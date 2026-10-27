@@ -273,6 +273,18 @@ def _mod_files(name):
     return found
 
 
+def _mod_source(name):
+    """mod フォルダの .py を全部つないだ文字列。読めないファイルは飛ばす。"""
+    chunks = []
+    for path in _mod_files(name):
+        try:
+            with io.open(path, encoding="utf-8") as fh:
+                chunks.append(fh.read())
+        except Exception:
+            pass
+    return "\n".join(chunks)
+
+
 def _module_constants(path):
     """モジュール直下の `NAME = 定数` を `{名前: 値}` で返す。
 
@@ -334,6 +346,23 @@ def check_manifest(name, manifest):
         if not os.path.isfile(tool_path):
             problems.append((path, MANIFEST_NAME,
                              '"tool.entry" が指す {!r} が無い'.format(tool["entry"])))
+
+    # 記録の置き場所（GUI の行の右クリック「state/ を開く」が開く先）。ローダは外へ出る宣言を黙って捨てるので、
+    # 書いた意図と違って開けないことにここで気付く。名前の打ち間違いは、
+    # 区切った各段が MOD のソースに文字列として在るかで見る（`("musics", "battle")` の形でも通る）。
+    raw_state = data.get("state")
+    if raw_state is not None:
+        listed = [raw_state] if isinstance(raw_state, str) else raw_state
+        if not isinstance(listed, list) or len(manifest.get("state") or []) != len(listed):
+            problems.append((path, MANIFEST_NAME,
+                             '"state" は state/ の中の相対パスの並びで書く: {!r}'.format(raw_state)))
+        source = _mod_source(name)
+        for rel in manifest.get("state") or []:
+            missing = [seg for seg in rel.split("/")
+                       if '"{}"'.format(seg) not in source and "'{}'".format(seg) not in source]
+            if missing:
+                problems.append((path, MANIFEST_NAME,
+                                 '"state" の {!r} がソースに無い（{}）'.format(rel, ", ".join(missing))))
 
     # ローダ API。
     # ここで撥ねられる mod は注入しても読み込まれない。

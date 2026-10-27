@@ -12,6 +12,7 @@
   },
   "version": "4",
   "author": "R01/Flossian",
+  "state": ["arrival_event"],
   "after": [
     "205_probe_player_events"
   ],

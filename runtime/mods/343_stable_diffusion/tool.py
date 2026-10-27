@@ -102,6 +102,7 @@ MODEL_GROUPS = (
     ("モデルの差し替え (空 = ゲームのまま)", ("CHECKPOINT_PATH", "TAESD_PATH",
                                               "VAE_PATH", "LORA_DIR")),
     ("安全弁", ("MODEL_SAFETY", "STRIP_LORA")),
+    ("背景の切り抜き", ("CUTOUT_MODEL",)),
     ("実験用", ("DISABLE_TAESD", "DISABLE_VAE", "DIFFUSERS_RESIZE")),
 )
 
@@ -399,7 +400,9 @@ def build_window(rules_in=None, settings_in=None, note=""):
 
     root_dir, state_dir, game_dir = modtool.locate(MOD_DIR)
     decls = modtool.decls(MOD_DIR, root_dir)
-    values = modtool.load_settings(root_dir, MOD_DIR)
+    # v1.18.0 の置き場（state\models\）から移し、古い置き場を指したパスは読み替えて欄に出す。
+    assets.migrate(state_dir)
+    values = assets.relocate_values(modtool.load_settings(root_dir, MOD_DIR), state_dir)
     if settings_in:
         values = dict(values)
         values.update(settings_in)
@@ -484,7 +487,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
     ttk.Label(box, style="Faint.TLabel", wraplength=740, justify="left",
               text=("ゲーム内のモデル選択はゲームフォルダの中しか見ないので、外に置いたモデルは"
                     "ここから指す。系統ごとに1つのフォルダへ揃えて置く"
-                    r"（state\models\<系統>\checkpoints / taesd / vae / lora）。"
+                    r"（state\stable_diffusion\models\<系統>\checkpoints / taesd / vae / lora）。"
                     "系統が混ざるとプロセスごと落ちるので、置き場を系統ごとに分けたまま使う。")
               ).pack(anchor="w")
     assets_note = ttk.Label(box, text="", justify="left")
@@ -564,36 +567,6 @@ def build_window(rules_in=None, settings_in=None, note=""):
                             command=lambda f=family, k=kind: fetch(f, k))
         button.pack(side="left", padx=(8, 0))
         fetch_buttons.append(button)
-
-    box = group(tab, "プリセット（元 MOD のモード切替）")
-    ttk.Label(box, style="Faint.TLabel", wraplength=740, justify="left",
-              text=("寸法・サンプラー・LoRA タグの除去・チェックポイント・TAESD をプリセットとして入れ替える。"
-                    "片方だけ外すと残りが噛み合わない（SDXL の寸法のまま SD1.5 に描かせるなど）ので、"
-                    "モードを移るときはここから。入れ替えただけでは保存されない。"
-                    "規則（付け替え・追加・除去・置き換え）は触らない。")
-              ).pack(anchor="w")
-    preset_note = ttk.Label(box, text="", justify="left")
-
-    def use_preset(key):
-        values, notes = presets.resolve(key, state_dir)
-        for name, value in values.items():
-            if name in entries:
-                entries[name].set(value)
-        preset_note.configure(text=chr(10).join(
-            ["{} を読み込みました。内容を確認して「保存」を押してください。".format(
-                presets.by_key(key)["label"])] + ["※ " + note for note in notes]))
-
-    row = ttk.Frame(box)
-    row.pack(anchor="w", pady=(8, 0))
-    for preset in presets.PRESETS:
-        ttk.Button(row, text=preset["label"],
-                   command=lambda k=preset["key"]: use_preset(k)).pack(side="left",
-                                                                       padx=(0, 8))
-    for preset in presets.PRESETS:
-        ttk.Label(box, style="Faint.TLabel", wraplength=740, justify="left",
-                  text="{}: {}".format(preset["label"], preset["about"])).pack(
-            anchor="w", pady=(4, 0))
-    preset_note.pack(anchor="w", pady=(6, 0))
 
     # カスタムプリセット（版26。`presets.py` の後半）。組み込みのプリセットと同じく、
     # 読み込むのは欄までで、反映するのは下の「保存」。
@@ -702,6 +675,36 @@ def build_window(rules_in=None, settings_in=None, note=""):
     custom_note.pack(anchor="w", pady=(6, 0))
     custom_name.trace_add("write", show_custom)
     list_custom()
+
+    box = group(tab, "プリセット（元 MOD のモード切替）")
+    ttk.Label(box, style="Faint.TLabel", wraplength=740, justify="left",
+              text=("寸法・サンプラー・LoRA タグの除去・チェックポイント・TAESD をプリセットとして入れ替える。"
+                    "片方だけ外すと残りが噛み合わない（SDXL の寸法のまま SD1.5 に描かせるなど）ので、"
+                    "モードを移るときはここから。入れ替えただけでは保存されない。"
+                    "規則（付け替え・追加・除去・置き換え）は触らない。")
+              ).pack(anchor="w")
+    preset_note = ttk.Label(box, text="", justify="left")
+
+    def use_preset(key):
+        values, notes = presets.resolve(key, state_dir)
+        for name, value in values.items():
+            if name in entries:
+                entries[name].set(value)
+        preset_note.configure(text=chr(10).join(
+            ["{} を読み込みました。内容を確認して「保存」を押してください。".format(
+                presets.by_key(key)["label"])] + ["※ " + note for note in notes]))
+
+    row = ttk.Frame(box)
+    row.pack(anchor="w", pady=(8, 0))
+    for preset in presets.PRESETS:
+        ttk.Button(row, text=preset["label"],
+                   command=lambda k=preset["key"]: use_preset(k)).pack(side="left",
+                                                                       padx=(0, 8))
+    for preset in presets.PRESETS:
+        ttk.Label(box, style="Faint.TLabel", wraplength=740, justify="left",
+                  text="{}: {}".format(preset["label"], preset["about"])).pack(
+            anchor="w", pady=(4, 0))
+    preset_note.pack(anchor="w", pady=(6, 0))
 
     # 種類ごとのプリセット（版26。上級者向け）。既定は畳んで隠し、使うときは注意を確かめてから。
     kind_rows = (("PORTRAIT_PRESET", "立ち絵"), ("ENEMY_PRESET", "敵・モンスター"),
@@ -1065,7 +1068,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
 def main(argv):
     if "--dump" in argv:
         root_dir, state_dir, game_dir = modtool.locate(MOD_DIR)
-        values = modtool.load_settings(root_dir, MOD_DIR)
+        values = assets.relocate_values(modtool.load_settings(root_dir, MOD_DIR), state_dir)
         print(describe_family(values, game_dir))
         for line in preview_lines(values):
             print(line)

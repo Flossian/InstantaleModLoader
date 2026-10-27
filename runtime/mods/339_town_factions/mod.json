@@ -12,6 +12,7 @@
   },
   "version": "6",
   "author": "R01/Flossian",
+  "state": ["town_factions_ledger", "town_factions"],
   "shares": [
     "town_incidents"
   ],

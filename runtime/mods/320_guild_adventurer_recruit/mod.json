@@ -12,6 +12,7 @@
   },
   "version": "5",
   "author": "R01/Flossian",
+  "state": ["adventurer_recruit"],
   "settings": {
     "RECRUIT_MIN": {
       "type": "int",

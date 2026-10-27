@@ -12,6 +12,7 @@
   },
   "version": "6",
   "author": "R01/Flossian,MoririnJP",
+  "state": ["area_move_custom"],
   "shares": [
     "road_opening"
   ],

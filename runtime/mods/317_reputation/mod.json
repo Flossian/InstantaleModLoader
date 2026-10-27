@@ -12,6 +12,7 @@
   },
   "version": "5",
   "author": "R01/Flossian",
+  "state": ["reputation"],
   "settings": {
     "IN_CONVERSATION": {
       "type": "bool",

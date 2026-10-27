@@ -12,6 +12,7 @@
   },
   "version": "45",
   "author": "R01/Flossian",
+  "state": ["real_estate"],
   "settings": {
     "RENT_PRICE": {
       "type": "int",

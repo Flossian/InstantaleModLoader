@@ -12,6 +12,7 @@
   },
   "version": "14",
   "author": "R01/Flossian",
+  "state": ["training_custom"],
   "after": [
     "306_party_train_exp"
   ],

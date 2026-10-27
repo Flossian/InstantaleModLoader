@@ -4,6 +4,7 @@
   "kind": "feature",
   "version": "4",
   "author": "MoririnJP",
+  "state": ["npc_starting_equipment"],
   "name": {
     "ja": "NPC初期装備",
     "en": "NPC starting equipment"

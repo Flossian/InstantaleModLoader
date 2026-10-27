@@ -12,6 +12,7 @@
   },
   "version": "27",
   "author": "R01/Flossian",
+  "state": ["equipment_slots"],
   "after": [
     "402_party_inventory_transfer",
     "319_battle_tactics"

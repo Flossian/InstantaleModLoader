@@ -12,6 +12,7 @@
   },
   "version": "2",
   "author": "R01/Flossian",
+  "state": ["rival_adventurer"],
   "tool": {
     "entry": "tool.py",
     "label": {

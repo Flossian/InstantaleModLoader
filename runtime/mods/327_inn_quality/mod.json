@@ -12,6 +12,7 @@
   },
   "version": "5",
   "author": "R01/Flossian",
+  "state": ["inn_regular"],
   "settings": {
     "ACTIONS_KENNEL": {
       "type": "int",

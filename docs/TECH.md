@@ -2658,6 +2658,19 @@ journey_path = ctx.state_path("road_travel.json")  # 続きに要るデータ
 > `ctx.state_path()` は親を作るので、`os.path.join(ctx.state_dir, ...)` で組む
 > （相手を切っている人の `state/` に、使われない空のフォルダを置かないため）。
 
+`state/` に書く MOD は、置き場所を `mod.json` の `"state"` で名乗る（`state/` からの相対。`/` 区切り）。
+設定画面で MOD の行を右クリックしたときの「state/ を開く」が、ここに書いたもののうち在るものを開く。
+置き場所はコードの定数で決まり、フォルダ名とも一致しない（`320_guild_adventurer_recruit` は `adventurer_recruit`）ので、GUI は推し量らない。
+
+```json
+"state": ["town_factions_ledger", "town_factions"]
+"state": ["musics/battle"]
+"state": ["road_travel.json"]
+```
+
+書くのは自分が持つものだけ。読むだけの相手の控え（`403_` の `npc_profiles`）と、ローダの共有の控え（`modfacility`・`modnpc`・`choices`）は書かない。
+`check_mods.py` は、外へ出る宣言と、区切った各段が MOD のソースに文字列として無い名前（打ち間違い）を問題に数える。
+
 #### 3.11.1 書くときは `ctx.write_json()`、読むときは `ctx.read_json()` を通す
 
 `open(path, "w")` で残すデータを書かないこと。

@@ -77,21 +77,28 @@ DLL 版はこの3つを「ゲームフォルダへ置く・上書きする」で
 （選んだと聞いた回も `config.json` は元の名前のままで、建ったのも元のモデルだった）。
 届いていても、上の表の3つは変わらない。
 
-## モデルの置き場（`state\models\`）
+## モデルの置き場（`state\stable_diffusion\models\`）
 
 ゲームのフォルダを触らずに済ませるため、外へ置くモデルの場所を決めてある。
 
 ```text
-state\models\sd15\checkpoints\  taesd\  vae\  lora\
-state\models\sdxl\checkpoints\  taesd\  vae\  lora\
+state\stable_diffusion\models\sd15\checkpoints\  taesd\  vae\  lora\
+state\stable_diffusion\models\sdxl\checkpoints\  taesd\  vae\  lora\
 ```
 
 **系統を先に切る。**
 壊れ方（プロセスごと落ちる）は系統の食い違いで起きるので、
 1つのフォルダの中身が常に揃った組になる形にした。
 中の名前はゲームの `runtime\models\sd15\...` と同じにして、説明を減らしてある。
-`state\` の下に置くのは、手で用意する大きなファイルの前例（`state\musics\battle\`）に合わせたもの。
+プリセット・規則・タグの一覧と同じ `state\stable_diffusion\` の下にまとめてある。
 MOD のフォルダ名では切らない（正式化で番号が変わると行方不明になるため）。
+
+v1.18.0 までは `state\models\` に置いていた。
+ゲームか道具画面を開いたときに新しい置き場へ移し、古い置き場を指したままの設定とプリセットも新しい置き場として読む。
+新しい置き場に同じ名前のファイルが既にあるものは、移さずに残す。
+
+チェックポイントの置き場に、その系統として読めないファイル（Stable Cascade など）があると、道具画面の置き場の欄に出る。
+SDXL プリセットはそれを選ばない。
 
 道具画面の「状態 / モデル」から、置き場を開く・中身を数える・
 **TAESD デコーダをダウンロードする**ことができる。
@@ -171,7 +178,8 @@ Illustrious と Pony はどちらも `sdxl` なので、分けるならファイ
 | 雛形 | 立ち絵 | 背景 | 敵 |
 | --- | --- | --- | --- |
 | Illustrious / NoobAI 系 | 画質の印を Illustrious の形に替え、`1boy` / `1girl`・`simple background` を足し、`wallpaper` `empty background` を外す。否定に崩れの語と `monochrome, greyscale` | 頭に `no humans, scenery`。`indoor` は `indoors` に | 画質の印を替え、`creature` を外す。否定の `anime` を外す |
-| Pony 系 | 画質の印が `score_9, score_8_up, score_7_up, source_anime`、否定に `score_6, score_5, score_4`。ほかは上と同じ | 同じ | 同じ |
+| Animagine XL 4.0 | 画質の印 `masterpiece, high score, great score, absurdres` を最後に置き、`1boy` / `1girl` を先頭に。否定に `low score, bad score, average score`。ほかは上と同じ | 画質の印を最後に | 画質の印を最後に。`simple background` を足し、大きい敵の否定の `detailed background` を外す（残すと絵が崩れる） |
+| Pony 系 | 画質の印が `score_9, score_8_up, score_7_up, source_anime`、否定に `score_6, score_5, score_4`。ゲームの否定の `(nsfw, worst quality, low quality:1.4)` を重み無しにする（モデルによっては絵が崩れる）。ほかは上と同じ | 同じ | 同じ |
 | 素の SDXL | `wallpaper` `empty background` を外し、`plain black background` を足す | そのまま | そのまま |
 
 ### 語の置き換えと Danbooru のタグとの照合
@@ -203,12 +211,40 @@ SD1.5 用の LoRA を足す規則を書いているなら、その行の「モ�
 書き換えた前後のプロンプトは、種類と段ごとに最初の1枚だけ `out\stable_diffusion.log` に全文で出る（`前:` / `後:` の行）。
 規則を保存し直すと、もう1回出る。
 
+## 背景の切り抜き
+
+ゲームは立ち絵と敵の背景を、同梱の rembg で抜く。
+使うモデルは汎用の u2net に決まっていて、人物の周りに描かれた飾り（後光・渦・結晶など）と人物の区別がつかず、人物ごと削ることがある。
+「状態 / モデル」タブの「背景の切り抜きのモデル」を isnet-anime にすると、ゲームのフォルダにあるアニメ絵向けのモデル（`runtime\models\u2net\isnet-anime.onnx`）で抜く。
+
+| 設定 | 抜き方 | 1枚の時間 |
+|---|---|---|
+| game（既定） | ゲームのまま（u2net。alpha matting あり） | 1.8〜14秒（飾りの多い絵ほど遅い） |
+| isnet-anime | アニメ絵向けのモデル。CPU で動かし、VRAM は使わない | 0.4〜0.8秒 |
+
+isnet-anime は人物を削らない代わりに、人物に付いた飾りも人物の一部として残す。
+飾りが要らないなら、描く段階で抑える（下の規則の例）。
+ファイルが無いか、抜けなかったときは、ゲームの切り抜きに戻して `out\stable_diffusion.log` に知らせる。
+設定は描くたびに読み直すので、ゲームを起動し直さなくても次の絵から効く。
+
+SD1.5（SoteMix など）の立ち絵の飾りを抑える規則の例（どれも「モデル」は `sd15`、種類は立ち絵）:
+
+| 欄 | 中身 |
+|---|---|
+| 除去 | `wallpaper`、`empty background` |
+| 追加（プロンプト） | `(simple background:1.2)` |
+| 追加（否定） | `halo, wings, aura, magic, light rays, particles, sparkles, picture frame, ornate background, scenery` |
+
+背景は黒から灰色の無地になり、後光・翼・額縁などが描かれにくくなる。
+外見に結晶や魔法の炎などが書かれている人物は、それが人物の一部として残る。
+
 ## 困ったとき
 
 | 症状 | やること |
 |---|---|
 | 絵が変わらない | `out\stable_diffusion.log` に `wrapped` の行が出ているか。短辺の目標だけ上げて長辺の上限がゲームのままだと、計算上どこも変わらない |
 | 絵が崩れる・落ちる | 目標を既定へ戻す。SD1.5 は学習時の寸法から離れるほど崩れ、系統の違う LoRA を当てるとゲームごと落ちる |
+| 立ち絵や敵の体の一部が切り抜きで消える | 「背景の切り抜きのモデル」を isnet-anime にする（§背景の切り抜き） |
 | 顔が出ない（全身の縮小が顔になる） | ゲームが顔を見つけられなかった回。寸法とは関係なく起きる（`131_sharp_portrait` の「顔の検出をやり直す」を入にすると拾える率が上がる） |
 | 生成が遅くなった | 寸法と steps を上げれば時間も増える（VERIFICATION.md §3.65 の実測）。**桁で遅くなったら VRAM が溢れている**。LLM を載せたまま拡大すると起きやすい。寸法を下げるか、ゲーム側の詳細設定で VAE のタイル化を入れるか、LLM を降ろす |
 | SDXL で人の敵の横に小さな生き物が出る・立ち絵が白黒になる・背景に人が出る | モデルに合った雛形を「モデル別」のタブから入れる（§1） |

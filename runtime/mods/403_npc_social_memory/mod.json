@@ -4,6 +4,7 @@
   "kind": "feature",
   "version": "9",
   "author": "MoririnJP",
+  "state": ["npc_social_memory"],
   "shares": ["npc_profiles"],
   "name": {
     "en": "NPC social memory",

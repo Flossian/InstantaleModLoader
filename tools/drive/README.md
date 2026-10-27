@@ -81,7 +81,7 @@ sh tools/drive/relaunch.sh restore        # 4. 控えへ戻して起動し直す
 
 | ファイル | すること |
 |---|---|
-| `backup.sh [名前]` | セーブ・世界の骨格（`world_data.json`）・`state\` を `out/backup/<名前>_<日時>/` へ写す。立ち絵のフォルダは写さず、名前の一覧だけ控える。`state\models\`（画像生成のモデル、数 GB）は写さない |
+| `backup.sh [名前]` | セーブ・世界の骨格（`world_data.json`）・`state\` を `out/backup/<名前>_<日時>/` へ写す。立ち絵のフォルダは写さず、名前の一覧だけ控える。`state\stable_diffusion\models\`（画像生成のモデル、数 GB。v1.18.0 までは `state\models\`）は写さない |
 | `relaunch.sh [restore\|title]` | ゲームを閉じて起動し直し、注入・題の画面・世界の一覧・遊べる画面を順に待つ。注入は GUI と同じく、ゲームの Python の初期化と窓の出現を待ってから流す（`watcher.py --once`）。`restore` を付けると、起動の前に控えへ戻す。`title` を付けると題の画面で止め、世界は選ばない（キャラのまだ居ない世界へ進むとき） |
 | `reload.sh` | ゲームを閉じずに題の画面へ戻り、同じ世界を読み直す（約9秒）。保存とロードをまたいで値が残るかの確認に使う |
 | `waitchoice.sh 文字 [秒]` | その選択肢が並ぶまで待つ（`w` の中身）。終了コードは 0 並んだ / 1 時間切れ / 2 ゲームオーバー / 3 別の画面で落ち着いた |

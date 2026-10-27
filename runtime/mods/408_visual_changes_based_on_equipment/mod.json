@@ -12,6 +12,7 @@
   },
   "version": "4",
   "author": "MoririnJP",
+  "state": ["equipment_visuals"],
   "settings": {
     "EQUIPMENT_PROMPT_COUNT": {
       "type": "int",

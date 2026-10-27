@@ -970,9 +970,25 @@ def read_mods() -> dict:
             "local": name in local,
             # MOD 同梱の道具（`323_` §4）。GUI はボタンを出して別プロセスで開くだけ。
             "tool": manifest.get("tool"),
+            # 記録の置き場所（`state/` からの相対）。行の右クリックの「state/ を開く」が開く先。
+            "state": manifest.get("state") or [],
         })
     return {"mods": mods, "disabled": disabled, "problems": found["problems"],
             "debug_mode": bool(found.get("debug_mode"))}
+
+
+def state_targets(mod: dict) -> list[tuple[str, str]]:
+    """MOD の記録のうち、いま在るもの: `(宣言の相対パス, 実パス)` の並び。
+
+    宣言だけ在って中身が無い（まだ遊んでいない）ものは数えない。
+    開いても空のフォルダが出るだけなので、項目を押せなくする方が伝わる。
+    """
+    found = []
+    for rel in mod.get("state") or []:
+        path = os.path.join(STATE_DIR, *rel.split("/"))
+        if os.path.exists(path):
+            found.append((rel, path))
+    return found
 
 
 def write_order(names: list[str], disabled: set[str]) -> None:
@@ -2243,6 +2259,9 @@ class App(ttk.Frame):
         self.row_menu.add_command(label="一番下へ", command=lambda: self._move_to(-1))
         self.row_menu.add_separator()
         self.row_menu.add_command(label="フォルダを開く", command=self.open_mod_dir)
+        # 記録は MOD のフォルダではなく `state/` に在り、名前もフォルダ名と違う
+        # （`320_guild_adventurer_recruit` → `adventurer_recruit`）。探さずに行けるように。
+        self.row_menu.add_command(label="state/ を開く", command=self.open_mod_state)
 
     def _sync_mod_menu(self) -> None:
         """メニューバーの「MOD」を開く直前に、押せる項目だけを押せる状態にする。"""
@@ -2270,6 +2289,9 @@ class App(ttk.Frame):
         self.row_menu.entryconfigure(
             "設定…",
             state="normal" if (mod and mod["settings"]) else "disabled")
+        self.row_menu.entryconfigure(
+            "state/ を開く",
+            state="normal" if (mod and state_targets(mod)) else "disabled")
         try:
             self.row_menu.tk_popup(event.x_root, event.y_root)
         finally:
@@ -2951,6 +2973,40 @@ class App(ttk.Frame):
         """MOD が持つ永続データの置き場。**ログとは別**（消すと遊びが巻き戻る）。"""
         os.makedirs(STATE_DIR, exist_ok=True)
         self._open(STATE_DIR)
+
+    def open_mod_state(self) -> None:
+        """選んでいる MOD の記録（`mod.json` の "state"）を開く。2つ以上在れば選ばせる。"""
+        mod = self._selected()
+        if not mod:
+            self._set_status("一覧から MOD を選択してください")
+            return
+        targets = state_targets(mod)
+        if not targets:
+            self._set_status("この MOD の記録はまだありません" if mod.get("state")
+                             else "この MOD は記録を持ちません")
+            return
+        if len(targets) == 1:
+            self._reveal(targets[0][1])
+            return
+        # ボタン・行の右クリック・メニューバーのどこから来ても、指している所に出す。
+        menu = tk.Menu(self, tearoff=0)
+        for rel, path in targets:
+            menu.add_command(label="state/" + rel, command=lambda p=path: self._reveal(p))
+        x, y = self.winfo_pointerxy()
+        try:
+            menu.tk_popup(x, y)
+        finally:
+            menu.grab_release()
+
+    def _reveal(self, path: str) -> None:
+        """フォルダならそれを開き、ファイルなら入っているフォルダを開いて選んだ状態にする。"""
+        if os.path.isdir(path):
+            self._open(path)
+            return
+        try:
+            subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
+        except Exception as exc:
+            messagebox.showerror("開けませんでした", f"{type(exc).__name__}: {exc}")
 
     def _open(self, path: str) -> None:
         try:

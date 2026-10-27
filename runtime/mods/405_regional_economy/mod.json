@@ -4,6 +4,7 @@
   "kind": "feature",
   "version": "6",
   "author": "MoririnJP, R01/Flossian",
+  "state": ["regional_economy"],
   "name": {
     "ja": "地域毎に物価が変動する",
     "en": "Regional economy profile"

@@ -12,6 +12,7 @@
   },
   "version": "5",
   "author": "R01/Flossian,MoririnJP",
+  "state": ["currency_unit"],
   "settings": {
     "UNIT_LONG": {
       "type": "str",

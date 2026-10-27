@@ -12,6 +12,7 @@
   },
   "version": "46",
   "author": "R01/Flossian",
+  "state": ["facility_investment"],
   "settings": {
     "COST_SCALE": {
       "type": "int",

@@ -12,6 +12,7 @@
   },
   "version": "2",
   "author": "R01/Flossian",
+  "state": ["conversation_log"],
   "after": ["113_ui_text_expand", "118_batch_message_render"],
   "shares": ["_instantale_expand_button"],
   "settings": {

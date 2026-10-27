@@ -34,6 +34,9 @@ GUI に出るだけだが、次の5つは動作に関わる:
     "debug": true                   開発者向け。デバッグモードのときだけ動く（discover）
     "superseded": "main_024"        本体がその版で同じ修正を取り込んだので降ろした
 
+`"state": ["npc_profiles"]` はその MOD の記録の置き場所（`state/` からの相対）。
+GUI の行の右クリック「state/ を開く」が開く先で、読み込みには関わらない。
+
 `kind` は mod 自身が名乗る種別（`KINDS` の1つ。GUI の「種別」列に出る。表示だけで
 読み込みの扱いは変えない）。
 
@@ -1548,7 +1551,35 @@ def _manifest(mods_dir: str, name: str) -> dict:
         # {"entry": "tool.py", "label": {...}, "note": {...}}。無ければ None。
         # GUI が起動するだけで、ローダ本体は読まない。
         "tool": _tool_decl(name, data.get("tool")),
+        # この MOD の記録の置き場所（`state/` からの相対。"npc_profiles"・"musics/battle"・
+        # "road_travel.json"）。GUI の行の右クリック「state/ を開く」が開くだけで、ローダ本体は読まない。
+        # 置き場所はコードの定数で決まり、フォルダ名とも一致しない（"adventurer_recruit"）ので、
+        # GUI が推し量らずに済むよう MOD に言わせる。
+        "state": _state_decl(name, data.get("state")),
     }
+
+
+def _state_decl(name: str, raw) -> list[str]:
+    """`"state"` の宣言を均す。`/` 区切りの相対パスの並び。外へ出るものは捨てる。"""
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list):
+        if raw is not None:
+            log("{}: \"state\" が並びではない。無視する".format(name), level="WARN")
+        return []
+    found = []
+    for item in raw:
+        parts = [p for p in str(item).replace("\\", "/").split("/") if p] if isinstance(item, str) else []
+        # 先頭の区切りは直に見る（Windows の 3.13 から `os.path.isabs("/x")` は False）。
+        if (not parts or str(item)[:1] in ("/", "\\") or ":" in str(item)
+                or any(p in (".", "..") for p in parts)):
+            log("{}: \"state\" の {!r} は state/ の中の相対パスではない。無視する".format(name, item),
+                level="WARN")
+            continue
+        joined = "/".join(parts)
+        if joined not in found:
+            found.append(joined)
+    return found
 
 
 def _tool_decl(name: str, raw) -> dict | None:

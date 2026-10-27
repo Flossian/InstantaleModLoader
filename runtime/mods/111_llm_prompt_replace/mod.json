@@ -12,6 +12,7 @@
   },
   "version": "9",
   "author": "R01/Flossian",
+  "state": ["llm_prompt_replace"],
   "tool": {
     "entry": "tool.py",
     "label": {

@@ -12,6 +12,7 @@
   },
   "version": "6",
   "author": "R01/Flossian",
+  "state": ["road_travel.json"],
   "after": [
     "301_quest_from_conversation"
   ],

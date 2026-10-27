@@ -13,6 +13,7 @@ import re
 import sys
 import threading
 import time
+from typing import List
 
 from instantale_modloader import frames, imagegen, jobs, llm, state, ui
 
@@ -45,6 +46,24 @@ FUNC = "generate_character_image"
 SD_ITEM = re.compile(r"^[a-z0-9][a-z0-9 '-]*$")
 MAX_ITEM_WORDS = 4
 MAX_ITEM_CHARS = 40
+
+# 外見文を短いタグにする頼み（版4。`_ask_tags`）。記録は output_data の `mod_335_player_look` に残る。
+LOOK_MANAGER = "mod_335_player_look"
+LOOK_STRUCTURE = "PlayerLookTags335"
+#: タグの数の上限。前置きと合わせて SD が1回に読む 75トークンに収まる数（実測 73。18個だと 77 で超えた）。
+MAX_TAGS = 16
+#: 外見文ごとの控えの数の上限。古いものから捨てる。
+MAX_LOOKS = 8
+LOOK_SYSTEM = (
+    "あなたは Stable Diffusion の画像生成用のプロンプトを書く担当です。\n"
+    "人物の外見の説明（日本語）を読み、絵に描ける特徴を漏らさず、英語の短いタグの並びに直してください。\n"
+    "- 1つのタグは英語で1〜3語。Danbooru のタグの言い方を優先する（例: black hair, blue eyes, off-shoulder, black pants, knee boots）。\n"
+    "- 説明にある物は全部入れる。次の順で並べる: 髪（色・内側や毛先の色・長さ・髪型）、目（色・目つき）、表情、体つき、"
+    "上衣、鎧、ベルトやポーチ、下衣、履き物、首や頭の装飾、武器や持ち物。\n"
+    "- 1つのタグに with や and で2つの物を入れない。別のタグに分ける。\n"
+    "- 説明に無い物は足さない。性別・年齢・人数・画質・背景・ポーズ・画風のタグは書かない（別に付ける）。\n"
+    "- タグは全部で{}個まで。".format(MAX_TAGS)
+)
 
 # 他の立ち絵の生成が終わるまでこの秒数だけ待つ。
 IDLE_WAIT = 30.0
@@ -223,10 +242,63 @@ def _look_words(got):
     return []
 
 
-def _player_look(store, write, app, player):
+def _cached_look(bucket, source):
+    """外見文のハッシュに当たる控えの要素。無ければ空。
+
+    版4 から外見文ごとに `looks` に持つ（説明を一度変えて戻したときに、前の要素へ戻すため）。
+    版3 までの `look`（最後の1件だけ）も読む。
+    """
+    looks = bucket.get("looks")
+    if isinstance(looks, dict):
+        words = _sd_items(looks.get(source))
+        if words:
+            return words
+    record = bucket.get("look")
+    if isinstance(record, dict) and record.get("source") == source:
+        return _sd_items(record.get("prompts"))
+    return []
+
+
+def _keep_look(bucket, source, words):
+    """作った要素を外見文のハッシュごとに控える。`look` には最後の1件を残す（版3 と同じ形）。"""
+    looks = bucket.get("looks")
+    if not isinstance(looks, dict):
+        looks = {}
+        record = bucket.get("look")
+        if isinstance(record, dict) and record.get("source") and record.get("prompts"):
+            looks[record["source"]] = list(record["prompts"])
+    looks[source] = list(words)
+    while len(looks) > MAX_LOOKS:
+        looks.pop(next(iter(looks)))
+    bucket["looks"] = looks
+    bucket["look"] = {"source": source, "prompts": list(words)}
+
+
+def _ask_tags(ctx, write, desc):
+    """外見文を短いタグの並びにする（版4）。頼めない・読めないときは空。
+
+    ゲームの `create_look` は「8要素以下」と頼むので、LLM が細部を長い言い回しに詰め込み、
+    4語を超える要素（胸甲・ズボンとブーツ・髪の内側の色など）がここで落ちていた。
+    見える物を全部 1〜3語のタグで書かせ、16個までにする（SD1.5 / SDXL が1回に読む 75トークンに収まる。
+    VERIFICATION.md §2.94）。
+    """
+    structure = llm.create_structure(ctx, LOOK_STRUCTURE, {"tags": (List[str], ...)},
+                                     label="player portrait")
+    if structure is None:
+        return []
+    got = llm.ask(ctx, LOOK_MANAGER,
+                  [{"role": "system", "content": LOOK_SYSTEM},
+                   {"role": "user", "content": "【外見の説明】\n" + desc}],
+                  timeout=LOOK_TIMEOUT, structure=structure, label="player portrait", write=write)
+    tags = (got or {}).get("tags") if isinstance(got, dict) else None
+    return _sd_items(tags)[:MAX_TAGS]
+
+
+def _player_look(store, write, app, player, ask=None):
     """主人公の英語の外見プロンプト。外見文が同じ間は控えを使う。
 
     look_description（日本語）をそのまま SD1.5 へ渡さない。
+    `ask`（外見文 -> 要素）が渡されればまずそれで作り、空ならゲームの `create_look` で作る。
     作れなければ None（描き直しは止める）。
     """
     desc = _text(player, "look_description")
@@ -236,11 +308,18 @@ def _player_look(store, write, app, player):
     source = hashlib.sha256(desc.encode("utf-8")).hexdigest()
     playthrough = store.playthrough(app)
     bucket = store.load(playthrough)
-    record = bucket.get("look")
-    if isinstance(record, dict) and record.get("source") == source:
-        words = _sd_items(record.get("prompts"))
+    words = _cached_look(bucket, source)
+    if words:
+        return words
+
+    if ask is not None:
+        words = ask(desc)
         if words:
+            _keep_look(bucket, source, words)
+            store.save(playthrough)
+            write("look prepared ({} tag(s))".format(len(words)))
             return words
+        write("tags unavailable; falling back to create_look")
 
     module = sys.modules.get(CREATE_LOOK_MODULE)
     create = getattr(module, "create_look", None)
@@ -276,7 +355,7 @@ def _player_look(store, write, app, player):
     if not words:
         write("skipped: create_look returned {!r}".format(repr(got)[:200]))
         return None
-    bucket["look"] = {"source": source, "prompts": list(words)}
+    _keep_look(bucket, source, words)
     store.save(playthrough)
     write("look prepared ({} item(s))".format(len(words)))
     return words
@@ -384,7 +463,8 @@ def apply(ctx):
         if generator is None:
             write("skipped: image module unavailable")
             return
-        words = _player_look(store, write, app, player)
+        words = _player_look(store, write, app, player,
+                             ask=lambda desc: _ask_tags(ctx, write, desc))
         if not words:
             return
         if not _wait_idle(runtime):

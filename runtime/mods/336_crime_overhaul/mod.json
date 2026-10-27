@@ -12,6 +12,7 @@
   },
   "version": "4",
   "author": "R01/Flossian",
+  "state": ["crime_overhaul"],
   "after": [
     "119_fix_crime_attribution",
     "405_regional_economy"

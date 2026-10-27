@@ -139,13 +139,21 @@ def size_scale(kind, short_goal, max_long):
     return max(1.0, min(by_short, by_long))
 
 
-def scaled(width, height, scale):
-    """縦横比を保ったまま倍率を掛ける。掛けられなければ `None`。"""
+def scaled(width, height, scale, max_long=None):
+    """縦横比を保ったまま倍率を掛ける。掛けられなければ `None`。
+
+    `max_long` はその種類の長辺の上限で、**この1枚の長辺**に当てる。
+    倍率はゲームの基準の寸法（`GAME_SIZE`）から決めるので、基準より長い絵
+    （大きさ huge の敵はゲームでは 768x512）は倍率だけだと上限を超えていた
+    （SDXL で 1536x1024 になり、遅くなるか崩れた。VERIFICATION.md §3.65）。
+    """
     if not isinstance(width, int) or not isinstance(height, int):
         return None
     if width <= 0 or height <= 0 or scale <= 1.0:
         return None
     limit = float(MAX_SIDE) / max(width, height)
+    if max_long:
+        limit = min(limit, float(max_long) / max(width, height))
     factor = min(float(scale), limit)
     if factor <= 1.0:
         return None

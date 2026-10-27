@@ -131,6 +131,68 @@ check("英語が取れなければ None",
 check("外見文が無ければ None",
       mod._player_look(FakeStore(), write, None, dict(player, look_description="")) is None)
 
+# 版4: 独自の頼み（短いタグ）を先に使い、外見文ごとに控える
+look_calls = []
+fake.create_look = lambda *a: look_calls.append(a) or {"image_generation_prompt": ["from create look"]}
+asked = []
+
+
+def ask_tags(desc):
+    asked.append(desc)
+    return ["black hair", "blue inner hair", desc_tag[desc]]
+
+
+desc_tag = {"説明A": "black pants", "説明B": "red cape"}
+store4 = FakeStore()
+pa = dict(player, look_description="説明A")
+got_a = mod._player_look(store4, write, None, pa, ask=ask_tags)
+check("独自の頼みのタグを使い、create_look は呼ばない",
+      got_a == ["black hair", "blue inner hair", "black pants"] and not look_calls, (got_a, look_calls))
+got_b = mod._player_look(store4, write, None, dict(player, look_description="説明B"), ask=ask_tags)
+got_a2 = mod._player_look(store4, write, None, pa, ask=ask_tags)
+check("説明を変えて戻すと、前の要素が戻り、頼み直さない",
+      got_a2 == got_a and asked == ["説明A", "説明B"], (got_a2, asked))
+check("控えは外見文ごと（looks）と最後の1件（look）",
+      len(store4.buckets["w|p"]["looks"]) == 2 and store4.buckets["w|p"]["look"]["prompts"] == got_b,
+      store4.buckets)
+got_fb = mod._player_look(FakeStore(), write, None, dict(player, look_description="説明C"),
+                          ask=lambda desc: [])
+check("独自の頼みで取れなければ create_look に戻す", got_fb == ["from create look"], got_fb)
+legacy = FakeStore()
+legacy.buckets["w|p"] = {"look": {"source": __import__("hashlib").sha256("説明D".encode("utf-8")).hexdigest(),
+                                   "prompts": ["old tag"]}}
+check("版3 の控え（look）も読む",
+      mod._player_look(legacy, write, None, dict(player, look_description="説明D"),
+                       ask=lambda desc: ["new tag"]) == ["old tag"])
+many = FakeStore()
+for i in range(mod.MAX_LOOKS + 3):
+    mod._player_look(many, write, None, dict(player, look_description="多{}".format(i)),
+                     ask=lambda desc: ["tag {}".format(len(desc))])
+check("外見文ごとの控えは上限まで", len(many.buckets["w|p"]["looks"]) == mod.MAX_LOOKS,
+      len(many.buckets["w|p"]["looks"]))
+
+_real_create, _real_ask = mod.llm.create_structure, mod.llm.ask
+try:
+    sent = {}
+    mod.llm.create_structure = lambda ctx, name, fields, label="llm": ("structure", name, list(fields))
+
+    def _fake_ask(ctx, manager, message, timeout, structure=None, label="llm", write=None, **kw):
+        sent.update(manager=manager, message=message, structure=structure)
+        return {"tags": ["Black Hair", "黒髪", "blue eyes"] + ["tag {}".format(i) for i in range(20)]}
+    mod.llm.ask = _fake_ask
+    tags = mod._ask_tags(None, write, "【外見】黒髪")
+    check("タグは英語だけ・{}個まで".format(mod.MAX_TAGS),
+          tags[:2] == ["black hair", "blue eyes"] and len(tags) == mod.MAX_TAGS, tags)
+    check("頼みは MOD 専用の名前と構造で送る",
+          sent["manager"] == mod.LOOK_MANAGER and sent["structure"][1] == mod.LOOK_STRUCTURE
+          and sent["message"][0]["role"] == "system" and "【外見】黒髪" in sent["message"][1]["content"], sent)
+    mod.llm.ask = lambda *a, **k: None
+    check("返事が無ければ空", mod._ask_tags(None, write, "x") == [])
+    mod.llm.create_structure = lambda *a, **k: None
+    check("構造が作れなければ空", mod._ask_tags(None, write, "x") == [])
+finally:
+    mod.llm.create_structure, mod.llm.ask = _real_create, _real_ask
+
 # ゲームの送り口は timeout で待ちを打ち切らない（main_026 の実測）。335 も打ち切らず、LOOK_TIMEOUT 秒を過ぎたらログに出す
 import time as _time
 _flags = []

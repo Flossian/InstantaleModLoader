@@ -12,6 +12,7 @@
   },
   "version": "7",
   "author": "R01/Flossian",
+  "state": ["road_opening"],
   "settings": {
     "SEARCH_LABEL": {
       "type": "str",

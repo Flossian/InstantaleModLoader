@@ -12,6 +12,7 @@
   },
   "version": "3",
   "author": "R01/Flossian",
+  "state": ["town_incidents"],
   "after": [
     "405_regional_economy"
   ],

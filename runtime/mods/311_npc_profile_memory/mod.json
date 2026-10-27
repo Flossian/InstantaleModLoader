@@ -12,6 +12,7 @@
   },
   "version": "7",
   "author": "yoshinari/tomotomo-y, R01/Flossian",
+  "state": ["npc_profiles"],
   "settings": {
     "CONVERSATION_TURNS": {
       "type": "int",

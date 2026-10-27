@@ -12,6 +12,7 @@
   },
   "version": "8",
   "author": "R01/Flossian",
+  "state": ["shop_restock"],
   "settings": {
     "RESTOCK_DAYS": {
       "type": "int",

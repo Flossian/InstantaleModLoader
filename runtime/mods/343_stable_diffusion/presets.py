@@ -16,7 +16,7 @@ SD1.5 に 1024x2048 を 24 steps で描かせることになり、
 | 1段目・2段目 | euler_a / 24 / 5.0 | euler_a / 24 / 5.0 |
 | LCM の段 | ゲームのまま | euler_a / 24 / 5.0（SDXL に lcm / 5 / 1.0 は絵にならない。実測） |
 | LoRA タグを外す | 切 | 入（SD1.5 用の LoRA が当たると落ちる。実測） |
-| チェックポイント / TAESD | 空（ゲームのまま） | `state\models\sdxl\` の一番新しいもの。無ければ空のまま注記 |
+| チェックポイント / TAESD | 空（ゲームのまま） | `state\stable_diffusion\models\sdxl\` の一番新しいもの（中身が SDXL のものだけ）。無ければ空のまま注記 |
 
 元 MOD の `portrait_*` はこちらの1段目と2段目の両方に写す（`iniimport` と同じ）。
 元 MOD の `square`（敵）は `portrait` と同じ値を使っていたので、敵も同じにする。
@@ -85,7 +85,7 @@ PRESETS = (
         "label": "SDXL プリセット",
         "about": "元 MOD の sd_upscale.sdxl.ini。立ち絵と敵 1024 / 2048、背景 704 / 1408、euler_a / 24 / 5.0。"
                  "LoRA タグを外し、LCM の段も euler_a / 24 / 5.0 にする。"
-                 r"チェックポイントと TAESD は state\models\sdxl\ の一番新しいものを指す",
+                 r"チェックポイントと TAESD は state\stable_diffusion\models\sdxl\ の一番新しいものを指す",
         "values": _base((1024, 2048), (1024, 2048), (704, 1408), _DLL_SAMPLER, True),
         "family": "sdxl",
     },
@@ -118,6 +118,8 @@ def resolve(key, state_dir):
         else:
             notes.append("{}: {} に無いので空のまま。置くか「参照」で指す".format(
                 label, assets.dir_of(state_dir, family, kind)))
+    for name in assets.foreign(state_dir, family):
+        notes.append("{} は SDXL のチェックポイントとして読めないので選ばなかった".format(name))
     return values, notes
 
 
@@ -140,7 +142,9 @@ def load_custom(state_dir):
     except Exception:
         return []
     rows = data.get("presets") if isinstance(data, dict) else None
-    return [row for row in rows or []
+    # v1.18.0 の置き場（state\models\）を指したままのパスは、新しい置き場へ読み替えて渡す。
+    return [dict(row, values=assets.relocate_values(row["values"], state_dir))
+            for row in rows or []
             if isinstance(row, dict) and str(row.get("name") or "").strip()
             and isinstance(row.get("values"), dict)]
 

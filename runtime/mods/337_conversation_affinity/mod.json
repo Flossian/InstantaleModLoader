@@ -12,6 +12,7 @@
   },
   "version": "2",
   "author": "R01/Flossian",
+  "state": ["conversation_affinity"],
   "settings": {
     "GAIN_PER_STEP": {
       "type": "int",

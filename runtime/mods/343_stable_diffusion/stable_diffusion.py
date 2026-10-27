@@ -40,6 +40,8 @@ import time
 
 from instantale_modloader import frames
 
+from . import assets
+from . import cutout
 from . import live as hot
 from . import presets
 from . import rules as rulebook
@@ -143,6 +145,10 @@ PORTRAIT_PRESET = ""
 ENEMY_PRESET = ""
 BACKGROUND_PRESET = ""
 
+#: 背景の切り抜きのモデル（版27）。game はゲームのまま（サイドカーの u2net）、
+#: isnet-anime はゲームのフォルダのアニメ絵向けのモデルで抜く（`cutout.py`）。
+CUTOUT_MODEL = "game"
+
 #: ゲームが部品を建てたときの引数。種類ごとの部品を同じ作りで建てるために控える。
 #: 部品のクラスに持たせる（注入のたびにモジュールは作り直されるが、クラスは同じ）。
 INIT_ATTR = "_mod343_init_kwargs"
@@ -153,6 +159,9 @@ PIPES_ATTR = "_mod343_kind_pipes"
 #: 343 が書き換える前のゲームの材料（manager のモジュールに持たせる）。
 #: プリセットのチェックポイントが空のとき（ゲームのまま）に使う。
 GAME_ATTR = "_mod343_game_materials"
+
+#: ゲームの背景の切り抜き（rembg のサイドカーへ頼む関数。版27 で isnet-anime に差し替えられる）。
+CUTOUT_TARGET = "scripts.image_processing.request_remove_background:remove_background"
 
 #: いちばん新しい apply() の `attach`。用済みになった apply() の包みが、
 #: 建て終わった後の当て直しをこちらへ渡す（版26。VERIFICATION.md §3.65）。
@@ -337,9 +346,14 @@ def apply(ctx):
     if not live.hot():
         write("hot reload: off (場所が控えられない。設定は注入し直しで効く)")
 
+    # v1.18.0（916）の置き場 state\models\ に残ったモデルを state\stable_diffusion\models\ へ移す。
+    for path in assets.migrate(ctx.state_dir):
+        write("置き場を移した: {}".format(path))
+
     #: 建つ前に書く材料。**熱くしない**（建つ瞬間にしか効かない）。
-    materials = [(attr, ctx.setting(name)) for name, attr in MATERIALS
-                 if str(ctx.setting(name) or "").strip()]
+    #: 古い置き場を指したままの設定は新しい置き場へ読み替える。
+    materials = [(attr, assets.relocate(ctx.setting(name), ctx.state_dir))
+                 for name, attr in MATERIALS if str(ctx.setting(name) or "").strip()]
 
     #: diffusers 系で実際に当てた寸法。2つ以上になったら知らせる
     #: （寸法ごとにモデルが作り直され、ゲームを閉じるまで残る。VERIFICATION.md §3.65）。
@@ -441,7 +455,8 @@ def apply(ctx):
         scale = scales.get(kind, 1.0)
         if rulebook.skip_upscale(rules, kind, params.get("prompt"), model):
             scale = 1.0
-        new = sizes.scaled(params.get("width"), params.get("height"), scale)
+        new = sizes.scaled(params.get("width"), params.get("height"), scale,
+                           conf.get("long_caps", {}).get(kind))
         if new is not None:
             changes["width"], changes["height"] = new
         for name, target in (("prompt", "prompt"), ("negative_prompt", "negative")):
@@ -497,7 +512,7 @@ def apply(ctx):
 
     def main_cfg():
         """この画面の設定（`live`）を、プリセットの値と同じ形で。"""
-        return {"scales": live.scales, "samplers": live.samplers,
+        return {"scales": live.scales, "long_caps": live.long_caps, "samplers": live.samplers,
                 "strip_lora": live.strip_lora, "safety": live.safety}
 
     def add_safety(stage, params, changes, conf, family):
@@ -659,9 +674,8 @@ def apply(ctx):
     state_dir = ctx.state_dir
     game_dir = ctx.game_dir
 
-    #: チェックポイントの系統（ヘッダを毎回読まないため）と、知らせ済みの振り分け。
+    #: チェックポイントの系統（ヘッダを毎回読まないため）。
     families = {}
-    routed = set()
 
     def full_path(path):
         path = str(path or "")
@@ -1059,6 +1073,38 @@ def apply(ctx):
     install_observer()
     HANDOFF["attach"] = attach
     attach()
+
+    # ------------------------------------------------- 背景の切り抜き（版27）
+
+    cutout_file = cutout.model_path(game_dir)
+    cutout_seen = {}
+
+    @ctx.wrap(CUTOUT_TARGET, required=False, safe=True)
+    def remove_background(orig, *args, **kwargs):
+        """設定が isnet-anime なら、サイドカー（u2net 固定）の代わりに isnet-anime で抜く。
+
+        抜けなければ（ファイルが無い・推論で落ちた）ゲームの切り抜きへ戻す。
+        """
+        if str(live.values.get("CUTOUT_MODEL") or "game") != "isnet-anime":
+            return orig(*args, **kwargs)
+        image = frames.arg(args, kwargs, "image", 0)
+        if image is None or not os.path.isfile(cutout_file):
+            warn("cutout-missing", "isnet-anime が使えないのでゲームの切り抜きで抜く"
+                 "（{} が無い）".format(cutout_file))
+            return orig(*args, **kwargs)
+        start = time.time()
+        try:
+            got = cutout.cut(image, cutout_file)
+        except Exception as exc:
+            warn("cutout-failed", "isnet-anime で抜けなかったのでゲームの切り抜きで抜く"
+                 "（{}: {}）".format(type(exc).__name__, exc))
+            return orig(*args, **kwargs)
+        count = cutout_seen.get("count", 0) + 1
+        cutout_seen["count"] = count
+        if count <= 3 or count % 50 == 0:
+            write("cutout: isnet-anime {}x{} {:.2f} 秒（{} 枚目）".format(
+                got.size[0], got.size[1], time.time() - start, count))
+        return got
 
     def start_poll():
         """建った後に現れる出口（組み直し・バックエンド切替）へ当て直す。"""

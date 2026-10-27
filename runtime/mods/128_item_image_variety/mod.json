@@ -12,6 +12,7 @@
   },
   "version": "10",
   "author": "R01/Flossian",
+  "state": ["item_image", "item_image_cross", "item_image_genres", "item_image_variety"],
   "settings": {
     "TOP_K": {
       "type": "int",

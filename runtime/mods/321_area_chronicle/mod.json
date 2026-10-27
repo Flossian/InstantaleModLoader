@@ -12,6 +12,7 @@
   },
   "version": "5",
   "author": "R01/Flossian",
+  "state": ["area_chronicle"],
   "settings": {
     "RECENT_DEEDS": {
       "type": "int",

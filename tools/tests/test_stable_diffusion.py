@@ -471,6 +471,67 @@ check("種類が分からなくても any の行は当たる",
       got["negative_prompt"] == "worst quality, bad hands", got["negative_prompt"])
 check("種類が分からない回は寸法も触らない", (got["width"], got["height"]) == (256, 512))
 
+print("長辺の上限は1枚ごとに当てる")
+ctx_cap = fresh(ENEMY_SHORT=1024, ENEMY_MAX_LONG=1024)
+MOD.MARKS.kind, MOD.MARKS.func = "enemy", "generate_image_real_lcm"
+got = ctx_cap.hooks[exit_target](Pipe.generate_image, pipe, prompt="p", width=512, height=512)
+check("正方形の敵は倍率どおり（512 -> 1024）", (got["width"], got["height"]) == (1024, 1024), got)
+got = ctx_cap.hooks[exit_target](Pipe.generate_image, pipe, prompt="p", width=768, height=512)
+check("huge の敵（768x512）も長辺は上限の 1024 で止まり、比は保つ",
+      (got["width"], got["height"]) == (1024, 704), got)
+check("上限を当てても縮めはしない（倍率 1.0 の種類は触らない）",
+      SZ.scaled(768, 512, 1.0, 512) is None)
+check("上限なしは今までどおり倍率だけ", SZ.scaled(768, 512, 2.0) == (1536, 1024),
+      SZ.scaled(768, 512, 2.0))
+check("上限より短い1段目には効かない（立ち絵 256x512 を 1.625 倍）",
+      SZ.scaled(256, 512, 1.625, 1664) == (448, 832), SZ.scaled(256, 512, 1.625, 1664))
+
+print("背景の切り抜き（版27）")
+CUT = MOD.CUTOUT_TARGET
+
+
+class _Cut(object):
+    size = (640, 1280)
+
+
+def _game_cut(image, use_rembg_alpha_matting=True):
+    return ("game", image, use_rembg_alpha_matting)
+
+
+ctx_cut = fresh()
+check("切り抜きの関数を包む", CUT in ctx_cut.hooks, sorted(ctx_cut.hooks))
+check("既定（game）はゲームの切り抜きのまま",
+      ctx_cut.hooks[CUT](_game_cut, "img", use_rembg_alpha_matting=False) == ("game", "img", False))
+ctx_cut = fresh(CUTOUT_MODEL="isnet-anime")
+got = ctx_cut.hooks[CUT](_game_cut, "img")
+check("isnet-anime でもモデルのファイルが無ければゲームの切り抜きに戻す",
+      got == ("game", "img", True) and any(k == "cutout-missing" for k, _ in ctx_cut.warnings),
+      (got, ctx_cut.warnings))
+_onnx = MOD.cutout.model_path(ctx_cut.game_dir)
+os.makedirs(os.path.dirname(_onnx), exist_ok=True)
+io.open(_onnx, "wb").write(b"x")
+_real_cut = MOD.cutout.cut
+try:
+    MOD.cutout.cut = lambda image, path: _Cut()
+    got = ctx_cut.hooks[CUT](_game_cut, "img")
+    check("ファイルがあれば isnet-anime の結果を返す（位置引数の絵も読む）", isinstance(got, _Cut), got)
+    got = ctx_cut.hooks[CUT](_game_cut, image="img")
+    check("キーワードで来た絵も読む", isinstance(got, _Cut), got)
+    check("切り抜いた記録を残す", any(n.startswith("cutout: isnet-anime 640x1280") for n in ctx_cut.notes),
+          ctx_cut.notes[-3:])
+
+    def _boom(image, path):
+        raise RuntimeError("推論で落ちた")
+    MOD.cutout.cut = _boom
+    got = ctx_cut.hooks[CUT](_game_cut, "img")
+    check("isnet-anime で落ちたらゲームの切り抜きに戻す",
+          got == ("game", "img", True) and any(k == "cutout-failed" for k, _ in ctx_cut.warnings), got)
+finally:
+    MOD.cutout.cut = _real_cut
+check("モデルの場所はゲームのフォルダの runtime/models/u2net/isnet-anime.onnx",
+      MOD.cutout.model_path("G").replace("\\", "/") == "G/runtime/models/u2net/isnet-anime.onnx",
+      MOD.cutout.model_path("G"))
+
 print("LoRA タグ")
 ctx_lora = fresh(STRIP_LORA=True)
 MOD.MARKS.kind, MOD.MARKS.func = "background", "generate_image_real_lcm"
@@ -937,6 +998,10 @@ check("既定なら材料を触らない",
 
 print("モデルの置き場とダウンロード")
 import importlib.util as _ilu  # noqa: E402
+import shutil as _shutil  # noqa: E402
+import time  # noqa: E402
+if MOD_DIR not in sys.path:
+    sys.path.insert(0, MOD_DIR)          # assets は道具と同じく隣（sizes）を素の名前で import する
 _spec = _ilu.spec_from_file_location("assets_under_test",
                                      os.path.join(MOD_DIR, "assets.py"))
 AS = _ilu.module_from_spec(_spec)
@@ -945,24 +1010,68 @@ _spec.loader.exec_module(AS)
 store = tempfile.mkdtemp(prefix="stable_diffusion_models_")
 made = AS.ensure_dirs(store)
 check("系統ごとに4つのフォルダを作る", len(made) == 8, made)
-check(r"置き場は state\models\<系統>\<種類>",
-      AS.dir_of(store, "sdxl", "taesd").endswith(os.path.join("models", "sdxl", "taesd")),
+check(r"置き場は state\stable_diffusion\models\<系統>\<種類>",
+      AS.dir_of(store, "sdxl", "taesd").endswith(
+          os.path.join("stable_diffusion", "models", "sdxl", "taesd")),
       AS.dir_of(store, "sdxl", "taesd"))
 check("同じ並びを2回作っても増えない", AS.ensure_dirs(store) == [])
 
-io.open(os.path.join(AS.dir_of(store, "sdxl", "checkpoints"), "x.safetensors"),
-        "w").write("x")
+_shutil.copyfile(sdxl_path, os.path.join(AS.dir_of(store, "sdxl", "checkpoints"), "x.safetensors"))
+# Stable Cascade の Stage C（ゲームの stable-diffusion.cpp が読めない）。後から置いたので一番新しい。
+cascade = fake_checkpoint(["clip_txt_mapper.weight", "clf.1.weight", "down_downscalers.0.1.weight"],
+                          ".safetensors")
+_cascade_at = os.path.join(AS.dir_of(store, "sdxl", "checkpoints"), "stageC.safetensors")
+_shutil.copyfile(cascade, _cascade_at)
+os.utime(_cascade_at, (time.time() + 60, time.time() + 60))
 io.open(os.path.join(AS.dir_of(store, "sdxl", "checkpoints"), "読まない.txt"),
         "w", encoding="utf-8").write("x")
 check("モデルの拡張子だけ数える",
-      AS.files_in(store, "sdxl", "checkpoints") == ["x.safetensors"],
+      AS.files_in(store, "sdxl", "checkpoints") == ["stageC.safetensors", "x.safetensors"],
       AS.files_in(store, "sdxl", "checkpoints"))
-check("一番新しいものを絶対パスで引ける",
-      AS.newest(store, "sdxl", "checkpoints").endswith("x.safetensors"))
+check("中身がその系統でないチェックポイントを見分ける（Stable Cascade）",
+      AS.foreign(store, "sdxl") == ["stageC.safetensors"], AS.foreign(store, "sdxl"))
+check("一番新しいものを絶対パスで引ける（系統の違うものは新しくても選ばない）",
+      AS.newest(store, "sdxl", "checkpoints").endswith("x.safetensors"),
+      AS.newest(store, "sdxl", "checkpoints"))
 check("無ければ空", AS.newest(store, "sd15", "taesd") == "")
-check("置き場の説明が系統ごとに出る",
-      len(AS.describe(store)) == 2 and "sdxl" in AS.describe(store)[1],
-      AS.describe(store))
+check("置き場の説明が系統ごとに出て、読めないチェックポイントも出る",
+      len(AS.describe(store)) == 3 and "sdxl" in AS.describe(store)[1]
+      and "stageC.safetensors" in AS.describe(store)[2], AS.describe(store))
+
+print(r"v1.18.0 の置き場（state\models\）からの移動と読み替え")
+moving = tempfile.mkdtemp(prefix="stable_diffusion_move_")
+_old_ckpt = os.path.join(moving, "models", "sdxl", "checkpoints", "old.safetensors")
+os.makedirs(os.path.dirname(_old_ckpt))
+_shutil.copyfile(sdxl_path, _old_ckpt)
+_both = os.path.join(moving, "models", "sdxl", "taesd", "same.safetensors")
+os.makedirs(os.path.dirname(_both))
+io.open(_both, "w").write("old")
+_new_both = os.path.join(AS.root_dir(moving), "sdxl", "taesd", "same.safetensors")
+os.makedirs(os.path.dirname(_new_both))
+io.open(_new_both, "w").write("new")
+moved = AS.migrate(moving)
+check("古い置き場のファイルを新しい置き場の同じ所へ移す",
+      os.path.isfile(os.path.join(AS.dir_of(moving, "sdxl", "checkpoints"), "old.safetensors"))
+      and not os.path.exists(_old_ckpt), moved)
+check("同じ名前が新しい置き場に在れば上書きしない",
+      io.open(_new_both).read() == "new" and os.path.isfile(_both), moved)
+check("空になったフォルダは消し、残したファイルのフォルダは残す",
+      not os.path.isdir(os.path.join(moving, "models", "sdxl", "checkpoints"))
+      and os.path.isdir(os.path.dirname(_both)))
+check("古い置き場が無ければ何もしない", AS.migrate(tempfile.mkdtemp()) == [])
+check("古い置き場を指す絶対パスを新しい置き場へ読み替える",
+      AS.relocate(_old_ckpt, moving)
+      == os.path.join(AS.dir_of(moving, "sdxl", "checkpoints"), "old.safetensors"),
+      AS.relocate(_old_ckpt, moving))
+check("それ以外のパスはそのまま（ゲームの相対パス・空・別の場所）",
+      AS.relocate("runtime/models/sd15/checkpoints/a.safetensors", moving)
+      == "runtime/models/sd15/checkpoints/a.safetensors"
+      and AS.relocate("", moving) == ""
+      and AS.relocate(os.path.join(moving, "modelsX", "a"), moving)
+      == os.path.join(moving, "modelsX", "a"))
+check("設定の並びはパスの項目だけ読み替える",
+      AS.relocate_values({"CHECKPOINT_PATH": _old_ckpt, "PORTRAIT_SHORT": 704}, moving)
+      == {"CHECKPOINT_PATH": AS.relocate(_old_ckpt, moving), "PORTRAIT_SHORT": 704})
 
 
 class _Response(object):
@@ -1028,6 +1137,8 @@ check("SDXL プリセットは実測で要ると分かった2つを足す（LoRA
       == ("euler_a", 24, 5.0), sdxl_values)
 check("SDXL プリセットは置き場の一番新しいチェックポイントを指す（x.safetensors）",
       sdxl_values["CHECKPOINT_PATH"].endswith("x.safetensors"), sdxl_values["CHECKPOINT_PATH"])
+check("SDXL プリセットは読めないチェックポイントを選ばなかったと注記する",
+      any("stageC.safetensors" in note for note in sdxl_notes), sdxl_notes)
 check("SDXL プリセットは置き場の TAESD を指す（ダウンロードで置いたもの）",
       sdxl_values["TAESD_PATH"].endswith("taesdxl.safetensors"), sdxl_values["TAESD_PATH"])
 empty_store = tempfile.mkdtemp(prefix="stable_diffusion_empty_")
@@ -1223,6 +1334,8 @@ import profiles as PF  # noqa: E402
 GAME_PORTRAIT = ("full-body, masterpiece,high quality, detailed face, watercolor, standing,"
                  " middle-aged man, graying hair, empty background,black background,wallpaper")
 GAME_BG = "masterpiece, best quality, watercolor, highly detailed, indoor, dark stone prison cell"
+GAME_ENEMY = ("masterpiece,high quality,full body,creature,(wolf:1.1), a grey dire wolf,"
+              "(plain background,black background:1.1)")
 check("雛形の行の項目は規則の書式に在る",
       all(set(row) <= set(RB.SECTIONS[section]) | {"enabled", "profile"}
           for profile in PF.PROFILES for section, row in PF.rows_of(profile["key"], "m")),
@@ -1258,6 +1371,43 @@ got = RB.rewrite(pony, "portrait", "prompt", GAME_PORTRAIT, GAME_PORTRAIT, PONY)
 check("Pony: 画質の印は score_9 の形", got.startswith("score_9, score_8_up, score_7_up, source_anime"), got)
 got = RB.rewrite(pony, "enemy", "negative", "worst quality", "worst quality", PONY)
 check("Pony: 否定に score_6 以下", "score_6, score_5, score_4" in got, got)
+for game_neg in ("photoreal, (nsfw, worst quality, low quality:1.4), thighs, nude, (zombie, sketch, comic)",
+                 "photoreal, (worst quality, low quality:1.4), nsfw, interlocked fingers, nipples"):
+    got = RB.rewrite(pony, "portrait", "negative", game_neg, game_neg, PONY)
+    check("Pony: ゲームの否定の 1.4 倍の画質の語を重み無しにする（{}）".format(game_neg[:30]),
+          ":1.4" not in got and "nsfw" in RB.split_tags(got)
+          and "worst quality" in RB.split_tags(got)
+          and ("(zombie, sketch, comic)" in got) == ("(zombie, sketch, comic)" in game_neg), got)
+got = RB.rewrite(ill, "portrait", "negative", "(nsfw, worst quality, low quality:1.4)",
+                 "(nsfw, worst quality, low quality:1.4)", NOVA)
+check("Illustrious: 重みは触らない（Pony だけの手当て）", ":1.4" in got, got)
+ANIMAGINE = ("sdxl", "animagineXL40_v4Opt.safetensors")
+ani = PF.put(RB.empty(), "animagine", "animagineXL40_v4Opt")
+got = RB.rewrite(ani, "portrait", "prompt", GAME_PORTRAIT, GAME_PORTRAIT, ANIMAGINE)
+check("Animagine: 立ち絵は 1boy / 1girl から始まり、画質の印は最後",
+      got.split(", ")[0] in ("1boy", "1girl")
+      and got.endswith("masterpiece, high score, great score, absurdres")
+      and "full body" in RB.split_tags(got) and "best quality" not in got, got)
+got = RB.rewrite(ani, "enemy", "prompt", GAME_ENEMY, GAME_ENEMY, ANIMAGINE)
+check("Animagine: 敵も画質の印は最後で、ゲームの画質の語と creature は外れる",
+      got.endswith("masterpiece, high score, great score, absurdres")
+      and got.count("masterpiece") == 1 and "creature" not in RB.split_tags(got), got)
+got = RB.rewrite(ani, "background", "prompt", GAME_BG, GAME_BG, ANIMAGINE)
+check("Animagine: 背景は no humans, scenery から始まり、画質の印は最後",
+      got.startswith("no humans, scenery") and got.endswith("absurdres"), got)
+got = RB.rewrite(ani, "portrait", "negative", "worst quality", "worst quality", ANIMAGINE)
+check("Animagine: 否定に low score, bad score", "low score, bad score, average score" in got, got)
+HUGE_NEG = ("nsfw,human,girl,women,people,(worst quality, low quality:1.4),  multiple characters, "
+            "(sketch, comic, anime), detailed background")
+got = RB.rewrite(ani, "enemy", "negative", HUGE_NEG, HUGE_NEG, ANIMAGINE)
+check("Animagine: huge の敵の否定から detailed background を外す（絵が崩れるため）",
+      "detailed background" not in got and "sketch" in got, got)
+got = RB.rewrite(ani, "enemy", "prompt", GAME_ENEMY, GAME_ENEMY, ANIMAGINE)
+check("Animagine: 代わりに敵へ simple background を足し、画質の印は最後のまま",
+      "simple background" in RB.split_tags(got) and got.endswith("absurdres"), got)
+got = RB.rewrite(ill, "enemy", "negative", HUGE_NEG, HUGE_NEG, NOVA)
+check("Illustrious: detailed background は外さない（Animagine だけの手当て）",
+      "detailed background" in got, got)
 
 print("雛形がフック越しに効く（全文は1回だけ出す）")
 prof_dir = tempfile.mkdtemp(prefix="stable_diffusion_profile_")

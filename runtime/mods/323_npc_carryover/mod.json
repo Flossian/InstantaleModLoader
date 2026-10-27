@@ -12,6 +12,7 @@
   },
   "version": "4",
   "author": "R01/Flossian",
+  "state": ["npc_carryover"],
   "after": [
     "120_fix_npc_name_collision",
     "311_npc_profile_memory",

@@ -12,6 +12,7 @@
   },
   "version": "3",
   "author": "R01/Flossian",
+  "state": ["npc_travel"],
   "settings": {
     "DEPART_CHANCE_PERCENT": {
       "type": "int",

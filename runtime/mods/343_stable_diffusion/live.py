@@ -38,7 +38,8 @@ HOT_NAMES = ("PORTRAIT_SHORT", "PORTRAIT_MAX_LONG",
              "STAGE2_METHOD", "STAGE2_STEPS", "STAGE2_CFG", "STAGE2_SCHEDULER",
              "LCM_METHOD", "LCM_STEPS", "LCM_CFG", "LCM_SCHEDULER",
              "STRIP_LORA", "MODEL_SAFETY", "DIFFUSERS_RESIZE",
-             "KIND_PRESETS", "PORTRAIT_PRESET", "ENEMY_PRESET", "BACKGROUND_PRESET")
+             "KIND_PRESETS", "PORTRAIT_PRESET", "ENEMY_PRESET", "BACKGROUND_PRESET",
+             "CUTOUT_MODEL")
 
 #: 種類ごとに割り当てるカスタムプリセットの設定名（版26）。
 KIND_PRESET_NAMES = (("portrait", "PORTRAIT_PRESET"), ("enemy", "ENEMY_PRESET"),
@@ -65,6 +66,10 @@ def derive(values):
             "background": sizes.size_scale("background", values["BACKGROUND_SHORT"],
                                            values["BACKGROUND_MAX_LONG"]),
         },
+        #: 1枚ごとの長辺の上限（`sizes.scaled`）。倍率だけだと基準より長い絵が上限を超える。
+        "long_caps": {"portrait": values["PORTRAIT_MAX_LONG"],
+                      "enemy": values["ENEMY_MAX_LONG"],
+                      "background": values["BACKGROUND_MAX_LONG"]},
         "samplers": {
             "stage1": (values["STAGE1_METHOD"], values["STAGE1_STEPS"],
                        values["STAGE1_CFG"], values["STAGE1_SCHEDULER"]),
@@ -124,6 +129,7 @@ class Live(object):
     def _apply(self, values):
         got = derive(values)
         self.scales = got["scales"]
+        self.long_caps = got["long_caps"]
         self.samplers = got["samplers"]
         self.strip_lora = got["strip_lora"]
         self.safety = got["safety"]

@@ -12,6 +12,7 @@
   },
   "version": "5",
   "author": "R01/Flossian",
+  "state": ["bounty_hunter"],
   "after": [
     "309_office_pardon"
   ],

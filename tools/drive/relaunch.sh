@@ -43,7 +43,7 @@ if [ "$1" = "restore" ]; then
   (cd "$B" && find state -type f \( -name "${IML_DRIVE_WORLD}.*" -o -name "${IML_DRIVE_WORLD}×*" \)) | while read -r f; do
     cmp -s "$B/$f" "$f" && continue
     mkdir -p "$(dirname "$f")" && cp -p "$B/$f" "$f" && echo "restored $f"; done
-  find state -path state/models -prune -o -type f \( -name "${IML_DRIVE_WORLD}.*" -o -name "${IML_DRIVE_WORLD}×*" \) -newer "$B/save/savedata.json" -print | while read -r f; do
+  find state \( -path state/models -o -path state/stable_diffusion/models \) -prune -o -type f \( -name "${IML_DRIVE_WORLD}.*" -o -name "${IML_DRIVE_WORLD}×*" \) -newer "$B/save/savedata.json" -print | while read -r f; do
     [ -f "$B/$f" ] && continue
     mkdir -p "$LEFT/$(dirname "$f")"; mv "$f" "$LEFT/${f}_$(date +%H%M%S)" && echo "moved new state $f"; done
 fi

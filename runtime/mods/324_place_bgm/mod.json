@@ -12,6 +12,7 @@
   },
   "version": "4",
   "author": "R01/Flossian",
+  "state": ["musics/place"],
   "tool": {
     "entry": "tool.py",
     "label": {

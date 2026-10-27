@@ -10,8 +10,9 @@
     "en": "Raises the generation resolution and overrides the sampler at the single exit every backend goes through, separately for portraits, enemies and backgrounds, keeping the aspect ratio. The checkpoint, TAESD, VAE and LoRA folder can be pointed elsewhere (for an SDXL model) because they are written before the pipeline is built. Every default is the game's own value, and a setting left at its default is never written",
     "ja": "どのバックエンドでも通る1つの出口で、生成解像度を上げ、サンプラーを上書きする。立ち絵・敵・背景で別々に指定でき、縦横比は保つ。チェックポイント・TAESD・VAE・LoRA の置き場も差し替えられる（パイプラインが建つ前に書くため。SDXL のモデルへ移る用）。既定値はすべてゲームの値で、既定のままの項目は書き換えない"
   },
-  "version": "26",
+  "version": "27",
   "author": "R01/Flossian",
+  "state": ["stable_diffusion"],
   "settings": {
     "PORTRAIT_SHORT": {
       "type": "int",
@@ -480,6 +481,22 @@
       "note": {
         "ja": "空ならこの画面の設定で描く。カスタムプリセットの名前を入れると、背景だけそのプリセットのチェックポイント・TAESD・解像度・サンプラー・LoRA タグの除去で描く。ゲームのモデルとは別にもう1つモデルを読み込むので、そのぶん VRAM を使う",
         "en": "Empty draws with the settings on this screen. A custom preset name draws only backgrounds with that preset's checkpoint, TAESD, resolution, sampler and LoRA tag removal. It loads a second model besides the game's, which uses more VRAM."
+      }
+    },
+    "CUTOUT_MODEL": {
+      "type": "choice",
+      "values": [
+        "game",
+        "isnet-anime"
+      ],
+      "default": "game",
+      "label": {
+        "ja": "背景の切り抜きのモデル",
+        "en": "Background removal model"
+      },
+      "note": {
+        "ja": "立ち絵と敵の背景を抜くモデル。game はゲームのまま（同梱の rembg。汎用の u2net）。isnet-anime はゲームのフォルダにあるアニメ絵向けのモデルで抜く。人物の周りの飾りと人物を取り違えて体を削ることが減り、1枚 0.4〜0.6 秒（CPU）で済む。ファイルが無いか抜けないときはゲームの切り抜きに戻す。設定は描くたびに読み直す",
+        "en": "Model used to cut the background out of portraits and enemies. game keeps the game's own cutout (the bundled rembg with the general u2net). isnet-anime uses the anime-oriented model already in the game folder, which cuts away parts of the character far less often and takes 0.4-0.6 s per image on the CPU. Falls back to the game's cutout if the file is missing or the cutout fails. Re-read on every image"
       }
     }
   },

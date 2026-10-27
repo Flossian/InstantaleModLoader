@@ -12,6 +12,7 @@
   },
   "version": "3",
   "author": "R01/Flossian",
+  "state": ["city_case"],
   "settings": {
     "START_FACILITY_TYPE": {
       "type": "str",
