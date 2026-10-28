@@ -79,6 +79,12 @@ BUTTON_WATCH_ATTR = BUTTON_ATTR + "_watch"
 BUTTON_SIZE = 24.0
 # 立ち絵の左上の角からの間（upx）。
 BUTTON_INSET = 6.0
+# 描き方の一覧（txt2img / img2img / txt2img→img2img）。描き方を出す MOD（343）が居て、
+# txt2img のほかにも選べるときだけ、ボタンを押すとその右に出す（ローダの描き方の窓口。TECH.md §5.11）。
+MENU_ATTR = BUTTON_ATTR + "_menu"
+# ボタンと一覧の間・一覧の行の間（upx）と、文字の左右の余白（px）。
+MENU_GAP = 4.0
+MENU_PADDING = 24.0
 PORTRAIT_WIDGET = "character_image_right"
 # 立ち絵のこれが変わったら置き直す（窓の大きさ・絵の差し替え・開閉）。
 PORTRAIT_EVENTS = ("pos", "size", "texture", "opacity", "source")
@@ -491,10 +497,12 @@ def apply(ctx):
         if not _wait_idle(runtime):
             write("skipped: another portrait is still generating")
             return
-        # 本体は並びを「, 」で繋ぐ（実測。408 の native prompt type: list）。
-        generator(state.world_key(app), _text(player, "name"),
-                  _text(player, "category") or "character", list(words))
-        write("regenerated {}".format(_text(player, "name")))
+        # 選んだ描き方は、このスレッドの描き方として立てる（描くのは 343。ローダの描き方の窓口）。
+        with imagegen.drawing_method(job.get("method") or "txt2img") as method:
+            # 本体は並びを「, 」で繋ぐ（実測。408 の native prompt type: list）。
+            generator(state.world_key(app), _text(player, "name"),
+                      _text(player, "category") or "character", list(words))
+        write("regenerated {} ({})".format(_text(player, "name"), method))
 
     worker = _worker(ctx, run_job, write, finish_job)
 
@@ -522,6 +530,60 @@ def apply(ctx):
         visible = (rect is not None and app is not None and not runtime["busy"]
                    and _portrait_shows_player(app, image))
         ui.show_widget(button, visible)
+        if visible:
+            place_menu(hud, button)
+        else:
+            close_menu(hud)
+
+    def close_menu(hud):
+        """描き方の一覧を外す。"""
+        for item in getattr(hud, MENU_ATTR, None) or ():
+            parent = frames.attr(item, "parent", None)
+            if parent is not None:
+                try:
+                    parent.remove_widget(item)
+                except Exception:
+                    ctx.log_exc("player portrait: could not remove the method menu")
+        setattr(hud, MENU_ATTR, [])
+
+    def place_menu(hud, button):
+        """一覧をボタンの右へ、上端を揃えて縦に並べる。"""
+        gap = ui.upx(MENU_GAP)
+        top = button.y + button.height
+        for index, item in enumerate(getattr(hud, MENU_ATTR, None) or ()):
+            item.pos = (button.x + button.width + gap, top - (index + 1) * item.height - index * gap)
+            ui.clamp_into_window(item)
+
+    def open_menu(hud, button, choices, fresh):
+        """描き方の一覧を出す。選んだら一覧を閉じて描く。"""
+        host = ui.overlay_host(hud)
+        if host is None:
+            return
+        # 既定の字体（Roboto）には「→」が無く四角になった（実機）。ゲームの字体を写す。
+        try:
+            font = ui.font_from(hud, max_depth=6)
+        except Exception:
+            font = None
+        items = []
+        for method in choices:
+            item = ui.popup_button(imagegen.METHOD_LABELS[method])
+            if font:
+                item.font_name = font
+            try:
+                item.texture_update()
+                item.width = max(float(item.width), float(item.texture_size[0]) + MENU_PADDING)
+            except Exception:
+                pass                         # 測れなければ既定の幅のまま
+
+            def chosen(*_args, picked=method):
+                close_menu(hud)
+                start(hud, button, picked, fresh or _shift_held())
+
+            item.bind(on_release=chosen)
+            host.add_widget(item)
+            items.append(item)
+        setattr(hud, MENU_ATTR, items)
+        place_menu(hud, button)
 
     def request(button):
         app = ui.find_app()
@@ -532,14 +594,27 @@ def apply(ctx):
             return
         # Shift を押しながら押したら、控えの要素を使わずに作り直す（DOC.md「英語の外見」）。
         fresh = _shift_held()
+        choices = imagegen.methods("portrait")
+        if len(choices) <= 1:
+            start(hud, button, "txt2img", fresh)
+        elif getattr(hud, MENU_ATTR, None):
+            close_menu(hud)                  # もう一度押したら閉じる
+        else:
+            open_menu(hud, button, choices, fresh)
+
+    def start(hud, button, method, fresh):
+        """選んだ描き方で描き直しの仕事を積む。"""
+        app = ui.find_app()
+        if app is None or runtime["busy"]:
+            return
         runtime["busy"] = True
         ui.show_widget(button, False)
         key = state.playthrough_key(app) + ":player"
-        if not worker.enqueue({"app": app, "key": key, "fresh": fresh}):
+        if not worker.enqueue({"app": app, "key": key, "fresh": fresh, "method": method}):
             runtime["busy"] = False
             place_button(hud, button)
             return
-        write("regeneration requested" + (" (rebuild look)" if fresh else ""))
+        write("regeneration requested ({})".format(method) + (" (rebuild look)" if fresh else ""))
 
     def rebind(button, attr, target, events, callback):
         """target の events に callback を結ぶ。前の注入が結んだものは外す。
@@ -599,6 +674,7 @@ def apply(ctx):
         required=False, safe=True)
     def character_sheet(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
+        close_menu(self)                     # 人物欄を開け閉めしたら一覧は閉じる
         button = ensure_button(self)
         if button is not None:
             place_button(self, button)

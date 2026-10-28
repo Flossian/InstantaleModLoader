@@ -10,7 +10,7 @@ TECH.md §3.12 の契約で動く（`131_sharp_portrait` の道具と同じ）�
 
 ##### なぜ専用の画面か
 
-設定は 27 項目あり、ローダの設定画面はそれを宣言順に1列で並べる。
+設定は 54 項目あり、ローダの設定画面はそれを宣言順に1列で並べる。
 対になる値（短辺と長辺、方法と steps と cfg）が離れ、
 入れた数字が**実際に何ピクセルになるのか**も分からない。
 規則（LoRA の付け替えや条件つき追加）は表なので、そもそも宣言できない。
@@ -31,6 +31,8 @@ TECH.md §3.12 の契約で動く（`131_sharp_portrait` の道具と同じ）�
 | 完全置き換え | 完全置き換え | 同じ |
 | サンプラー | サンプラー | 種類ではなく段（1段目 / 2段目 / LCM の段）で持つ |
 | （無し） | モデル別 | 版26。`model` の付いた行と、モデルの系統に合わせたプロンプトの雛形（`profiles.py`） |
+| （無し） | 高度設定 | 今の絵を下絵にした描き直し（img2img）と、2つのモデルで続けて描く（txt2img→img2img）。部品は `img2img.py` |
+| （無し） | 次に描く絵（タブの上の帯） | 種類ごとのモデル・寸法・サンプラーと、効いていない設定。計算は `outlook.py`（VERIFICATION.md §3.65） |
 
 一覧の行は「選択行を削除」ではなく行ごとの `×` で消す（Tk の表に合わせた）。
 
@@ -58,8 +60,10 @@ for _tools in [os.environ.get("INSTANTALE_MODLOADER_TOOLS", ""),
         break
 
 import assets     # noqa: E402  自分の隣（モデルの置き場とダウンロード）
+import img2img    # noqa: E402  自分の隣（描き直しと続けて描くの設定名）
 import iniimport  # noqa: E402  自分の隣（元 MOD の ini の取り込み）
 import modtool  # noqa: E402
+import outlook   # noqa: E402  自分の隣（次に描く絵の見通し）
 import presets   # noqa: E402  自分の隣（SD1.5 / SDXL のプリセット）
 import profiles  # noqa: E402  自分の隣（モデルの系統に合わせたプロンプトの雛形）
 import rules as rulebook  # noqa: E402  自分の隣（本体と共通の規則）
@@ -145,22 +149,46 @@ BLURBS = {
                  "タグとの照合（alias）は別名を正しいタグへ直すが、試した範囲では絵の良し悪しの差は見えていない。"),
     "サンプラー": ("段ごとにサンプラーを上書きする。ゲームの値のままなら書き込まない。"
                    "lcm は LCM LoRA 専用（4〜8 steps・cfg 1〜2）で、LoRA を外したまま使うと破綻する。"),
+    "高度設定": ("再生成の描き方を足す設定。既定は切（ゲームのまま）で、sdcpp 系のときだけ効く。\n"
+                 "プリセットは「状態 / モデル」で保存したカスタムプリセットから選ぶ。\n"
+                 "「（ゲーム既定のモデル）」は、ゲームで選んだモデルで描く（寸法・サンプラーはほかのタブの値）。"),
 }
+
+#: 高度設定のプリセットのプルダウンで、空の設定（ゲームで選んだモデルで描く）の見せ方。
+SAME_LABEL = "（ゲーム既定のモデル）"
+
+#: 種類ごとのプリセットのプルダウンで、空の設定（プリセットを使わずに描く）の見せ方。
+KIND_SAME_LABEL = "（プリセットを使わない）"
+
+#: 高度設定のタブの種類の並び。
+ADVANCED_KINDS = (("portrait", "立ち絵"), ("enemy", "敵・モンスター"), ("background", "背景"))
+
+#: 本体のログ（`stable_diffusion.py` の `LOG_BASENAME`）。帯の「前に描いた絵」はここから読む。
+LOG_BASENAME = "stable_diffusion.log"
 
 #: ゲームが選んでいるバックエンド（GAME.md §2.12.1）。
 CONFIG_TAIL = os.path.join("Darmabeko", "Instantale", "config.json")
 
 
-def game_config():
-    """ゲームの `config.json` の画像生成の欄。読めなければ空の辞書。"""
+def game_local_setting():
+    """ゲームの `config.json` のローカルのモデルの欄。読めなければ空の辞書。"""
     base = os.environ.get("LOCALAPPDATA") or ""
     try:
         with io.open(os.path.join(base, CONFIG_TAIL), encoding="utf-8") as fh:
             data = json.load(fh)
     except Exception:
         return {}
-    return (((data.get("ai_setting") or {})
-             .get("local_model_setting") or {}).get("sd_backend") or {})
+    return ((data.get("ai_setting") or {}).get("local_model_setting") or {}) if isinstance(data, dict) else {}
+
+
+def game_config():
+    """ゲームの `config.json` の画像生成の欄。読めなければ空の辞書。"""
+    return game_local_setting().get("sd_backend") or {}
+
+
+def game_model():
+    """ゲームで選んでいる画像のモデルの名前（`sotemix_v30` など）。読めなければ空。"""
+    return str(game_local_setting().get("model_name") or "")
 
 
 def describe_family(values, game_dir=""):
@@ -412,6 +440,41 @@ def build_window(rules_in=None, settings_in=None, note=""):
     window.title("Stable Diffusionの各種差し替え（ModLoader 版）")
     modtool.setup_theme(window, root_dir)
     modtool.restore_window(root_dir, MOD_DIR, window, fallback="940x780")
+
+    # タブの上の帯。どのタブで値を変えても、保存の前に次に描く絵の中身が変わる（`outlook.py`）。
+    band = ttk.LabelFrame(window, text="次に描く絵", padding=(10, 4))
+    band.pack(fill="x", padx=12, pady=(10, 0))
+    band_cells = []
+    for column, text in enumerate(("", "モデル", "寸法", "サンプラー", "前に描いた絵（ログ）")):
+        ttk.Label(band, text=text, style="Faint.TLabel").grid(row=0, column=column, sticky="w", padx=(0, 14))
+    for row_index in range(len(outlook.KINDS)):
+        band_cells.append([ttk.Label(band, text="") for _column in range(5)])
+        for column, cell in enumerate(band_cells[-1]):
+            cell.grid(row=row_index + 1, column=column, sticky="w", padx=(0, 14))
+    band_regen = ttk.Label(band, text="")
+    band_regen.grid(row=len(outlook.KINDS) + 1, column=0, columnspan=5, sticky="w", pady=(4, 0))
+    band_notes = ttk.Label(band, text="", style="Faint.TLabel", wraplength=880, justify="left")
+    band_notes.grid(row=len(outlook.KINDS) + 2, column=0, columnspan=5, sticky="w")
+    log_path = os.path.join(root_dir, "out", LOG_BASENAME)
+    band_log = {"stamp": None, "value": {"last": {}, "built": None}}
+
+    def band_refresh(raw):
+        """帯を組み直す。ログは変わったときだけ読み直す。"""
+        try:
+            stamp = (os.path.getmtime(log_path), os.path.getsize(log_path))
+        except OSError:
+            stamp = None
+        if stamp != band_log["stamp"]:
+            band_log["stamp"], band_log["value"] = stamp, outlook.read_log(log_path)
+        merged = dict(values)
+        merged.update(raw)
+        got = outlook.build(merged, presets.load_custom(state_dir), game_config(), game_model(),
+                            band_log["value"], game_dir)
+        for cells, row in zip(band_cells, got["rows"]):
+            for cell, text in zip(cells, row):
+                cell.configure(text=text)
+        band_regen.configure(text="再生成のボタン: " + got["regen"])
+        band_notes.configure(text="効いていない設定: " + "／".join(got["notes"]) if got["notes"] else "")
 
     book = ttk.Notebook(window)
     book.pack(fill="both", expand=True, padx=12, pady=(10, 0))
@@ -709,7 +772,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
     # 種類ごとのプリセット（版26。上級者向け）。既定は畳んで隠し、使うときは注意を確かめてから。
     kind_rows = (("PORTRAIT_PRESET", "立ち絵"), ("ENEMY_PRESET", "敵・モンスター"),
                  ("BACKGROUND_PRESET", "背景"))
-    kind_same = "（この画面の設定）"
+    kind_same = KIND_SAME_LABEL
     entries["KIND_PRESETS"] = tk.BooleanVar(value=bool(values.get("KIND_PRESETS")))
     for key, _label in kind_rows:
         entries[key] = tk.StringVar(value=str(values.get(key) or ""))
@@ -776,7 +839,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
             box.configure(values=choices)
             shown.set(now or kind_same)
         kind_note.configure(text="".join(
-            "※ 割り当てたプリセット「{}」が見つかりません。この画面の設定で描きます。\n".format(name)
+            "※ 割り当てたプリセット「{}」が見つかりません。プリセットを使わずに描きます。\n".format(name)
             for name in sorted(set(missing))).rstrip())
 
     def kind_states(*_args):
@@ -986,6 +1049,131 @@ def build_window(rules_in=None, settings_in=None, note=""):
         for key in keys:
             row = setting_row(box, key, row)
 
+    # ---------------------------------------------------------- 高度設定
+    # 描き方ごとに同じ形の枠を2つ並べる。枠の見出しが「使う」のチェックで、切のあいだは中を畳む。
+    tab = page("高度設定")
+    #: プリセットのプルダウン（設定の名前, 表示の変数, 部品）。空の設定は SAME_LABEL で見せる。
+    advanced_boxes = []
+
+    def var_for(key):
+        """設定の値を持つ変数を作って `entries` に置く（真偽はチェック、ほかは文字）。"""
+        if decls[key]["type"] == "bool":
+            entries[key] = tk.BooleanVar(value=bool(values.get(key)))
+        else:
+            entries[key] = tk.StringVar(value=str(values.get(key)))
+        return entries[key]
+
+    def preset_box(parent, key, row, column):
+        """カスタムプリセットを選ぶプルダウン。空の設定は SAME_LABEL で見せる。"""
+        shown = tk.StringVar()
+        box = ttk.Combobox(parent, textvariable=shown, state="readonly", width=24)
+        box.grid(row=row, column=column, sticky="w", padx=(0, 8), pady=2)
+        advanced_boxes.append((key, shown, box))
+
+        def picked(*_args):
+            want = "" if shown.get() == SAME_LABEL else shown.get()
+            if entries[key].get() != want:
+                entries[key].set(want)
+
+        def followed(*_args):
+            want = entries[key].get() or SAME_LABEL
+            if shown.get() != want:
+                shown.set(want)
+
+        shown.trace_add("write", picked)
+        entries[key].trace_add("write", followed)
+
+    def advanced_lists(names=None):
+        """プルダウンの中身を組み直す。選んだ名前が一覧に無ければ知らせる。"""
+        if names is None:
+            names = [row["name"] for row in presets.load_custom(state_dir)]
+        missing = []
+        for key, shown, box in advanced_boxes:
+            now = entries[key].get()
+            choices = [SAME_LABEL] + list(names)
+            if now and now not in names:
+                choices.append(now)
+                missing.append(now)
+            box.configure(values=choices)
+            shown.set(now or SAME_LABEL)
+        advanced_note.configure(text="".join(
+            "※ 選んだプリセット「{}」が見つかりません。ゲーム既定のモデルで描きます。\n".format(name)
+            for name in sorted(set(missing))).rstrip())
+
+    def method_frame(switch, title, lines, headings, confirm=None):
+        """描き方の枠。見出しのチェックが入のあいだだけ、説明と種類ごとの表を見せる。表の枠を返す。"""
+        check = ttk.Checkbutton(tab, text=title, variable=var_for(switch))
+        frame = ttk.LabelFrame(tab, labelwidget=check, padding=8)
+        frame.pack(fill="x", pady=(0, 12))
+        body = ttk.Frame(frame)
+        ttk.Label(body, wraplength=740, justify="left", text="\n".join(lines)).pack(anchor="w")
+        grid = ttk.Frame(body)
+        grid.pack(anchor="w", pady=(8, 0))
+        for column, text in enumerate(headings):
+            ttk.Label(grid, text=text, style="Faint.TLabel").grid(row=0, column=column, sticky="w",
+                                                                  padx=(0, 8))
+        closed = ttk.Label(frame, text="（切。ゲームのまま描く）", style="Faint.TLabel")
+
+        def shown(*_args):
+            if entries[switch].get():
+                closed.pack_forget()
+                body.pack(fill="x")
+            else:
+                body.pack_forget()
+                closed.pack(anchor="w")
+
+        def toggled():
+            # 画面の説明は常体、確かめのダイアログは丁寧語（道具画面の通知の決まり）。
+            if confirm and entries[switch].get() and not messagebox.askokcancel(title, confirm):
+                entries[switch].set(False)
+
+        check.configure(command=toggled)
+        entries[switch].trace_add("write", shown)
+        shown()
+        return grid
+
+    grid = method_frame(
+        img2img.IMG2IMG_SWITCH, "img2img を使う（今の絵を下絵にして描き直す）",
+        ["入にすると、再生成のボタンに (img2img) が出る。",
+         "強さは、小さいほど今の絵が残る（既定 0.5）。"],
+        ("種類", "プリセット", "強さ"))
+    for index, (kind, label) in enumerate(ADVANCED_KINDS, 1):
+        preset, strength = img2img.redraw_names(kind)
+        ttk.Label(grid, text=label).grid(row=index, column=0, sticky="w", padx=(0, 10), pady=2)
+        var_for(preset)
+        preset_box(grid, preset, index, 1)
+        ttk.Entry(grid, textvariable=var_for(strength), width=8).grid(row=index, column=2, sticky="w")
+
+    grid = method_frame(
+        img2img.CHAIN_SWITCH, "txt2img→img2img を使う（2つのモデルで続けて描く。上級者向け）",
+        ["入にすると、再生成のボタンに (txt2img→img2img) が出る。",
+         "1つ目のプリセットで描いた絵を、2つ目のプリセットで描き直す。",
+         "「通常の生成でも使う」は、新しい NPC・場所・敵にも使う。",
+         "モデルを2つ読み込むので VRAM を多く使い、時間もおよそ2倍になる。"],
+        ("種類", "1つ目（txt2img）", "2つ目（img2img）", "強さ", "通常の生成でも使う"),
+        confirm="\n".join([
+            "絵を2つのモデルで続けて描くため、ゲームのモデルとは別にモデルを読み込みます。",
+            "",
+            "VRAM が足りないと、絵の生成がとても遅くなったり、ゲームが落ちたりします。",
+            "1枚にかかる時間も、およそ2倍になります。",
+            "",
+            "使いますか？"]))
+    for index, (kind, label) in enumerate(ADVANCED_KINDS, 1):
+        first, second, strength = img2img.chain_names(kind)
+        ttk.Label(grid, text=label).grid(row=index, column=0, sticky="w", padx=(0, 10), pady=2)
+        var_for(first)
+        preset_box(grid, first, index, 1)
+        var_for(second)
+        preset_box(grid, second, index, 2)
+        ttk.Entry(grid, textvariable=var_for(strength), width=8).grid(row=index, column=3, sticky="w",
+                                                                      padx=(0, 8))
+        ttk.Checkbutton(grid, variable=var_for(img2img.chain_auto_name(kind))).grid(
+            row=index, column=4, sticky="w")
+    advanced_note = ttk.Label(tab, text="", justify="left")
+    advanced_note.pack(anchor="w")
+    preset_listeners.append(advanced_lists)
+    advanced_lists()
+
     # --------------------------------------------------------------- 下の帯
     def current():
         return dict((key, var.get()) for key, var in entries.items())
@@ -1001,9 +1189,11 @@ def build_window(rules_in=None, settings_in=None, note=""):
             r"書き換えた値は out\stable_diffusion.log に出る",
         ]))
         widgets["preview"].configure(text="\n".join(preview_lines(raw)))
+        band_refresh(raw)
 
     for var in entries.values():
         var.trace_add("write", refresh)
+    preset_listeners.append(lambda _names: refresh())   # プリセットを保存・削除したとき
     refresh()
     refresh_assets()
     if note:

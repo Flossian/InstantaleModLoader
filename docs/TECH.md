@@ -2162,6 +2162,29 @@ row = quest_clients.client_of(app, quest_id)   # その依頼の行か None
 誰の仕業かを伏せる依頼かは、この窓口ではなく `board` の「掲示板に出さない依頼」で見る（掲示板に出ない依頼は表に知られていない）。
 置き場は `sys` の属性（`_instantale_quest_clients`）。検査は `tools\tests\test_quest_clients.py`。
 
+#### 3.3.24 絵の描き方も窓口で分け合う（`imagegen` の描き方）
+
+`343_stable_diffusion` は、立ち絵・敵・背景を描き直すときに描き方を選べる（ゲームのままの txt2img・今の絵を下絵にする img2img・2つのモデルで続けて描く txt2img→img2img）。
+選ぶ口は2つある。ゲームの設定の画面の「画像の再生成」（343 自身）と、主人公の立ち絵の描き直し（`335_player_portrait_regenerate`）。
+どちらも描くのは 343 の出口なので、335 は「どの描き方を出せるか」を知り、「選んだ描き方」を 343 へ渡さなければならない。
+MOD どうしは import しないので、ローダの `imagegen` が仲介する。
+
+```python
+imagegen.declare_methods(owner, ctx, fn)    # 出す側。apply() の中。fn(種類) -> 使える描き方の並び（"img2img" / "chain"）
+imagegen.methods("portrait")                # 選ぶ側。先頭は必ず "txt2img"。出す MOD が居なければ txt2img だけ
+with imagegen.drawing_method("img2img"):    # 選ぶ側。描く関数をこの中で呼ぶ（同じスレッド）
+    ...
+imagegen.method_now()                       # 描く側。このスレッドで選ばれている描き方（無ければ None）
+imagegen.METHOD_LABELS                      # 選ぶ口に出す名前（chain は「txt2img→img2img」）
+```
+
+| 決まり | 理由 |
+|---|---|
+| 選ぶ側は、`methods` が txt2img だけなら選ぶ口を出さず、今までどおり描く | 343 が入っていない・何も出していないときに、選べない一覧を出さない |
+| 選んだ描き方はスレッドの中だけ（`drawing_method` の `with`） | 描くのは選ぶ側のスレッド（335 の作業のスレッド、ゲームの再生成のスレッド）。ほかの絵の生成に漏らさない |
+| 知らない描き方は txt2img として扱う | 出す側が描き方を増やしても、古い選ぶ側が壊れない |
+| 登録は持ち主ごとに1つ。登録した ctx が用済みなら数えない。`fn` が投げたら何も出さなかったものとみなす（`errors` に残す） | `board`（§3.3.12）・`quest_clients`（§3.3.23）と同じ |
+
 ### 3.4 まだ現れていない対象を狙う（保留と当て直し）
 
 ゲームは `llama_cpp_runtime_completion` と `scripts.llm.llm_manager` を
@@ -4204,6 +4227,7 @@ imagegen.backend()                         # config.json の sd_backend.name。�
 imagegen.creature_targets("pixel_art_process")   # 包む対象（`モジュール:関数`）の一覧
 imagegen.creature_module()                 # 読み込まれている方の image_generation_creature。無ければ None
 imagegen.FAMILIES / imagegen.CREATURE_FORMAT
+imagegen.methods(種類) / imagegen.drawing_method(描き方) / imagegen.method_now()   # 描き方の窓口（§3.3.24）
 ```
 
 人物・敵・モンスターの絵を描くモジュールは方式ごとに別のパッケージに居て、ゲームは選ばれた1つだけを import する（GAME.md §2.33）。

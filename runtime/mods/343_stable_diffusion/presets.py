@@ -196,6 +196,16 @@ def delete_custom(state_dir, name):
     return _write_custom(state_dir, kept)
 
 
+def overlay(values, preset_values):
+    """いまの設定にプリセットの値を重ねる。`values` に無い項目（版の違いで知らない項目）は捨てる。
+
+    本体（種類ごとのプリセットで描く回）と道具画面の帯（次に描く絵）で同じ重ね方にする。
+    """
+    got = dict(values)
+    got.update((key, value) for key, value in (preset_values or {}).items() if key in got)
+    return got
+
+
 def custom_values(entry, known):
     """欄へ入れる値と、画面に出す注記。
 

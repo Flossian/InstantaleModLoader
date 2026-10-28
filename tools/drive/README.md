@@ -121,6 +121,7 @@ python tools/drive/drive.py <ファイル> --args '<JSON>' --wait <秒>
 | `incident.py` | `kind`・`area`・`elapse`・`force` | `338_town_incidents` の出来事を、決めた街（id か名前。省くといまいる街）に決めた種類で起こす。次の1回の抽選だけ候補を絞り、日数を送る。`force` でその街の収まった後の休みを外す |
 | `typein.py` | `fields` | 入力欄に文字を書く（押さない）。欄は `hint_text` の一部で選ぶ（世界を作る画面の「名前」「概要」など） |
 | `clickimage.py` | `image` | 文字の無い絵のボタンを、絵のファイル名の一部で押す（キャラを作る画面のランダム作成のボタン `dice_1` など） |
+| `settingwindow.py` | `press` | ゲームの設定の画面（歯車）を開いて中のボタンを並べ、`press` の文字のボタンを押す（「画像の再生成(img2img)」など） |
 | `screenwait.py` | `leave`・`texts`・`enabled`・`timeout` | 遊ぶ画面の手待ちで見分けられない段を待つ。画面の名前が変わる・文字が見える・ボタンが押せるようになる、のどれか |
 
 ### 世界とキャラを作る

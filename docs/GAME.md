@@ -3846,6 +3846,38 @@ Atk:<n>(+<n>)\nDef:<n>(+<n>)\nExp:<n>/<n>\nGold:<n>\nAge:<n>\nSta:…\nLocation:
 - SD の段の設定（`character_generation_quality` の `highres_upscale` / `highres`）はここへ来る寸法を変えない。
   プロキシ MOD が 640x1216 で描いていても、この経路へ渡るのは 512x1024
 
+敵と背景の絵は、同じ世界のフォルダの別の置き場に残る（2026-10-28）。
+
+| 種類 | 置き場 | 背景を抜いた絵 |
+| --- | --- | --- |
+| 立ち絵 | `characters\<名前>\` | `no_bg_image.png` |
+| 敵・モンスター | `monsters\<名前>\`（`base_image.png`・`pixelated_image_resized.png`・`reduced_color_image.png`・`add_border_image.png`） | `base_image.png`（RGBA。描いた寸法のまま） |
+| 背景 | `backgrounds\<場所の名前>\`（`image.png`・`prompts.json`） | `image.png`（背景は抜かない。描いた寸法のまま） |
+
+設定の画面（歯車）の「画像の再生成」のボタンは `InstantaleApp.regenerate_current_image` を呼ぶ。
+描くのは作業のスレッド（`_regenerate_current_image_thread`）で、いまの画面に合わせて
+`_regenerate_conversation_character_image`（会話の相手）・`_regenerate_background_image`（背景）・
+`_regenerate_first_enemy_image`（戦闘中の最初の敵）のどれかへ分かれる（recon の名前。中は読めない）。
+会話の相手は `generate_character_image` から描き直す。
+描き終えてから同じ名前のファイルを書き直すだけで、描く前に今の絵を消さない（`343_` の描き直しで実測）。
+押した後、ゲームは設定の画面を閉じる。
+
+設定の画面は `InstanTaleHUD.toggle_setting_window_visibility` で開け閉めする（2026-10-28 実測）。
+枠は `setting_window_layout`（FloatLayout、`pos_hint` は `center_x` 0.5・`center_y` 0.68）で、開くと 500x525、閉じると 0x0・不透明度 0 になる。
+中のボタン3つ（`setting_window_shutdown_button` / `_return_to_title_button` / `_regenerate_image_button`）は素の Kivy の `Button`（375x100、MisakiGothic 25、`pos_hint` は空）で、開くたびに枠へ足され、閉じると外れる（閉じている間は親が無い）。
+並びは上から終了・タイトル・再生成で、上下の余白 62.5・間 50。
+ボタンの暗い下地は `canvas.before`（色 0.07, 0.06, 0.05, 0.5）、明るい縁は `canvas.after` の細い四角4本（色 0.8, 0.78, 0.76）で、ローダの `ui.popup_button` と同じ描き方。
+ドライブから開くときは `InstantaleApp.toggle_setting_window` を呼ぶ。開いた形は次のコマで組まれるので、同じ呼び出しの中で読むとまだ並んでいない。
+HUD の `toggle_setting_window_visibility` を直に呼ぶと、ゲームが `AttributeError: 'InstanTaleHUD' object has no attribute 'close_button_binding'` で落ちる（2026-10-29）。
+開いているかは枠の大きさで見る（閉じていても枠は画面に付いたまま）。
+左下の本の絵のボタンも、この設定の画面を開く。
+主人公のキャラクターシート（`character_image_right` に立ち絵が出る）は `InstantaleApp.toggle_character_sheet_window(0)` で開け閉めする（0 番が主人公）。右の欄の顔の枠は押せる部品ではない。
+
+敵の `monsters\<名前>\base_image.png` は描いたままの絵で、背景が付いている。
+ゲームが背景を抜いた形は `pixelated_image_resized.png`（256x256）と `reduced_color_image.png`（128x128）の透明度にある。
+描いた絵に明るい背景が入ると、背景抜きが本体ごと消し、戦闘の画面では輪郭だけが残る（`343_` の描き直しで2回。VERIFICATION.md §3.65）。
+宿の犬小屋の部屋は背景を新しく描かず、ゲームの既定の背景を出す。
+
 #### 顔
 
 - `detect_face_coordinates(image, cascade_path, padding=0.25, crop_size=256)` は
@@ -3983,8 +4015,12 @@ MOD の控え（`state\<MOD>\`）は世界名で引いていたので、前の�
 | 寸法 | `width` / `height` | `width` / `height` |
 | サンプラー | `sample_method` / `sample_steps` / `cfg_scale` / `scheduler` | `num_inference_steps` / `guidance_scale` |
 | 種 | `seed`（実測は `-1`） | 実測では来ていない |
-| img2img | `image_to_image_anime` が `init_image` 付きで同じ出口へ | 関数ごと無い |
+| img2img | `image_to_image_anime` が `init_image` 付きで同じ出口へ。出口の `strength` の既定は 0.75 | 関数ごと無い |
 | LoRA | ゲームが上の層と出口の**間**で `<lora:...>` を足す | 概念が無い（`lora_dir` も `taesd_path` も無い） |
+
+sdcpp 系の出口へ `init_image` を渡すときは、絵の寸法を `width` / `height` と同じにする。
+違うと出口の中（ネイティブ）で `OSError('exception: access violation writing 0x0000000000000000')` になる（2026-10-28、24回とも。ゲームは落ちず、例外として戻る）。
+寸法を揃えれば、SD1.5 でも SDXL でも txt2img の部品のまま img2img が描ける。
 
 素の値（`sdcpp_cuda`、実測）:
 
@@ -4122,6 +4158,8 @@ system は「世界観と背景に基づき」と言うが、渡すのは名前�
 手元では 2497 で、頼み文は「10 で貧弱・30 で一端の冒険者・60 で名の知れた実力者・150 で伝説」「概ねスキル・能力・年齢で 1/3 ずつ」と目安を書く。
 13 件の返答では、能力値の補正は +5 まで、スキルは1つで有用度 5〜26、年齢は 31〜46 に収まった（使えるのは 2172〜2497 点）。
 年齢の目安は 44 歳が 0 点で、若くするほど高い（40 歳 1・33 歳 4・30 歳 7・25 歳 23・20 歳 66。45 歳から上は1歳ごとに1点戻る）。
+若さに払う点の見返りは、宿の休養などで回復に掛かる期間が短いこと（宿泊の月数は年齢の変動式。§2.17 の「宿泊の流れ」）。
+若いほど1回の活動の周期が短くなり、寿命までに遊べる回数が増える。
 画面が実際に数える式（`StoryApp.set_point_use`）は読めない。
 数えた結果は作成画面の「残り才能: 2497(-61)」の文字にだけ出る（括弧の中がこのキャラの使う点）。`StoryApp` は残りを属性に持たない（在るのは `talent_point` / `get_talent_point` / `set_point_use`）。
 物語を始めても、貯まっている才能点は減らなかった（2026-10-11、使う点 31 のキャラ。`common_savedata.json` が 2497 のまま）。

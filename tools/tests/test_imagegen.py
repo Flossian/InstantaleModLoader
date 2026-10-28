@@ -5,6 +5,7 @@
     包む先          知っている方式はその1つ、知らない・読めないなら4つとも。名前は下線の落ち方まで表どおり
     包み方          同じ関数を対象の数だけ登録する。required は方式が分かっているときだけ立つ
     実体            読み込まれている方のモジュールを返す
+    描き方の窓口    出す MOD の登録を合わせ、用済みは数えない。選んだ描き方はスレッドごと
 """
 import json
 import os
@@ -98,6 +99,57 @@ try:
     check("別の方式を選んでいれば返さない", imagegen.creature_module("sdcpp_cuda") is None)
 finally:
     sys.modules.pop(name, None)
+
+print("描き方の窓口")
+store = getattr(sys, imagegen.METHODS_ATTR, None)
+if isinstance(store, dict):
+    store["providers"].clear()
+check("出す MOD が居なければ txt2img だけ", imagegen.methods("portrait") == ["txt2img"])
+
+
+class AliveCtx(object):
+    gone = False
+
+    def superseded(self):
+        return self.gone
+
+
+live = AliveCtx()
+imagegen.declare_methods("a", live, lambda kind: ["chain", "img2img"] if kind == "portrait" else ["chain"])
+check("並びは txt2img・img2img・chain の順", imagegen.methods("portrait") == ["txt2img", "img2img", "chain"])
+check("種類ごとに出す", imagegen.methods("background") == ["txt2img", "chain"])
+imagegen.declare_methods("b", live, lambda kind: ["img2img", "unknown"])
+check("複数の MOD の分を合わせ、知らない描き方は出さない",
+      imagegen.methods("background") == ["txt2img", "img2img", "chain"])
+imagegen.declare_methods("b", live, lambda kind: 1 / 0)
+check("投げた MOD の分は出さず、誤りを残す",
+      imagegen.methods("background") == ["txt2img", "chain"]
+      and any("ZeroDivisionError" in e for e in getattr(sys, imagegen.METHODS_ATTR)["errors"]))
+live.gone = True
+check("用済みになった登録は数えない", imagegen.methods("portrait") == ["txt2img"])
+imagegen.withdraw_methods("a")
+imagegen.withdraw_methods("b")
+check("下げた登録は残らない", getattr(sys, imagegen.METHODS_ATTR)["providers"] == {})
+
+check("選ばれていなければ None", imagegen.method_now() is None)
+with imagegen.drawing_method("img2img") as chosen:
+    inner = imagegen.method_now()
+    with imagegen.drawing_method("chain"):
+        nested = imagegen.method_now()
+    after_nested = imagegen.method_now()
+check("with の間だけ立ち、入れ子は出ると戻る",
+      (chosen, inner, nested, after_nested, imagegen.method_now()) == ("img2img", "img2img", "chain", "img2img", None))
+with imagegen.drawing_method("nonsense") as chosen:
+    pass
+check("知らない描き方は txt2img", chosen == "txt2img")
+import threading as _threading  # noqa: E402
+seen = {}
+with imagegen.drawing_method("img2img"):
+    worker = _threading.Thread(target=lambda: seen.update(other=imagegen.method_now()))
+    worker.start()
+    worker.join()
+check("描き方はスレッドごと（別のスレッドには移らない）", seen.get("other") is None, seen)
+check("選ぶ口に出す名前", imagegen.METHOD_LABELS["chain"] == "txt2img→img2img")
 
 print()
 if failures:

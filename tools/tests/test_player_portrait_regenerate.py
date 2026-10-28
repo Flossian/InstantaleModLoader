@@ -511,6 +511,62 @@ look_module.create_look = lambda *a: {"image_generation_prompt": ["silver hair"]
 captured["run"]({"app": app, "key": "k", "fresh": True})
 check("作り直しの仕事は記録を使わない", seen and seen[-1][0][3] == ["silver hair"] and kept_words != ["silver hair"],
       (kept_words, seen[-1] if seen else None))
+print("=== 描き方の一覧 ===")
+imagegen = mod.imagegen
+check("描き方を出す MOD が居なければ一覧を出さない（すぐ描く）",
+      captured["jobs"][0].get("method") == "txt2img" and not getattr(sheet_hud, mod.MENU_ATTR, None),
+      captured["jobs"][0])
+
+
+class MenuCtx(object):
+    def superseded(self):
+        return False
+
+
+menu_items = []
+
+
+def fake_popup(text):
+    item = FakeButton()
+    item.text, item.height, item.width = text, 37.0, 75.0
+    menu_items.append(item)
+    return item
+
+
+mod.ui.popup_button = fake_popup
+mod.ui.clamp_into_window = lambda widget: None
+mod._shift_held = lambda: False
+imagegen.declare_methods("test_343", MenuCtx(), lambda kind: ["chain", "img2img"] if kind == "portrait" else [])
+before = len(captured["jobs"])
+button.fire("on_release")
+menu = getattr(sheet_hud, mod.MENU_ATTR, None) or []
+check("押すと描き方の一覧を出す（txt2img・img2img・txt2img→img2img の順）",
+      [item.text for item in menu] == ["txt2img", "img2img", "txt2img→img2img"]
+      and all(item in host.children for item in menu) and len(captured["jobs"]) == before,
+      [item.text for item in menu])
+check("一覧はボタンの右に、上端を揃えて並べる",
+      menu and abs(menu[0].x - (button.x + button.width + 4)) < 0.01
+      and abs(menu[0].y + menu[0].height - (button.y + button.height)) < 0.01
+      and menu[1].y < menu[0].y, [m.pos for m in menu])
+button.fire("on_release")
+check("もう一度押すと一覧を閉じる", not getattr(sheet_hud, mod.MENU_ATTR, None)
+      and not any(item in host.children for item in menu))
+button.fire("on_release")
+menu = getattr(sheet_hud, mod.MENU_ATTR, None) or []
+menu[1].fire("on_release")
+check("一覧で選ぶと閉じて、その描き方の仕事を積む",
+      captured["jobs"][-1].get("method") == "img2img" and not getattr(sheet_hud, mod.MENU_ATTR, None)
+      and mod._runtime()["busy"], captured["jobs"][-1])
+captured["done"]({"app": app})
+button.fire("on_release")
+toggle(lambda self: None, sheet_hud)
+check("人物欄を開け閉めしたら一覧を閉じる", not getattr(sheet_hud, mod.MENU_ATTR, None))
+drawn = []
+image_module.generate_character_image = lambda *a, **k: drawn.append(imagegen.method_now())
+captured["run"]({"app": app, "key": "k", "method": "chain"})
+check("描くあいだ、選んだ描き方を窓口に立てる（描くのは 343）",
+      drawn == ["chain"] and imagegen.method_now() is None, drawn)
+imagegen.withdraw_methods("test_343")
 check("例外なし", not any(str(line).startswith("EXC") for line in logs),
       [line for line in logs if str(line).startswith("EXC")])
 

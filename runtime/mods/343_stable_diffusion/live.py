@@ -27,6 +27,7 @@ import os
 from instantale_modloader import config as loader_config
 from instantale_modloader import frames
 
+from . import img2img
 from . import rules as rulebook
 from . import sizes
 
@@ -39,7 +40,7 @@ HOT_NAMES = ("PORTRAIT_SHORT", "PORTRAIT_MAX_LONG",
              "LCM_METHOD", "LCM_STEPS", "LCM_CFG", "LCM_SCHEDULER",
              "STRIP_LORA", "MODEL_SAFETY", "DIFFUSERS_RESIZE",
              "KIND_PRESETS", "PORTRAIT_PRESET", "ENEMY_PRESET", "BACKGROUND_PRESET",
-             "CUTOUT_MODEL")
+             "CUTOUT_MODEL") + img2img.NAMES
 
 #: 種類ごとに割り当てるカスタムプリセットの設定名（版26）。
 KIND_PRESET_NAMES = (("portrait", "PORTRAIT_PRESET"), ("enemy", "ENEMY_PRESET"),
@@ -81,7 +82,7 @@ def derive(values):
         "strip_lora": bool(values["STRIP_LORA"]),
         "safety": str(values["MODEL_SAFETY"] or "auto"),
         "diffusers_resize": bool(values["DIFFUSERS_RESIZE"]),
-        # プリセットの値から組むときは無い項目なので get で読む（空 = この画面の設定）。
+        # プリセットの値から組むときは無い項目なので get で読む（空 = プリセットを使わない）。
         # 使う設定（`KIND_PRESETS`）が切なら、割り当てが残っていても使わない。
         "kind_presets": dict((kind, str(values.get(name) or "").strip()
                               if values.get("KIND_PRESETS") else "")
@@ -92,7 +93,7 @@ def derive(values):
 class Live(object):
     """いま効いている設定と規則。`refresh()` で変わっていれば読み直す。
 
-    `scales` / `samplers` / `strip_lora` / `safety` / `diffusers_resize` / `rules`
+    `scales` / `samplers` / `strip_lora` / `safety` / `diffusers_resize` / `img2img` / `rules`
     を属性で持ち、本体はそれを読むだけ。
     """
 
@@ -135,6 +136,8 @@ class Live(object):
         self.safety = got["safety"]
         self.diffusers_resize = got["diffusers_resize"]
         self.kind_presets = got["kind_presets"]
+        #: 描き直しと続けて描くの、入になっている種類（`img2img.derive`）。
+        self.img2img = img2img.derive(values)
 
     def hot(self):
         """読み直しができる状態か（場所が控えられていて、宣言も読めた）。"""
@@ -148,6 +151,15 @@ class Live(object):
             if values != sizes.GAME_SAMPLER[stage]:
                 lines.append("sampler {}: {} -> {}".format(
                     stage, sizes.GAME_SAMPLER[stage], values))
+        for switch, name, label in (("img2img_on", "redraw", "描き直し"), ("chain_on", "chain", "続けて描く")):
+            if not self.img2img[switch]:
+                continue
+            for kind, conf in sorted(self.img2img[name].items()):
+                lines.append("img2img {} {}: {}".format(label, kind, ", ".join(
+                    "{}={}".format(key, value if value != "" else "（ゲーム既定のモデル）")
+                    for key, value in sorted(conf.items()))))
+        if self.img2img["chain_auto"]:
+            lines.append("img2img 続けて描く（通常の生成）: {}".format(", ".join(sorted(self.img2img["chain_auto"]))))
         counts = sum(len(rows) for rows in self.rules.values())
         if counts:
             lines.append("rules: {} 行（{}）".format(

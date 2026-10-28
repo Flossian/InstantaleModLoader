@@ -31,6 +31,10 @@ r"""Stable Diffusion の解像度・サンプラー・モデル・プロンプ�
 5秒ごとの見張りでは包みが間に合わないので、
 `sys.meta_path` の先頭に観測者を置いて import の直後に包みと書き込みを済ませる。
 **この観測者は本来ローダの語彙**（TECH.md §3.2.3）で、試作の間だけここに置いてある。
+
+同じ出口で、今の絵を下絵にした描き直し（img2img）と、2つのモデルで続けて描く
+（txt2img→img2img）も行う。今の絵は入口で読んで印と一緒に控え、出口で寸法を合わせて渡す。
+決め方と下絵の形は `img2img.py`。
 """
 import inspect
 import os
@@ -39,9 +43,13 @@ import threading
 import time
 
 from instantale_modloader import frames
+from instantale_modloader import imagegen
+from instantale_modloader import saves
+from instantale_modloader import ui
 
 from . import assets
 from . import cutout
+from . import img2img
 from . import live as hot
 from . import presets
 from . import rules as rulebook
@@ -136,7 +144,7 @@ EXIT_METHODS = ("generate_image", "__call__")
 #: `__call__` は名前がありふれているので、生きたパイプラインの型からしか包まない。
 EARLY_EXIT_METHOD = "generate_image"
 
-#: 種類ごとに割り当てるカスタムプリセットの名前（版26）。空ならこの画面の設定で描く。
+#: 種類ごとに割り当てるカスタムプリセットの名前（版26）。空ならプリセットを使わずに描く。
 #: 割り当てた種類は、そのプリセットのチェックポイントで建てた別の部品と、そのプリセットの
 #: 寸法・サンプラー・LoRA タグの除去・安全弁で描く（VERIFICATION.md §3.65）。
 #: 使うかどうか。上級者向けなので既定は切（もう1つモデルを載せるぶん VRAM を使う）。
@@ -148,6 +156,34 @@ BACKGROUND_PRESET = ""
 #: 背景の切り抜きのモデル（版27）。game はゲームのまま（サイドカーの u2net）、
 #: isnet-anime はゲームのフォルダのアニメ絵向けのモデルで抜く（`cutout.py`）。
 CUTOUT_MODEL = "game"
+
+#: 今の絵を下絵にした描き直し（img2img）。使うかどうかと、種類ごとのプリセット
+#: （空でゲーム既定のモデル）・強さ。入なら再生成のボタンに出る（再生成でだけ使う）。
+#: 既定は切（ゲームのまま）。sdcpp 系の出口だけで効く（`img2img.py`）。
+IMG2IMG = False
+IMG2IMG_PORTRAIT_PRESET = ""
+IMG2IMG_PORTRAIT_STRENGTH = img2img.REDRAW_STRENGTH
+IMG2IMG_ENEMY_PRESET = ""
+IMG2IMG_ENEMY_STRENGTH = img2img.REDRAW_STRENGTH
+IMG2IMG_BACKGROUND_PRESET = ""
+IMG2IMG_BACKGROUND_STRENGTH = img2img.REDRAW_STRENGTH
+
+#: 2つのモデルで続けて描く（txt2img→img2img）。使うかどうかと、種類ごとの
+#: 1つ目と2つ目のプリセット（空でゲーム既定のモデル）・2つ目の強さ・
+#: 通常の生成（新しい NPC・場所・敵）でも使うか（`_AUTO`）。入なら再生成のボタンに出る。上級者向けで既定は切。
+CHAIN = False
+CHAIN_PORTRAIT_FIRST = ""
+CHAIN_PORTRAIT_SECOND = ""
+CHAIN_PORTRAIT_STRENGTH = img2img.CHAIN_STRENGTH
+CHAIN_PORTRAIT_AUTO = False
+CHAIN_ENEMY_FIRST = ""
+CHAIN_ENEMY_SECOND = ""
+CHAIN_ENEMY_STRENGTH = img2img.CHAIN_STRENGTH
+CHAIN_ENEMY_AUTO = False
+CHAIN_BACKGROUND_FIRST = ""
+CHAIN_BACKGROUND_SECOND = ""
+CHAIN_BACKGROUND_STRENGTH = img2img.CHAIN_STRENGTH
+CHAIN_BACKGROUND_AUTO = False
 
 #: ゲームが部品を建てたときの引数。種類ごとの部品を同じ作りで建てるために控える。
 #: 部品のクラスに持たせる（注入のたびにモジュールは作り直されるが、クラスは同じ）。
@@ -162,6 +198,18 @@ GAME_ATTR = "_mod343_game_materials"
 
 #: ゲームの背景の切り抜き（rembg のサイドカーへ頼む関数。版27 で isnet-anime に差し替えられる）。
 CUTOUT_TARGET = "scripts.image_processing.request_remove_background:remove_background"
+
+#: 設定の画面（ゲームを終了する・タイトルに戻る・画像の再生成）を開け閉めする関数。
+#: 開いた直後に「画像の再生成」を描き方ごとのボタンへ分ける。
+SETTING_WINDOW_TARGET = "scripts.hud.new_hud:InstanTaleHUD.toggle_setting_window_visibility"
+
+#: 「画像の再生成」が描く作業のスレッドの本体（会話の相手・背景・戦闘の敵の絵を描き直す）。
+#: ここでボタンで選んだ描き方をスレッドの印にする。
+REGEN_THREAD_TARGET = "__main__:InstantaleApp._regenerate_current_image_thread"
+
+#: ボタンで選んだ描き方を、押したときから再生成のスレッドの頭まで控える。
+#: ゲームの再生成ボタンを直接押した回は空で、txt2img（ふだんどおり）になる。
+REGEN = {"mode": None}
 
 #: いちばん新しい apply() の `attach`。用済みになった apply() の包みが、
 #: 建て終わった後の当て直しをこちらへ渡す（版26。VERIFICATION.md §3.65）。
@@ -193,6 +241,10 @@ KIND_FUNCS = {"generate_enemy_image": "enemy",
               "generate_enemy_image_from_character": "enemy",
               "generate_character_image": "portrait",
               "generate_character_image_from_enemy": "portrait"}
+
+#: 背景の入口（`image_generation_background` の関数）。今の絵を控えるために包む。
+#: 種類の印はこれが無くても呼び出し元のファイル名で分かる（`KIND_HINTS`）。
+BACKGROUND_FUNCS = ("generate_background_image", "generate_and_save_background")
 
 #: 「出口を持っている層」の目印。
 MANAGER_MARKS = ("txt2img_pipe", "load_sd_pipeline")
@@ -236,6 +288,11 @@ def stage_of(func):
     if func == LCM_FUNC:
         return "lcm"
     return "stage2" if func == SECOND_STAGE_FUNC else "stage1"
+
+
+def worlds_dir():
+    r"""今の絵を探す親（`%LOCALAPPDATA%\Darmabeko\Instantale\worlds`）。検査は仮の置き場へ差し替える。"""
+    return saves.worlds_dir()
 
 
 def unwrapped(func):
@@ -404,6 +461,11 @@ def apply(ctx):
         return [name for name in sys.modules
                 if name.endswith(".image_generation_creature")]
 
+    def background_modules():
+        """背景の入口（`image_generation_background`）を持つモジュール。"""
+        return [name for name in sys.modules
+                if name.endswith(".image_generation_background")]
+
     def kind_now():
         """入口の印。無ければ呼び出し元のファイル名から。"""
         kind = frames.attr(MARKS, "kind", None)
@@ -417,15 +479,48 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 印を立てる
 
-    def make_kind_hook(kind):
+    def make_kind_hook(kind, func_name=None):
+        """入口で種類の印を立てる。描き直しが入の種類なら、今の絵もここで読んで控える。
+
+        入口で読むのは、世界と名前（場所）が入口の引数にしか無く、出口では分からないため。
+        ゲームは描き終えてから同じ名前で絵を書き直すので、入口の時点では今の絵が残っている（GAME.md §2.30）。
+        今の絵を探さない入口（`img2img.ENTRANCES` に無い）は、外側の控えを持ち越さない。
+        """
+        entrance = img2img.ENTRANCES.get(func_name)
+
         def hook(orig, *args, **kwargs):
             before = frames.attr(MARKS, "kind", None)
+            before_source = frames.attr(MARKS, "source", None)
             MARKS.kind = kind
+            MARKS.source = None
+            if entrance is not None:
+                MARKS.source = current_image(kind, args, kwargs, entrance)
             try:
                 return orig(*args, **kwargs)
             finally:
                 MARKS.kind = before
+                MARKS.source = before_source
         return hook
+
+    def current_image(kind, args, kwargs, entrance):
+        """設定の画面のボタンで img2img を選んだ回なら、今の絵を読んで返す。
+
+        選んでいない・絵が無い・読めないなら None。
+        """
+        if imagegen.method_now() != "img2img":
+            return None
+        _kind, name_arg, name_index = entrance
+        world = frames.arg(args, kwargs, "world_name", 0)
+        name = frames.arg(args, kwargs, name_arg, name_index)
+        path = img2img.source_path(worlds_dir(), kind, world, name)
+        if not path or not os.path.isfile(path):
+            return None
+        try:
+            return img2img.load_image(path)
+        except Exception as exc:
+            warn("img2img-read", "今の絵を読めなかったので、ふだんどおり描く（{}: {}: {}）".format(
+                path, type(exc).__name__, exc))
+            return None
 
     def make_stage_hook(func_name):
         """上の層の関数の名前を控える。段はここでは決めない（`stage_of`）。"""
@@ -511,7 +606,7 @@ def apply(ctx):
         return True
 
     def main_cfg():
-        """この画面の設定（`live`）を、プリセットの値と同じ形で。"""
+        """道具画面の各タブの値（`live`）を、プリセットの値と同じ形で。"""
         return {"scales": live.scales, "long_caps": live.long_caps, "samplers": live.samplers,
                 "strip_lora": live.strip_lora, "safety": live.safety}
 
@@ -560,7 +655,10 @@ def apply(ctx):
                  "{} にした".format(sizes.SDXL_SAMPLER))
 
     def brief_change(name, params, value):
-        """ログの1項目。プロンプトは本文を出さず、字数と LoRA の出入りだけ出す。"""
+        """ログの1項目。プロンプトは本文を出さず、字数と LoRA の出入りだけ出す。下絵は寸法だけ。"""
+        if name == "init_image":
+            size = frames.attr(value, "size", None)
+            return "下絵 {}x{}".format(*size) if size else "下絵"
         if name not in ("prompt", "negative_prompt"):
             return "{}->{}".format(params.get(name), value)
         was = params.get(name) or ""
@@ -696,21 +794,24 @@ def apply(ctx):
         return {}
 
     def kind_route(kind):
-        """その種類に割り当てたプリセット。割り当てが無い・プリセットが無いなら None。
+        """その種類に割り当てたプリセット。割り当てが無い・プリセットが無いなら None。"""
+        return preset_route(live.kind_presets.get(kind) or "", kind)
 
-        値はこの画面の設定にプリセットの値を重ねたもの（版の違いで欠けた項目はいまの値）。
+    def preset_route(name, where):
+        """名前のカスタムプリセットで描くための組。名前が空・プリセットが無いなら None。
+
+        値は道具画面の各タブの値にプリセットの値を重ねたもの（版の違いで欠けた項目はいまの値。`presets.overlay`）。
+        `where` は知らせに出す使い道（種類の名前や「描き直し」）。
         """
-        name = live.kind_presets.get(kind) or ""
         if not name:
             return None
         entry = presets.find_custom(state_dir, name)
         if entry is None:
             warn("kind-preset-missing-" + name,
-                 "{} に割り当てたプリセット「{}」が見つからない。この画面の設定で描く".format(kind, name))
+                 "{} に割り当てたプリセット「{}」が見つからない。プリセットを使わずに描く".format(where, name))
             return None
         got = entry["values"]
-        merged = dict(live.values)
-        merged.update((key, value) for key, value in got.items() if key in merged)
+        merged = presets.overlay(live.values, got)
         game = game_materials()
         checkpoint = str(got.get("CHECKPOINT_PATH") or "") or game.get("model_path_anime", "")
         taesd = "" if got.get("DISABLE_TAESD") else (
@@ -718,10 +819,44 @@ def apply(ctx):
         vae = "" if got.get("DISABLE_VAE") else (
             str(got.get("VAE_PATH") or "") or game.get("vae_path", ""))
         lora = str(got.get("LORA_DIR") or "") or game.get("lora_dir", "")
-        return {"name": name, "cfg": hot.derive(merged),
+        return {"name": name, "label": "プリセット「{}」".format(name), "cfg": hot.derive(merged),
                 "model": (family_at(checkpoint), checkpoint),
                 "materials": {"model_path": checkpoint, "taesd_path": taesd,
                               "vae_path": vae, "lora_model_dir": lora}}
+
+    def game_route():
+        """ゲーム既定のモデル（モデルの差し替えの前の、ゲームが選んだ材料）で描く組。
+
+        高度設定でプリセットを空にした回に使う。寸法・サンプラーは道具画面の各タブの値。
+        モデルの差し替えが空なら、材料がゲームの部品と同じなのでゲームの部品で描く（`route_pipe`）。
+        ゲームの材料がまだ分からないなら None（ゲームの部品で描く）。
+        """
+        game = game_materials()
+        checkpoint = game.get("model_path_anime", "")
+        if not checkpoint:
+            return None
+        return {"name": "ゲーム既定のモデル", "label": "ゲーム既定のモデル", "cfg": main_cfg(),
+                "model": (family_at(checkpoint), checkpoint),
+                "materials": {"model_path": checkpoint, "taesd_path": game.get("taesd_path", ""),
+                              "vae_path": game.get("vae_path", ""),
+                              "lora_model_dir": game.get("lora_dir", "")}}
+
+    def method_route(name, where):
+        """描き直しと続けて描くのプリセットの組。空ならゲーム既定のモデル（`game_route`）。"""
+        return preset_route(name, where) if name else game_route()
+
+    def routes_in_use():
+        """いま割り当てられているプリセットの組（種類ごと・描き直し・続けて描く）。
+
+        描き直しと続けて描くは、使う設定が入のとき全種類を数える（どの種類を描き直すかはゲームが決める）。
+        """
+        got = [kind_route(kind) for kind in img2img.KINDS]
+        for kind, conf in live.img2img["redraw"].items() if live.img2img["img2img_on"] else ():
+            got.append(method_route(conf["preset"], "描き直し（{}）".format(kind)))
+        for kind, conf in live.img2img["chain"].items() if live.img2img["chain_on"] else ():
+            got.append(method_route(conf["first"], "続けて描く1つ目（{}）".format(kind)))
+            got.append(method_route(conf["second"], "続けて描く2つ目（{}）".format(kind)))
+        return [route for route in got if route is not None]
 
     def pipe_key(mats):
         """部品を見分ける鍵（チェックポイント・TAESD・VAE・LoRA の置き場）。"""
@@ -740,7 +875,7 @@ def apply(ctx):
         if not init:
             warn("kind-preset-no-init",
                  "ゲームが部品を建てたときの引数が控えられていない（注入より先に建っていた）。"
-                 "種類ごとのプリセットはゲームを起動し直すと効く。この画面の設定で描く")
+                 "種類ごとのプリセットはゲームを起動し直すと効く。プリセットを使わずに描く")
             return None
         key = pipe_key(route["materials"])
         if key == pipe_key(init):
@@ -748,18 +883,16 @@ def apply(ctx):
         checkpoint = full_path(route["materials"]["model_path"])
         if not checkpoint or not os.path.isfile(checkpoint):
             warn("kind-preset-no-model-" + route["name"],
-                 "プリセット「{}」のチェックポイントが見つからない（{}）。この画面の設定で描く".format(
-                     route["name"], checkpoint or "空。ゲームのモデルがまだ分からない"))
+                 "{}のチェックポイントが見つからない（{}）。プリセットを使わずに描く".format(
+                     route["label"], checkpoint or "空。ゲームのモデルがまだ分からない"))
             return None
         cache = cls.__dict__.get(PIPES_ATTR)
         if cache is None:
             cache = {}
             setattr(cls, PIPES_ATTR, cache)
         if key not in cache:
-            # どの種類にも割り当てられていない部品は外す（割り当てを変えるたびに VRAM に溜めない）。
-            wanted_keys = set(pipe_key(other["materials"]) for other in
-                              (kind_route(kind) for kind in ("portrait", "enemy", "background"))
-                              if other is not None)
+            # どこにも割り当てられていない部品は外す（割り当てを変えるたびに VRAM に溜めない）。
+            wanted_keys = set(pipe_key(other["materials"]) for other in routes_in_use())
             for old in [old for old in cache if old not in wanted_keys]:
                 cache.pop(old, None)
                 write("kind pipe: 割り当てから外れた部品を外した（{}）".format(
@@ -779,12 +912,12 @@ def apply(ctx):
             except Exception:
                 ctx.log_exc("image quality: building the pipe for preset failed")
                 warn("kind-preset-build-" + route["name"],
-                     "プリセット「{}」の部品を建てられなかった。この画面の設定で描く".format(route["name"]))
+                     "{}の部品を建てられなかった。プリセットを使わずに描く".format(route["label"]))
                 return None
             finally:
                 MARKS.building = False
-            write("kind pipe: プリセット「{}」の部品を建てた（{}・{}、{:.1f} 秒。ゲームの部品のほかに {} 個）".format(
-                route["name"], route["model"][0] or "系統不明",
+            write("kind pipe: {}の部品を建てた（{}・{}、{:.1f} 秒。ゲームの部品のほかに {} 個）".format(
+                route["label"], route["model"][0] or "系統不明",
                 os.path.basename(kwargs["model_path"]), time.time() - started, len(cache)))
         return cache[key]
 
@@ -806,10 +939,12 @@ def apply(ctx):
     def make_exit_hook(label, sig, diffusers):
         self_name = next(iter(sig.parameters)) if sig is not None else "self"
 
-        def hook(orig, self, *args, **kwargs):
-            live.refresh()                 # 設定と規則が変わっていれば読み直す
-            kind = kind_now()
-            stage = stage_of(frames.attr(MARKS, "func", None))
+        def draw(orig, self, args, kwargs, kind, stage, route, extra=None, mode=""):
+            """1回描く。`route` はプリセットの組（None で道具画面の各タブの値とゲームの部品）。
+
+            `extra` は寸法が決まった後に足す引数を返す関数（下絵と強さ）。
+            `mode` はログの印（描き直し・続けて描く）。
+            """
             if sig is None:
                 params = dict(kwargs)
                 bound = None
@@ -817,12 +952,10 @@ def apply(ctx):
                 bound = sig.bind_partial(self, *args, **kwargs)
                 bound.apply_defaults()
                 params = dict(bound.arguments)
-            # 種類にプリセットを割り当てていれば、その部品と値で描く（sdcpp だけ）。
-            route = kind_route(kind) if (kind and not diffusers and sig is not None) else None
             target = self
             if route is not None:
                 target = route_pipe(self, route)
-                if target is None:          # 建てられなかった。この画面の設定で描く
+                if target is None:          # 建てられなかった。プリセットを使わずに描く
                     target, route = self, None
             changes = wanted(kind, stage, params, route)
             if diffusers:
@@ -830,14 +963,17 @@ def apply(ctx):
             # その一族の出口に無い引数は落とす（名前を新設しない）。
             changes = {name: value for name, value in changes.items()
                        if name in params or name in ("width", "height")}
+            if extra is not None:
+                changes.update(extra(params, changes))
             if target is not self:
                 bound.arguments[self_name] = target
             if not changes:
                 if target is not self:
                     return orig(*bound.args, **bound.kwargs)
                 return orig(self, *args, **kwargs)
-            write("{} [{}/{}]{} {}{}".format(
+            write("{} [{}/{}]{}{} {}{}".format(
                 label, kind, stage,
+                " {}".format(mode) if mode else "",
                 " <{}>".format(route["name"]) if route else "",
                 " ".join("{}: {}".format(name, brief_change(name, params, value))
                          for name, value in sorted(changes.items())),
@@ -852,6 +988,72 @@ def apply(ctx):
                 return orig(self, *args, **kwargs)
             bound.arguments.update(changes)
             return orig(*bound.args, **bound.kwargs)
+
+        def init_from(image, strength):
+            """下絵と強さを足す関数。下絵は出口が描く寸法に合わせる（違うとネイティブで落ちる）。"""
+            def extra(params, changes):
+                width = int(changes.get("width", params.get("width")))
+                height = int(changes.get("height", params.get("height")))
+                return {"init_image": img2img.as_init(image, width, height),
+                        "strength": float(strength)}
+            return extra
+
+        def hook(orig, self, *args, **kwargs):
+            live.refresh()                 # 設定と規則が変わっていれば読み直す
+            kind = kind_now()
+            stage = stage_of(frames.attr(MARKS, "func", None))
+            # プリセット・描き直し・続けて描くは sdcpp だけ（diffusers 系に別の部品と下絵の口は無い）。
+            sdcpp = kind is not None and not diffusers and sig is not None
+            source = frames.attr(MARKS, "source", None)
+            forced = imagegen.method_now()
+            mode = None
+            if sdcpp:
+                bound = sig.bind_partial(self, *args, **kwargs)
+                bound.apply_defaults()
+                mode = img2img.plan(kind, stage, dict(bound.arguments), live.img2img,
+                                    source is not None, forced)
+            if mode == "redraw":
+                conf = img2img.conf_for(live.img2img, mode, kind)
+                # プリセットが空なら、ゲーム既定のモデルで描く（続けて描くと同じ）。
+                route = method_route(conf["preset"], "描き直し（{}）".format(kind))
+                try:
+                    return draw(orig, self, args, kwargs, kind, stage, route,
+                                init_from(source, conf["strength"]), "描き直し")
+                except Exception as exc:
+                    ctx.log_exc("image quality: img2img redraw failed")
+                    warn("img2img-redraw-failed",
+                         "今の絵を下絵にして描けなかったので、ふだんどおり描く（{}: {}）".format(
+                             type(exc).__name__, exc))
+            elif mode == "chain":
+                conf = img2img.conf_for(live.img2img, mode, kind)
+                try:
+                    first = draw(orig, self, args, kwargs, kind, stage,
+                                 method_route(conf["first"], "続けて描く1つ目（{}）".format(kind)),
+                                 mode="続けて描く 1/2")
+                except Exception as exc:
+                    ctx.log_exc("image quality: chain first pass failed")
+                    warn("img2img-chain-first-failed",
+                         "続けて描くの1つ目で描けなかったので、ふだんどおり描く（{}: {}）".format(
+                             type(exc).__name__, exc))
+                else:
+                    image = img2img.first_image(first)
+                    if image is None:
+                        warn("img2img-chain-no-image",
+                             "続けて描くの1つ目が絵を返さなかったので、1つ目の絵のままにする")
+                        return first
+                    try:
+                        return draw(orig, self, args, kwargs, kind, stage,
+                                    method_route(conf["second"], "続けて描く2つ目（{}）".format(kind)),
+                                    init_from(image, conf["strength"]), "続けて描く 2/2")
+                    except Exception as exc:
+                        ctx.log_exc("image quality: chain second pass failed")
+                        warn("img2img-chain-second-failed",
+                             "続けて描くの2つ目で描けなかったので、1つ目の絵のままにする（{}: {}）".format(
+                                 type(exc).__name__, exc))
+                        return first
+            # 種類にプリセットを割り当てていれば、その部品と値で描く（sdcpp だけ）。
+            return draw(orig, self, args, kwargs, kind, stage,
+                        kind_route(kind) if sdcpp else None)
         return hook
 
     # ------------------------------------------------------- 当てる・当て直す
@@ -886,7 +1088,13 @@ def apply(ctx):
             for fn, kind in KIND_FUNCS.items():
                 if frames.attr(mod, fn, None) is None:
                     continue
-                added += install("{}:{}".format(name, fn), make_kind_hook(kind))
+                added += install("{}:{}".format(name, fn), make_kind_hook(kind, fn))
+        for name in background_modules():
+            mod = sys.modules.get(name)
+            for fn in BACKGROUND_FUNCS:
+                if frames.attr(mod, fn, None) is None:
+                    continue
+                added += install("{}:{}".format(name, fn), make_kind_hook("background", fn))
         for name in managers():
             mod = sys.modules.get(name)
             for fn in STAGE_FUNCS:
@@ -1105,6 +1313,114 @@ def apply(ctx):
             write("cutout: isnet-anime {}x{} {:.2f} 秒（{} 枚目）".format(
                 got.size[0], got.size[1], time.time() - start, count))
         return got
+
+    # ------------------------------------- 再生成のボタンを描き方ごとに分ける
+
+    def offered(_kind=None):
+        """再生成のボタンに出す描き方（txt2img のほかに）。ローダの描き方の窓口へ登録する中身。
+
+        使う設定が入の描き方だけで、種類は問わない（どの種類を描き直すかはゲームが決める）。
+        画像生成の方式が diffusers 系なら下絵の口が無いので出さない。
+        """
+        if str(imagegen.backend() or "").startswith("diffusers"):
+            return []
+        live.refresh()
+        return img2img.enabled(live.img2img)
+
+    # 主人公の描き直し（`335_`）も、この中身から選ぶ口を出す（TECH.md §5.11）。
+    imagegen.declare_methods("343_stable_diffusion", ctx, offered)
+
+    @ctx.wrap(REGEN_THREAD_TARGET, required=False, safe=True)
+    def regenerate_thread(orig, *args, **kwargs):
+        """ボタンで選んだ描き方を、このスレッドの描き方にする（出口の `img2img.plan` が見る）。"""
+        mode, REGEN["mode"] = REGEN["mode"], None
+        with imagegen.drawing_method(mode or "txt2img") as method:
+            write("regenerate: {}".format(method))
+            return orig(*args, **kwargs)
+
+    #: 足したボタン、ゲームのボタンの元の文字と形、ゲームの再生成ボタンに結んだ手（閉じたら戻す）。
+    regen_ui = {"buttons": [], "kept": [], "bound": None}
+
+    @ctx.wrap(SETTING_WINDOW_TARGET, required=False, safe=True)
+    def setting_window(orig, hud, *args, **kwargs):
+        result = orig(hud, *args, **kwargs)
+        # ここで投げると safe の包みがゲームの関数をもう一度呼ぶので、自分で受け止める。
+        try:
+            arrange_regen_buttons(hud)
+        except Exception:
+            ctx.log_exc("image quality: arranging the regenerate buttons failed")
+        return result
+
+    def regen_widgets(hud):
+        """設定の画面の枠と、上から順のゲームのボタン（終了・タイトル・再生成）。"""
+        names = ("setting_window_shutdown_button", "setting_window_return_to_title_button",
+                 "setting_window_regenerate_image_button")
+        buttons = [frames.attr(hud, name, None) for name in names]
+        return frames.attr(hud, "setting_window_layout", None), buttons
+
+    def drop_regen_buttons():
+        """足したボタンを外し、ゲームのボタンの文字と形を戻す。"""
+        for button in regen_ui["buttons"]:
+            if button.parent is not None:
+                button.parent.remove_widget(button)
+        regen_ui["buttons"] = []
+        if regen_ui["bound"] is not None:
+            regen, clear = regen_ui["bound"]
+            regen.unbind(on_press=clear)
+            regen_ui["bound"] = None
+        for widget, text, pos_hint, pos, size in regen_ui["kept"]:
+            widget.text, widget.pos_hint, widget.pos, widget.size = text, pos_hint, pos, size
+        regen_ui["kept"] = []
+
+    def arrange_regen_buttons(hud):
+        """開いた直後なら、再生成を txt2img / img2img（/ txt2img→img2img）のボタンに分けて並べる。
+
+        閉じたときは足したボタンを外して戻すだけ。
+        画像生成の方式が diffusers 系なら下絵の口が無いので、ゲームのままにする。
+        """
+        layout, game = regen_widgets(hud)
+        if layout is None or None in game:
+            return
+        drop_regen_buttons()
+        regen = game[-1]
+        if regen.parent is not layout:
+            return
+        modes = offered()
+        if not modes:
+            return                           # 足すボタンが無い。ゲームのまま
+        regen_ui["kept"] = [(widget, widget.text, dict(widget.pos_hint or {}), tuple(widget.pos),
+                             tuple(widget.size)) for widget in game]
+        regen.text = img2img.BUTTON_LABELS["txt2img"]
+        for mode in modes:
+            button = ui.popup_button(img2img.BUTTON_LABELS[mode], regen)
+            button.bind(on_release=lambda _button, chosen=mode: press_regen(regen, chosen))
+            layout.add_widget(button)
+            regen_ui["buttons"].append(button)
+        rows = game + regen_ui["buttons"]
+        width = float(regen.width)
+        for button in rows:
+            button.texture_update()
+            width = max(width, float(button.texture_size[0]) + 60)
+        height, bottoms = img2img.stack(len(rows))
+        side = (float(layout.width) - float(regen.width)) / 2
+        # 位置は枠の中の割合で持たせ、枠（FloatLayout）に並べさせる。
+        # 枠の位置は開いた後にもう一度動くので、自分で座標を書くと置き去りになった（実機）。
+        for button, bottom in zip(rows, bottoms):
+            button.size = (width, img2img.STACK_HEIGHT)
+            button.pos_hint = {"center_x": 0.5, "y": float(height - bottom) / height}
+
+        def clear(*_args):
+            REGEN["mode"] = None             # ゲームのボタン（txt2img）を直接押した
+
+        regen.bind(on_press=clear)
+        regen_ui["bound"] = (regen, clear)
+        layout.size = (width + 2 * side, height)
+        write("regenerate buttons: {}".format(", ".join(button.text for button in rows[2:])))
+
+    def press_regen(regen, mode):
+        """選んだ描き方を控えてから、ゲームの再生成ボタンを押したのと同じ処理を呼ぶ。"""
+        REGEN["mode"] = mode
+        regen.dispatch("on_release")
 
     def start_poll():
         """建った後に現れる出口（組み直し・バックエンド切替）へ当て直す。"""
