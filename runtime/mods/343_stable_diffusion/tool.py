@@ -445,16 +445,22 @@ def build_window(rules_in=None, settings_in=None, note=""):
     band = ttk.LabelFrame(window, text="次に描く絵", padding=(10, 4))
     band.pack(fill="x", padx=12, pady=(10, 0))
     band_cells = []
-    for column, text in enumerate(("", "モデル", "寸法", "サンプラー", "前に描いた絵（ログ）")):
+    # 寸法とサンプラーは txt2img（ふだんの生成）のもの。img2img と txt2img→img2img は再生成のボタンで描くモデル。
+    headings = ("", "txt2img", "寸法", "サンプラー", "img2img", "txt2img→img2img")
+    for column, text in enumerate(headings):
         ttk.Label(band, text=text, style="Faint.TLabel").grid(row=0, column=column, sticky="w", padx=(0, 14))
     for row_index in range(len(outlook.KINDS)):
-        band_cells.append([ttk.Label(band, text="") for _column in range(5)])
+        # 最後の2列（img2img・txt2img→img2img）は長くなるので折り返す。
+        band_cells.append([ttk.Label(band, text="", wraplength=230 if column >= 4 else 0, justify="left")
+                           for column, _heading in enumerate(headings)])
         for column, cell in enumerate(band_cells[-1]):
-            cell.grid(row=row_index + 1, column=column, sticky="w", padx=(0, 14))
-    band_regen = ttk.Label(band, text="")
-    band_regen.grid(row=len(outlook.KINDS) + 1, column=0, columnspan=5, sticky="w", pady=(4, 0))
+            cell.grid(row=row_index + 1, column=column, sticky="nw", padx=(0, 14))
+    band_game = ttk.Label(band, text="", style="Faint.TLabel")
+    band_game.grid(row=len(outlook.KINDS) + 1, column=0, columnspan=len(headings), sticky="w", pady=(4, 0))
+    band_last = ttk.Label(band, text="", style="Faint.TLabel", wraplength=880, justify="left")
+    band_last.grid(row=len(outlook.KINDS) + 2, column=0, columnspan=len(headings), sticky="w")
     band_notes = ttk.Label(band, text="", style="Faint.TLabel", wraplength=880, justify="left")
-    band_notes.grid(row=len(outlook.KINDS) + 2, column=0, columnspan=5, sticky="w")
+    band_notes.grid(row=len(outlook.KINDS) + 3, column=0, columnspan=len(headings), sticky="w")
     log_path = os.path.join(root_dir, "out", LOG_BASENAME)
     band_log = {"stamp": None, "value": {"last": {}, "built": None}}
 
@@ -473,7 +479,9 @@ def build_window(rules_in=None, settings_in=None, note=""):
         for cells, row in zip(band_cells, got["rows"]):
             for cell, text in zip(cells, row):
                 cell.configure(text=text)
-        band_regen.configure(text="再生成のボタン: " + got["regen"])
+        band_game.configure(text="ゲーム既定 = ゲームで選んだモデル（{}）".format(got["game"] or "読めない"))
+        band_last.configure(text="前に描いた絵（ログ）: " + "／".join(
+            "{} {}".format(label, text) for label, text in got["last"]))
         band_notes.configure(text="効いていない設定: " + "／".join(got["notes"]) if got["notes"] else "")
 
     book = ttk.Notebook(window)

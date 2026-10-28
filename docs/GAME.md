@@ -4069,6 +4069,11 @@ AIManager.set_ai_models (instantale.py:510〜516)   一族を import する行�
 （実測 11 回。`pipe=null` の4回は建ち、既に在る7回は建たなかった）。
 モジュール変数の差し替えを効かせるには、ゲームの起動し直しが要る。
 
+描いた後に同じプロセスで別の部品を建てると、`StableDiffusion.__init__` の中（ネイティブ）で `access violation writing 0x0000000000000000` になる（2026-10-29、建たなかったプロセス 8 個のどれも1枚以上描いた後）。
+`generate_image` が関数の中で作った進み具合のコールバック（exe の平文に `StableDiffusion.generate_image.<locals>.sd_progress_callback`）を `sd_cpp.sd_set_progress_callback` で DLL に登録したまま返り、モデルの読み込みの途中でそれが呼ばれるため。
+建てる前に `sd_cpp.sd_set_progress_callback(None, None)` で外せば建つ（`sd_cpp` は部品のクラスのモジュールの属性。VERIFICATION.md §3.65）。
+落ちた後に建て直しを繰り返すと、ゲームの部品の `generate_image` も `access violation reading 0x0000000000000048` で描けなくなる。
+
 > バックエンドを切り替えても画質の設定は付いてこない。
 > `diffusers_openvino` の manager には `image_to_image_anime` が無いのに、
 > `character_generation_quality` が `highres_upscale`（2段で描く指定）のまま残ると、

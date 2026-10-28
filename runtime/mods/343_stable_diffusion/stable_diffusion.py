@@ -192,6 +192,10 @@ INIT_ATTR = "_mod343_init_kwargs"
 #: 種類ごとに建てた部品の置き場（部品のクラスに持たせる。注入し直しても二重に建てない）。
 PIPES_ATTR = "_mod343_kind_pipes"
 
+#: 建てられなかった部品の鍵（部品のクラスに持たせる）。ネイティブの中で落ちた後は
+#: 建て直すたびに壊れ方が広がり、ゲームの部品も描けなくなったので、同じプロセスでは建て直さない。
+FAILED_ATTR = "_mod343_failed_pipes"
+
 #: 343 が書き換える前のゲームの材料（manager のモジュールに持たせる）。
 #: プリセットのチェックポイントが空のとき（ゲームのまま）に使う。
 GAME_ATTR = "_mod343_game_materials"
@@ -842,8 +846,11 @@ def apply(ctx):
                               "lora_model_dir": game.get("lora_dir", "")}}
 
     def method_route(name, where):
-        """描き直しと続けて描くのプリセットの組。空ならゲーム既定のモデル（`game_route`）。"""
-        return preset_route(name, where) if name else game_route()
+        """描き直しと続けて描くのプリセットの組。空か見つからないならゲーム既定のモデル（`game_route`）。
+
+        見つからないときも道具画面はゲーム既定のモデルで描くと知らせるので、モデルの差し替えへは落とさない。
+        """
+        return (preset_route(name, where) if name else None) or game_route()
 
     def routes_in_use():
         """いま割り当てられているプリセットの組（種類ごと・描き直し・続けて描く）。
@@ -863,6 +870,22 @@ def apply(ctx):
         norm = lambda path: os.path.normcase(os.path.normpath(full_path(path))) if path else ""
         return tuple(norm(mats.get(name, "")) for name in ("model_path", "taesd_path", "vae_path",
                                                            "lora_model_dir"))
+
+    def clear_progress_callback(cls):
+        """ゲームが描いたときに登録した進み具合のコールバックを外す（部品を建てる前に呼ぶ）。
+
+        ゲームの包みは描くたびに関数の中で作ったコールバックを DLL に登録し、描き終えると
+        Python の側だけが消える。DLL はそれを指したまま、次の部品のモデルを読み込む途中で呼んで
+        落ちる（access violation。VERIFICATION.md §3.65）。外すと DLL は自分で標準出力へ書く。
+        """
+        binding = getattr(sys.modules.get(cls.__module__), "sd_cpp", None)
+        clear = getattr(binding, "sd_set_progress_callback", None)
+        if not callable(clear):
+            return
+        try:
+            clear(None, None)
+        except Exception:
+            ctx.log_exc("image quality: clearing the progress callback failed")
 
     def route_pipe(pipe, route):
         """その種類を描く部品。ゲームの部品と同じ材料ならゲームの部品。建てられなければ None。
@@ -890,6 +913,12 @@ def apply(ctx):
         if cache is None:
             cache = {}
             setattr(cls, PIPES_ATTR, cache)
+        failed = cls.__dict__.get(FAILED_ATTR)
+        if failed is None:
+            failed = set()
+            setattr(cls, FAILED_ATTR, failed)
+        if key in failed:
+            return None                      # 知らせは建てられなかった回に出した
         if key not in cache:
             # どこにも割り当てられていない部品は外す（割り当てを変えるたびに VRAM に溜めない）。
             wanted_keys = set(pipe_key(other["materials"]) for other in routes_in_use())
@@ -902,6 +931,7 @@ def apply(ctx):
             started = time.time()
             MARKS.building = True            # 控えの引数を自分の部品で上書きしない
             try:
+                clear_progress_callback(cls)
                 built = cls(**kwargs)
                 # モデルが入っていない部品は描くところで落ちる（`model` が AssertionError）。
                 # 建てた時点で読んで確かめ、入っていなければ使わない。
@@ -911,8 +941,10 @@ def apply(ctx):
                 cache[key] = built
             except Exception:
                 ctx.log_exc("image quality: building the pipe for preset failed")
+                failed.add(key)
                 warn("kind-preset-build-" + route["name"],
-                     "{}の部品を建てられなかった。プリセットを使わずに描く".format(route["label"]))
+                     "{}の部品を建てられなかった。ゲームを起動し直すまで、プリセットを使わずに描く".format(
+                         route["label"]))
                 return None
             finally:
                 MARKS.building = False

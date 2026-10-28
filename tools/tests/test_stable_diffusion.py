@@ -730,12 +730,27 @@ cleanup("image_generation.fake5.stable_diffusion_manager",
 print("種類ごとのプリセット（版26）")
 
 
+class KindBinding(object):
+    """ゲームの包みの `sd_cpp`（DLL の関数）の代わり。登録されている進み具合のコールバックを持つ。"""
+    callback = None
+
+    @staticmethod
+    def sd_set_progress_callback(callback, data):
+        KindBinding.callback = callback
+
+
 class KindSD(object):
-    """sdcpp の部品の代わり。建てた数と、どの材料で建ったかを返す。"""
+    """sdcpp の部品の代わり。建てた数と、どの材料で建ったかを返す。
+
+    描くと、ゲームの包みと同じく進み具合のコールバックを登録したまま残す（Python の側は消える）。
+    それが残ったまま建てると、実機と同じく access violation で落ちる。
+    """
     built = 0
 
     def __init__(self, model_path="", taesd_path="", vae_path="", lora_model_dir="",
                  vae_tiling=False, diffusion_flash_attn=False):
+        if KindBinding.callback is not None:
+            raise OSError("exception: access violation writing 0x0000000000000000")
         KindSD.built += 1
         self.model_path, self.taesd_path = model_path, taesd_path
         self.vae_path, self.lora_model_dir = vae_path, lora_model_dir
@@ -750,6 +765,7 @@ class KindSD(object):
     def generate_image(self, prompt, negative_prompt="", width=512, height=512,
                        cfg_scale=7.0, scheduler="default", sample_method="euler_a",
                        sample_steps=20, seed=-1):
+        KindBinding.sd_set_progress_callback("消えたコールバック", None)
         return {"model": self.model_path, "taesd": self.taesd_path, "flash": self.flash,
                 "width": width, "height": height, "cfg_scale": cfg_scale,
                 "scheduler": scheduler, "sample_method": sample_method,
@@ -757,6 +773,8 @@ class KindSD(object):
 
 
 KindSD.__module__ = "fake_kind.stable_diffusion"
+sys.modules["fake_kind.stable_diffusion"] = types.ModuleType("fake_kind.stable_diffusion")
+sys.modules["fake_kind.stable_diffusion"].sd_cpp = KindBinding
 GAME_SOTE = "runtime/models/sd15/checkpoints/sote.safetensors"
 GAME_INIT = {"model_path": GAME_SOTE, "taesd_path": "runtime/models/sd15/taesd/t.safetensors",
              "vae_path": "runtime/models/sd15/vae/v.safetensors",
@@ -799,9 +817,14 @@ MOD.FAMILY.update({"name": "sd15", "path": GAME_SOTE})
 built_before = KindSD.built
 try:
     MOD.MARKS.kind, MOD.MARKS.func = "portrait", "generate_image_real_lcm"
+    game_pipe.generate_image(prompt="ゲームが先に描いた絵")   # コールバックが残る
     got = ctx_kind.hooks[kind_exit](KindSD.generate_image, game_pipe,
                                     prompt="young man, <lora:LCM_LoRA_Weights_SD15:1>",
                                     width=512, height=1024)
+    check("ゲームが描いた後でも、残ったコールバックを外して部品を建てる",
+          KindSD.built == built_before + 1
+          and not any(key.startswith("kind-preset-build") for key, _m in ctx_kind.warnings),
+          (KindSD.built, built_before, ctx_kind.warnings))
     check("割り当てた種類はプリセットのチェックポイントの部品で描く",
           got["model"] == sdxl_path and got["taesd"] == "xl_taesd.safetensors", got)
     check("部品はゲームと同じ作り（控えた引数）で建てる", got["flash"] is True, got)
@@ -877,6 +900,11 @@ try:
           got["model"] == GAME_SOTE and not any("broken" in k[0] for k in cache)
           and any(key.startswith("kind-preset-build") for key, _m in ctx_broken.warnings),
           (got, [k[0] for k in cache], ctx_broken.warnings))
+    built_now = KindSD.built
+    got = ctx_broken.hooks[kind_exit](KindSD.generate_image, game_pipe, prompt="p",
+                                      width=1024, height=512)
+    check("建てられなかった部品は、同じプロセスでは建て直さない",
+          got["model"] == GAME_SOTE and KindSD.built == built_now, (got, KindSD.built, built_now))
 finally:
     MOD.FAMILY.update({"name": None, "path": None})
     MOD.MARKS.kind, MOD.MARKS.func = None, None
@@ -1972,6 +2000,15 @@ try:
     check("プリセットが空なら、ゲーム既定のモデルで今の絵から描き直す（ゲームの部品のまま）",
           got.info["init"] is not None and got.info["model"] == GAME_SOTE
           and got.info["strength"] == 0.5 and ImgSD.built == built_before, got.info)
+    ctx_gone = fresh(_state_dir=img_dir, IMG2IMG=True, IMG2IMG_PORTRAIT_PRESET="GONE")
+    MOD.MARKS.kind, MOD.MARKS.func = "portrait", "generate_image_real_lcm"
+    MOD.MARKS.source, MOD.imagegen._DRAWING.method = zeno, "img2img"
+    got = ctx_gone.hooks[img_exit](ImgSD.generate_image, game_img, prompt="p", width=512, height=1024)[0]
+    check("見つからないプリセットは知らせて、ゲーム既定のモデルで描き直す",
+          got.info["init"] is not None and got.info["model"] == GAME_SOTE
+          and any(key == "kind-preset-missing-GONE" for key, _m in ctx_gone.warnings),
+          (got.info, ctx_gone.warnings))
+    MOD.MARKS.source = zeno
     # モデルを差し替えてゲームの部品が別のモデルで建っていても、空ならゲーム既定のモデルで描く。
     # 相対の材料は apply() のときの game_dir から引くので、そこへ置く。
     sote_file = os.path.join(ctx_same.game_dir, GAME_SOTE)
@@ -2074,13 +2111,14 @@ ol_faster = {"name": "sdcpp_cuda", "character_generation_quality": "highres_fast
 got = OL.build(ol_values, [], ol_faster, "game_model", ol_read)
 check("素のままなら、どの種類もゲームのモデルで、寸法とサンプラーはゲームの値",
       [row[:4] for row in got["rows"]] == [
-          ("立ち絵", "game_model（ゲームのモデル）", "512x1024", "lcm 5 / cfg 1"),
-          ("敵", "game_model（ゲームのモデル）", "512x512", "lcm 5 / cfg 1"),
-          ("背景", "game_model（ゲームのモデル）", "1024x512", "lcm 5 / cfg 1")]
-      and got["notes"] == [] and got["regen"] == "img2img 切・txt2img→img2img 切", got)
+          ("立ち絵", "ゲーム既定", "512x1024", "lcm 5 / cfg 1"),
+          ("敵", "ゲーム既定", "512x512", "lcm 5 / cfg 1"),
+          ("背景", "ゲーム既定", "1024x512", "lcm 5 / cfg 1")]
+      and got["notes"] == [] and [row[4:] for row in got["rows"]] == [("切", "切")] * 3
+      and got["game"] == "game_model", got)
 check("前に描いた絵はログから",
-      got["rows"][0][4] == "10-28 22:30・描き直し・XL・704x1408" and got["rows"][1][4] == "記録なし",
-      [row[4] for row in got["rows"]])
+      got["last"][0] == ("立ち絵", "10-28 22:30・描き直し・XL・704x1408") and got["last"][1] == ("敵", "記録なし"),
+      got["last"])
 got = OL.build(dict(ol_values, PORTRAIT_SHORT=704, PORTRAIT_MAX_LONG=1408, STAGE1_STEPS=30),
                [], dict(ol_faster, character_generation_quality="highres_upscale"), "game_model", ol_read)
 check("立ち絵が2段なら、2段目の寸法と両方のサンプラー",
@@ -2094,16 +2132,16 @@ ol_custom = [{"name": "XL", "values": {"CHECKPOINT_PATH": sdxl_path, "PORTRAIT_S
 got = OL.build(dict(ol_values, KIND_PRESETS=True, PORTRAIT_PRESET="XL"), ol_custom, ol_faster,
                "game_model", ol_read)
 check("種類のプリセットなら、プリセットの寸法で、SDXL の素の LCM は安全弁の値",
-      got["rows"][0][1:4] == ("XL（立ち絵のプリセット）", "704x1408", "euler_a 24 / cfg 5")
-      and got["rows"][1][1] == "game_model（ゲームのモデル）", got["rows"])
+      got["rows"][0][1:4] == ("XL（プリセット）", "704x1408", "euler_a 24 / cfg 5")
+      and got["rows"][1][1] == "ゲーム既定", got["rows"])
 got = OL.build(dict(ol_values, PORTRAIT_PRESET="XL"), ol_custom, ol_faster, "game_model", ol_read)
 check("割り当てても種類ごとのプリセットが切なら使わず、効いていない設定に出す",
-      got["rows"][0][1] == "game_model（ゲームのモデル）"
+      got["rows"][0][1] == "ゲーム既定"
       and got["notes"] == ["立ち絵に割り当てたプリセット（種類ごとのプリセットが切）"], got)
 got = OL.build(dict(ol_values, KIND_PRESETS=True, PORTRAIT_PRESET="GONE"), ol_custom, ol_faster,
                "game_model", ol_read)
 check("見つからないプリセットは知らせて、プリセットを使わずに描く",
-      got["rows"][0][1] == "game_model（ゲームのモデル）"
+      got["rows"][0][1] == "ゲーム既定"
       and "立ち絵のプリセット「GONE」（見つからない。プリセットを使わずに描く）" in got["notes"], got["notes"])
 all_xl = dict(ol_values, KIND_PRESETS=True, PORTRAIT_PRESET="XL", ENEMY_PRESET="XL", BACKGROUND_PRESET="XL")
 check("どの種類もプリセットで描くなら、タブの値は効かない",
@@ -2117,21 +2155,29 @@ got = OL.build(ol_values, [], dict(ol_faster, background_generation_quality="low
 check("前回も無ければ段は分からないと出す", got["rows"][2][3].startswith("段が分からない"), got["rows"][2])
 got = OL.build(dict(ol_values, CHECKPOINT_PATH=sdxl_path), [], ol_faster, "game_model", ol_read)
 check("モデルの差し替えは、建っている部品と違えば起動し直すと効くと出す",
-      got["rows"][0][1].endswith("（モデルの差し替え）")
+      got["rows"][0][1].endswith("（差し替え）")
       and any(note.startswith("モデルの差し替え（ゲームを起動し直すと効く") for note in got["notes"]), got)
 got = OL.build(dict(ol_values, IMG2IMG=True, CHAIN=True, CHAIN_PORTRAIT_AUTO=True, PORTRAIT_SHORT=704,
                     PORTRAIT_MAX_LONG=1408, LCM_METHOD="euler_a"),
                [], {"name": "diffusers_openvino"}, "game_model", ol_read)
 check("diffusers 系では高度設定・寸法・サンプラーの方法が効かないと出し、寸法はゲームのまま",
-      got["regen"] == "img2img・txt2img→img2img は使えない（diffusers 系）"
+      got["rows"][0][4:] == ("使えない", "使えない")
       and got["rows"][0][2] == "512x1024" and got["rows"][0][3] == "steps 5 / cfg 1"
       and got["notes"] == ["高度設定（diffusers 系では使わない）",
                            "解像度（diffusers 系では寸法を変えない。「実験用」で入にできる）",
                            "サンプラーの方法とスケジューラ（diffusers 系は steps と cfg だけ）"], got)
 got = OL.build(dict(ol_values, IMG2IMG=True, CHAIN=True, CHAIN_BACKGROUND_AUTO=True), [], ol_faster,
                "game_model", ol_read)
-check("再生成のボタンの描き方と、通常の生成でも使う種類",
-      got["regen"] == "img2img 入・txt2img→img2img 入（通常の生成でも使う: 背景）", got["regen"])
+check("img2img と txt2img→img2img は、空ならゲーム既定のモデル名、通常の生成でも使う種類はそう添える",
+      got["rows"][0][4:] == ("ゲーム既定", "ゲーム既定 → ゲーム既定")
+      and got["rows"][2][5].endswith("（通常の生成も）"), got["rows"])
+got = OL.build(dict(ol_values, IMG2IMG=True, IMG2IMG_PORTRAIT_PRESET="XL", IMG2IMG_ENEMY_PRESET="GONE",
+                    CHAIN=True, CHAIN_PORTRAIT_SECOND="XL"), ol_custom, ol_faster, "game_model", ol_read)
+check("プリセットを選んだ描き方はその名前、見つからないプリセットはゲーム既定で描くと知らせる",
+      got["rows"][0][4:] == ("XL", "ゲーム既定 → XL")
+      and got["rows"][1][4] == "ゲーム既定"
+      and "敵のimg2imgのプリセット「GONE」（見つからない。ゲーム既定のモデルで描く）" in got["notes"],
+      (got["rows"], got["notes"]))
 check("ゲームの設定が読めなければそう出す",
       OL.build(ol_values, [], {}, "", ol_read)["notes"][0].startswith("ゲームの設定（config.json）が読めない"))
 

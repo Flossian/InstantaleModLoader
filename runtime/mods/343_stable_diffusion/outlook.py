@@ -204,13 +204,13 @@ def plan_kind(kind, values, custom, family, quality, game, last, game_dir=""):
     戻り値は `{"model", "source", "family", "stages", "how", "size", "samplers", "values", "missing"}`。
     """
     used = values
-    source = "ゲームのモデル"
-    model = game.get("model") or "（ゲームのモデル）"
+    source = ""
+    model = "ゲーム既定"
     model_family = game.get("family")
     missing = ""
     replaced = str(values.get("CHECKPOINT_PATH") or "").strip()
     if replaced:
-        source = "モデルの差し替え" if family != "diffusers" else "モデルの差し替え（diffusers 系で効くかは未確認）"
+        source = "差し替え" if family != "diffusers" else "差し替え。diffusers 系で効くかは未確認"
         model = _stem(replaced)
         model_family = family_of(_full(replaced, game_dir))
     name = str(values.get(KIND_PRESET_NAMES[kind]) or "").strip() if values.get("KIND_PRESETS") else ""
@@ -221,7 +221,7 @@ def plan_kind(kind, values, custom, family, quality, game, last, game_dir=""):
         else:
             used = presets.overlay(values, entry["values"])
             checkpoint = str(entry["values"].get("CHECKPOINT_PATH") or "").strip()
-            source = "{}のプリセット".format(KIND_NAMES[kind])
+            source = "プリセット"
             model = name
             model_family = family_of(_full(checkpoint, game_dir)) if checkpoint else game.get("family")
     stages, how = stages_for(kind, family, quality, last)
@@ -248,7 +248,7 @@ def sampler_text(sampler, family):
 
 def kind_line(kind, plan, family):
     """帯の1行（種類, モデル, 寸法, サンプラー）。"""
-    model = "{}（{}）".format(plan["model"], plan["source"])
+    model = "{}（{}）".format(plan["model"], plan["source"]) if plan["source"] else plan["model"]
     size = "{}x{}".format(*plan["size"]) if plan["size"] else "寸法は不明"
     if not plan["stages"]:
         sampler = "段が分からない（まだ描いていない画質）"
@@ -276,17 +276,46 @@ def last_text(last):
     return "・".join(parts)
 
 
-def regen_text(values, family):
-    """再生成のボタンの描き方。"""
+def method_model(name, custom, game_model):
+    """描き直しと続けて描くのプリセットの欄が描くモデル。空か見つからないならゲーム既定（本体の `method_route`）。"""
+    if name and any(row["name"] == name for row in custom):
+        return name
+    return "ゲーム既定"
+
+
+def method_cells(kind, values, custom, family, game_model):
+    """その種類の (img2img のモデル, txt2img→img2img のモデル)。使う設定が切なら「切」。"""
     if family == "diffusers":
-        return "img2img・txt2img→img2img は使えない（diffusers 系）"
-    on = lambda key: "入" if values.get(key) else "切"
-    text = "img2img {}・txt2img→img2img {}".format(on("IMG2IMG"), on("CHAIN"))
-    auto = [label for kind, label in KINDS if values.get("CHAIN") and values.get(
-        "CHAIN_{}_AUTO".format(SIZE_HEADS[kind]))]
-    if auto:
-        text += "（通常の生成でも使う: {}）".format("・".join(auto))
-    return text
+        return "使えない", "使えない"
+    head = SIZE_HEADS[kind]
+    text = lambda key: str(values.get(key) or "").strip()
+    redraw = method_model(text("IMG2IMG_{}_PRESET".format(head)), custom, game_model)         if values.get("IMG2IMG") else "切"
+    if not values.get("CHAIN"):
+        return redraw, "切"
+    chain = "{} → {}".format(method_model(text("CHAIN_{}_FIRST".format(head)), custom, game_model),
+                             method_model(text("CHAIN_{}_SECOND".format(head)), custom, game_model))
+    if values.get("CHAIN_{}_AUTO".format(head)):
+        chain += "（通常の生成も）"
+    return redraw, chain
+
+
+def method_missing(values, custom):
+    """描き直しと続けて描くで、使う設定が入なのに見つからないプリセット（知らせの文）。"""
+    notes = []
+    names = set(row["name"] for row in custom)
+    for kind, label in KINDS:
+        head = SIZE_HEADS[kind]
+        keys = []
+        if values.get("IMG2IMG"):
+            keys.append(("img2img", "IMG2IMG_{}_PRESET".format(head)))
+        if values.get("CHAIN"):
+            keys += [("txt2img→img2img の1つ目", "CHAIN_{}_FIRST".format(head)),
+                     ("txt2img→img2img の2つ目", "CHAIN_{}_SECOND".format(head))]
+        for what, key in keys:
+            name = str(values.get(key) or "").strip()
+            if name and name not in names:
+                notes.append("{}の{}のプリセット「{}」（見つからない。ゲーム既定のモデルで描く）".format(label, what, name))
+    return notes
 
 
 def idle_notes(values, plans, family, backend, log):
@@ -330,8 +359,11 @@ def idle_notes(values, plans, family, backend, log):
 
 
 def build(values, custom, backend, game_model, log, game_dir=""):
-    """帯の中身。`{"rows": [(種類, モデル, 寸法, サンプラー, 前回)], "regen": 文, "notes": [文]}`。
+    """帯の中身。
 
+    `{"rows": [(種類, txt2img のモデル, 寸法, サンプラー, img2img のモデル, txt2img→img2img のモデル)],
+    "game": ゲーム既定のモデルの名前, "last": [(種類, 前に描いた絵)], "notes": [文]}`。
+    寸法とサンプラーは txt2img（ふだんの生成）のもの。欄の「ゲーム既定」の中身は `game` に1回だけ出す。
     `backend` はゲームの `config.json` の画像生成の欄（読めなければ空）。`log` は `read_log` の戻り値。
     """
     family = method_family(backend.get("name"))
@@ -341,10 +373,14 @@ def build(values, custom, backend, game_model, log, game_dir=""):
             else None}
     plans = {}
     rows = []
-    for kind, _label in KINDS:
+    last_rows = []
+    for kind, label in KINDS:
         last = log.get("last", {}).get(kind)
         plans[kind] = plan_kind(kind, values, custom, family, backend.get(QUALITY_KEYS[kind]),
                                 game, last, game_dir)
-        rows.append(kind_line(kind, plans[kind], family) + (last_text(last),))
-    return {"rows": rows, "regen": regen_text(values, family),
-            "notes": idle_notes(values, plans, family, backend, log)}
+        rows.append(kind_line(kind, plans[kind], family) + method_cells(kind, values, custom, family, game_model))
+        last_rows.append((label, last_text(last)))
+    notes = idle_notes(values, plans, family, backend, log)
+    if family != "diffusers":
+        notes += method_missing(values, custom)
+    return {"rows": rows, "game": game_model or "", "last": last_rows, "notes": notes}
