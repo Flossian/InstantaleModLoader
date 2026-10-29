@@ -10,7 +10,7 @@
     "en": "An NPC at the facility starts a conversation when you arrive",
     "ja": "施設に着くと、その場に居る NPC の方から会話を始めてくるようにする"
   },
-  "version": "4",
+  "version": "5",
   "author": "R01/Flossian",
   "state": ["arrival_event"],
   "after": [
