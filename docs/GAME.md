@@ -3259,6 +3259,14 @@ llm_manager:conversation_facilitator_after_retrieval(..., retrieved_knowledge)
 
 - 第一声だけ変えたいなら `conversation_starter` に渡す messages のコピーを差し替える（`300_` の手口）
 - 自由入力で尋ねたときにも効かせたいなら `retrieved_knowledge` に足す
+- 相手が受けられる頼みは、返答の種類 `response_list`（`conversation_facilitator` も `_after_retrieval` も8番目）と、
+  その説明の文 `response_prompt_instruction`（10番目と9番目。プロンプトの【返答の要素】にそのまま載る）で決まる。
+  どちらも相手の施設の種類で決め打ちで、店の主は `["casual_response", "selling_response"]` と
+  「売買の提案の場合: selling_responseとして返答を記述。」、鍛冶屋の主は `upgrade_response`（装備の強化）、
+  宿屋の主は宿泊の値段の説明だけ（種類は `casual_response` のみ）、診療所の主は売買と `treat_response`。
+  載っていない頼みは「それ以外のあらゆる要求や取引: casual_response」に倒れるので、
+  宿屋と鍛冶屋の主は売買を頼まれても「ここは買い物をする店ではない」と答えた（2026-10-29、`213_` の記録と output_data）。
+  `340_` が主との会話の間だけ両方に売買を足す（VERIFICATION §3.114）
 
 > 差し込む条件は「誰と話しているか」で決めること。
 > `character_instance`（両者とも引数の4番目）から id を引いて突き合わせる。

@@ -381,6 +381,72 @@ check("鍛冶屋の主との会話の先頭に 売買する", app4.buttons[0]["t
       [e["text"] for e in app4.buttons])
 check("例外を出していない（鍛冶屋）", not ctx.errors, ctx.errors)
 
+print("主との会話の LLM（返答の種類に売買を足す）")
+TALK = "scripts.llm.llm_manager:conversation_facilitator"
+TALK_AFTER = "scripts.llm.llm_manager:conversation_facilitator_after_retrieval"
+SMITH_TEXT = ("  - 雑談や質問の場合: casual_responseとして返答を記述。acceptedはnull。\n"
+              "  - 装備強化依頼の場合: 装備の強化を請け負う。upgrade_responseとして返答を記述。\n"
+              "  - それ以外のあらゆる要求や取引: casual_responseとして返答を記述する。\n")
+smith_owner = types.SimpleNamespace(name="テスト鍛冶師")
+stranger = types.SimpleNamespace(name="テスト客")
+world4.characters = {"9": smith_owner, "1": stranger}
+seen_talk = {}
+
+
+def talk_orig(*args, **kwargs):
+    seen_talk["args"], seen_talk["kwargs"] = args, kwargs
+    return "reply"
+
+
+def talk_args(character, response_list=None, text=SMITH_TEXT):
+    return ["msgs", {}, player4, character, "世界観", {}, "", [],
+            list(response_list or ["casual_response", "upgrade_response"]), [], text, None]
+
+
+saved_find_app, module.ui.find_app = module.ui.find_app, lambda: app4
+try:
+    player4.location = smith4
+    check("会話の包みを2つ登録", TALK in ctx.hooks and TALK_AFTER in ctx.hooks, sorted(ctx.hooks))
+    check("会話の返りはそのまま", ctx.hooks[TALK](talk_orig, *talk_args(smith_owner)) == "reply")
+    got = seen_talk["args"]
+    check("鍛冶屋の主: 返答の種類に selling_response", got[8] == ["casual_response", "upgrade_response", "selling_response"], got[8])
+    check("鍛冶屋の主: 説明の1行を「それ以外」の前に入れる",
+          got[10] == SMITH_TEXT.replace("  - それ以外", module.SELLING_LINE + module.SELLS["blacksmith"] + "\n  - それ以外"),
+          got[10])
+    check("会話に足した記録", "talk: added selling_response to conversation_facilitator with the owner of blacksmith"
+          in log_text(), log_text())
+    ctx.hooks[TALK](talk_orig, *talk_args(stranger))
+    check("主でない人には足さない", seen_talk["args"][8] == ["casual_response", "upgrade_response"]
+          and seen_talk["args"][10] == SMITH_TEXT, seen_talk["args"][8])
+    after = talk_args(smith_owner)
+    del after[9]                       # `_after_retrieval` は negotiate_response_list を受けない
+    ctx.hooks[TALK_AFTER](talk_orig, *after)
+    check("取り出しの後の会話にも足す", "selling_response" in seen_talk["args"][8]
+          and module.SELLING_LINE in seen_talk["args"][9], seen_talk["args"][8:10])
+    kw = dict(zip(("messages", "character_life_log", "player", "character_instance"), talk_args(smith_owner)[:4]))
+    kw.update(response_list=["casual_response"], response_prompt_instruction=SMITH_TEXT)
+    ctx.hooks[TALK](talk_orig, **kw)
+    check("名前付きで来ても足す", seen_talk["kwargs"]["response_list"] == ["casual_response", "selling_response"]
+          and module.SELLING_LINE in seen_talk["kwargs"]["response_prompt_instruction"], seen_talk["kwargs"])
+    ctx.hooks[TALK](talk_orig, *talk_args(smith_owner, ["casual_response", "selling_response"],
+                                          SMITH_TEXT + module.SELLING_LINE + "\n"))
+    check("既にあれば二重に足さない", seen_talk["args"][8].count("selling_response") == 1
+          and seen_talk["args"][10].count("selling_response") == 1, seen_talk["args"][8:11])
+    player4.location = shop4
+    world4.characters["1"] = stranger
+    ctx.hooks[TALK](talk_orig, *talk_args(stranger, ["casual_response", "selling_response"]))
+    check("店の主は触らない（ゲームが足す）", seen_talk["args"][10] == SMITH_TEXT, seen_talk["args"][10])
+    player4.location = smith4
+    smith4.choices = {key: value for key, value in smith4.choices.items() if key != "売買する"}
+    ctx.hooks[TALK](talk_orig, *talk_args(smith_owner))
+    check("入口を外した施設の主には足さない", "selling_response" not in seen_talk["args"][8], seen_talk["args"][8])
+finally:
+    module.ui.find_app = saved_find_app
+check("説明の文に「それ以外」の行が無ければ末尾に足す",
+      module.add_selling(["casual_response"], "  - 雑談", "inn")[1]
+      == "  - 雑談\n" + module.SELLING_LINE + module.SELLS["inn"] + "\n")
+check("例外を出していない（会話の LLM）", not ctx.errors, ctx.errors)
+
 print("品揃えの傾向")
 check("送り口に1つ登録", len(REWRITES) == 1, REWRITES)
 rewrite = REWRITES[0]

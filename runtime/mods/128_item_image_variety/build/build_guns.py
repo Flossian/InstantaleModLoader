@@ -133,8 +133,7 @@ def write_categories(entries, made, owned):
             vectors.append(vec)
         data = MOD / "data" / cid
         data.mkdir(parents=True, exist_ok=True)
-        json.dump({"index": index, "vectors": vectors},
-                  open(data / (folder + ".json"), "w", encoding="utf-8"), separators=(",", ":"))
+        write_lines(data / (folder + ".json"), {"index": index, "vectors": vectors}, depth=2)
         counts[cid] = counts.get(cid, 0) + len(group)
     # 品の無くなったフォルダを消す
     for cid in owned:
@@ -210,11 +209,42 @@ def parallel_map(func, items):
 _model = [None]
 
 
+def write_lines(path, obj, depth=1):
+    """辞書の JSON を1項目1行で書く（1行に詰めると、差分で変わった品が見つからない）。
+    depth=1 は最上段の項目ごと（`{鍵: 埋め込み}`）、depth=2 は2段目の項目ごと（`{"index": {…}, "vectors": […]}`）。"""
+    def compact(value):
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+    def opened(value):
+        if isinstance(value, dict) and value:
+            return "{\n" + ",\n".join("%s:%s" % (compact(k), compact(v)) for k, v in value.items()) + "\n}"
+        if isinstance(value, list) and value:
+            return "[\n" + ",\n".join(compact(v) for v in value) + "\n]"
+        return compact(value)
+
+    if depth == 1:
+        text = opened(obj)
+    else:
+        text = "{\n" + ",\n".join("%s:%s" % (compact(k), opened(v)) for k, v in obj.items()) + "\n}"
+    Path(path).write_text(text + "\n", encoding="utf-8", newline="\n")
+
+
+def split_pattern():
+    """本体の SPLIT_COMPOUND（外見文と同じ規則で武器の合成語を2語に分ける）。"""
+    import ast
+    source = (MOD / "item_image_variety.py").read_text(encoding="utf-8")
+    node = next(n for n in ast.parse(source).body
+                if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", None) == "SPLIT_COMPOUND")
+    return re.compile(ast.literal_eval(node.value), re.IGNORECASE)
+
+
 def embed_caption(caption):
-    """キャプション1つの埋め込み（小数4桁）。プロセスごとにモデルを1回読む。"""
+    """キャプション1つの埋め込み（小数4桁）。プロセスごとにモデルを1回読む。
+    武器の合成語は本体と同じく2語に分けてから埋め込む（キャプションの文はそのまま）。"""
     if _model[0] is None:
-        _model[0] = MiniLM()
-    return [round(float(x), 4) for x in _model[0].embed(caption)]
+        _model[0] = (MiniLM(), split_pattern())
+    model, split = _model[0]
+    return [round(float(x), 4) for x in model.embed(split.sub(r"\1 \2", caption))]
 
 
 def label(mask, diagonal=True):

@@ -10,7 +10,7 @@
     "en": "Adds the game's own \"Trade\" to inns and blacksmiths, on the facility screen and when talking to the owner. The lineup is made by the game; instead of always asking for a weapon and a piece of armor, the request leans by shop type: general stores stock a bit of everything, blacksmiths mainly weapons and armor, inns mainly food and drink with a few healing items, clinics mainly healing items and medicine, specialty shops what their sign says. Other items may still mix in (weapons and armor at inns and clinics can be turned off). Selling works as in any shop",
     "ja": "宿屋と鍛冶屋に、ゲーム自身の「売買する」を足す（施設の画面と、主との会話）。品揃えはゲームが作り、どの店にも武器と防具を1つずつ作らせる指示を、店の種類ごとの傾向に替える。雑貨屋は幅広く、鍛冶屋は武器・防具、宿屋は料理・飲み物・酒に回復薬を少し、診療所は回復薬・薬、専門店は看板に合う品が中心。ほかの品が混じるのは止めない（宿屋と診療所の武器・防具は設定で止められる）。売る側は店と同じ"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "MIXED_GEAR": {

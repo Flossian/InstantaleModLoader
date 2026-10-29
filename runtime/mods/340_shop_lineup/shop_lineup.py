@@ -27,6 +27,10 @@
    2026-10-19 に実プレイの世界で踏んだ。直し方の記録は `discontinued\\906_fix_new_shop_data`）。
    主との会話のボタンにも、店の主との会話と同じく `売買する` を先頭に入れる
    （ゲームは会話に足す入口を施設の種類で決め打ちしていて、宿屋と鍛冶屋の売買は入っていない。GAME.md §2.5）。
+   主との会話の LLM（`conversation_facilitator` / `_after_retrieval`）にも、店の主と同じ返答の種類
+   `selling_response` と、その説明の1行を足す（`SELLS` の一文を添える）。
+   ゲームは返答の種類（`response_list`）と説明の文（`response_prompt_instruction`）も施設の種類で決め打ちしていて、
+   宿屋の主は宿泊、鍛冶屋の主は装備の強化しか知らず、「ここは買い物をする店ではない」と答えていた（GAME.md §2.24）。
 2. **品揃えを作る間だけ、ゲームのプロンプトの1文を店の種類ごとの文へ差し替える。**
    ゲームの店（雑貨屋・専門店・診療所・鍛冶屋・宿屋）で `ShoppingStartManagerRemake.execute` が走っている間だけ、
    ローダの送り口（`llm.wrap_outgoing`）で「武器と防具を必ず作る」の1文を `LINEUPS` の文へ替える。
@@ -88,6 +92,21 @@ MOD_PREFIX = "mod:"
 ENTRY_TYPES = {
     "inn": "DisplayVacationChoice",              # 宿泊する
     "blacksmith": "EquipmentReinforcementStart",  # 装備の強化
+}
+
+#: 主との会話の LLM と、返答の種類・説明の文の位置（recon の署名。0 起点）。
+TALK_TARGETS = {
+    "scripts.llm.llm_manager:conversation_facilitator": (8, 10),
+    "scripts.llm.llm_manager:conversation_facilitator_after_retrieval": (8, 9),
+}
+SELLING_TYPE = "selling_response"
+#: ゲームが店の主に添える説明の1行（exe の定数の写し）と、その後に続くゲームの行の頭。
+SELLING_LINE = "  - 売買の提案の場合: selling_responseとして返答を記述。"
+OTHER_LINE = "  - それ以外のあらゆる要求や取引"
+#: 宿屋と鍛冶屋の主に添える、売り買いしている品の一文。
+SELLS = {
+    "inn": "この宿では料理・飲み物・酒と少しの回復薬を売っていて、客の品の買い取りもする。",
+    "blacksmith": "この鍛冶屋では武器と防具を売っていて、客の品の買い取りもする。",
 }
 
 FACILITY_INIT = "__main__:Facility.__init__"
@@ -227,6 +246,28 @@ def rewrite_text(text, facility_type, mixed=None):
             text = text.replace(old, new)
             hits += 1
     return text, hits
+
+
+def add_selling(response_list, instruction, facility_type):
+    """返答の種類に `selling_response` を足し、説明の文に店と同じ1行を入れる。`(種類, 説明, 足したか)`。
+
+    1行は「それ以外のあらゆる要求や取引」の行の前に入れる（無ければ末尾）。どちらも既にあれば触らない。
+    """
+    if not isinstance(response_list, (list, tuple)) or not isinstance(instruction, str):
+        return response_list, instruction, False
+    changed = False
+    if SELLING_TYPE not in response_list:
+        response_list = list(response_list) + [SELLING_TYPE]
+        changed = True
+    if SELLING_TYPE not in instruction:
+        line = SELLING_LINE + SELLS.get(facility_type, "") + "\n"
+        at = instruction.find(OTHER_LINE)
+        if at < 0:
+            instruction = instruction + ("" if not instruction or instruction.endswith("\n") else "\n") + line
+        else:
+            instruction = instruction[:at] + line + instruction[at:]
+        changed = True
+    return response_list, instruction, changed
 
 
 def apply(ctx):
@@ -490,6 +531,45 @@ def apply(ctx):
 
     # 選択肢はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。ボタンは足さない（ゲームが `choices` から組む）。
     choices.provide(ctx, None, refresh=refresh_buttons)
+
+    # ------------------------------------------------------------ 主との会話の LLM
+    def selling_owner(character):
+        """`character` が今いる宿屋・鍛冶屋の主で、入口を出している施設なら、その施設の種類。"""
+        app = ui.find_app()
+        facility = current_facility(app)
+        if facility is None or not takes_entry(facility):
+            return None
+        found = _get(facility, "choices")
+        if not isinstance(found, dict) or SHOP_CHOICE not in found:
+            return None     # 入口を外した施設（素データに無い）
+        owner = _get(facility, "owner")
+        if ui.character_of(app, owner) is not character \
+                and str(_get(character, "id", "")) != str(owner):
+            return None
+        return ui.facility_type_of(facility)
+
+    def make_talk_hook(target, list_at, text_at):
+        name = target.rsplit(":", 1)[1]
+
+        @ctx.wrap(target, required=False, safe=True)
+        def talk(orig, *args, **kwargs):
+            try:
+                kind = selling_owner(frames.arg(args, kwargs, "character_instance", 3))
+                if kind is not None:
+                    found = frames.arg(args, kwargs, "response_list", list_at)
+                    text = frames.arg(args, kwargs, "response_prompt_instruction", text_at)
+                    found, text, changed = add_selling(found, text, kind)
+                    if changed:
+                        args, kwargs, _ = frames.replace_arg(args, kwargs, "response_list", list_at, found)
+                        args, kwargs, _ = frames.replace_arg(args, kwargs, "response_prompt_instruction", text_at, text)
+                        write("talk: added {} to {} with the owner of {}".format(SELLING_TYPE, name, kind))
+            except Exception:
+                ctx.log_exc("shop lineup: cannot add the trade to the conversation")
+            return orig(*args, **kwargs)
+        return talk
+
+    for target, (list_at, text_at) in TALK_TARGETS.items():
+        make_talk_hook(target, list_at, text_at)
 
     # ------------------------------------------------------------ 品揃えを作る間
     def live_batch():

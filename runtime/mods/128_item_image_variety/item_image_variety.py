@@ -54,6 +54,7 @@ build/README.md）。
 """
 
 import os
+import re
 import shutil
 import sys
 import threading
@@ -92,6 +93,16 @@ CROSS_DIRNAME = "item_image_cross"
 IMAGE_REL = os.path.join("Assets", "images", "item_candidates_dark")
 # 外した絵の付け替え先の表（`data/` の下。build/build_retired.py が書く）
 RETIRED_FILE = "retired.json"
+# 埋め込みのモデルの語彙に無い武器の合成語（battleaxe・longsword・shortsword など）は細切れに分かれ、
+# 同じ綴りの説明文にしか当たらない（battleaxe が刀剣、shortsword がナイフに当たる）。
+# 外見文も足した絵の説明文も、埋め込む前に2語に分ける（build_guns.embed_caption も同じ規則。VERIFICATION.md §3.26）
+SPLIT_COMPOUND = (r"\b(battle|war|great|long|short|broad|pole|hand|pick)"
+                  r"(swords?|axes?|hammers?|bows?|spears?|shields?|clubs?|scythes?|picks?|maces?)\b")
+
+
+def split_compound(text):
+    """埋め込む文の武器の合成語を2語に分ける（battleaxe → battle axe）。"""
+    return re.sub(SPLIT_COMPOUND, r"\1 \2", text, flags=re.IGNORECASE) if isinstance(text, str) else text
 
 # 足した絵の分類ごとの使い方。分類は同じ種類の元画像をまとめた単位（`categories.json`）。
 #   off       使わない（その分類の辞書を読まない）
@@ -803,7 +814,7 @@ def apply(ctx):
             if kept is not None:
                 return kept
 
-        query = emb_mod.text_to_embedding(query_text)
+        query = emb_mod.text_to_embedding(split_compound(query_text))
         query = query.detach().reshape(-1).to(dtype=pool[1].dtype)
         query = query / query.norm().clamp_min(1e-12)
         own = rank(pool, query)

@@ -590,6 +590,7 @@ class Picker(object):
         self.cross_margin = ast.literal_eval(consts["CROSS_SLOT_MARGIN"])
         self.cross_slots = ast.literal_eval(consts["CROSS_SLOTS"])
         self.cross_prefix = ast.literal_eval(consts["CROSS_PREFIX"])
+        self.split = re.compile(ast.literal_eval(consts["SPLIT_COMPOUND"]), re.IGNORECASE)
         self.cats = json.load(io.open(os.path.join(MOD_128, "categories.json"), encoding="utf-8"))
         self.emb_dir = os.path.join(str(game_dir), "Data", "item_embeddings")
         self.img_dir = os.path.join(str(game_dir), "Assets", "images", "item_candidates_dark")
@@ -663,10 +664,14 @@ class Picker(object):
         qualified = [i for i in order if float(sims[i]) >= best - (1.0 - self.floor) * float(raw[order[0]])]
         return {"keys": keys, "cat": cat, "raw": raw, "top": order[0], "top_sim": top, "qualified": qualified}
 
+    def embed(self, text):
+        """本体と同じく、武器の合成語を2語に分けてから埋め込む（正規化済み）。"""
+        q = self.model.embed(self.split.sub(r"\1 \2", text))
+        return q / self.np.linalg.norm(q)
+
     def pick(self, detail, text):
         np = self.np
-        q = self.model.embed(text)
-        q = q / np.linalg.norm(q)
+        q = self.embed(text)
         own = self.rank(detail, q)
         if own is None:
             return None

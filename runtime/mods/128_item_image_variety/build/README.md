@@ -5,6 +5,7 @@
 足した絵の分類は、同じ種類の元画像をまとめた単位（`../categories.json`。版10 で119分類を「品の種類：ジャンル」の45分類にまとめ、防具：ファンタジーを中世・ファンタジー（魔法の要素がある品）・ハイファンタジー・ダークファンタジーに分け、防具：魔法とSF と食料：近世を足して50分類。元画像は `sources`）。絵と辞書は分類ごとのフォルダに書く
 （`../images/<分類>/Assets/images/item_candidates_dark/<部位>/<鍵>.png`・`../data/<分類>/<部位>.json`）。
 書くのは3つの道具に共通の `build_guns.write_categories` で、道具の受け持つ分類（表の品が入る分類）から、その道具の品（鍵の頭）の絵と埋め込みだけを消して書き直す（防具の分類にはほかの道具の品も入る）。
+辞書の JSON は `build_guns.write_lines` で1項目1行に書く（`index` の鍵1つ・`vectors` の埋め込み1つが1行。差分で変わった品が分かる）。
 辞書は同じキャプションのベクトルを1つにまとめた形（`{"index": {鍵: 番号}, "vectors": [...]}`、小数4桁）。
 一枚絵を足すときは、合う分類の `sources` に元画像（一枚絵の呼び名・置き場所・元の名前）を足す。分類を足すときは `categories.json`（id・設定の名前・まとまり・表示名・既定の使い方・sources）と、本体の `IMAGE_SETS` と設定の定数、`mod.json` の settings を揃える（`tools\tests\test_item_image_sets.py` が見る）。
 ジャンル内の重みの既定（`../genres.json` の `weights`）にも、足した分類の行を足す（`tools\tests\test_item_image_tool.py` が見る）。
@@ -16,6 +17,7 @@
 分類ごとの一枚絵は `categories.json` の `source`（`assets/item_images/` の下の相対パス）。道具はどれもここを読む。別の場所を読ませるときは `--sheets` か環境変数 `ITEM_IMAGE_ASSETS`。
 元の一枚絵の PNG は画素を変えずに詰め直してある。
 3つの道具は、品ごとの処理と埋め込みを `build_guns.parallel_map` でプロセスを並べて流す（既定はコア数 - 1。環境変数 `ITEM_IMAGE_WORKERS=1` で1本。結果は同じ）。
+キャプションは、本体が外見文にするのと同じく、武器の合成語（battleaxe・longsword など、モデルの語彙に無い語）を2語に分けてから埋め込む（本体の `SPLIT_COMPOUND` を `build_guns.split_pattern` が読む。`build_extra_embeddings.py` も同じ。キャプションの文はそのまま。VERIFICATION.md §3.26）。
 塊数え（`build_guns.label`）は OpenCV（cv2）か scipy があればその実装を使い、無ければ素の Python で数える（作り直しの時間の約9割が素の Python の塊数えだった）。
 切り出すときは、明るさ 12 より上を品とみなし、外周の背景とつながらない閉じた透明の塊のうち中の平均が 2.5 以上のもの（品の中の暗い影）を品に戻す（`build_guns.fill_enclosed`。依頼の背景は #000000 で、本当に空いている所は平均 0.6〜1.7）。
 縮めるときは、透明の色を隣の色で広げてから輪郭を立て（黒のまま立てると白い粒が並んだ）、残った 6px 以下の閉じた穴を埋める（`spread_colors`・`small_holes`）。

@@ -10,7 +10,7 @@
     "en": "Spreads item icons across similar candidates instead of always the single best match, and adds weapon, armor, clothing, consumable and material images the stock assets lack. Per-category use and per-genre weights can be set for all worlds or per world, and event items are asked for English appearance text",
     "ja": "アイテム画像を「最も似た1枚」固定でなく似た候補から散らして選び、素材に無い武器・防具・服・消耗品・素材の絵を足す。足した絵は同じ種類の元画像をまとめた分類で、使い方とジャンルの重みを一括とワールド個別で決められる。イベントで得る品の外見文を英語で頼む。"
   },
-  "version": "10",
+  "version": "11",
   "author": "R01/Flossian",
   "state": ["item_image", "item_image_cross", "item_image_genres", "item_image_variety"],
   "settings": {
