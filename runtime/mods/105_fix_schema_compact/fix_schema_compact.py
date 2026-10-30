@@ -29,6 +29,12 @@ SCHEMA_MARKERS = ("{'$defs':", "{'properties':", '{"$defs":', '{"properties":')
 
 AUDIT_FIRST_N = 5        # 最初の数回だけ、圧縮後の骨組みを全文ログに残す
 
+# これより短いスキーマは元の書き方のまま送る。
+# 書き方を変えるだけで決めかねる場面の答えが寄り（会話進行の雇用。中身を落とさない書き換えでも起きる）、
+# 短いスキーマは縮めても得が小さい（DOC.md）。
+# 実データの長さは 1,468 字の次が 2,280 字で、その間に置いた。
+MIN_SCHEMA_CHARS = 2000
+
 # messages と format が揃う地点。
 # 下流の `_post_with_model_loading_retry`（payload）にも仕掛けていたが、
 # ここで圧縮した後はマーカーが残らず一度も発火しなかったので外した（DOC.md）。
@@ -222,15 +228,56 @@ def _text_of(value):
     return json.dumps(value, ensure_ascii=False)
 
 
+def _bounds(low, high, low_open=False, high_open=False):
+    """範囲を "1..10"・"5"・">=1"・"<10" の形にする。どちらも無ければ空文字。"""
+    if low is not None and high is not None and not low_open and not high_open:
+        return str(low) if low == high else "{}..{}".format(low, high)
+    parts = []
+    if low is not None:
+        parts.append("{}{}".format(">" if low_open else ">=", low))
+    if high is not None:
+        parts.append("{}{}".format("<" if high_open else "<=", high))
+    return ",".join(parts)
+
+
+def _number_bounds(field):
+    low, low_open = field.get("minimum"), False
+    if field.get("exclusiveMinimum") is not None:
+        low, low_open = field["exclusiveMinimum"], True
+    high, high_open = field.get("maximum"), False
+    if field.get("exclusiveMaximum") is not None:
+        high, high_open = field["exclusiveMaximum"], True
+    return _bounds(low, high, low_open, high_open)
+
+
+def _note(field):
+    """description と example を "/* … */" にまとめる。どちらも無ければ空文字。
+
+    MOD が型の説明に手引きを足すことがある（342_ の vfx）。
+    ローカルではこの文が手引きの届く唯一の道なので落とさない。
+    """
+    parts = []
+    description = field.get("description")
+    if isinstance(description, str) and description.strip():
+        parts.append(description.strip())
+    if "example" in field:
+        parts.append("e.g. " + _text_of(field["example"]))
+    return " /* {} */".format(" ".join(parts)) if parts else ""
+
+
 def describe_field(field):
     """フィールド1つ分の型を、出力する JSON に近い形で書き出す。
 
     enum と const は値をそのまま、素の型は型名で書く。
+    数の範囲と件数は "integer(1..10)"・"Enemy[1..3]" の形で残す。
     版1は素の型と null を落としていたが、それで選び方が変わる欄があった（DOC.md）。
     """
     if not isinstance(field, dict):
         return "any"
+    return _describe_core(field) + _note(field)
 
+
+def _describe_core(field):
     if "const" in field:
         return _text_of(field["const"])
 
@@ -253,15 +300,19 @@ def describe_field(field):
 
     if "items" in field:
         inner = describe_field(field["items"])
+        count = _bounds(field.get("minItems"), field.get("maxItems"))
         # 要素が共用体なら括る（"a"|"b"[] だと最後の1つだけが配列に読める）。
-        return ("(" + inner + ")[]") if "|" in inner else inner + "[]"
+        return ("(" + inner + ")" if "|" in inner else inner) + "[" + count + "]"
 
     field_type = field.get("type")
     if isinstance(field_type, str):
-        return field_type
-    if isinstance(field_type, list):
-        return "|".join(str(t) for t in field_type)
-    return "any"
+        text = field_type
+    elif isinstance(field_type, list):
+        text = "|".join(str(t) for t in field_type)
+    else:
+        return "any"
+    limits = _number_bounds(field)
+    return "{}({})".format(text, limits) if limits else text
 
 
 def type_line(type_name, type_schema):
@@ -301,11 +352,11 @@ def compact_schema_text(root):
     return "\n".join(lines)
 
 
-def compact_embedded_schema(prompt):
+def compact_embedded_schema(prompt, min_chars=MIN_SCHEMA_CHARS):
     """プロンプト内の埋め込みスキーマを骨組み表記に置き換える。
 
     戻り値は (置き換え後のプロンプト, 差し込んだ骨組み) の組。
-    対象が無い・解析できない・圧縮にならない場合は None（＝無加工）。
+    対象が無い・解析できない・min_chars より短い・圧縮にならない場合は None（＝無加工）。
     """
     start = find_schema_start(prompt)
     if start < 0:
@@ -317,6 +368,8 @@ def compact_embedded_schema(prompt):
         return None                      # 読めない形は安全側で触らない
     if not isinstance(schema, dict):
         return None
+    if end - start < min_chars:
+        return None                      # 短いスキーマは元の書き方のまま
 
     try:
         compact = compact_schema_text(schema).rstrip("\n")
@@ -434,8 +487,13 @@ _EXPECTED = ('Location = {"name": string, "kind": "shop"|"inn"}\n'
 
 def _verify(ctx):
     prompt = "出力は次の構造に従うこと: " + _SAMPLE_SCHEMA + "\n以上を守ること。"
-    result = compact_embedded_schema(prompt)
 
+    # 見本は短いので、実際の長さの下限では触らないこと。
+    if compact_embedded_schema(prompt) is not None:
+        ctx.log("VERIFY FAILED: compacted a schema shorter than MIN_SCHEMA_CHARS", level="ERROR")
+        return
+
+    result = compact_embedded_schema(prompt, min_chars=0)
     if result is None:
         ctx.log("VERIFY FAILED: sample schema was not compacted", level="ERROR")
         return
@@ -448,16 +506,16 @@ def _verify(ctx):
         return
 
     # スキーマ説明を持たないプロンプトには作用しないこと（自由文出力を壊さない）。
-    if compact_embedded_schema("ここに構造の指定は無い。自由に書いてよい。") is not None:
+    if compact_embedded_schema("ここに構造の指定は無い。自由に書いてよい。", min_chars=0) is not None:
         ctx.log("VERIFY FAILED: compacted a prompt with no embedded schema", level="ERROR")
         return
 
     # 2回目は何も残っていない。
     # プロキシと同時に動かしても二重適用にならない根拠。
-    if compact_embedded_schema(compacted) is not None:
+    if compact_embedded_schema(compacted, min_chars=0) is not None:
         ctx.log("VERIFY FAILED: compaction is not idempotent", level="ERROR")
         return
 
     ctx.log("verified: schema compaction {} -> {} chars ({:.0%} smaller), "
-            "idempotent, no-op without a schema".format(
-                len(prompt), len(compacted), 1 - len(compacted) / len(prompt)))
+            "idempotent, no-op without a schema or under {} chars".format(
+                len(prompt), len(compacted), 1 - len(compacted) / len(prompt), MIN_SCHEMA_CHARS))
