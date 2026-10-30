@@ -35,7 +35,7 @@
 | `102_fix_prompt_dedup` | DEDUP | 発火は確認、発生源が本体で直った〔main_023〕 | [§2.3](verification/2.3.md) |
 | `103_fix_eventlog_trim` | EVENTLOG | 実経路で検証済〔main_024〕 | [§2.3](verification/2.3.md) |
 | `104_balance_area_bgm` | エリア BGM の偏り | 決着（差し替え3件）。既存3世界の是正は未実行 | [§2.4](verification/2.4.md) / [§3.4](verification/3.4.md) |
-| `105_fix_schema_compact` | COMPACT | 決着（2,803 件で 73.3% 減） | [§2.3](verification/2.3.md) |
+| `105_fix_schema_compact` | COMPACT | 決着（2,803 件で 73.3% 減）。版2 で一覧を骨組みに変え、雇用の返事が崩れるのを直した（ゲーム抜きのローカル LLM で 19/50 → 41/50。ゲームの中は未） | [§2.3](verification/2.3.md) |
 | `139_fix_quest_generation_runaway` | 依頼の生成で敵の一覧が窓を使い切る | オフラインで成立（上限なし 12 回中 8 回失敗、上限あり 40 回とも型どおり）。ゲームの中でも1回成立 | [§3.81](verification/3.81.md) |
 | `106_fix_battle_bgm_restore` | 戦闘後に BGM が戻らない | 決着（3つの起点が発火）〔main_024〕。版3 で組み直しの包みを窓口の `after` に移した。戦闘の最中のセーブを読むと戦闘曲を止めていたのを直し、実機で成立（[§3.109](verification/3.109.md)） | [§2.5](verification/2.5.md) / [§3.1](verification/3.1.md) |
 | `107_fix_battle_flag_stuck` | 戦闘・闘技場・売買の旗が残る | 決着（版4まで成立、撤退の後の依頼の戦闘も）。版6 の `in_shopping` は3か所とも成立。版7 のロードの見分けも成立。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） | [§3.73](verification/3.73.md) / [§3.86](verification/3.86.md) / [§3.91](verification/3.91.md) |

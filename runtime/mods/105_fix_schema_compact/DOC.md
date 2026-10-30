@@ -1,16 +1,25 @@
 # `105_fix_schema_compact`: LLM へ送るスキーマ説明を圧縮する
 
-プロンプトに埋め込まれたスキーマ説明文を、簡潔な一覧表記に置き換える。
+プロンプトに埋め込まれたスキーマ説明文を、簡潔な骨組み表記に置き換える。
 ゲームは `json_schema`（grammar）を送ると同時に、同じスキーマを dict の repr としてプロンプト本文にも埋め込む。
-構造は grammar が強制するので、本文側はフィールド名と enum・参照・配列・任意の印だけ残せば足りる。
+構造は grammar が強制するので、全フィールドに付く `title` などの定型句は落としてよい。
+型と値は出力する JSON に近い形で残す。
 
     元:   {'$defs': {'Location': {'properties': {'name': {'title': 'Name', ...
-    後:   Location: name, kind:∈{shop,inn}
-          Area: name, locations:Location[], atomosphere:∈{tense,normal}, note?
+    後:   Location = {"name": string, "kind": "shop"|"inn"}
+          Area = {"name": string, "locations": Location[], "atomosphere": "tense"|"normal", "note"?: string|null}
 
-外部プロキシ（InstantaleLLMProxy）の COMPACT と同じ処理をプロセス内でやる。
-書式を揃えてあるので、同じスキーマからは同じ一覧が出る。
+外部プロキシ（InstantaleLLMProxy）の COMPACT と同じ判定をプロセス内でやる。
+出力の書式は版2でプロキシの一覧表記から離れたので、同じスキーマから同じ文は出ない。
 両方を同時に動かしても、先に圧縮した方でマーカー（`{'$defs':` 等）が消えるため、もう片方は何もしない。
+
+## 型と値を削らない（版2）
+
+版1はフィールド名と enum・参照・配列・任意の印だけを `kind:∈{shop,inn}` の形で残し、素の型と null を落としていた。
+grammar が許す範囲は変わらないが、その中でモデルの選び方が変わる欄があった。
+会話で「雇いたい」と言ったとき、相手が文では応じていても雇用の返事として扱われず、「雇う（40G）」が出ない回が増えていた。
+版2は値と型を JSON の形で書くので、圧縮しないときとほぼ同じ割合で出る。
+縮み方は 73% から 67% になった（VERIFICATION_LOG.md §2.3）。
 
 ## どこに仕掛けるか
 
@@ -23,7 +32,7 @@
 その仕掛けは外した。
 `chat` に仕掛かったかどうかは `bootstrap.log` の `schema compact: armed on chat` で分かる。
 
-## 割り切り（プロキシと同じ）
+## 割り切り
 
 - 圧縮するのは最初に見つかったスキーマ1個だけ。
   2個目を含むメッセージは実データに 0 件
@@ -43,6 +52,7 @@ Gemini は `send_request` の中で足すので境界の外、OpenAI / Claude �
 
 ## 検証
 
-実データ 12,067 件のオフライン検証と実機の両方で済んでいる。
+版1は実データ 12,067 件のオフライン検証と実機の両方で済んでいる。
 誤爆・欠落とも 0 件、削減率は 72〜73%（VERIFICATION_LOG.md §2.3）。
-`tools/tests/test_schema_compact.py` が同じ見本で一覧の形・べき等・無加工を検査する。
+版2は実データ 3,896 件で解析の失敗・二重の圧縮とも 0 件、雇用の会話をローカル LLM へ投げ比べて確かめた。
+`tools/tests/test_schema_compact.py` が同じ見本で骨組みの形・べき等・無加工を検査する。

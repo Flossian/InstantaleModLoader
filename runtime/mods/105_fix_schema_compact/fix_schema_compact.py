@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
-"""プロンプトに埋め込まれたスキーマ説明文を、簡潔な一覧表記に置き換える。
+"""プロンプトに埋め込まれたスキーマ説明文を、簡潔な骨組み表記に置き換える。
 
 ゲームは llama-server に `json_schema` パラメータ（grammar の実体）を送ると同時に、
 同じスキーマを Python dict の repr としてプロンプト本文にも埋め込んでいる。
 構造の正しさは `json_schema` 側がトークン単位で強制するので、
-プロンプト側に必要なのは「フィールドの意味の手がかり」だけで、
 全フィールドに付く `{'title': 'Name', 'type': 'string'}` のような定型句は落としても構造は壊れない。
+ただし型と値の書き方まで削ると、grammar が許す範囲の中でモデルの選び方が変わる（DOC.md）。
 
     元:   {'$defs': {'Location': {'properties': {'name': {'title': 'Name', ...
-    後:   Location: name, kind:∈{shop,inn}
-          Area: name, locations:Location[], atomosphere:∈{tense,normal}, note?
+    後:   Location = {"name": string, "kind": "shop"|"inn"}
+          Area = {"name": string, "locations": Location[], "atomosphere": "tense"|"normal", "note"?: string|null}
 
-外部プロキシ（InstantaleLLMProxy）の `Proxy.SchemaFix.cs` にある COMPACT と同じ処理をプロセス内でやる。
-判定と出力の書式はプロキシ側に揃えてあるので、同じスキーマからは同じ一覧が出る。
+外部プロキシ（InstantaleLLMProxy）の `Proxy.SchemaFix.cs` にある COMPACT と同じ判定をプロセス内でやる。
+出力の書式は版2でプロキシの一覧表記から離れた（DOC.md）。
 
 仕掛け先は `LlamaCppClient.chat` の1点。
 `format` が dict のとき（＝実体のあるスキーマが渡っているとき）だけ messages を圧縮する。
@@ -20,12 +20,14 @@
 割り切り・検証の経過・クラウド経路に無い理由は DOC.md と VERIFICATION_LOG.md §2.3。
 """
 
+import json
+
 
 # Python 表記／JSON 表記のどちらでも拾う。
 # プロキシの SchemaMarkers と同じ。
 SCHEMA_MARKERS = ("{'$defs':", "{'properties':", '{"$defs":', '{"properties":')
 
-AUDIT_FIRST_N = 5        # 最初の数回だけ、圧縮後の一覧を全文ログに残す
+AUDIT_FIRST_N = 5        # 最初の数回だけ、圧縮後の骨組みを全文ログに残す
 
 # messages と format が揃う地点。
 # 下流の `_post_with_model_loading_retry`（payload）にも仕掛けていたが、
@@ -143,7 +145,7 @@ def parse_literal(text, i):
 
     if char == "{":
         # dict は挿入順を保つ（3.7 以降）。
-        # スキーマの定義順がそのまま一覧の順になる。
+        # スキーマの定義順がそのまま骨組みの順になる。
         mapping = {}
         i = _skip_ws(text, i + 1)
         if i < length and text[i] == "}":
@@ -203,7 +205,7 @@ def parse_literal(text, i):
 
 
 # --------------------------------------------------------------------------
-# JSON Schema → 一覧表記
+# JSON Schema → 骨組み表記
 # --------------------------------------------------------------------------
 def find_schema_start(prompt):
     """埋め込みスキーマの開始位置。見つからなければ -1。"""
@@ -216,68 +218,54 @@ def find_schema_start(prompt):
 
 
 def _text_of(value):
-    """enum 値や const をそのまま書き出すときの表記。"""
-    return "" if value is None else str(value)
+    """enum 値や const を JSON の値として書き出す（文字列は "x"、None は null）。"""
+    return json.dumps(value, ensure_ascii=False)
 
 
 def describe_field(field):
-    """フィールド1つ分の「意味の手がかり」だけを短く書き出す。
+    """フィールド1つ分の型を、出力する JSON に近い形で書き出す。
 
-    素の string / integer / boolean / number には何も付けない。
-    既定の型として扱われるので、書いても手がかりが増えないため。
-    enum・$ref・配列・共用体だけ残す。
+    enum と const は値をそのまま、素の型は型名で書く。
+    版1は素の型と null を落としていたが、それで選び方が変わる欄があった（DOC.md）。
     """
     if not isinstance(field, dict):
-        return ""
+        return "any"
 
     if "const" in field:
-        return '="{}"'.format(_text_of(field["const"]))
+        return _text_of(field["const"])
 
     if "$ref" in field:
         ref = field["$ref"]
         # "#/$defs/Location" -> "Location"
-        return ref.rpartition("/")[2] if isinstance(ref, str) else ""
+        return ref.rpartition("/")[2] if isinstance(ref, str) else "any"
 
     if "enum" in field:
         values = field["enum"]
         if not isinstance(values, list):
-            return ""
-        return "∈{" + ",".join(_text_of(v) for v in values) + "}"
+            return "any"
+        return "|".join(_text_of(v) for v in values)
 
     if "anyOf" in field:
         options = field["anyOf"]
         if not isinstance(options, list):
-            return ""
-        parts = []
-        nullable = False
-        for option in options:
-            if not isinstance(option, dict):
-                continue
-            if option.get("type") == "null":
-                # Optional[...] は型の選択肢ではなく末尾の ? で表す。
-                nullable = True
-                continue
-            described = describe_field(option)
-            if described:
-                parts.append(described)
-        joined = "|".join(parts)
-        return joined + "?" if nullable and joined else joined
+            return "any"
+        return "|".join(describe_field(option) for option in options)
 
     if "items" in field:
-        items = field["items"]
-        inner = describe_field(items)
-        if not inner and isinstance(items, dict):
-            # 要素が素の型なら、その型名だけは残す（string[] と
-            # list の区別が付く）。
-            item_type = items.get("type")
-            inner = item_type if isinstance(item_type, str) else ""
-        return inner + "[]"
+        inner = describe_field(field["items"])
+        # 要素が共用体なら括る（"a"|"b"[] だと最後の1つだけが配列に読める）。
+        return ("(" + inner + ")[]") if "|" in inner else inner + "[]"
 
-    return ""
+    field_type = field.get("type")
+    if isinstance(field_type, str):
+        return field_type
+    if isinstance(field_type, list):
+        return "|".join(str(t) for t in field_type)
+    return "any"
 
 
 def type_line(type_name, type_schema):
-    """1つの型を "Name: f1, f2:desc, f3?" の1行にする。properties が無ければ None。"""
+    """1つの型を 'Name = {"f1": string, "f2"?: X}' の1行にする。properties が無ければ None。"""
     if not isinstance(type_schema, dict):
         return None
     properties = type_schema.get("properties")
@@ -289,17 +277,16 @@ def type_line(type_name, type_schema):
 
     fields = []
     for name, schema in properties.items():
-        described = describe_field(schema)
-        # 必須でないものだけ末尾に ? を付ける。
+        # 必須でないものだけキーの後に ? を付ける。
         # required の方が多数派なので、印を付けるのは任意側にした方が短くなる。
-        fields.append("{}{}{}".format(name,
-                                      ":" + described if described else "",
-                                      "" if name in required else "?"))
-    return "{}: {}".format(type_name, ", ".join(fields))
+        fields.append("{}{}: {}".format(_text_of(name),
+                                        "" if name in required else "?",
+                                        describe_field(schema)))
+    return "{} = {{{}}}".format(type_name, ", ".join(fields))
 
 
 def compact_schema_text(root):
-    """スキーマ全体を、型ごとに1行の一覧に落とす。"""
+    """スキーマ全体を、型ごとに1行の骨組みに落とす。"""
     lines = []
     defs = root.get("$defs")
     if isinstance(defs, dict):
@@ -315,9 +302,9 @@ def compact_schema_text(root):
 
 
 def compact_embedded_schema(prompt):
-    """プロンプト内の埋め込みスキーマを一覧表記に置き換える。
+    """プロンプト内の埋め込みスキーマを骨組み表記に置き換える。
 
-    戻り値は (置き換え後のプロンプト, 差し込んだ一覧) の組。
+    戻り値は (置き換え後のプロンプト, 差し込んだ骨組み) の組。
     対象が無い・解析できない・圧縮にならない場合は None（＝無加工）。
     """
     start = find_schema_start(prompt)
@@ -364,7 +351,7 @@ def apply(ctx):
         state["hits"] += 1
         write("[COMPACT] {} | スキーマ説明を圧縮 {} -> {} 文字 (削減 {})".format(
             site, len(before_text), len(after_text), len(before_text) - len(after_text)))
-        # 最初の数回だけ、差し込んだ一覧をそのまま残す。
+        # 最初の数回だけ、差し込んだ骨組みをそのまま残す。
         # 「フィールド名と enum が本当に残っているか」を目で確認するため。
         if state["hits"] <= AUDIT_FIRST_N:
             for line in compact.split("\n"):
@@ -440,8 +427,9 @@ _SAMPLE_SCHEMA = (
     "'type': 'object'}"
 )
 
-_EXPECTED = ("Location: name, kind:∈{shop,inn}\n"
-             "Area: name, locations:Location[], atomosphere:∈{tense,normal}, note?")
+_EXPECTED = ('Location = {"name": string, "kind": "shop"|"inn"}\n'
+             'Area = {"name": string, "locations": Location[], '
+             '"atomosphere": "tense"|"normal", "note"?: string|null}')
 
 
 def _verify(ctx):

@@ -3,7 +3,7 @@
 
     python tools/tests/test_schema_compact.py
 
-  一覧   … pydantic の形（$defs / $ref / enum / 配列 / Optional）が2行の一覧になる
+  骨組み … pydantic の形（$defs / $ref / enum / 配列 / Optional）が2行の骨組みになる
   無加工 … スキーマの無い文・壊れた dict は None（触らない）
   べき等 … 圧縮後をもう一度通しても None
   両表記 … JSON 表記（true/null・ダブルクォート）でも同じ一覧が出る
@@ -65,10 +65,29 @@ as_json = json.dumps(mod.parse_literal(mod._SAMPLE_SCHEMA, 0)[0], ensure_ascii=F
 check("json spelling", mod.compact_embedded_schema(PRE + as_json + POST) == result)
 
 # 型の書き出し
-check("const", mod.describe_field({"const": "x"}) == '="x"')
+check("const", mod.describe_field({"const": "x"}) == '"x"')
 check("string[]", mod.describe_field({"type": "array", "items": {"type": "string"}}) == "string[]")
-check("union?", mod.describe_field({"anyOf": [{"$ref": "#/$defs/A"}, {"enum": [1, 2]}, {"type": "null"}]})
-      == "A|∈{1,2}?")
+check("union", mod.describe_field({"anyOf": [{"$ref": "#/$defs/A"}, {"enum": [1, 2]}, {"type": "null"}]})
+      == "A|1|2|null")
+check("plain types", [mod.describe_field({"type": t}) for t in ("string", "boolean", "integer")]
+      == ["string", "boolean", "integer"])
+check("nullable bool", mod.describe_field({"anyOf": [{"type": "boolean"}, {"type": "null"}]})
+      == "boolean|null")
+check("enum array", mod.describe_field({"type": "array", "items": {"enum": ["a", "b"]}})
+      == '("a"|"b")[]')
+
+# 会話進行の型（main_026）。
+# 版1は accepted の型と enum の値の引用符を落とし、ローカル LLM が雇用の誘いに
+# casual_response を返す回が増えた（DOC.md）。
+reply = {"properties": {
+    "type": {"enum": ["casual_response", "recruitment_response"], "type": "string"},
+    "accepted": {"anyOf": [{"type": "boolean"}, {"type": "null"}]},
+    "statement": {"type": "string"},
+    "call_free_action": {"type": "boolean"}},
+    "required": ["type", "accepted", "statement", "call_free_action"]}
+check("reply line", mod.type_line("Reply", reply)
+      == 'Reply = {"type": "casual_response"|"recruitment_response", "accepted": boolean|null, '
+         '"statement": string, "call_free_action": boolean}', mod.type_line("Reply", reply))
 
 if failures:
     raise SystemExit("FAILED: {}".format(failures))
