@@ -3508,6 +3508,20 @@ llm.CLOUD_API_KEY   # inference の「API キーでクラウド」の値
 LLM を切り替えるとゲームが起動し直すので、注入の時に1回読めば足りる。
 `is_cloud_runtime()` と違い、最初の LLM リクエストを待たずに分かる（`136_` がタイトル画面に出すのに使う）。
 
+#### 頼みに足す文の上限（`text_limit`）
+
+```python
+llm.runs_bundled_llm()   # ゲーム同梱の llama.cpp で推論しているか
+llm.text_limit(600)      # 同梱の llama.cpp なら 600、それ以外は None（切らない）
+```
+
+同梱の llama-server は `--ctx-size` をゲームが 16384 に固定する（GAME.md §2.12.1）。
+MOD が頼みに足す文（世界の概要など）を字数で切るのはこのときだけにする。
+クラウドと任意の OpenAI 互換サーバー（LM Studio など）は文脈長を遊ぶ側が選べるので切らない。
+判定は `is_local_runtime()` → `is_cloud_runtime()` → まだ決まらなければ `game_choice()` の `inference` が `local` か。
+`config.json` が読めなければ同梱の側（短い方）に倒す。
+使っているのは `143_` と `144_`。
+
 ### 5.4 `instantale_modloader.state`
 
 世界ごとにデータを分けて持つ MOD が使う。

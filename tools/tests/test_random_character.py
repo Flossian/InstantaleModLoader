@@ -254,6 +254,11 @@ def main():
     check("長い概要は切る", clipped and len(clipped[1][1]) == mod.TEXT_LIMIT + 1 and clipped[1][1].endswith("…"),
           clipped and len(clipped[1][1]))
     check("改行は1行に畳む", mod.clip("一行目\n二行目") == "一行目 二行目")
+    full = mod.world_facts({"world_data": {"name": "x", "overview": long_text,
+                                           "story": {"world_situation": long_text}}},
+                           situation=True, limit=None)
+    check("上限なしなら概要も情勢も全文", [t for _h, t in full[1:]] == [long_text, long_text],
+          [len(t) for _h, t in full])
 
     # -- 作り ------------------------------------------------------------------
     print("\n[作り]")
@@ -431,8 +436,8 @@ def main():
         with io.open(os.path.join(out_dir, mod.LOG_BASENAME), encoding="utf-8") as fh:
             log = fh.read()
         check("[WORLD] が残る（さいころ3・立ち絵2）",
-              log.count("[WORLD]") == 5 and log.count("character | world+build | 見本の都市 from file") == 2
-              and "look | world | 見本の島々 from app" in log, log[-900:])
+              log.count("[WORLD]") == 5 and log.count("character | world+build 800字まで | 見本の都市 from file") == 2
+              and "look | world 800字まで | 見本の島々 from app" in log, log[-900:])
         check("[BUILD] が3回", log.count("[BUILD] 才能点") == 3, log[-600:])
         check("[COST] が画面に載った後に（表示の文字から残りと使う点を読む。無ければ ?）",
               log.count("[COST]") == 2 and "画面: 残り ? / 才能点 2497 / 年齢 33" in log

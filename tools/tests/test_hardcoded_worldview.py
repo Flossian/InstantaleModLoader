@@ -280,6 +280,38 @@ def main():
     long_world = {"world_data": {"name": "x", "overview": "長" * (mod.TEXT_LIMIT + 10)}}
     got, done = mod.rewrite(NARRATOR, long_world)
     check("長い概要は切る", ("長" * mod.TEXT_LIMIT + "…") in got[0] and ("長" * (mod.TEXT_LIMIT + 1)) not in got[0])
+    got, done = mod.rewrite(NARRATOR, long_world, limit=None)
+    check("上限なしなら全文", ("長" * (mod.TEXT_LIMIT + 10)) in got[0]
+          and ("長" * (mod.TEXT_LIMIT + 10) + "…") not in got[0], done)
+    check("上限なしなら改行も残す", mod.clip(" 一行目\n二行目 ", None) == "一行目\n二行目")
+
+    # -- 上限の判定（ローダの llm.text_limit） ---------------------------------
+    print("\n[上限の判定]")
+    from instantale_modloader import llm
+    tmp = tempfile.mkdtemp()
+    saved = {name: sys.modules.pop(name) for name in list(sys.modules)
+             if name.startswith(llm.REQUEST_MODULE_PREFIX)}
+    try:
+        def config(inference):
+            path = os.path.join(tmp, "config_{}.json".format(inference))
+            with io.open(path, "w", encoding="utf-8") as fh:
+                json.dump({"ai_setting": {"llm_inference": inference, "cloud_model_setting": {}}}, fh)
+            return path
+        missing = os.path.join(tmp, "missing.json")
+        check("呼ぶ前: config がローカルなら切る", llm.text_limit(600, config("local")) == 600)
+        check("呼ぶ前: config がクラウドなら切らない", llm.text_limit(600, config("cloud_api_key")) is None)
+        check("呼ぶ前: config が読めなければ切る", llm.text_limit(600, missing) == 600)
+        sys.modules[llm.LOCAL_REQUEST_MODULE] = types.ModuleType(llm.LOCAL_REQUEST_MODULE)
+        check("同梱の llama.cpp なら config に関わらず切る", llm.text_limit(600, config("cloud_api_key")) == 600)
+        del sys.modules[llm.LOCAL_REQUEST_MODULE]
+        for name in ("claude", "any_server"):
+            module = llm.REQUEST_MODULE_PREFIX + name
+            sys.modules[module] = types.ModuleType(module)
+            check("{} なら config に関わらず切らない".format(name), llm.text_limit(600, missing) is None)
+            del sys.modules[module]
+    finally:
+        sys.modules.update(saved)
+        shutil.rmtree(tmp, ignore_errors=True)
 
     # -- 会話・許可・共通世界観 --------------------------------------------------
     print("\n[会話・許可・共通世界観]")

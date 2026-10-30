@@ -256,6 +256,28 @@ def game_choice(path=None):
         return None
 
 
+def runs_bundled_llm(path=None) -> bool:
+    """ゲーム同梱の llama.cpp で推論しているか。
+
+    同梱の llama-server は `--ctx-size` をゲームが 16384 に固定する（設定欄に書いても外される。
+    GAME.md §2.12.1）。MOD が頼みに足す文を短く切るのはこのときだけ。
+    クラウドと任意の OpenAI 互換サーバー（LM Studio など）は文脈長を遊ぶ側が選べるので切らない。
+    まだ1度も LLM を呼んでいない間は送信モジュールで決まらないので、`config.json` の選択で決める。
+    読めなければ同梱の側（短い方）に倒す。
+    """
+    if is_local_runtime():
+        return True
+    if is_cloud_runtime():
+        return False
+    choice = game_choice(path)
+    return choice is None or choice.get("inference") == "local"
+
+
+def text_limit(local_chars, path=None):
+    """MOD が頼みに足す文の上限（字）。同梱の llama.cpp なら `local_chars`、それ以外は None（切らない）。"""
+    return local_chars if runs_bundled_llm(path) else None
+
+
 def content_of(message):
     """メッセージの本文。dict でなければ None（＝触らない）。"""
     try:
