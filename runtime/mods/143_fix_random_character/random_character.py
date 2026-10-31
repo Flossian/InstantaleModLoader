@@ -44,7 +44,7 @@ import sys
 import threading
 import time
 
-from instantale_modloader import frames, llm, loads, saves, state, ui
+from instantale_modloader import frames, loads, saves, state, ui
 from instantale_modloader.llm import wrap_outgoing
 
 LOG_BASENAME = "random_character.log"
@@ -73,10 +73,6 @@ HEAD_RULES = "【世界に合わせること】"
 HEAD_BUILD = "【今回の作り】"
 #: さいころの頼み文の才能点の行（`今回利用可能な才能点：**2497**`）。
 TALENT_LINE = re.compile(r"今回利用可能な才能点[：:]\s*\**\s*(\d+)")
-
-#: 同梱の llama.cpp で動くときの世界の文1つの上限（字）。実データの概要は 200〜300 字だった。
-#: クラウドと任意の OpenAI 互換サーバーでは切らない（`llm.text_limit`）。
-TEXT_LIMIT = 800
 
 RULES_COMMON = (
     "- 冒頭の役の説明にあるジャンル（ダークファンタジーなど）より、この世界のデータを優先する。",
@@ -201,7 +197,7 @@ def classify(texts):
 
 # ================================================================== 世界
 
-def clip(value, limit=TEXT_LIMIT):
+def clip(value, limit=None):
     """1行に収めた文。文字列でなければ ""。`limit` が None なら切らず、改行も元のまま。"""
     if not isinstance(value, str):
         return ""
@@ -211,8 +207,11 @@ def clip(value, limit=TEXT_LIMIT):
     return got if len(got) <= limit else got[:limit] + "…"
 
 
-def world_facts(world_dict, situation=None, limit=TEXT_LIMIT):
-    """`world_dict` から `[(見出し, 文), ...]`。読めなければ []。概要と情勢は `limit` 字まで（None なら全文）。"""
+def world_facts(world_dict, situation=None):
+    """`world_dict` から `[(見出し, 文), ...]`。読めなければ []。
+
+    概要と情勢は切らずに全文渡す（同梱のローカル LLM の窓にも収まる。VERIFICATION.md §3.95）。
+    """
     if not isinstance(world_dict, dict):
         return []
     data = world_dict.get("world_data")
@@ -223,12 +222,12 @@ def world_facts(world_dict, situation=None, limit=TEXT_LIMIT):
     name = state.world_key_of_dict(world_dict)
     if name:
         facts.append(("世界の名前", clip(name, 80)))
-    overview = clip(data.get("overview"), limit)
+    overview = clip(data.get("overview"))
     if overview:
         facts.append(("世界の概要", overview))
     story = data.get("story")
     if situation and isinstance(story, dict):
-        now = clip(story.get("world_situation"), limit)
+        now = clip(story.get("world_situation"))
         if now:
             facts.append(("世界の情勢", now))
     # 名前だけでは世界観にならない。
@@ -452,12 +451,10 @@ def apply(ctx):
         kind, index = found
         started = time.monotonic()
         facts, name, source = [], None, "-"
-        limit = TEXT_LIMIT
         if ADD_WORLD and kind in WORLD_KINDS:
             with lock:
                 world_dict, name, source = current_world(ui.find_app())
-            limit = llm.text_limit(TEXT_LIMIT)
-            facts = world_facts(world_dict, limit=limit)
+            facts = world_facts(world_dict)
             if not facts:
                 write("[SKIP] {} {} | 世界が読めない（{}）".format(
                     site, kind, name or "世界名が分からない"))
@@ -469,9 +466,8 @@ def apply(ctx):
             return None
         if "build" in done:
             setattr(sys, BUILD_ATTR, plan)
-        size = (" 全文" if limit is None else " {}字まで".format(limit)) if "world" in done else ""
-        note("[WORLD] {} {} | {}{} | {} from {} ({:.1f}ms)".format(
-            site, kind, "+".join(done), size, name, source, (time.monotonic() - started) * 1000))
+        note("[WORLD] {} {} | {} | {} from {} ({:.1f}ms)".format(
+            site, kind, "+".join(done), name, source, (time.monotonic() - started) * 1000))
         if "build" in done:
             note("[BUILD] 才能点 {} / 年齢 {} / 高 {} / 低 {}".format(
                 plan["talent"], plan["age"], "・".join(k for k, _l in plan["high"]),

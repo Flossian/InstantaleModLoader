@@ -9,7 +9,8 @@
 API の経路を分けている**:
 
     gpt-5 / -mini / -nano                          responses.parse, effort="minimal"
-    gpt-5.5 / 5.4 / 5.4-mini / 5.4-nano / 5.2 / 5.1  responses.parse, effort="none"
+    gpt-6.1-sol / gpt-6-astra                      responses.parse, effort="low"
+    gpt-6-sol / 6-luna / 5.6 系 / 5.5 / 5.4 系 / 5.2 / 5.1  responses.parse, effort="none"
     それ以外                                        beta.chat.completions, max_tokens=
 
 3番目は古い経路で、GPT-5 系は
@@ -184,24 +185,35 @@ def generation(model):
     return int(head) if head.isdigit() else 0
 
 
-#: ゲームが responses の経路で組む推論量（上の経路の表。モデル名で決まる）。
+#: ゲームが responses の経路で組む推論量（モデル名で決まる。main_026 の送信モジュールの定数）。
+#: GPT-6 系・GPT-5.6 系は none の表に並び、そのうち none を断る2つだけ low に上げている。
 GAME_EFFORT_MINIMAL = ("gpt-5", "gpt-5-mini", "gpt-5-nano")
-GAME_EFFORT_NONE = ("gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.2", "gpt-5.1")
+GAME_EFFORT_LOW = ("gpt-6.1-sol", "gpt-6-astra")
+GAME_EFFORT_NONE = ("gpt-6-sol", "gpt-6-luna", "gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna",
+                    "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.2", "gpt-5.1")
+
+
+def game_effort(game_model):
+    """ゲームが組む推論量。chat.completions の経路（推論量を送らない）なら None。"""
+    if game_model in GAME_EFFORT_MINIMAL:
+        return "minimal"
+    if game_model in GAME_EFFORT_LOW:
+        return "low"
+    if game_model in GAME_EFFORT_NONE:
+        return "none"
+    return None
 
 
 def sent_effort(target, game_model, setting):
     """実際に送る推論量（タイトル画面に出す）。推論量を送らない経路なら None。
 
     `setting` が keep ならゲームが組む値（`game_model` で決まる）に、差し替え先の読み替えを通す。
-    chat.completions の経路（上の表の「それ以外」）は、指定が無ければ推論量を送らない。
+    差し替えないときは target に game_model を、setting に keep を渡す。
     """
     if setting and setting != "keep":
         return _effort(target, setting)
-    if game_model in GAME_EFFORT_MINIMAL:
-        return _effort(target, "minimal")
-    if game_model in GAME_EFFORT_NONE:
-        return _effort(target, "none")
-    return None
+    value = game_effort(game_model)
+    return _effort(target, value) if value else None
 
 
 def _effort(target, value):

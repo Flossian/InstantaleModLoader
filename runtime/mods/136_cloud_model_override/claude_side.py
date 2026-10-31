@@ -257,14 +257,36 @@ def mark_shared_prefix(body, prefixes, ttl):
     return ["cache mark {}/{}{}".format(shared, total, " " + ttl if ttl else "")]
 
 
-def sent_effort(target, setting):
+#: ゲームが推論量（low）を付けて送るモデル（main_026 の送信モジュールの定数）。他は付けない。
+GAME_EFFORT_LOW = ("claude-fable-5", "claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5")
+
+#: 推論量を送らないときの API の既定が medium のモデル。表にある他のモデルは high。
+DEFAULT_MEDIUM = ("claude-opus-5-5", "claude-haiku-5-5")
+
+#: 推論量を送らず API の既定に任せるときの書き方（タイトル画面）。値の分からない名前は「既定」だけ。
+DEFAULT_TEXT = "既定"
+DEFAULT_MARK = "（既定）"
+
+
+def default_effort(model):
+    """推論量を送らないときに API が使う値（印つき）。表に無い名前は「既定」だけ。"""
+    for prefix, _found in TRAITS:
+        if model == prefix or model.startswith(prefix + "-"):
+            return ("medium" if prefix in DEFAULT_MEDIUM else "high") + DEFAULT_MARK
+    return DEFAULT_TEXT
+
+
+def sent_effort(target, setting, game_model=None):
     """実際に送る推論量（タイトル画面に出す）。推論量を受けないモデル（Haiku 4.5）なら None。
 
-    keep は「ゲームの組んだ値のまま」で、その値はここでは分からないので keep のまま返す。
+    keep は「ゲームの組んだ値のまま」で、`game_model` から決まる（ゲームが付けないなら API の既定）。
+    差し替えないときは target に game_model を、setting に keep を渡す。
     """
     if not traits(target)["effort"]:
         return None
-    return setting or "keep"
+    if setting and setting != "keep":
+        return setting
+    return "low" if game_model in GAME_EFFORT_LOW else default_effort(target)
 
 
 def usage_line(result):

@@ -249,16 +249,14 @@ def main():
     check("情勢を外せる", [h for h, _t in mod.world_facts(WORLD_A, situation=False)] == ["世界の名前", "世界の概要"])
     check("概要も情勢も無ければ空", mod.world_facts({"world_data": {"name": "名前だけ"}}, situation=True) == [])
     check("world_data が無ければ空", mod.world_facts({"areas": {}}) == [] and mod.world_facts(None) == [])
-    long_text = "長" * (mod.TEXT_LIMIT + 50)
-    clipped = mod.world_facts({"world_data": {"name": "x", "overview": long_text}})
-    check("長い概要は切る", clipped and len(clipped[1][1]) == mod.TEXT_LIMIT + 1 and clipped[1][1].endswith("…"),
-          clipped and len(clipped[1][1]))
-    check("改行は1行に畳む", mod.clip("一行目\n二行目") == "一行目 二行目")
+    long_text = "長" * 5000 + "\n二段落目"
     full = mod.world_facts({"world_data": {"name": "x", "overview": long_text,
                                            "story": {"world_situation": long_text}}},
-                           situation=True, limit=None)
-    check("上限なしなら概要も情勢も全文", [t for _h, t in full[1:]] == [long_text, long_text],
+                           situation=True)
+    check("長い概要も情勢も全文（改行も残す）", [t for _h, t in full[1:]] == [long_text, long_text],
           [len(t) for _h, t in full])
+    check("名前は1行に畳んで切る", mod.clip("一行目\n二行目", 80) == "一行目 二行目"
+          and mod.clip("名" * 90, 80) == "名" * 80 + "…")
 
     # -- 作り ------------------------------------------------------------------
     print("\n[作り]")
@@ -436,8 +434,8 @@ def main():
         with io.open(os.path.join(out_dir, mod.LOG_BASENAME), encoding="utf-8") as fh:
             log = fh.read()
         check("[WORLD] が残る（さいころ3・立ち絵2）",
-              log.count("[WORLD]") == 5 and log.count("character | world+build 800字まで | 見本の都市 from file") == 2
-              and "look | world 800字まで | 見本の島々 from app" in log, log[-900:])
+              log.count("[WORLD]") == 5 and log.count("character | world+build | 見本の都市 from file") == 2
+              and "look | world | 見本の島々 from app" in log, log[-900:])
         check("[BUILD] が3回", log.count("[BUILD] 才能点") == 3, log[-600:])
         check("[COST] が画面に載った後に（表示の文字から残りと使う点を読む。無ければ ?）",
               log.count("[COST]") == 2 and "画面: 残り ? / 才能点 2497 / 年齢 33" in log

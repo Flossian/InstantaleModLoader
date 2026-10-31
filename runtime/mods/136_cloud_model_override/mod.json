@@ -10,7 +10,7 @@
     "en": "Use Claude models the game does not list (Haiku 5.5 and others) from a list, and any other OpenAI / Claude model by typing its name. The model name is swapped right before sending, and arguments the target rejects are fixed. Prompt cache markers can be chosen too. Also fixes Claude refusing the game's quest schema as too large (no quests get made) and world generation resending over and over",
     "ja": "ゲームの一覧に無い Claude のモデル（Haiku 5.5 など）を一覧から選び、OpenAI / Claude の一覧に無い名前は欄に書いて使う。送信直前にモデル名を差し替え、差し替え先が受け付けない引数も直す。プロンプトキャッシュの印の置き方も選べる。Claude がゲームの依頼の型を大きすぎるとして断り、依頼が作られないのと、世界の生成が何度も送り直しになるのも直す"
   },
-  "version": "6",
+  "version": "7",
   "author": "R01/Flossian",
   "settings": {
     "OPENAI_CUSTOM": {
@@ -215,8 +215,24 @@
         "en": "Show the model in use on the title screen"
       },
       "note": {
-        "ja": "タイトル画面の右上に「LLM: Claude Haiku 5.5 / effort: medium」のように、モデルと推論量を1行出す。ゲームが API キーでクラウドを使っていて、そのプロバイダをこの MOD で差し替えているときだけ出る",
-        "en": "Shows one line such as \"LLM: Claude Haiku 5.5 / effort: medium\" (model and effort) in the title screen's top right. Only when the game uses a cloud provider with an API key and this mod swaps that provider's model"
+        "ja": "タイトル画面の右上に「LLM: Claude Haiku 5.5 / effort: medium」のように、モデルと推論量を1行出す。ゲームが API キーでクラウドを使っていて、そのプロバイダをこの MOD で差し替えているときだけ出る（差し替えていないときは下の欄）",
+        "en": "Shows one line such as \"LLM: Claude Haiku 5.5 / effort: medium\" (model and effort) in the title screen's top right. Only when the game uses a cloud provider with an API key and this mod swaps that provider's model (see below for when it does not)"
+      }
+    },
+    "TITLE_MODEL_UNSWAPPED": {
+      "type": "bool",
+      "default": false,
+      "group": {
+        "ja": "共通",
+        "en": "Common"
+      },
+      "label": {
+        "ja": "差し替えていないときも出す",
+        "en": "Show it without a swap too"
+      },
+      "note": {
+        "ja": "上の欄がオンのときだけ効く。ゲームが API キーで OpenAI / Claude を使っていれば、差し替えていなくても、ゲームで選んだモデルとゲームが送る推論量を出す。ゲームが推論量を付けないモデルは「high（既定）」のように API の既定を出す",
+        "en": "Only with the option above on. When the game uses OpenAI / Claude with an API key, shows the model chosen in the game and the effort the game sends even without a swap. For models the game sends no effort for, the API default is shown, such as \"high（既定）\""
       }
     }
   }

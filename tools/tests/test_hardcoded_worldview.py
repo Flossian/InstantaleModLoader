@@ -277,15 +277,13 @@ def main():
           mod.rewrite(NARRATOR, {"world_data": {"name": "名前だけ"}}) == (None, []))
     got, done = mod.rewrite(POLICY_ONLY, None)
     check("許可の理由は世界が無くても直す", done == ["policy"] and "ゲームであるため" in got[0], done)
-    long_world = {"world_data": {"name": "x", "overview": "長" * (mod.TEXT_LIMIT + 10)}}
-    got, done = mod.rewrite(NARRATOR, long_world)
-    check("長い概要は切る", ("長" * mod.TEXT_LIMIT + "…") in got[0] and ("長" * (mod.TEXT_LIMIT + 1)) not in got[0])
-    got, done = mod.rewrite(NARRATOR, long_world, limit=None)
-    check("上限なしなら全文", ("長" * (mod.TEXT_LIMIT + 10)) in got[0]
-          and ("長" * (mod.TEXT_LIMIT + 10) + "…") not in got[0], done)
-    check("上限なしなら改行も残す", mod.clip(" 一行目\n二行目 ", None) == "一行目\n二行目")
+    long_overview = "長" * 5000 + "\n二段落目"
+    got, done = mod.rewrite(NARRATOR, {"world_data": {"name": "x", "overview": long_overview}})
+    check("長い概要も全文（改行も残す）", long_overview in got[0] and (long_overview + "…") not in got[0], done)
+    check("名前と記録の頭は1行に畳んで切る", mod.clip(" 一行目\n二行目 ", 80) == "一行目 二行目"
+          and mod.clip("名" * 90, 80) == "名" * 80 + "…")
 
-    # -- 上限の判定（ローダの llm.text_limit） ---------------------------------
+    # -- 上限の判定（ローダの llm.text_limit。同梱の MOD は使わなくなったが公開している口） --
     print("\n[上限の判定]")
     from instantale_modloader import llm
     tmp = tempfile.mkdtemp()

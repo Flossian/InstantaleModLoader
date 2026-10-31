@@ -63,6 +63,10 @@ FORMAT_HEAD = "json形式で出力すること"
 
 KINDS = ("narrator", "conversation_facilitator", "conversation_resolver", "referee_player_attack_new_new",
          "referee_npc", "random_quest_generator", "mod_town_factions_people", "shop_item_generator_ordinary")
+#: `--kinds gm` で足す、GM に近い頼み（自由行動の判定・街の詳細の生成）
+GM_KINDS = ("quest_referee_with_free_action", "create_settlement_detail")
+#: 街の詳細の生成で、どの街にも要る施設の種類（ゲームの頼みの必須5種）
+REQUIRED_FACILITIES = ("inn", "guild", "administrative_office", "medical_facility", "general_store")
 #: (名前, 思考, effort)
 CONFIGS = (("off-low", "disabled", "low"), ("off-medium", "disabled", "medium"), ("off-high", "disabled", "high"),
            ("on-low", "adaptive", "low"), ("on-medium", "adaptive", "medium"), ("on-high", "adaptive", "high"),
@@ -70,26 +74,42 @@ CONFIGS = (("off-low", "disabled", "low"), ("off-medium", "disabled", "medium"),
 
 
 # ------------------------------------------------------------------ 頼み
-def load_request(game_dir, kind, compact):
+def _messages(path):
+    with io.open(path, encoding="utf-8") as fh:
+        data = json.load(fh)
+    return [{"role": m["role"], "content": m["content"]} for m in data["messages"] if isinstance(m.get("content"), str)]
+
+
+def _has_format(messages):
+    return bool(messages) and FORMAT_HEAD in messages[0]["content"]
+
+
+def load_request(game_dir, spec, compact):
+    """`spec` は頼みの種類（最新の記録）か `種類:番号`（その記録）。
+
+    Claude で動いた回の記録には型の指示が残らないので、型は同じ種類の、型の指示が付いた最新の記録から取る。
+    """
+    kind, _, number = spec.partition(":")
     paths = sorted(glob.glob(os.path.join(str(game_dir), "output_data", "*", "*", kind, "*.json")),
                    key=os.path.getmtime, reverse=True)
-    for path in paths:
-        with io.open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-        messages = [{"role": m["role"], "content": m["content"]} for m in data["messages"]
-                    if isinstance(m.get("content"), str)]
-        has_format = bool(messages) and FORMAT_HEAD in messages[0]["content"]
-        if kind == "narrator" or has_format:
-            break
-    else:
-        raise SystemExit("記録が無い: {}".format(kind))
+    if number:
+        paths = [p for p in paths if os.path.basename(p) == number + ".json"] + paths
+    if not paths:
+        raise SystemExit("記録が無い: {}".format(spec))
+    path = paths[0]
+    messages = _messages(path)
     schema = None
-    if has_format:
+    if _has_format(messages):
         schema = embedded_schema(messages[:1], compact)
         messages = messages[1:]
+    elif kind != "narrator":
+        source = next((p for p in paths if _has_format(_messages(p))), None)
+        if source is None:
+            raise SystemExit("型の指示が付いた記録が無い: {}".format(kind))
+        schema = embedded_schema(_messages(source)[:1], compact)
     system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
     turns = [m for m in messages if m["role"] != "system"] or [{"role": "user", "content": NO_USER}]
-    return {"kind": kind, "record": os.path.basename(path), "system": system, "messages": turns, "schema": schema}
+    return {"kind": spec, "record": os.path.basename(path), "system": system, "messages": turns, "schema": schema}
 
 
 def body_of(request, thinking):
@@ -209,15 +229,33 @@ def text_chars(value):
     return 0
 
 
+def facility_types(value):
+    """応答の中の `type` の値をすべて集める（街の詳細の生成で、必須の施設がそろったかを見る）。"""
+    found = set()
+    if isinstance(value, dict):
+        if isinstance(value.get("type"), str):
+            found.add(value["type"])
+        for sub in value.values():
+            found |= facility_types(sub)
+    elif isinstance(value, list):
+        for sub in value:
+            found |= facility_types(sub)
+    return found
+
+
 def check(request, content):
+    """`(型どおりか, 理由, 字数, 欠けた必須施設)`。欠けは街の詳細の生成だけ（他は None）。"""
     if request["schema"] is None:
-        return True, "ok", len(content.strip())
+        return True, "ok", len(content.strip()), None
     ok, reason = qgp.judge(content, request["schema"])
     try:
-        chars = text_chars(json.loads(content))
+        data = json.loads(content)
     except ValueError:
-        chars = len(content)
-    return ok, reason, chars
+        return ok, reason, len(content), None
+    missing = None
+    if request["kind"].partition(":")[0] == "create_settlement_detail":
+        missing = [t for t in REQUIRED_FACILITIES if t not in facility_types(data)]
+    return ok, reason, text_chars(data), missing
 
 
 # ------------------------------------------------------------------ 集計
@@ -227,7 +265,8 @@ def summarize(rows, model):
     for row in rows:
         by[(row["config"], row["kind"])].append(row)
     configs = [c[0] for c in CONFIGS if any(r["config"] == c[0] for r in rows)]
-    kinds = [k for k in KINDS if any(r["kind"] == k for r in rows)]
+    kinds = [k for k in KINDS + GM_KINDS if any(r["kind"] == k for r in rows)]
+    kinds += sorted({r["kind"] for r in rows} - set(kinds))
     print("\n## 頼みごと（中央値の秒 / 平均の出力トークン / 型どおり / 平均の字数）")
     for kind in kinds:
         print("\n" + kind)
@@ -240,11 +279,14 @@ def summarize(rows, model):
                 print("  {:<11} 失敗 {}".format(config, group[0]["error"][:100]))
                 continue
             secs = sorted(r["seconds"] for r in done)
-            print("  {:<11} {:>6.1f}s  out {:>6.0f}  ok {}/{}  字 {:>5.0f}{}".format(
+            judged = [r for r in done if r.get("missing") is not None]
+            print("  {:<11} {:>6.1f}s  out {:>6.0f}  ok {}/{}  字 {:>5.0f}{}{}".format(
                 config, secs[len(secs) // 2], sum(r["output_tokens"] for r in done) / len(done),
                 sum(1 for r in done if r["ok"]), len(group), sum(r["chars"] for r in done) / len(done),
                 "  stop:" + ",".join(sorted({r["stop"] for r in done if r["stop"] != "end_turn"}))
-                if any(r["stop"] != "end_turn" for r in done) else ""))
+                if any(r["stop"] != "end_turn" for r in done) else "",
+                "  必須5種そろい {}/{}".format(sum(1 for r in judged if not r["missing"]), len(judged))
+                if judged else ""))
     print("\n## 設定ごと（全頼みの合計）")
     for config in configs:
         done = [r for r in rows if r["config"] == config and "error" not in r]
@@ -280,7 +322,9 @@ def main():
 
     game_dir = find_game_dir(args.game_dir)
     compact = qgp.load_compact_module()
-    kinds = [k for k in args.kinds.split(",") if k]
+    kinds = []
+    for k in args.kinds.split(","):
+        kinds += list(KINDS + GM_KINDS) if k == "all" else list(GM_KINDS) if k == "gm" else [k] if k else []
     configs = [c for c in CONFIGS if c[0] in args.configs.split(",")]
     requests = [load_request(game_dir, kind, compact) for kind in kinds]
     for request in requests:
@@ -304,10 +348,11 @@ def main():
                "record": request["record"], "run": run + 1, "model": args.model}
         try:
             got = sender.generate(request, thinking, effort)
-            ok, reason, chars = check(request, got["content"])
-            row.update(got, ok=ok, reason=reason, chars=chars)
-            line = "{:<11} {:<32} #{} {:>6.1f}s out {:>6} {} {}".format(
-                name, request["kind"], run + 1, got["seconds"], got["output_tokens"], "ok" if ok else "NG", reason[:60])
+            ok, reason, chars, missing = check(request, got["content"])
+            row.update(got, ok=ok, reason=reason, chars=chars, missing=missing)
+            line = "{:<11} {:<32} #{} {:>6.1f}s out {:>6} {} {}{}".format(
+                name, request["kind"], run + 1, got["seconds"], got["output_tokens"], "ok" if ok else "NG", reason[:60],
+                "" if missing is None else "  欠け: " + (",".join(missing) or "なし"))
         except Exception as exc:
             row.update(error=str(exc)[:500])
             line = "{:<11} {:<32} #{} 失敗 {}".format(name, request["kind"], run + 1, str(exc)[:120])

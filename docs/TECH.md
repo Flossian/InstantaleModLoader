@@ -2665,6 +2665,7 @@ v2.0.0 を作るときは、この表の行を外し、`MIN_API` を上げる。
 | `choices.provide(trim=...)`（全部の MOD の `refresh` の後に一覧を絞る） | `claim`（画面を自分のボタンだけにする） | 同上 | 2026-10-21 |
 | `ui.Screen.prune_stale(buttons, labels)`（印を失った自前のボタンを外す） | `choices.provide(labels=...)`（窓口が組み直しの最初に外す） | 働きは前のまま | 2026-10-21 |
 | `modfacility.maintain_buttons(app)` / `modfacility.press(app, index)`（建物の選択肢を自分で組む・押す） | 窓口が組み直しのたびに組む（§5.8） | 呼べばその場で組み直す・押す | 2026-10-21 |
+| `llm.text_limit(local_chars, path)` / `llm.runs_bundled_llm(path)`（同梱の llama.cpp のときだけ足す文を切る） | 切らずに渡す（同梱の窓 16384 に収まる。§5.3「頼みに足す文の上限」） | 働きは前のまま | 2026-10-31 |
 
 ### 3.10 パッチを剥がす（`unload`）
 
@@ -3565,12 +3566,13 @@ llm.runs_bundled_llm()   # ゲーム同梱の llama.cpp で推論しているか
 llm.text_limit(600)      # 同梱の llama.cpp なら 600、それ以外は None（切らない）
 ```
 
-同梱の llama-server は `--ctx-size` をゲームが 16384 に固定する（GAME.md §2.12.1）。
-MOD が頼みに足す文（世界の概要など）を字数で切るのはこのときだけにする。
-クラウドと任意の OpenAI 互換サーバー（LM Studio など）は文脈長を遊ぶ側が選べるので切らない。
+v1.19.0 で、MOD が頼みに足す文（世界の概要など）を同梱の llama.cpp のときだけ字数で切るために足した。
 判定は `is_local_runtime()` → `is_cloud_runtime()` → まだ決まらなければ `game_choice()` の `inference` が `local` か。
 `config.json` が読めなければ同梱の側（短い方）に倒す。
-使っているのは `143_` と `144_`。
+
+v1.20.0 で同梱の MOD は使わなくなった。
+同梱の llama-server の窓（`--ctx-size 16384`。GAME.md §2.12.1）は、世界の概要を全文足しても収まると測れたため（[VERIFICATION.md §3.95](verification/3.95.md)）。
+公開している口なので働きは前のまま残し、v2.0.0 で外す（§3.9「次の API（v2.0.0）で外すもの」）。
 
 ### 5.4 `instantale_modloader.state`
 

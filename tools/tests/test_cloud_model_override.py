@@ -396,7 +396,12 @@ cloud = {"inference": "cloud_api_key", "provider": "Claude API", "model": "claud
 t = MOD.title_text(cloud, "gpt-6-luna", "claude-haiku-5-5", NAMES, claude_effort="medium")
 assert t == "LLM: Claude Haiku 5.5 / effort: medium", t
 t = MOD.title_text(cloud, "gpt-6-luna", "claude-sonnet-5-5", NAMES)
-assert t == "LLM: claude-sonnet-5-5 / effort: ゲームのまま", "一覧から外した名前は欄に書いたとき ID のまま出す"
+assert t == "LLM: claude-sonnet-5-5 / effort: high（既定）", "keep でゲームが付けない（Sonnet 5）なら差し替え先の既定"
+t = MOD.title_text(dict(cloud, model="claude-opus-5-5"), None, "claude-haiku-5-5", NAMES)
+assert t == "LLM: Claude Haiku 5.5 / effort: low", "keep でゲームが low を付けるモデル（Opus 5.5）はそのまま"
+t = MOD.title_text(cloud, None, "claude-opus-5-5", NAMES)
+assert t == "LLM: claude-opus-5-5 / effort: medium（既定）", "Opus 5.5 / Haiku 5.5 の既定は medium"
+assert MOD.title_text(cloud, None, "my-claude", NAMES) == "LLM: my-claude / effort: 既定", "既定の分からない名前"
 assert MOD.title_text(cloud, None, "claude-haiku-4-5", NAMES, claude_effort="low") ==     "LLM: claude-haiku-4-5", "推論量を受けないモデルには付けない"
 openai_cloud = dict(cloud, provider="OpenAI API", model="gpt-5.5")
 t = MOD.title_text(openai_cloud, "gpt-6-luna", None, NAMES)
@@ -414,6 +419,28 @@ assert MOD.title_text(cloud, "gpt-6-luna", None, NAMES) is None, "そのプロ�
 assert MOD.title_text(dict(cloud, inference="local"), "gpt-6-luna", "claude-sonnet-5-5", NAMES) is None
 assert MOD.title_text(dict(cloud, provider="Gemini API(Experimental)"), "gpt-6-luna", "x", NAMES) is None
 assert MOD.title_text(None, "gpt-6-luna", None, NAMES) is None
+t = MOD.title_text(dict(openai_cloud, model="gpt-6-sol"), "gpt-6-luna", None, NAMES)
+assert t == "LLM: gpt-6-luna / effort: none", "ゲームの一覧の GPT-6 系も none を組む（main_026）"
+
+# 差し替えていないときも出す（既定はオフ）。ゲームが選んだモデルと、ゲームが組む推論量
+U = dict(unswapped=True)
+t = MOD.title_text(dict(cloud, model="claude-sonnet-5-5"), None, None, NAMES, claude_effort="high", **U)
+assert t == "LLM: claude-sonnet-5-5 / effort: low", "推論量の設定は差し替えるときだけ効く"
+t = MOD.title_text(cloud, None, None, NAMES, **U)
+assert t == "LLM: claude-sonnet-5 / effort: high（既定）", t
+t = MOD.title_text(dict(cloud, model="claude-haiku-4-5-20251001"), None, None, NAMES, **U)
+assert t == "LLM: claude-haiku-4-5-20251001", "推論量を受けないモデルには付けない"
+for model, effort in (("gpt-5.5", "none"), ("gpt-6-astra", "low"), ("gpt-6.1-sol", "low"),
+                      ("gpt-5.6-luna", "none"), ("gpt-5", "minimal")):
+    t = MOD.title_text(dict(openai_cloud, model=model), None, None, NAMES, openai_effort="high", **U)
+    assert t == "LLM: {} / effort: {}".format(model, effort), t
+assert MOD.title_text(dict(openai_cloud, model="gpt-4.1"), None, None, NAMES, **U) == "LLM: gpt-4.1"
+t = MOD.title_text(cloud, None, "claude-haiku-5-5", NAMES, claude_effort="medium", **U)
+assert t == "LLM: Claude Haiku 5.5 / effort: medium", "差し替えているときは今までどおり"
+assert MOD.title_text(dict(cloud, inference="local"), None, None, NAMES, **U) is None
+assert MOD.title_text(dict(cloud, provider="Gemini API(Experimental)"), None, None, NAMES, **U) is None
+assert MOD.title_text(dict(cloud, model=None), None, None, NAMES, **U) is None, "モデルが読めなければ出さない"
+assert MOD.TITLE_MODEL_UNSWAPPED is False, "既定は出さない"
 
 # apply() はタイトル画面を包み、開いている画面へは on_ready で付ける。世代を鍵に混ぜる
 ctx = Ctx()

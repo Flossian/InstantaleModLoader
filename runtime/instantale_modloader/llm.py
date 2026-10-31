@@ -260,8 +260,10 @@ def runs_bundled_llm(path=None) -> bool:
     """ゲーム同梱の llama.cpp で推論しているか。
 
     同梱の llama-server は `--ctx-size` をゲームが 16384 に固定する（設定欄に書いても外される。
-    GAME.md §2.12.1）。MOD が頼みに足す文を短く切るのはこのときだけ。
-    クラウドと任意の OpenAI 互換サーバー（LM Studio など）は文脈長を遊ぶ側が選べるので切らない。
+    GAME.md §2.12.1）。
+    v1.19.0 では、MOD が頼みに足す文を短く切るのをこのときだけにするために足した。
+    v1.20.0 で同梱の MOD（`143_` / `144_`）は切るのをやめた（16384 に収まると測れた。VERIFICATION.md §3.95）。
+    公開している口なので残す。v2.0.0 で外す（TECH.md §3.9「次の API（v2.0.0）で外すもの」）。
     まだ1度も LLM を呼んでいない間は送信モジュールで決まらないので、`config.json` の選択で決める。
     読めなければ同梱の側（短い方）に倒す。
     """
@@ -274,7 +276,10 @@ def runs_bundled_llm(path=None) -> bool:
 
 
 def text_limit(local_chars, path=None):
-    """MOD が頼みに足す文の上限（字）。同梱の llama.cpp なら `local_chars`、それ以外は None（切らない）。"""
+    """MOD が頼みに足す文の上限（字）。同梱の llama.cpp なら `local_chars`、それ以外は None（切らない）。
+
+    同梱の MOD はもう使っていない。v2.0.0 で外す（`runs_bundled_llm` と同じ）。
+    """
     return local_chars if runs_bundled_llm(path) else None
 
 

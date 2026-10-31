@@ -10,7 +10,7 @@
     "en": "The dice on the character creation screen sends no world information to the LLM and always lands on similar talent spending and age. This adds the world's name, overview and situation to the dice request, the portrait-tag request and the skill and trait generation on that screen, and adds a talent budget, age and strongest/weakest abilities rolled for each press",
     "ja": "キャラを作る画面のランダム作成は、LLM に世界の情報を渡さず、才能点の使い方と年齢もいつも似たところに落ちる。ランダム作成・立ち絵の要素・作成画面のスキルと特質の生成のプロンプトに世界の名前・概要・情勢を足し、押すたびに引いた才能点・年齢・高い能力値と低い能力値の目安を渡す"
   },
-  "version": "3",
+  "version": "4",
   "author": "R01/Flossian",
   "after": [
     "144_fix_hardcoded_worldview"
@@ -24,8 +24,8 @@
         "en": "Pass the world to the dice, portrait-tag, skill and trait requests"
       },
       "note": {
-        "ja": "世界の名前・概要と、出自・生業・装い・立ち絵の要素・スキル・特質を世界に合わせる指示。ゲーム同梱のローカル LLM では概要と情勢をそれぞれ先頭800字まで、クラウドと任意の OpenAI 互換サーバーでは全文を渡す",
-        "en": "The world's name and overview, with instructions to fit background, trade, clothing, portrait tags, skills and traits to it. With the game's bundled local LLM the overview and situation are cut at 800 characters each; cloud and any OpenAI-compatible server get them in full"
+        "ja": "世界の名前・概要と、出自・生業・装い・立ち絵の要素・スキル・特質を世界に合わせる指示。概要と情勢は全文を渡す",
+        "en": "The world's name and overview, with instructions to fit background, trade, clothing, portrait tags, skills and traits to it. The overview and situation are passed in full"
       }
     },
     "ADD_SITUATION": {

@@ -42,7 +42,7 @@ import re
 import sys
 import time
 
-from instantale_modloader import frames, imagegen, llm, patch, saves, state, ui
+from instantale_modloader import frames, imagegen, patch, saves, state, ui
 from instantale_modloader.llm import wrap_outgoing
 
 LOG_BASENAME = "hardcoded_worldview.log"
@@ -92,9 +92,6 @@ WORLD_MARKS = ("世界の概要:", "【世界", "【この世界", "【土地情
 NO_WORLD_MARKS = ("プレイヤーキャラクター", "主人公の外見のカテゴリ", "主人公キャラクターの設定を提出",
                   "キャラクターに追加する1つの", "世界そのものを生成する担当")
 HEAD_WORLD = "【この世界】"
-#: 同梱の llama.cpp で動くときの世界の概要の上限（字）。実データは 200〜300 字だった。
-#: クラウドと任意の OpenAI 互換サーバーでは切らない（`llm.text_limit`）。
-TEXT_LIMIT = 600
 
 # ---------------------------------------------------------------- 絵
 POSITIVE_DROP = ("medieval", "dark fantasy", "shabby", "fantasy setting")
@@ -110,7 +107,7 @@ BACKGROUND_FUNCS = (("generate_and_save_background", 2, 3), ("generate_image_rea
 
 # ================================================================== 頼み文
 
-def clip(value, limit=TEXT_LIMIT):
+def clip(value, limit=None):
     """`limit` 字で切って1行に畳んだ文。`limit` が None なら切らず、改行も元のまま。"""
     if not isinstance(value, str):
         return ""
@@ -120,15 +117,18 @@ def clip(value, limit=TEXT_LIMIT):
     return got if len(got) <= limit else got[:limit] + "…"
 
 
-def world_block(world_dict, limit=TEXT_LIMIT):
-    """足す世界の塊。名前か概要が読めなければ ""。概要は `limit` 字まで（None なら全文）。"""
+def world_block(world_dict):
+    """足す世界の塊。名前か概要が読めなければ ""。
+
+    概要は切らずに全文足す（同梱のローカル LLM の窓にも収まる。VERIFICATION.md §3.95）。
+    """
     if not isinstance(world_dict, dict):
         return ""
     data = world_dict.get("world_data")
     if not isinstance(data, dict):
         return ""
     name = state.world_key_of_dict(world_dict)
-    overview = clip(data.get("overview"), limit)
+    overview = clip(data.get("overview"))
     if not overview:
         return ""
     lines = [HEAD_WORLD]
@@ -140,11 +140,10 @@ def world_block(world_dict, limit=TEXT_LIMIT):
 
 
 def rewrite(texts, world_dict=None, *, role=True, add_world=True, policy=True, common=True,
-            image=True, limit=TEXT_LIMIT):
+            image=True):
     """本文の並びを書き換える。`(新しい並び or None, したことの並び)`。
 
     したことは `role` / `tone` / `magic` / `world` / `policy` / `common` / `list`（記録用）。
-    足す概要は `limit` 字まで（None なら全文）。
 
     ジャンルに関わる書き換え（役の一文・会話の調子・魔法の前提・【共通世界観】・「自動で足す」一覧）は、
     頼みに世界の情報があるか、ここで世界を足せたときだけする。
@@ -162,7 +161,7 @@ def rewrite(texts, world_dict=None, *, role=True, add_world=True, policy=True, c
     role_at = next((i for i, t in enumerate(texts) if ROLE.search(t)), None)
     if (role and add_world and not has_world and role_at is not None
             and not any(m in joined for m in NO_WORLD_MARKS)):
-        block = world_block(world_dict, limit)
+        block = world_block(world_dict)
     genre = has_world or bool(block)
 
     new_texts = list(texts)
@@ -269,19 +268,15 @@ def apply(ctx):
         """ローダから、1回の推論で出ていく本文の並びとして呼ばれる。変えなければ None。"""
         started = time.monotonic()
         world_dict = None
-        limit = TEXT_LIMIT
         if ADD_WORLD and ROLE_LINE and any(ROLE.search(text) for text in texts):
             world_dict = getattr(ui.find_app(), "world_dict", None)
-            limit = llm.text_limit(TEXT_LIMIT)
         new_texts, done = rewrite(texts, world_dict, role=ROLE_LINE, add_world=ADD_WORLD,
-                                  policy=POLICY_REASON, common=COMMON_WORLD, image=IMAGE_PREFIX,
-                                  limit=limit)
+                                  policy=POLICY_REASON, common=COMMON_WORLD, image=IMAGE_PREFIX)
         if new_texts is None:
             return None
         head = next((t for t in texts if ROLE.search(t)), texts[0])
-        size = (" 概要は全文" if limit is None else " 概要は{}字まで".format(limit)) if "world" in done else ""
-        note("[TEXT] {} {}{} | {} ({:.1f}ms)".format(
-            site, "+".join(done), size, clip(head, 40), (time.monotonic() - started) * 1000))
+        note("[TEXT] {} {} | {} ({:.1f}ms)".format(
+            site, "+".join(done), clip(head, 40), (time.monotonic() - started) * 1000))
         return new_texts
 
     hooks = wrap_outgoing(

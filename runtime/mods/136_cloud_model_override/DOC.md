@@ -49,7 +49,8 @@ Claude の送信が1度も走らないため。
 | 設定 | 既定 | 意味 |
 | --- | --- | --- |
 | 差し替えをログに出す回数 | 3 | `out\modloader.log`。効いているかの確認用。応答の入力・キャッシュの書き込み・読み出しの数も同じ回数だけ出す（Claude はキャッシュを使うときだけ） |
-| タイトル画面に使うモデルを出す | オン | タイトル画面の右上に「LLM: Claude Haiku 5.5 / effort: medium」のように、実際に送っているモデルと推論量を1行出す。推論量の設定が `keep` のときは、OpenAI はゲームが組む値（gpt-5.5 などなら none）を出し、Claude は「ゲームのまま」と出す。推論量を送らないモデル（Claude Haiku 4.5 など）では付かない。ゲームが API キーでクラウドを使っていて、そのプロバイダをこの MOD で差し替えているときだけ出る（ローカルの LLM や、差し替え先が `off` のときは出ない）。`126_` の版の行がある場合は、その下に並ぶ |
+| タイトル画面に使うモデルを出す | オン | タイトル画面の右上に「LLM: Claude Haiku 5.5 / effort: medium」のように、実際に送っているモデルと推論量を1行出す。推論量の設定が `keep` のときは、ゲームが組む値を出す（OpenAI の gpt-5.5 などなら none、Claude の Sonnet 5.5・Opus 5.5・Fable 5.1・Fable 5 なら low）。ゲームが推論量を付けない Claude のモデル（Sonnet 5 など）では、API の既定を「high（既定）」のように出す。推論量を送らないモデル（Claude Haiku 4.5 など）では付かない。ゲームが API キーでクラウドを使っていて、そのプロバイダをこの MOD で差し替えているときだけ出る（ローカルの LLM や、差し替え先が `off` のときは出ない）。`126_` の版の行がある場合は、その下に並ぶ |
+| 差し替えていないときも出す | オフ | 上の欄がオンのときだけ効く。ゲームが API キーで OpenAI / Claude を使っていれば、差し替えていなくても、ゲームで選んだモデル（モデル ID）とゲームが送る推論量を同じ形で出す。推論量の設定は差し替えるときだけ効くので、ここではゲームの値を出す |
 
 Claude の一覧の中身（画面には名前で出る。ログと「一覧に無いモデル」の欄はモデル ID）:
 
@@ -77,7 +78,8 @@ OpenAI 互換の別サーバー（任意互換 / Alibaba）も `openai` の SDK 
 
 ```
 gpt-5 / -mini / -nano                             responses.parse, effort="minimal"
-gpt-5.5 / 5.4 / 5.4-mini / 5.4-nano / 5.2 / 5.1   responses.parse, effort="none"
+gpt-6.1-sol / gpt-6-astra                         responses.parse, effort="low"
+gpt-6-sol / 6-luna / 5.6 系 / 5.5 / 5.4 系 / 5.2 / 5.1   responses.parse, effort="none"
 それ以外                                          beta.chat.completions, max_tokens=
 ```
 
