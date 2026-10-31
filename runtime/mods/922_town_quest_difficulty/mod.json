@@ -1,0 +1,43 @@
+{
+  "entry": "town_quest_difficulty.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Set the quest difficulty range of each town",
+    "ja": "街ごとに依頼の難易度の範囲を決める"
+  },
+  "description": {
+    "en": "The game draws a town's quest difficulties from a range fixed by the town's slot, and towns past the ninth (added by bulk generation or the editor) get the whole 1-76 range, so a village next to the start can hand out level 70 quests. A settings screen reads the world and lists every town with its roads, the game's range and the quests it has now, and lets you set each town's range, or smooth the whole map along the roads from the start town to the farthest ones. The range is used where the game draws the number, for the three quests made on the first visit and for each quest found by searching, so the prompt, the save and 318's growth all see the same number. Quests that already exist are left as they are",
+    "ja": "ゲームは街の依頼の難易度を街の番号で決まった範囲から引き、9番目より後の街（一括生成やエディタで足した街）は 1〜76 の全域から引く。開始の隣の村からレベル70の依頼が出ることもある。設定画面で世界を読み込み、街ごとの道のつながり・ゲームの範囲・今の依頼を並べ、街ごとに範囲を決められる。開始の街から最も遠い街まで道に沿ってなだらかにするボタンもある。決めた範囲はゲームが数を引く所で使う（初めて訪ねたときの3件と、クエストを探したときの1件）。LLM への指示・セーブ・318 の育ちがどれも同じ数を見る。すでにある依頼は変えない"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "state": ["town_quest_difficulty"],
+  "settings": {
+    "DIFFICULTY_LIMIT": {
+      "type": "int",
+      "default": 76,
+      "min": 3,
+      "max": 100,
+      "label": {
+        "ja": "範囲の上限",
+        "en": "Highest difficulty"
+      },
+      "note": {
+        "ja": "既定 76 はゲームが依頼の難易度に使う上限。100 まで上げられる。76 を超えた分は敵だけが強くなり、報酬・才能点・店の品は 76 のときのまま増えない（923「難易度と品の価値の 76 超えを、報酬と品の強さにも効かせる」を入れれば伸びる）。設定画面で決める範囲もこの数で頭打ちになる",
+        "en": "Default 76 is the ceiling the game uses for quest difficulty. Up to 100. Above 76 only the enemies get stronger; rewards, talent points and shop goods stay as at 76 unless 923 (Make difficulty and item value above 76 count) is on. Ranges set on the settings screen are capped here too"
+      }
+    }
+  },
+  "tool": {
+    "entry": "tool.py",
+    "label": {
+      "ja": "街ごとの難易度を決める",
+      "en": "Set difficulty per town"
+    },
+    "note": {
+      "ja": "世界を選んで街の一覧を読み込み、街ごとに依頼の難易度の範囲を決める画面。なだらかにするボタンもある。state/town_quest_difficulty/<世界名>.json に保存する",
+      "en": "Pick a world, list its towns and set each town's quest difficulty range, or smooth them along the roads. Saves state/town_quest_difficulty/<world>.json"
+    }
+  }
+}

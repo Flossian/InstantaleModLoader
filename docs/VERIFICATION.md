@@ -183,7 +183,7 @@
 | `222_probe_battle_mechanics` | 戦闘の語彙が数になるところ | 主要部は決着（[§2.68](verification/2.68.md)・GAME.md §2.10）。残るのは `AttributeEffect` の実効と、自由入力の `command` の強さ（`referee_player_any_input_new_new` を包む必要がある。§2.85） |
 | `223_probe_party_equipment` | 装備の入口が誰の `equipments` を書き換えるか | 決着（GAME.md §2.13.3） |
 | `224_probe_npc_carryover` | ロードのどこから `make_npc` を呼べるか | 決着（`load_game_new` から戻った直後） |
-| `225_probe_area_quest_difficulty` | 街の依頼の難易度の決め方 | 決着（[§2.84](verification/2.84.md)・GAME.md §2.9.1） |
+| `225_probe_area_quest_difficulty` | 街の依頼の難易度の決め方 | 決着（[§2.84](verification/2.84.md)・GAME.md §2.9.1）。版9で「クエストを探す」の引き方も録った（`randint(lo, hi - 1)`。[§3.117](verification/3.117.md)） |
 | `226_probe_item_consume` | 回復アイテムが何にどれだけ効くか | 決着（GAME.md §2.13.2） |
 | `227_probe_shop_stock` | 買った品が棚へ戻るところ | 決着（GAME.md §2.13.1.3）。版4 の承認のボタンを持つクラスは2回目で録る |
 | `228_probe_area_move_reject` | エリア移動の拒否が読むもの | 決着（GAME.md §2.18） |
@@ -200,6 +200,7 @@
 | `240_probe_stamina` | スタミナを誰がいつ減らすか | 1回目（クリアで `round(今の値 − 上限/2)`。GAME.md §2.19）。残るのは道中の被弾と、道中で使うもの |
 | `242_probe_world_reads` | 遊んでいる最中に世界の素データを引く箇所と、その要否 | 引く箇所と段を実測（10-19・10-20）。要らない読みは売買・施設の組み立て（世界の名前だけ）・人物の詳細の生成。世界側に無い施設・人物で落ちるのは、売買・人物の詳細の生成（会話と訓練場の入口。セーブが欠ける）・闘技場の試合の3つ。街ごと外した試しで、ほかの場面（強化・クラフト・投獄・雇用・裏の事務所・ゲームオーバーなど）は落ちない。奴隷市場（セーブエディタで足した）・一括生成・新たな道を探す（`325_`）も落ちない。使える世界にある場面は一通り踏んだ（[§3.106](verification/3.106.md)） |
 | `241_probe_world_bulk` | 世界の一括生成で何に時間が掛かるか | 1回目（ローカル。632件を89分、絵が仕事の中の73%、仕事は1件ずつ。GAME.md §2.27「一括生成」）。残るのはクラウドの LLM で流した回 |
+| `243_probe_value_curves` | 難易度と品の価値から作る数が 76 を超えたときの曲線、防具の防御力の出どころ、どこで 76 に切られるか | 曲線は1回目（10-31、テストワールド）。報酬・働いた報酬・訓練の経験・才能点・品の値段の段階は 76 で止まり、武器と回復の数は 76 を過ぎると揺れの中で横ばい（[§3.112](verification/3.112.md) と同じ）。`get_talent_point_by_quest_level` / `get_training_price_quest_clear` は 71 から KeyError。防具の出どころ（`link`）と切りの呼び出し元（`clamp`）は版2から（版1は起動時の MOD の確かめで枠が埋まった） |
 
 `228_` のほかは読み取り専用（`228_` は窓の間だけ同行者の属性を写しに差し替える。手元では無効）。
 決着した後も有効のまま残している。ログの量と負荷、読み取り専用の破れは [§3.78](verification/3.78.md) で全本を見直した。
@@ -340,6 +341,8 @@ crash_log.txt の 114 件のうち、35件が `llama-server` 起動失敗、40�
 - [3.114 宿屋と鍛冶屋の売買と、店の種類ごとの品揃えの傾向（`340_shop_lineup`。旧 `340_inn_shop`）・窓口 `shop_lineup`: 鍛冶屋の入口と会話・鍛冶屋と診療所の傾向・312 の入れ替えの傾向は実機で成立・雑貨屋と専門店と一括生成は実機が未](verification/3.114.md)
 - [3.115 依頼人の一覧と街の噂（`301_quest_from_conversation`・`336_crime_overhaul`）・窓口 `quest_clients`: ボタンの出し分けと噂の差し込みは実機で成立（Haiku 5.5）・裏の仕事も正規の経路で成立・処刑場からの脱出は未](verification/3.115.md)
 - [3.116 到着の会話が売買の窓の上から始まり、店を出ても立ち絵が残る（`300_event_facility_arrival`・ローダの `when_idle`）: 原因はログで特定・直しは検査で成立・実機は未](verification/3.116.md)
+- [3.117 街ごとの依頼の難易度の範囲（`922_town_quest_difficulty`）: 探す経路は実機で成立・初訪問の3件は検査まで](verification/3.117.md)
+- [3.118 難易度と品の価値の 76 超えを報酬と品の強さに効かせる（`923_beyond_76`・窓口 `value_limits`）: 報酬は実機で成立・品の側は検査まで](verification/3.118.md)
 <!-- verification-index: end -->
 
 ---

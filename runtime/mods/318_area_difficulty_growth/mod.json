@@ -70,8 +70,8 @@
         "en": "Difficulty ceiling"
       },
       "note": {
-        "ja": "既定 76 はゲームが依頼の難易度に使う上限。100 まで上げられる（敵のレベルが 101 まで上がる）。76 を超えた分は敵だけが強くなり、報酬・才能点・店の品は 76 のときのまま増えない。下げると世界全体の天井が下がる",
-        "en": "Default 76 is the ceiling the game uses for quest difficulty. It can go up to 100 (enemies up to level 101). Above 76 only the enemies get stronger; rewards, talent points and shop goods stay as at 76. Lower it to cap the whole world"
+        "ja": "既定 76 はゲームが依頼の難易度に使う上限。100 まで上げられる（敵のレベルが 101 まで上がる）。76 を超えた分は敵だけが強くなり、報酬・才能点・店の品は 76 のときのまま増えない（923「難易度と品の価値の 76 超えを、報酬と品の強さにも効かせる」を入れれば伸びる）。下げると世界全体の天井が下がる",
+        "en": "Default 76 is the ceiling the game uses for quest difficulty. It can go up to 100 (enemies up to level 101). Above 76 only the enemies get stronger; rewards, talent points and shop goods stay as at 76 unless 923 (Make difficulty and item value above 76 count) is on. Lower it to cap the whole world"
       }
     },
     "SCOPE": {

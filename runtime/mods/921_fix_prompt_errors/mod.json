@@ -1,0 +1,15 @@
+{
+  "entry": "fix_prompt_errors.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "Fix the game's prompt errors and make new towns always get the required facilities",
+    "ja": "ゲームのプロンプトの誤りを直し、新しく作る街に必須の施設を必ず作る"
+  },
+  "description": {
+    "en": "Many of the game's LLM prompts contradict the schema the game sends: they name values and fields the schema does not have ('facility', 'miss'/'escaped', move_and_battle, liquid_material, usefulness), give limits that do not match ('6 kinds' for five, '/70' while the game's maximum is 76), always say 'early game', and contain a typo. Rewrites those passages to match the schema. For town generation, where Claude often left towns with no inn, guild or shop, it also checks the reply for the five required facilities and for residents and adventurers, and asks once more for only what is missing",
+    "ja": "ゲームが LLM に送るプロンプトの多くは、送る型と食い違っている（型に無い facility・miss/escaped・move_and_battle・liquid_material・usefulness を名指しする、5種を6種と書く、上限 76 なのに /70 と書く、どの街でも「ゲーム序盤」と書く、誤字）。食い違う文を型に合わせて直す。Claude で宿屋もギルドも店も無い街が多く出た街の生成では、返事の必須の5施設と住人・冒険者を数え、欠けた分だけを1回頼み直して足す"
+  },
+  "version": "3",
+  "author": "R01/Flossian"
+}

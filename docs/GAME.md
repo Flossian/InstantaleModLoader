@@ -923,6 +923,18 @@ random.sample(range(lo, hi), k=3)          save_area_json.py:329
 エディタで後から足した街（id 9 以降）は枠が無く、全域 `range(1, 77)` から引かれる（id 33 で `[6, 34, 3]`、id 21 で `[13, 30, 40]`）。
 `133_ui_area_difficulty` はこの表で未訪問の街の帯を見積もる。
 
+「クエストを探す」で作る1件も同じ枠から引く（2026-10-31、テストワールドの id 8 で `225_` 版9。VERIFICATION.md §3.117）:
+
+```text
+random.randint(lo, hi - 1)                 instantale.py:5957（DisplayQuestChoice.generate_random_quest）
+  → random_quest_generator(..., quest_difficulty)   :5960
+  → Quest.__init__ / 依頼の記録の difficulty        :5985
+```
+
+id 8 で `randint(67, 76)`。引いた値がそのまま LLM への指示と記録（セーブに残る側）へ渡る。
+id 9 以降の街での引数は測っていない（初訪問と同じ全域とみられる）。
+`922_town_quest_difficulty` はこの `randint` と上の `sample` の2か所で範囲を差し替える。
+
 #### 依頼の生成は、ローカル LLM で敵の一覧を書き続けて失敗することがある
 
 依頼の生成（`random_quest_generator`。返却型 `QuestStructure`）の型には、並びの件数の決まり（`maxItems`）が1つも無い。

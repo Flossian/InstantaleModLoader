@@ -33,7 +33,9 @@
   作られ、難易度は `random.sample(range(lo, hi), 3)` で `lo` / `hi` は街の枠（id）で決まる
   （`225_` の実測。VERIFICATION_LOG.md §2.84）。枠の表（`SLOT_RANGES`）から見積もった帯を
   `BAND_ESTIMATE` の表記で出す。枠の無い街（エディタで足した id 9 以降）は `BAND_UNKNOWN`。
-  空なら名前のまま
+  空なら名前のまま。
+  街ごとの範囲を決める MOD（`922_town_quest_difficulty`）が窓口 `quest_bands` に範囲を出していれば、
+  枠の表より先にそちらを使う（版5。id 9 以降の街にも推定が出る。TECH.md §3.3.25）
 - 「既定=素の挙動」の原則の例外。素の値を変えず情報を足すだけの UI なので、
   既定で表示する（`314_` の馬車の日数と同じ判断）
 
@@ -43,7 +45,7 @@
 import sys
 import threading
 
-from instantale_modloader import ui
+from instantale_modloader import quest_bands, ui
 
 LOG_BASENAME = "ui_area_difficulty.log"
 
@@ -183,6 +185,13 @@ def estimate_values(area_id, offset):
             "lv_min": low + int(offset), "lv_max": high + int(offset)}
 
 
+def estimate_from_band(band, offset):
+    """窓口 `quest_bands` が返した範囲（両端を含む）からの見積もり。"""
+    low, high = int(band[0]), int(band[1])
+    return {"min": low, "max": high, "count": 0, "estimated": True,
+            "lv_min": low + int(offset), "lv_max": high + int(offset)}
+
+
 def band_text(values):
     """帯の文字列。引けないときは `BAND_UNKNOWN`（空なら None）。"""
     if values is None:
@@ -241,8 +250,10 @@ def apply(ctx):
         name = getattr(area, "name", None) or ""
         values = band_values(difficulties_of(app, area), LEVEL_OFFSET)
         if values is None and ESTIMATE:
-            # 依頼が1件も無い＝まだ作られていない街。枠から見積もる。
-            values = estimate_values(ui.area_id_of(area), LEVEL_OFFSET)
+            # 依頼が1件も無い＝まだ作られていない街。範囲を決める MOD に聞き、無ければ枠から見積もる。
+            area_id = ui.area_id_of(area)
+            band, _by = quest_bands.band_of(app, area_id)
+            values = estimate_from_band(band, LEVEL_OFFSET) if band is not None                 else estimate_values(area_id, LEVEL_OFFSET)
         band = band_text(values)
         merged = {"name": name, "band": band or ""}
         if values is not None:

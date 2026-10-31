@@ -1,0 +1,56 @@
+{
+  "entry": "beyond_76.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Make difficulty and item value above 76 count for rewards and item strength",
+    "ja": "難易度と品の価値の 76 超えを、報酬と品の強さにも効かせる"
+  },
+  "description": {
+    "en": "Quests and items can go up to 100 (318 raises a town's quests past 76, the LLM writes items worth more), but the game stops the reward, talent points, day labour pay, item prices and weapon and healing numbers at their value for 76, so above 76 only the enemies get stronger. Extends each of them past 76 along the slope of its own curve up to 76, up to 100: a difficulty 85 quest pays about 29,650 instead of 24,216, and a value 90 weapon gets about 60 more attack than at 76. Everything up to 76 stays as the game makes it. Training experience is left alone (its curve multiplies by about 1.15 per step). Mods that make items (312, 340, 921) stop cutting item values at 76 while this is on",
+    "ja": "依頼と品は 100 まで持てる（318 で街の依頼が 76 を超え、LLM はそれより高い品を書く）が、ゲームは報酬・才能点・日雇いの稼ぎ・品の値段・武器と回復の数を 76 の値で止める。76 を超えると敵だけが強くなる。それぞれを 76 までの曲線の傾きのまま 100 まで延ばす。難易度 85 の依頼の報酬は 24,216 から約 29,650 に、価値 90 の武器は 76 のときより攻撃力が約 60 高くなる。76 までの数はゲームのまま。訓練の経験は延ばさない（1段で約1.15倍に増える曲線のため）。これを入れている間は、品を作る MOD（312・340・921）が品の価値を 76 で切らなくなる"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "shares": ["_instantale_probe_dry_run_thread"],
+  "settings": {
+    "REWARDS": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "報酬・日雇い・才能点を延ばす",
+        "en": "Extend rewards, labour pay and talent points"
+      },
+      "note": {
+        "ja": "依頼の報酬と日雇いの稼ぎは 76 までの傾きのまま、才能点は下の段ごとに 1 ずつ増やす",
+        "en": "Quest rewards and labour pay follow the slope up to 76; talent points gain 1 per the steps below"
+      }
+    },
+    "ITEMS": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "品の値段と強さを延ばす",
+        "en": "Extend item prices and strength"
+      },
+      "note": {
+        "ja": "品の値段・武器の攻撃力・回復の数を延ばす。切ると、品を作る MOD（312・340・921）も品の価値を 76 で切る",
+        "en": "Extends item prices, weapon attack and healing. Off also makes the item mods (312, 340, 921) cut item values at 76 again"
+      }
+    },
+    "TALENT_EVERY": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 24,
+      "label": {
+        "ja": "才能点を 1 増やす段の数",
+        "en": "Steps per extra talent point"
+      },
+      "note": {
+        "ja": "既定 10（難易度 86 で +1、96 で +2）。ゲームの才能点は難易度 67 から 12 で止まっている。0 で延ばさない",
+        "en": "Default 10 (+1 at 86, +2 at 96). The game's talent points already stop at 12 from difficulty 67. 0 = do not extend"
+      }
+    }
+  }
+}

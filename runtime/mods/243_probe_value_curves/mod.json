@@ -1,0 +1,87 @@
+{
+  "entry": "probe_value_curves.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Probe: how numbers made from difficulty and item value behave above 76",
+    "ja": "計測: 難易度と品の価値から作る数の 76 より上の振る舞い"
+  },
+  "description": {
+    "en": "Once per process, after a save is loaded, calls the unwrapped scripts.functions conversions (quest reward, talent points, labor reward, training experience, item price tiers, weapon and healing specs, NPC numbers, enemy level and attributes per tier, skill usefulness, the clamps) for every value from 0 to the sweep limit, several times for the random ones, and records the curves, where each one stops changing and the first error; the price-to-level inverses for every forward output; and the base and randomized gold price of a copy of one inventory item per item type with only its value and stat swapped. The random state is saved before and restored after. While playing it also records which spec functions run inside the three item creation entry points (does armor defense come from get_weapon_spec, are stats rebuilt on load) and every call where a clamp actually cut a value, with the caller. Groundwork for a mod that makes difficulty and item value above 76 count for rewards and item strength. Read-only",
+    "ja": "セーブを読み込んだ後に1プロセス1回、scripts.functions の変換（依頼の報酬・才能点・働いた報酬・訓練の経験・品の値段の段・武器と回復の数値・NPC の数・段ごとの敵のレベルと能力値・スキルの有用性・切り）を包む前の素の関数で 0 から上限までの全部の値について呼び（乱数を引くものは複数回）、曲線と、値が最後に変わった所と、最初の例外を録る。値段→段階の逆引きには正引きの戻りを全部渡す。主人公の持ち物から種類ごとに1品を写し、価値と能力値だけを差し替えて、素の値段と揺らした値段を録る。乱数の状態は前に控えて後で戻す。遊んでいる間は、品を作る3つの入口の中でどの数値の関数が呼ばれたか（防具の防御力が get_weapon_spec から来るか、読み込みで能力値を作り直すか）と、切りが実際に値を切った回を呼び出し元つきで録る。76 を超えた難易度と品の価値を報酬と品の強さにも効かせる MOD の下調べ。読み取りだけでゲームは変えない"
+  },
+  "version": "2",
+  "author": "R01/Flossian",
+  "debug": true,
+  "shares": ["_instantale_probe_dry_run_thread"],
+  "settings": {
+    "SWEEP_MAX": {
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 300,
+      "label": {
+        "ja": "曲線を測る値の上限",
+        "en": "Highest value to sweep"
+      },
+      "note": {
+        "ja": "0 からこの値まで全部の値で関数を呼ぶ。1プロセス1回",
+        "en": "Every value from 0 to this is passed to each function. Once per process"
+      }
+    },
+    "REPEAT": {
+      "type": "int",
+      "default": 5,
+      "min": 1,
+      "max": 50,
+      "label": {
+        "ja": "1つの値で呼ぶ回数",
+        "en": "Calls per value"
+      },
+      "note": {
+        "ja": "乱数で揺らぐ関数の幅を見るため。揺らがない関数は1つの値に畳んで残す",
+        "en": "Shows the spread of the random ones. Functions that do not vary are kept as a single value"
+      }
+    },
+    "ITEM_SWEEP": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "品の値段も測る",
+        "en": "Also sweep item prices"
+      },
+      "note": {
+        "ja": "主人公の持ち物から種類ごとに1品を写して測る（元の品は触らない）",
+        "en": "Uses a copy of one inventory item per type (the item itself is not touched)"
+      }
+    },
+    "LINK_SAMPLES": {
+      "type": "int",
+      "default": 60,
+      "min": 0,
+      "max": 9999,
+      "label": {
+        "ja": "品の能力値の出どころを録る件数",
+        "en": "Item creations to record"
+      },
+      "note": {
+        "ja": "1プロセスあたり。0 で録らない",
+        "en": "Per process. 0 = do not record"
+      }
+    },
+    "CLAMP_SAMPLES": {
+      "type": "int",
+      "default": 40,
+      "min": 0,
+      "max": 9999,
+      "label": {
+        "ja": "切りを録る件数",
+        "en": "Clamps to record"
+      },
+      "note": {
+        "ja": "1プロセスあたり。呼び出し元と引数の組ごとに1回。0 で録らない",
+        "en": "Per process, once per caller and argument. 0 = do not record"
+      }
+    }
+  }
+}

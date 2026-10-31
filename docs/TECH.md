@@ -156,6 +156,8 @@ runtime/instantale_modloader/
     holdings.py   330 の家と 331 の施設を1つの窓「家と施設」に並べる窓口。2本は札の中身を渡すだけ（§3.3.19）
     save_lookup.py  世界の骨格に無い施設・人物を、その処理の間だけセーブ側から引かせる窓口と、保存の書き手の守り。直す MOD が名乗り、ほかの MOD は直っているかを聞く（§3.3.20）
     shop_lineup.py  店の品揃えの傾向の一文の窓口。傾向を決める MOD が出し、品揃えを作り直す MOD が聞く（§3.3.22）
+    quest_bands.py  街ごとの依頼の難易度の範囲の窓口。範囲を決める MOD が出し、帯を見せる MOD が聞く（§3.3.25）
+    value_limits.py  品の価値と難易度が数に効く上限の窓口。76 を超えて効かせる MOD が出し、品を作る MOD が切りに使う（§3.3.26）
     sounds.py     曲の置き場所の探し方・戦闘曲の見分け方・重みの読み方（§5.10）
     imagegen.py   画像生成の方式（sdcpp の cuda / vulkan / cpu と diffusers_openvino）を隠して、人物の絵を描く関数を包む（§5.11）
     stalls.py     作業スレッドが死んだときに本文の欄へ出して待機を終える。LLM の 4xx の送り直しを早めに打ち切る（§5.12）
@@ -2190,6 +2192,49 @@ imagegen.METHOD_LABELS                      # 選ぶ口に出す名前（chain �
 | 知らない描き方は txt2img として扱う | 出す側が描き方を増やしても、古い選ぶ側が壊れない |
 | 登録は持ち主ごとに1つ。登録した ctx が用済みなら数えない。`fn` が投げたら何も出さなかったものとみなす（`errors` に残す） | `board`（§3.3.12）・`quest_clients`（§3.3.23）と同じ |
 
+#### 3.3.25 街ごとの依頼の難易度の範囲も窓口で分け合う（`quest_bands`）
+
+ゲームは街の依頼の難易度を、街の id ごとに決まった範囲から引く（GAME.md §2.9。id 9 以降は 1〜76 の全域）。
+範囲を決め直すのは `922_town_quest_difficulty`（ゲームが数を引く所で差し替える）で、
+範囲を読んで見せるのは `133_ui_area_difficulty`（訪ねる前の街の「推定」の帯）。
+`instantale_modloader/quest_bands.py` で、範囲を決めた側から読む側へ渡す。
+
+```python
+quest_bands.provide(owner, ctx, fn)          # 決める側。apply() の中。fn(app, area_id) -> (下限, 上限)（両端を含む）/ None
+band, by = quest_bands.band_of(app, area_id)   # 読む側。誰も口を出さなければ (None, None)
+```
+
+| 決まり | 理由 |
+|---|---|
+| 範囲は両端を含む `(下限, 上限)`。逆さまは並べ直し、2つの整数でなければ口を出さなかったものとみなす | ゲームの `range(lo, hi)` と `randint(lo, hi)` で端の含み方が違うので、窓口では片方に揃える |
+| 誰も口を出さなければ、読む側は自分の表（ゲームの範囲）を使う | 922 が無くても 133 の推定は動く |
+| 登録の新しいものから聞き、最初に範囲を返した登録を使う（`by` はその持ち主） | `shop_lineup`（§3.3.22）と同じ |
+| 登録は持ち主ごとに1つ。登録した ctx が用済みなら聞かない。`fn` が投げたら口を出さなかったものとみなす（`errors` に残す） | 同上 |
+
+置き場は `sys` の属性（`_instantale_quest_bands`）。検査は `tools\tests\test_wip_town_quest_difficulty.py`。
+
+#### 3.3.26 品の価値がどこまで数に効くかも窓口で分け合う（`value_limits`）
+
+ゲームは報酬・才能点・品の値段・武器と回復の数を、難易度と価値が 76 の値で止める（VERIFICATION.md §3.112）。
+だから品を作る MOD（`312_shop_restock` / `340_shop_lineup` / `921_fix_prompt_errors`）は価値を 76 で切ってきた。
+76 を超えた分を数に効かせる MOD（`923_beyond_76`）が入ったときだけ、その切りを上げる。
+`instantale_modloader/value_limits.py` で、上限を効かせる側から切る側へ渡す。
+
+```python
+value_limits.provide(owner, ctx, fn)    # 効かせる側。apply() の中。fn() -> 数に効く上限（整数）
+top = value_limits.value_max()          # 切る側。誰も出していなければゲームの上限（QUEST_DIFFICULTY_VALUE_MAX、76）
+by = value_limits.raised_by()           # ゲームの上限より上げている持ち主 / None
+```
+
+| 決まり | 理由 |
+|---|---|
+| 生きている登録の中でいちばん大きい値を返す。ゲームの上限より下にはしない | 上げる MOD が複数あっても、いちばん広く効かせる側に合わせる。下げる用途は無い |
+| 切る側は、値を切るときに毎回引く（定数に写さない） | 923 の設定（品を延ばすか）を変えたとき、次の品から揃う |
+| LLM に見せる価値の目盛り（「最高が76」）は窓口に合わせない | ゲーム自身の目盛り。上げると品の価値が膨らむ |
+| 登録は持ち主ごとに1つ。登録した ctx が用済みなら数えない。`fn` が投げたら出さなかったものとみなす（`errors` に残す） | `quest_bands`（§3.3.25）と同じ |
+
+置き場は `sys` の属性（`_instantale_value_limits`）。検査は `tools\tests\test_wip_beyond_76.py`。
+
 ### 3.4 まだ現れていない対象を狙う（保留と当て直し）
 
 ゲームは `llama_cpp_runtime_completion` と `scripts.llm.llm_manager` を
@@ -2590,7 +2635,7 @@ GUI の1行に収めると「JSON を手で書く欄」になり、コードを�
 | `apply(ctx)` に渡る `ctx` | §3.1 / §3.6 / §3.8 / §3.11 |
 | `mod.json` の鍵 | §3.1 / §3.2 / §3.8 / §3.9 / §3.12 |
 | §5 の共通部品（`ui` / `frames` / `llm` / `state` / `jobs` / `modnpc` / `modfacility` / `prices` / `sounds` / `imagegen`） | §5 |
-| 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `loads` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons` / `quest_claims` / `quest_clients` / `holdings` / `save_lookup` / `shop_lineup`） | §3.2.3 / §3.3 |
+| 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `loads` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons` / `quest_claims` / `quest_clients` / `holdings` / `save_lookup` / `shop_lineup` / `quest_bands` / `value_limits`） | §3.2.3 / §3.3 |
 
 これ以外は内部で、予告なく変わる。
 `patch.py` の `_defer_if_*` や `__init__.py` の `_order()` のような

@@ -660,8 +660,8 @@ try:
           and "武器と防具は作らない" in asked_fill[0] and "雛形の湿布" in asked_fill[0], asked_fill)
     check("足す: 頼みの語彙に武器・防具が無い", asked_fill and "weapon:" not in asked_fill[0] and "wearable:" not in asked_fill[0])
     check("足す: 返ってきた武器は作らない", all(f[2] != "weapon" for f in built), built)
-    check("足す: 外れた値は寄せる（価値 1〜70・段の値・細分・希少度）",
-          built[0][4] == 70 and built[1][3] == "food" and built[1][4] == 31 and built[1][6] == "common", built)
+    check("足す: 外れた値は寄せる（価値 1〜76・段の値・細分・希少度）",
+          built[0][4] == 76 and built[1][3] == "food" and built[1][4] == 31 and built[1][6] == "common", built)
     check("足す: 記録", "filled 5 of 6 item(s) at medical_facility 42" in log_text(), log_text())
     fill_shop("medical_facility", start_empty=False)
     check("足す: 前から品のある棚には足さない", asked_fill == [] and built == [], (asked_fill, built))

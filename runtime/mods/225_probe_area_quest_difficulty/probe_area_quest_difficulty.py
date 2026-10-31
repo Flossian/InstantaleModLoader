@@ -52,6 +52,10 @@ id6≈62 / id7≈43 / id8≈70）なので、決め方はゲームのコード�
 数えないようにした（版7までは経路1回につき2本、ゲームが呼んだように見える行が混ざっていた）。
 `AreaMoveManager` の `__init__` / `execute` は引数を来た形のまま本体へ渡し、
 控えはゲームの Manager に属性を足さず弱参照の表に置く。
+
+版9: 「クエストを探す」（`DisplayQuestChoice.generate_random_quest`）の間も窓を開け、
+乱数・関数・前後の街の状態を同じ形で写す。探した依頼の難易度の引き方を見るため
+（`922_town_quest_difficulty` がゲームの引く所で差し替えられるか）。
 """
 
 import datetime
@@ -447,6 +451,45 @@ def apply(ctx):
                     len(window["random"])))
             except Exception:
                 ctx.log_exc("area quest difficulty probe: cannot close the move window")
+
+    # ------------------------------------------------------------ 依頼を探す窓（版9）
+    @ctx.wrap("__main__:DisplayQuestChoice.generate_random_quest", required=False)
+    def search_window(orig, self, *args, **kwargs):
+        """「クエストを探す」の窓。新しい依頼の難易度をどの乱数で引くかを写す。
+
+        初訪問の3件は `sample(range(lo, hi), k=3)` だった（§2.84）。
+        探した依頼も同じ枠から来る（テストワールドの実データ）が、引き方は録っていなかった。
+        """
+        app = frames.attr(self, "app", None) or ui.find_app()
+        area_id = None
+        window = {"target_id": None, "random": []}
+        before = None
+        try:
+            area_id = ui.area_id_of(ui.current_area(app))
+            window["target_id"] = area_id
+            before = area_brief(app, area_id) if area_id else None
+            write("=" * 78)
+            write("探す: 土地 {} before={}".format(
+                area_id, json.dumps(before, ensure_ascii=False, default=str)))
+            state["window"] = window
+            state["random_seen"] = 0
+        except Exception:
+            ctx.log_exc("area quest difficulty probe: cannot open the search window")
+        try:
+            return orig(self, *args, **kwargs)
+        finally:
+            state["window"] = None
+            try:
+                row = {"at": now(), "phase": "探す", "target": area_id,
+                       "before": before,
+                       "after": area_brief(app, area_id) if area_id else None,
+                       "random_calls": len(window["random"])}
+                row.update(context(app))
+                log_row(row, "探す: 終了 {} after={} random_calls={}".format(
+                    area_id, json.dumps(row["after"], ensure_ascii=False, default=str),
+                    len(window["random"])))
+            except Exception:
+                ctx.log_exc("area quest difficulty probe: cannot close the search window")
 
     # ------------------------------------------------------------ 乱数
     def watch_random(target):

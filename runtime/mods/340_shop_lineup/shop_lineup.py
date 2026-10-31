@@ -66,7 +66,7 @@ import time
 import typing
 import weakref
 
-from instantale_modloader import choices, frames, llm, modfacility, save_lookup, shop_lineup, ui
+from instantale_modloader import choices, frames, llm, modfacility, save_lookup, shop_lineup, ui, value_limits
 
 # ---------------------------------------------------------------- 設定（mod.json）
 #: 店の種類に合わない武器・防具も並べる（ゲームの「武器と防具を1つずつ」の名残）。
@@ -190,6 +190,11 @@ FILL_TYPES = {
                  "other_material"),
 }
 RARITIES = ("common", "rare", "magical", "epic", "legendary", "mythic")
+#: 頼みに書く価値の目盛りの上限。ゲームの難易度の上限（`QUEST_DIFFICULTY_VALUE_MAX`）と同じ 76。
+#: ゲームの頼みは「最高が70」と書くが、雛形の価値は終盤の街で 76 まで出る。
+#: 返ってきた価値を切る上限は窓口 `value_limits` から引く（素は 76。76 を超えた価値はゲームが値段と強さを
+#: 76 の値で止める。VERIFICATION.md §3.112。`923_beyond_76` が入っていれば 100。TECH.md §3.3.26）。
+VALUE_MAX = 76
 
 #: 品揃えの間の目印がこれより古ければ、差し替えない（`execute` が戻らなかった回の取り残し）。
 BATCH_STALE_SECONDS = 600
@@ -675,7 +680,7 @@ def apply(ctx):
             "- description: 日本語で1〜2文。\n"
             "- item_type と item_sub_type: 次の組から選ぶ。{types}\n"
             "- value: アイテムの価値。次の値を順に1つずつ使う: {values}。"
-            "この世界における最低が1で最高が70。高いほど強力であったり、特別であったりする。\n"
+            "この世界における最低が1で最高が{max}。高いほど強力であったり、特別であったりする。\n"
             "- item_appearance: 英語で短い一文、画像の選択に使う。"
             "(例:['A small clay jar of herbal salve sealed with wax.'])\n"
             "- rarity: {rarities} のいずれか。value が低いほど common。\n"
@@ -688,6 +693,7 @@ def apply(ctx):
             shop=frames.short(frames.attr(facility, "name", ""), 60), kind=facility_type,
             shop_desc=frames.short(frames.attr(facility, "description", "") or "", 400),
             types=types, values=values, rarities="/".join(RARITIES),
+            max=VALUE_MAX,
             present="、".join(sorted(present)) or "無し")
         return [{"role": "system", "content": text}, {"role": "user", "content": "＜品を足す＞"}]
 
@@ -706,7 +712,7 @@ def apply(ctx):
             sub = FILL_TYPES[item_type][0]
         got = row.get("value")
         if isinstance(got, int) and not isinstance(got, bool):
-            value = max(1, min(70, got))
+            value = max(1, min(value_limits.value_max(), got))
         rarity = str(row.get("rarity") or "")
         if rarity not in RARITIES:
             rarity = "common"

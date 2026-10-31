@@ -143,7 +143,8 @@
     "239_probe_game_flags",
     "240_probe_stamina",
     "241_probe_world_bulk",
-    "242_probe_world_reads"
+    "242_probe_world_reads",
+    "243_probe_value_curves"
   ],
   "disabled": []
 }

@@ -7,10 +7,10 @@
     "ja": "移動先の適正レベル帯の表示"
   },
   "description": {
-    "en": "The area move list only names the destinations, so you cannot tell which one fits your level until you get there. Appends the destination's quest difficulty band to each button (read from the game's own quest list, so difficulty raised by 318 shows up in the band). Towns not yet visited get a band estimated from their slot, marked as such",
-    "ja": "「他の土地へ行く」の一覧は土地の名前だけで、レベル適正は行ってみるまで分からない。各ボタンにその土地の依頼の難易度帯を添える（ゲーム自身の依頼一覧から読むので、318「依頼クリアで難易度上昇」で難易度が上がれば帯も上がる）。まだ訪ねていない街は、街の枠から見積もった帯を「推定」付きで出す"
+    "en": "The area move list only names the destinations, so you cannot tell which one fits your level until you get there. Appends the destination's quest difficulty band to each button (read from the game's own quest list, so difficulty raised by 318 shows up in the band). Towns not yet visited get a band estimated from their slot (or from the range set with 922), marked as such",
+    "ja": "「他の土地へ行く」の一覧は土地の名前だけで、レベル適正は行ってみるまで分からない。各ボタンにその土地の依頼の難易度帯を添える（ゲーム自身の依頼一覧から読むので、318「依頼クリアで難易度上昇」で難易度が上がれば帯も上がる）。まだ訪ねていない街は、街の枠（922 で範囲を決めていればその範囲）から見積もった帯を「推定」付きで出す"
   },
-  "version": "4",
+  "version": "5",
   "author": "R01/Flossian",
   "settings": {
     "SHOW": {
@@ -95,8 +95,8 @@
         "en": "Estimate unvisited towns from their slot"
       },
       "note": {
-        "ja": "街の依頼は初訪問で作られる。訪ねる前は街の枠（id）で決まる範囲から見積もって出す。切ると未訪問の街は「不明」",
-        "en": "A town's quests are created on the first visit. Before that the band is estimated from the range the game uses for that slot. Off shows the unknown text instead"
+        "ja": "街の依頼は初訪問で作られる。訪ねる前は街の枠（id）で決まる範囲から見積もって出す。922「街ごとに依頼の難易度の範囲を決める」で範囲を決めた街は、その範囲から見積もる（9番目より後の街にも出る）。切ると未訪問の街は「不明」",
+        "en": "A town's quests are created on the first visit. Before that the band is estimated from the range the game uses for that slot, or from the range set with 922 (Set the quest difficulty range of each town), which also covers towns past the ninth. Off shows the unknown text instead"
       }
     },
     "BAND_ESTIMATE": {
