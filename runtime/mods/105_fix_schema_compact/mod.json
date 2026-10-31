@@ -11,5 +11,6 @@
     "ja": "プロンプトに埋め込まれたスキーマ説明文を、簡潔な一覧表記に置き換える"
   },
   "version": "2",
-  "author": "R01/Flossian"
+  "author": "R01/Flossian",
+  "superseded": "127_llm_response_speed"
 }

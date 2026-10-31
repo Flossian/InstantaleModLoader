@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-"""105_fix_schema_compact をゲーム抜きで通す。
+"""127_llm_response_speed のスキーマ説明の圧縮（`schema_compact.py`）をゲーム抜きで通す。
+
+`105_fix_schema_compact` から移した部品（127 の DOC.md）。
 
     python tools/tests/test_schema_compact.py
 
@@ -10,7 +12,6 @@
   両表記 … JSON 表記（true/null・ダブルクォート）でも同じ一覧が出る
 """
 import importlib.util
-import io
 import json
 import os
 import sys
@@ -20,18 +21,18 @@ RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 
-def find_mod(suffix):
+def find_part(suffix, filename):
+    """mod を番号を除いた名前で探し、その中の部品のファイルを返す。"""
     matches = sorted(name for name in os.listdir(MODS_DIR)
                      if name.endswith(suffix)
                      and os.path.isfile(os.path.join(MODS_DIR, name, "mod.json")))
     if len(matches) != 1:
         raise SystemExit("cannot find *{} in {}: {}".format(suffix, MODS_DIR, matches))
-    folder = os.path.join(MODS_DIR, matches[0])
-    with io.open(os.path.join(folder, "mod.json"), encoding="utf-8") as fh:
-        return os.path.join(folder, json.load(fh)["entry"])
+    return os.path.join(MODS_DIR, matches[0], filename)
 
 
-spec = importlib.util.spec_from_file_location("fix_schema_compact", find_mod("_fix_schema_compact"))
+spec = importlib.util.spec_from_file_location(
+    "schema_compact", find_part("_llm_response_speed", "schema_compact.py"))
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 
@@ -53,11 +54,11 @@ def compact(prompt):
 
 
 # 一覧
-result = compact(PRE + mod._SAMPLE_SCHEMA + POST)
+result = compact(PRE + mod.SAMPLE_SCHEMA + POST)
 check("compacts sample", result is not None)
 compacted, listing = result or ("", "")
-check("listing text", listing == mod._EXPECTED, listing)
-check("surroundings kept", compacted == PRE + mod._EXPECTED + POST, compacted)
+check("listing text", listing == mod.EXPECTED, listing)
+check("surroundings kept", compacted == PRE + mod.EXPECTED + POST, compacted)
 
 # 無加工
 check("no schema -> None", compact("自由に書いてよい。") is None)
@@ -65,15 +66,15 @@ check("broken dict -> None", compact("{'$defs': {'A': ") is None)
 
 # 短いスキーマは元の書き方のまま。
 # 書き方を変えるだけで会話進行の雇用の答えが寄った（DOC.md）。
-check("short schema kept", mod.compact_embedded_schema(PRE + mod._SAMPLE_SCHEMA + POST) is None)
-long_schema = mod._SAMPLE_SCHEMA.replace("'title': 'Area'", "'title': 'Area', 'x': '" + "a" * mod.MIN_SCHEMA_CHARS + "'")
+check("short schema kept", mod.compact_embedded_schema(PRE + mod.SAMPLE_SCHEMA + POST) is None)
+long_schema = mod.SAMPLE_SCHEMA.replace("'title': 'Area'", "'title': 'Area', 'x': '" + "a" * mod.MIN_SCHEMA_CHARS + "'")
 check("long schema compacted", mod.compact_embedded_schema(PRE + long_schema + POST) is not None)
 
 # べき等
 check("idempotent", compact(compacted) is None)
 
 # 両表記
-as_json = json.dumps(mod.parse_literal(mod._SAMPLE_SCHEMA, 0)[0], ensure_ascii=False)
+as_json = json.dumps(mod.parse_literal(mod.SAMPLE_SCHEMA, 0)[0], ensure_ascii=False)
 check("json spelling", compact(PRE + as_json + POST) == result)
 
 # 型の書き出し

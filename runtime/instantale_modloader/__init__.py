@@ -33,6 +33,7 @@ GUI に出るだけだが、次の5つは動作に関わる:
     "settings": {...}               GUI から変えられる設定の宣言（config.py）
     "debug": true                   開発者向け。デバッグモードのときだけ動く（discover）
     "superseded": "main_024"        本体がその版で同じ修正を取り込んだので降ろした
+                                    （別の MOD が取り込んだときはその MOD の名前。"127_llm_response_speed"）
 
 `"state": ["npc_profiles"]` はその MOD の記録の置き場所（`state/` からの相対）。
 GUI の行の右クリック「state/ を開く」が開く先で、読み込みには関わらない。
@@ -1152,7 +1153,7 @@ def discover(mods_dir: str | None = None, *, debug: bool | None = None) -> dict:
          "disabled":  ["..."],                  切られているもの
          "debug":     {"200_probe_..."},        開発者向け。今は伏せられている
          "debug_mode": False,                   デバッグモードが入っているか
-         "superseded": {"101_...": "main_024"}, 本体が取り込んだので降ろしたもの
+         "superseded": {"101_...": "main_024"}, 本体か別の MOD が取り込んだので降ろしたもの
          "wip":       {"901_..."},              開発中（9xx）。順序ファイルに載り、かつデバッグモードのときだけ読む
          "manifests": {名前: マニフェスト},      無効なものも壊れたものも含む
          "problems":  ["..."],                  宣言と実体のずれ。人が読む行
@@ -1538,8 +1539,8 @@ def _manifest(mods_dir: str, name: str) -> dict:
         # （TECH.md §3.2.2。挙動を変えるなら機能追加でも 1xx に置いてよい）ので、
         # どれに属するかは mod 自身に言わせる。無指定・語彙の外は ""。
         "kind": kind,
-        # ゲーム本体が同じ修正を取り込んだので降ろした mod。
-        # 値はその版（例 "main_024"）。
+        # ゲーム本体か別の mod が同じ修正を取り込んだので降ろした mod。
+        # 値は取り込んだ版（例 "main_024"）か、取り込んだ mod の名前（例 "127_llm_response_speed"）。
         # **読み込みの扱いは "debug" と同じ**で、
         # 違うのは「なぜ伏せられているか」だけ。計測用に作ったものと、
         # 要らなくなった修正とを一覧で見分けられないと、

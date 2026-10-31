@@ -35,7 +35,7 @@
 | `102_fix_prompt_dedup` | DEDUP | 発火は確認、発生源が本体で直った〔main_023〕 | [§2.3](verification/2.3.md) |
 | `103_fix_eventlog_trim` | EVENTLOG | 実経路で検証済〔main_024〕 | [§2.3](verification/2.3.md) |
 | `104_balance_area_bgm` | エリア BGM の偏り | 決着（差し替え3件）。既存3世界の是正は未実行 | [§2.4](verification/2.4.md) / [§3.4](verification/3.4.md) |
-| `105_fix_schema_compact` | COMPACT | 決着（2,803 件で 73.3% 減）。版2 で一覧を骨組みに変え、雇用の返事が崩れるのを直した（ゲーム抜きのローカル LLM で 19/50 → 41/50、ゲームの中でも成立）。数の範囲・件数・説明も残すようにした（投げ比べで差は出ず）。説得の場面は書き方の違いだけで答えが寄るので、2,000 字未満のスキーマ（会話進行を含む）は触らない | [§2.3](verification/2.3.md) |
+| `105_fix_schema_compact` | COMPACT | 決着（2,803 件で 73.3% 減）。版2 で一覧を骨組みに変え、雇用の返事が崩れるのを直した（ゲーム抜きのローカル LLM で 19/50 → 41/50、ゲームの中でも成立）。数の範囲・件数・説明も残すようにした（投げ比べで差は出ず）。説得の場面は書き方の違いだけで答えが寄るので、2,000 字未満のスキーマ（会話進行を含む）は触らない。`127_` に取り込んで取込済にした | [§2.3](verification/2.3.md) |
 | `139_fix_quest_generation_runaway` | 依頼の生成で敵の一覧が窓を使い切る | オフラインで成立（上限なし 12 回中 8 回失敗、上限あり 40 回とも型どおり）。ゲームの中でも1回成立 | [§3.81](verification/3.81.md) |
 | `106_fix_battle_bgm_restore` | 戦闘後に BGM が戻らない | 決着（3つの起点が発火）〔main_024〕。版3 で組み直しの包みを窓口の `after` に移した。戦闘の最中のセーブを読むと戦闘曲を止めていたのを直し、実機で成立（[§3.109](verification/3.109.md)） | [§2.5](verification/2.5.md) / [§3.1](verification/3.1.md) |
 | `107_fix_battle_flag_stuck` | 戦闘・闘技場・売買の旗が残る | 決着（版4まで成立、撤退の後の依頼の戦闘も）。版6 の `in_shopping` は3か所とも成立。版7 のロードの見分けも成立。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） | [§3.73](verification/3.73.md) / [§3.86](verification/3.86.md) / [§3.91](verification/3.91.md) |
@@ -58,7 +58,7 @@
 | `124_ui_craft_window_fit` | 「作成」と矢印がグリッドと重なる | ボタン側は成立、矢印側も座標では解けた。残るのは目視 | [§3.22](verification/3.22.md) |
 | `125_balance_charisma_impression` | 魅力に振ると全員から最上段で見られる | 決着（確認5件。閾値 8/11/14/17/20） | [§3.23](verification/3.23.md) |
 | `126_ui_title_version` | MOD が効いているか画面から分からない | 決着 | [§2.47](verification/2.47.md) / [§3.24](verification/3.24.md) |
-| `127_llm_response_speed` | ローカル LLM の応答速度 | 起動15回とも書き換えが成立。残るは4点 | [§2.48](verification/2.48.md) / [§3.25](verification/3.25.md) |
+| `127_llm_response_speed` | ローカル LLM の応答速度 | 起動15回とも書き換えが成立。残るは4点。版6 で `105_` のスキーマ説明の圧縮を取り込み、窓を共有する起動のときだけ縮める（[§2.3](verification/2.3.md)） | [§2.48](verification/2.48.md) / [§3.25](verification/3.25.md) |
 | `128_item_image_variety` | アイテム画像が同じ絵に集中する／素材に無い品の絵 | 選定と散りは成立。版9 の銃の絵はクラウドで成立。版9 の 45分類（元画像119枚）の絵・ジャンルの重み・イベントの外見文を英語で頼む手当てはゲーム抜きで成立（Haiku 5.5・Gemma4、10の世界）。10-18 にローカル LLM でゲーム内も成立（分類の絵・売買の窓・世界の重み・ジャンル内の重みの保存がその場で効く・頼みに一文が届く）。10-19 の255色の作り直しと14分類の追加も、ゲーム内の画素・選定・表示で成立。イベントで品が出たときの外見文はゲーム内で未。版6 の「外見文→絵」の対応表は未 | [§3.26](verification/3.26.md) |
 | `129_balance_item_price` | レア度が値段に反映されない | 決着（決済まで、`reconcile` 0行） | [§3.19](verification/3.19.md) |
 | `130_currency_unit` | 通貨の呼び名と所持金の表示 | 成立（版5 の書式も）。残るのは古いセーブの文。ワールド個別（版4）は未 | [§3.37](verification/3.37.md) / [§3.57](verification/3.57.md) / [§3.88](verification/3.88.md) |
@@ -171,6 +171,7 @@
 
 | mod | 決めたいこと | 状態 |
 | --- | --- | --- |
+| `204_probe_prompt_bloat` | `105_` を外しても頼みと出力が窓（16,384）に収まるか | 1回目（10-30。外したローカル LLM で 126件、最大 7,090。[§2.3](verification/2.3.md)）。残るのは長く遊んだ世界と長い会話 |
 | `209_probe_free_facility` | シーン記述エンジンを MOD から使えるか | 決着（[§2.29](verification/2.29.md) / [§2.30](verification/2.30.md)・GAME.md §2.21） |
 | `210_probe_character_state` | NPC の退場に `is_dead` が使えるか | 決着（[§2.29](verification/2.29.md)・GAME.md §2.22） |
 | `211_probe_text_speed` | 本文の表示速度の設定が届いているか | 決着（[§2.34](verification/2.34.md)・GAME.md §2.3） |

@@ -26,7 +26,7 @@
   },
   "after": [
     "102_fix_prompt_dedup",
-    "105_fix_schema_compact"
+    "127_llm_response_speed"
   ],
   "settings": {
     "RULES_PATH": {

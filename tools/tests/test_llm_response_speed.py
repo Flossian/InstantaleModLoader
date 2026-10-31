@@ -509,6 +509,74 @@ module._META_CACHE.clear()
 check("GGUF でなければ None", module.gguf_meta(path) is None)
 os.remove(path)
 
+print("窓を共有する起動ではスキーマ説明を縮める")
+module = fresh_mod()[0]
+needs = module.needs_schema_compact
+check("--parallel 無し（統合 KV）は縮める", needs(GAME_ARGV, GAME_ARGV)[0] is True)
+check("--parallel 1 で窓がゲームのままなら縮めない",
+      needs(GAME_ARGV, GAME_ARGV + ["--parallel", "1"])[0] is False)
+check("-np の綴りでも読む", needs(GAME_ARGV, GAME_ARGV + ["-np", "1"])[0] is False)
+wide = [item if item != "16384" else "32768" for item in GAME_ARGV] + ["--parallel", "2"]
+check("--parallel 2 で窓をスロット数倍にしたら縮めない", needs(GAME_ARGV, wide)[0] is False)
+check("--parallel 2 で窓が割られたら縮める",
+      needs(GAME_ARGV, GAME_ARGV + ["--parallel", "2"])[0] is True)
+
+sc = module.schema_compact
+LONG_SCHEMA = sc.SAMPLE_SCHEMA.replace(
+    "'title': 'Area'", "'title': 'Area', 'x': '" + "a" * sc.MIN_SCHEMA_CHARS + "'")
+LONG_PROMPT = "出力は次の構造に従うこと: " + LONG_SCHEMA
+
+
+def send(ctx):
+    """フック越しに頼みを1回送る。戻り値は元関数が受け取った本文。"""
+    got = {}
+
+    def orig(self, model, messages, format=None, *a, **kw):
+        got["messages"] = messages
+        return {"content": "{}"}
+
+    sent = [{"role": "system", "content": LONG_PROMPT}, {"role": "user", "content": "行く"}]
+    ctx.hooks[module.CHAT_TARGET](orig, object(), "m", sent, {"type": "object"})
+    return got["messages"][0]["content"], sent
+
+
+def reset_compact_state(mod):
+    mod._COMPACT_STATE.need = None
+    mod._COMPACT_STATE.why = ""
+
+
+module, ctx = fresh_mod()
+reset_compact_state(module)
+launch(ctx, list(GAME_ARGV))
+content, sent = send(ctx)
+check("既定（SLOTS=1）で起こしたら頼みは素のまま", content == LONG_PROMPT, content[:80])
+
+module, ctx = fresh_mod(SLOTS=0)
+reset_compact_state(module)
+launch(ctx, list(GAME_ARGV))
+content, sent = send(ctx)
+check("SLOTS=0 で起こしたらスキーマ説明を縮める",
+      content.startswith("出力は次の構造に従うこと: Location = {") and len(content) < len(LONG_PROMPT),
+      content[:80])
+check("呼び出し側の message は書き換えない", sent[0]["content"] == LONG_PROMPT)
+check("短いスキーマは縮めない（下限）",
+      sc.compact_embedded_schema("出力: " + sc.SAMPLE_SCHEMA) is None)
+
+module, ctx = fresh_mod()
+reset_compact_state(module)
+module.running_flags = lambda: None
+content, sent = send(ctx)
+check("起動を見ておらずサーバも読めなければ縮める", content != LONG_PROMPT, content[:80])
+reset_compact_state(module)
+module.running_flags = lambda: ("16384", "1")
+content, sent = send(ctx)
+check("起動を見ていなくても、走っているサーバが --parallel 1 なら縮めない", content == LONG_PROMPT,
+      content[:80])
+reset_compact_state(module)
+
+module, ctx = fresh_mod(OBSERVE_ONLY=True)
+check("観測のみでは頼みを包まない", module.CHAT_TARGET not in ctx.hooks)
+
 print("設定の宣言")
 with io.open(os.path.join(MOD_DIR, "mod.json"), encoding="utf-8") as fh:
     declared = json.load(fh)["settings"]

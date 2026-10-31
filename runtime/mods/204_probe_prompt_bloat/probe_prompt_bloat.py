@@ -32,6 +32,15 @@ VERIFICATION.md §3.36 #4（`311_` と `317_` を併せたプロンプト長）�
 包みをすべて `safe=True` にし、orig の前の記録（サイドカーの `repr` など）を try に入れ、
 引数は受け取った形のまま `orig` へ渡すようにした。
 見出しの2行は注入のたびに出ていた（1か月で約 2,000 行）ので1プロセス1回にした。
+
+版4: 窓（`--ctx-size`）にどこまで近づいたかをトークン数で残す。
+`_apply_chat_template` の字数だけでは窓との距離が分からず、
+窓を超えた頼み（llama-server の HTTP 400 `exceed_context_size_error`）もどこにも残らなかった。
+`LlamaCppClient.chat` の戻り値から頼みと出力のトークン数を読み、1回につき1行書く（DOC.md）。
+
+    TOKENS prompt=<頼み> cached=<使い回し> predicted=<出力> total=<頼み+出力> done=<止まった理由> truncated=<窓に合わせて切ったか> schema=<型の名前>
+    RAISE  chat <例外の型>: <文>                  `chat` が投げた回（窓あふれなら EXCEED を付ける）
+    KEYS   chat result keys=[…]                  戻り値の鍵（1プロセス1回。数の在りかを確かめる用）
 """
 
 import hashlib
@@ -42,6 +51,15 @@ from instantale_modloader import frames
 
 # 見出しを「このプロセスで書いた」印。モジュール変数は注入し直すと消えるので `sys` に置く。
 HEADER_MARK = "_instantale_probe_prompt_bloat_header"
+# 戻り値の鍵を「このプロセスで書いた」印。
+KEYS_MARK = "_instantale_probe_prompt_bloat_keys"
+
+CHAT_TARGET = "llama_cpp_runtime_completion:LlamaCppClient.chat"
+# 頼みのトークン数の在りか。上から順に見る。
+# 使い回し（cache_prompt）の分を含む総数でないと窓との距離にならない。
+# llama-server の `timings.prompt_n` は新しく処理した分だけなので、`cache_n` を足す。
+PROMPT_KEYS = ("prompt_eval_count", "tokens_evaluated")
+PREDICTED_KEYS = ("eval_count", "tokens_predicted", "completion_tokens")
 
 TURN_SEPARATOR = "〈プレイヤーの入力〉"
 EVENT_LOG_ARG = 2          # referee 2関数いずれも quest_event_log は第3引数
@@ -57,6 +75,52 @@ EVENT_TARGETS = (
 def _digest(text: str) -> str:
     """内容の同一性を短い指紋で比較するためのハッシュ（全文はログに出さない）。"""
     return hashlib.sha1(text.encode("utf-8", "replace")).hexdigest()[:10]
+
+
+def _first_int(mapping, keys):
+    for key in keys:
+        value = mapping.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value
+    return None
+
+
+def token_counts(result):
+    """`chat` の戻り値から (頼み, 使い回し, 出力, 止まった理由) を読む。読めない数は None。
+
+    頼みは使い回しの分を含む総数。
+    """
+    if not isinstance(result, dict):
+        return None, None, None, None
+    # `tokens_evaluated` も `timings.prompt_n` も新しく処理した分だけ（実機で cached=5767 のとき 258）。
+    fresh = _first_int(result, PROMPT_KEYS)
+    predicted = _first_int(result, PREDICTED_KEYS)
+    cached = None
+    timings = result.get("timings")
+    if isinstance(timings, dict):
+        cached = _first_int(timings, ("cache_n",))
+        if fresh is None:
+            fresh = _first_int(timings, ("prompt_n",))
+        if predicted is None:
+            predicted = _first_int(timings, ("predicted_n",))
+    usage = result.get("usage")
+    if isinstance(usage, dict):
+        if fresh is None:
+            fresh = _first_int(usage, ("prompt_tokens",))
+        if predicted is None:
+            predicted = _first_int(usage, ("completion_tokens",))
+    prompt = fresh + (cached or 0) if fresh is not None else None
+    done = result.get("done_reason") or result.get("stop_type") or result.get("finish_reason")
+    return prompt, cached, predicted, done
+
+
+def schema_label(fmt):
+    """どの頼みかを型の名前で表す（`title` と `$defs` の先頭3つ）。"""
+    if not isinstance(fmt, dict):
+        return type(fmt).__name__ if fmt is not None else "-"
+    defs = fmt.get("$defs")
+    names = list(defs)[:3] if isinstance(defs, dict) else []
+    return "{}[{}]".format(fmt.get("title") or "?", ",".join(str(n) for n in names))
 
 
 def apply(ctx):
@@ -164,6 +228,44 @@ def apply(ctx):
         except Exception:
             pass
         return orig(self, *args, **kwargs)
+
+    # ------------------------------------------------------------- TOKENS
+    # 版4: 窓にどこまで近づいたか。
+    # 引数も戻り値も触らない。流し読み（ジェネレータ）の戻り値は読まない（読むとゲームの分を消費する）。
+    @ctx.wrap(CHAT_TARGET, required=False, safe=True)
+    def chat_tokens(orig, self, *args, **kwargs):
+        try:
+            label = schema_label(frames.arg(args, kwargs, "format", 2))
+        except Exception:
+            label = "?"
+        try:
+            result = orig(self, *args, **kwargs)
+        except BaseException as exc:
+            try:
+                text = str(exc).replace("\n", " ")[:300]
+                exceed = "exceed" in text.lower() and "context" in text.lower()
+                write("RAISE chat {}{}: {} schema={}".format(
+                    "EXCEED " if exceed else "", type(exc).__name__, text, label))
+            except Exception:
+                pass
+            raise
+        try:
+            if isinstance(result, dict):
+                if not getattr(sys, KEYS_MARK, False):
+                    setattr(sys, KEYS_MARK, True)
+                    timings = result.get("timings")
+                    write("KEYS chat result keys={} timings={}".format(
+                        sorted(str(k) for k in result)[:30],
+                        sorted(str(k) for k in timings)[:30] if isinstance(timings, dict) else None))
+                prompt, cached, predicted, done = token_counts(result)
+                total = (prompt + predicted) if prompt is not None and predicted is not None else None
+                write("TOKENS prompt={} cached={} predicted={} total={} done={} truncated={} schema={}".format(
+                    prompt, cached, predicted, total, done, result.get("truncated"), label))
+                if result.get("error"):
+                    write("ERROR chat {} schema={}".format(str(result.get("error"))[:300], label))
+        except Exception:
+            pass
+        return result
 
     # ------------------------------------------------------------ SIDECAR
     # 版3: 記録は try に入れた。

@@ -13,7 +13,7 @@
   "version": "4",
   "author": "yoshinari/tomotomo-y",
   "after": [
-    "105_fix_schema_compact",
-    "111_llm_prompt_replace"
+    "111_llm_prompt_replace",
+    "127_llm_response_speed"
   ]
 }

@@ -48,7 +48,7 @@
 | [`102_fix_prompt_dedup`](MODS.md#102_fix_prompt_dedup-llm-へ送る文章の重複を畳む) | プロンプト重複の除去 | LLM へ送る文章の重複を畳む | - | 取込済 main_023 |
 | [`103_fix_eventlog_trim`](MODS.md#103_fix_eventlog_trim-llm-へ送るイベントログを刈り込む) | プロンプト内のイベントログの刈り込み | LLM へ送るイベントログを刈り込む | - | 取込済 main_024 |
 | [`104_balance_area_bgm`](MODS.md#104_balance_area_bgm-新しいエリアのbgmの偏りを均す) | エリアBGMの偏りの均し | 新しいエリアのBGMの偏りを均す | 1 |  |
-| [`105_fix_schema_compact`](MODS.md#105_fix_schema_compact-llm-へ送るスキーマ説明を圧縮する) | スキーマ説明の圧縮 | LLM へ送るスキーマ説明を圧縮する | - |  |
+| [`105_fix_schema_compact`](MODS.md#105_fix_schema_compact-llm-へ送るスキーマ説明を圧縮する) | スキーマ説明の圧縮 | LLM へ送るスキーマ説明を圧縮する | - | 取込済 127_llm_response_speed |
 | [`106_fix_battle_bgm_restore`](MODS.md#106_fix_battle_bgm_restore-戦闘後にbgmが戻らないのを直す) | 戦闘後の戦闘BGMの停止 | 戦闘後にBGMが戻らないのを直す | 1 | 取込済 main_024 |
 | [`107_fix_battle_flag_stuck`](MODS.md#107_fix_battle_flag_stuck-戦闘と売買の後に残る最中の印を下ろす) | 戦闘と売買の後始末漏れの修正 | 戦闘と売買の後に残る「最中」の印を下ろす | - |  |
 | [`108_fix_shop_inventory_overflow`](MODS.md#108_fix_shop_inventory_overflow-売買画面を開くと落ちるのを直す) | 売買画面クラッシュの修正 | 売買画面を開くと落ちるのを直す | - | 取込済 main_024 |
@@ -164,7 +164,7 @@
 | `201_probe_missing_attr` | `FreeInputStart` の欠落属性を読んでいる箇所を特定する |
 | `202_probe_summarizers` | サマライザ／ファシリテータの引数を測り、空 `Literal[]` の発生源を追う |
 | `203_probe_create_model` | pydantic モデル生成の瞬間に空 `Literal[]` を捕らえ、呼び出し元まで記録する |
-| `204_probe_prompt_bloat` | EVENTLOG / DEDUP / サイドカー起動という3つのプロンプト肥大化挙動を測る |
+| `204_probe_prompt_bloat` | EVENTLOG / DEDUP / サイドカー起動という3つのプロンプト肥大化挙動と、ローカル LLM の頼みごとの頼みと出力のトークン数・窓あふれを測る |
 | `205_probe_player_events` | プレイヤーの行動をトリガーにしたイベントの差し込み場所を特定する |
 | `206_probe_quest_flow` | クエストの受注経路と、選択肢ボタンの登録方法を特定する |
 | `207_probe_battle_bgm` | BGM を鳴らす・止める呼び出しと、鳴っているミキサーの本数を見張る（戦闘BGMの直しが退行していないかの見張り） |

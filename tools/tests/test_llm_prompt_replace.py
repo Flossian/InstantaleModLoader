@@ -83,11 +83,11 @@ def load_mod():
     return module
 
 
-def load_neighbour(suffix):
-    """他の mod を番号を除いた名前で読む（`105_` の関数を借りるため）。"""
-    folder, path = find_mod(suffix)
+def load_neighbour_part(suffix, filename):
+    """他の mod の部品のファイルを読む（`127_` のスキーマ圧縮の関数を借りるため）。"""
+    folder, _path = find_mod(suffix)
     spec = importlib.util.spec_from_file_location(
-        "neighbour" + suffix, path, submodule_search_locations=[folder])
+        "neighbour" + suffix + "_" + filename[:-3], os.path.join(folder, filename))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -961,7 +961,7 @@ def test_real_prompts():
     """記録済みの実プロンプトに、同梱のルールをそのまま当ててみる。
 
     見るのは2つ。
-    **当たること**（書式の取り違えがあれば1件も当たらない）と、**`105_` の後段が壊れないこと** ― この MOD は `105_` より外側に居るので、
+    **当たること**（書式の取り違えがあれば1件も当たらない）と、**`127_` のスキーマ圧縮が壊れないこと** ― この MOD は `127_` より外側に居るので、
     置換した本文をあちらのスキーマ解析が読むことになる（`mod.json` の `after`）。
     `output_data/` が無い環境では飛ばす。
     """
@@ -976,7 +976,7 @@ def test_real_prompts():
     with io.open(found, encoding="utf-8", errors="replace") as fh:
         rules, _warnings = mod.parse_rules(fh.read().splitlines())
     groups = mod.group_rules(rules)
-    compact = load_neighbour("_fix_schema_compact")
+    compact = load_neighbour_part("_llm_response_speed", "schema_compact.py")
 
     fired = {}
     schema_messages = 0
@@ -1000,9 +1000,9 @@ def test_real_prompts():
                 fired[rule.disp_from] = fired.get(rule.disp_from, 0) + count
             if compact.find_schema_start(text) < 0:
                 continue
-            schema_messages += 1
             if compact.compact_embedded_schema(text) is None:
-                continue                      # 素でも圧縮できない形。ここでは問わない
+                continue                      # 素でも圧縮しない形（短いスキーマなど）。ここでは問わない
+            schema_messages += 1
             if compact.compact_embedded_schema(replaced) is None:
                 broken.append(os.path.basename(os.path.dirname(path)))
             else:
@@ -1010,7 +1010,7 @@ def test_real_prompts():
 
     check("実データ: 実在のルールが当たる（{}種 / {}ファイル）".format(
         len(fired), len(files)), len(fired) >= 1, sorted(fired)[:3])
-    check("実データ: 置換後も 105_ がスキーマを圧縮できる（{}件）".format(schema_messages),
+    check("実データ: 置換後も 127_ がスキーマを圧縮できる（{}件）".format(schema_messages),
           schema_messages and not broken, broken[:5])
     check("実データ: 圧縮できた件数が減らない",
           still_compacts == schema_messages, (still_compacts, schema_messages))

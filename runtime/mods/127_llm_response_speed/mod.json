@@ -7,10 +7,10 @@
     "ja": "ローカルLLMの応答を速くする"
   },
   "description": {
-    "en": "Starts llama-server with one dedicated slot instead of four shared ones. Same window, less KV memory, faster responses. Also uses MTP automatically when the model has MTP layers or a matching drafter sits in the model folder's mtp\\. Can also widen the window",
-    "ja": "llama-server を共有4スロットではなく専用1スロットで起こす。1リクエストが使える窓（トークン数）は同じまま KV が減って応答が速くなる。MTP 内蔵のモデルか、モデルのフォルダの mtp\\ に合う MTP 用の .gguf があれば、MTP を自動で使う。窓を広げることもできる"
+    "en": "Starts llama-server with one dedicated slot instead of four shared ones. Same window, less KV memory, faster responses. Also uses MTP automatically when the model has MTP layers or a matching drafter sits in the model folder's mtp\\. Can also widen the window. With shared slots it also shortens the schema description embedded in the prompt (taken over from 105)",
+    "ja": "llama-server を共有4スロットではなく専用1スロットで起こす。1リクエストが使える窓（トークン数）は同じまま KV が減って応答が速くなる。MTP 内蔵のモデルか、モデルのフォルダの mtp\\ に合う MTP 用の .gguf があれば、MTP を自動で使う。窓を広げることもできる。スロットを共有する起動では、文に埋め込まれたスキーマ説明を縮める（105 から取り込んだ）"
   },
-  "version": "5",
+  "version": "6",
   "author": "R01/Flossian",
   "settings": {
     "CTX_SIZE": {

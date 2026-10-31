@@ -137,6 +137,24 @@ config.json の欄  --parallel 2 --ctx-size 32768 --cache-reuse 256
 `tools\llm_ctx_probe.bat` が実測して出す。
 溢れてもエラーにはならず「異様に遅い」になるだけなので、勘で上げないこと。
 
+## 窓を共有する起動ではスキーマ説明を縮める（版6）
+
+統合 KV（`--parallel` 無し）は4スロットが窓を1つの領域で分け合うので、
+2本が同時に走ると1件あたりは約半分になり、足りなければ `context-exceeded` で止まる。
+`105_fix_schema_compact` はこれに備えて、本文に埋め込まれたスキーマ説明を縮めていた。
+1件ごとに窓を丸ごと持つ起動（既定の `--parallel 1` など）では縮める理由が無く、
+書き方を変えるだけで答えが寄る場面もあった（VERIFICATION_LOG.md §2.3）。
+そこで縮めるかを、最後に渡した起動引数で決める（`needs_schema_compact`）:
+
+    --parallel 無し                           縮める（統合 KV。SLOTS=0 か、127 が触らない場合）
+    --parallel N で 窓 ÷ N ≥ ゲームの窓        縮めない（SLOTS=1 の既定・SLOTS>=2）
+    --parallel N で 窓 ÷ N < ゲームの窓        縮める（設定欄に --parallel を書いて窓が割られた場合）
+
+起動を見ていないうちに頼みが来たら（注入がサーバより後）、走っているサーバの引数を読んで決め、
+読めなければ縮める。
+縮め方の部品は `schema_compact.py`。
+`105_` は取込済として伏せた。
+
 ## 割り切り
 
 - **効くのは次にサーバが起きるときから。**
@@ -162,6 +180,8 @@ import struct
 import subprocess
 import sys
 import types
+
+from . import schema_compact
 
 # 1リクエストが使える窓（トークン）。
 # 0 は `--ctx-size` に触らない。
@@ -265,6 +285,20 @@ _MTP_STATE.__dict__.setdefault("last", None)
 #: ゲームが必ず渡してくる `--ctx-size`。
 #: `SLOTS>=2` で窓を保つ計算に使う。
 GAME_CTX_SIZE = 16384
+
+#: 頼みを送る地点。本文に埋め込まれたスキーマ説明を縮める。
+CHAT_TARGET = "llama_cpp_runtime_completion:LlamaCppClient.chat"
+#: スキーマ説明を縮めたときの記録。`105_` と同じ置き場で、`204_` の記録と並べて読む。
+COMPACT_LOG = "prompt_bloat.log"
+#: 最初の数回だけ、縮めた骨組みを全文ログに残す。
+COMPACT_AUDIT_FIRST_N = 5
+
+#: 縮めるかの判定。プロセスにつき1つ（注入し直しても残す）。
+#: `need` は True / False / None（まだ起動を見ていない）、`why` はログに出す理由。
+_COMPACT_STATE = sys.modules.setdefault("instantale_127_compact_state",
+                                        types.ModuleType("instantale_127_compact_state"))
+_COMPACT_STATE.__dict__.setdefault("need", None)
+_COMPACT_STATE.__dict__.setdefault("why", "")
 
 
 def is_llama_server(argv):
@@ -736,6 +770,33 @@ def running_flags():
     return None
 
 
+def needs_schema_compact(game_argv, final_argv):
+    """スキーマ説明を縮めるか。戻り値は (縮めるか, 理由)。
+
+    1件の頼みが窓を丸ごと使えると言い切れる起動のときだけ縮めない。
+    `final_argv` は実際に渡す起動引数、`game_argv` はゲームが渡してきた起動引数（ゲームの窓を読む）。
+    """
+    parallel = flag_value(final_argv, PARALLEL_FLAG)
+    if not parallel:
+        return True, "{} 無し（統合 KV。2本が同時に走ると窓を分け合う）".format(PARALLEL_FLAG)
+    total = flag_value(final_argv, CTX_FLAG)
+    game = flag_value(game_argv, CTX_FLAG) or GAME_CTX_SIZE
+    if total is None:
+        return True, "{} {} だが {} が読めない".format(PARALLEL_FLAG, parallel, CTX_FLAG)
+    per = total // parallel
+    if per >= game:
+        return False, "{} {} で1件ごとの窓 {}（ゲームの窓 {} 以上）".format(PARALLEL_FLAG, parallel, per, game)
+    return True, "{} {} で1件ごとの窓 {}（ゲームの窓 {} より狭い）".format(PARALLEL_FLAG, parallel, per, game)
+
+
+def _decide_compact(write, game_argv, final_argv):
+    need, why = needs_schema_compact(game_argv, final_argv)
+    changed = (need, why) != (_COMPACT_STATE.need, _COMPACT_STATE.why)
+    _COMPACT_STATE.need, _COMPACT_STATE.why = need, why
+    if changed:
+        write("[COMPACT] {}: {}".format("スキーマ説明を縮める" if need else "スキーマ説明を縮めない", why))
+
+
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
 
@@ -783,6 +844,10 @@ def apply(ctx):
         write("[LAUNCH] {}".format(describe(argv)))
 
         new_argv, changes = rewrite_argv(argv)
+        try:
+            _decide_compact(write, argv, new_argv)
+        except Exception:
+            ctx.log_exc("llm speed: スキーマ説明を縮めるかの判定に失敗")
         if not changes:
             write("    観測のみ（CTX_SIZE={}）".format(CTX_SIZE))
             return orig(*args, **kwargs)
@@ -829,3 +894,56 @@ def apply(ctx):
         ctx.log("llm context size: installed ({}{})".format(
             " ".join(plan),
             "" if CTX_SIZE > 0 else "。窓はゲームの値のまま"))
+        # 観測のみのときは頼みの本文も書き換えない。
+        install_schema_compact(ctx, write)
+
+
+def install_schema_compact(ctx, write):
+    """窓を共有する起動のときだけ、頼みの本文のスキーマ説明を縮める（版6。docstring）。"""
+    compact_write = ctx.logger(COMPACT_LOG)
+    state = {"hits": 0}
+
+    def need_now():
+        if _COMPACT_STATE.need is None:
+            # 起動を見ていない（注入がサーバより後）。走っているサーバの引数で決める。
+            current = running_flags()
+            if current is None:
+                _COMPACT_STATE.need = True
+                _COMPACT_STATE.why = "起動を見ておらず、走っているサーバの引数も読めない"
+                write("[COMPACT] スキーマ説明を縮める: " + _COMPACT_STATE.why)
+            else:
+                ctx_now, par_now = current
+                seen = []
+                if ctx_now:
+                    seen += [CTX_FLAG, ctx_now]
+                if par_now:
+                    seen += [PARALLEL_FLAG, par_now]
+                _decide_compact(write, [], seen)
+        return _COMPACT_STATE.need
+
+    @ctx.wrap(CHAT_TARGET, required=False, safe=True)
+    def chat(orig, self, model, messages, format=None, *args, **kwargs):
+        # format が dict のとき（＝実体のあるスキーマが渡っているとき）だけ。
+        # "json" のような汎用指定はフィールド単位の強制をしないので触らない。
+        if isinstance(format, dict) and format and isinstance(messages, list) and need_now():
+            new_messages, done = schema_compact.compact_messages(messages)
+            if new_messages is not None:
+                messages = new_messages
+                for role, before, after, compact in done:
+                    state["hits"] += 1
+                    compact_write("[COMPACT] chat {} | スキーマ説明を圧縮 {} -> {} 文字 (削減 {})".format(
+                        role, len(before), len(after), len(before) - len(after)))
+                    if state["hits"] <= COMPACT_AUDIT_FIRST_N:
+                        for line in compact.split("\n"):
+                            compact_write("    {}".format(line))
+        return orig(self, model, messages, format, *args, **kwargs)
+
+    # 実経路はゲームが構造付きの頼みを出したときにしか通らず、起動直後に通る保証が無いので、
+    # 注入の時点で見本を通して正しさを確かめておく。
+    failure, sizes = schema_compact.verify()
+    if failure:
+        ctx.log("llm speed: VERIFY FAILED: schema compaction " + failure, level="ERROR")
+    else:
+        ctx.log("llm speed: verified schema compaction {} -> {} chars, idempotent, "
+                "no-op without a schema or under {} chars".format(
+                    sizes[0], sizes[1], schema_compact.MIN_SCHEMA_CHARS))
