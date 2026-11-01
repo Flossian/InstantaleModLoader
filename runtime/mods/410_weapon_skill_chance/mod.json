@@ -1,0 +1,244 @@
+{
+  "entry": "weapon_skill_chance.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Weapons sometimes carry a skill",
+    "ja": "武器にたまにスキルが付く"
+  },
+  "description": {
+    "en": "In the base game only shop stock ever gets a weapon skill (about 1 in 8); crafted weapons and weapons from free text or events never do. Rolls a chance when a weapon is crafted or obtained, and on a hit has the game's own item skill generator make a skill that fits the item. The chance can be changed in settings and is scaled by the hero's INT and DEX (with gear and other bonuses) (0% when low, double or triple when high, certain when very high). The item details also show the skill's effect and uses. Companions can use the skill of the weapon they wear in battle",
+    "ja": "素のゲームでスキル付きの武器が出るのは店の品揃えだけ（8本に1本ほど）で、クラフトやテキスト・イベントで手に入る武器には付かない。武器が作られたとき・手に入ったときに抽選し、当たればゲーム自身のスキル生成で品に合ったスキルを付ける。確率は設定で変えられ、主人公の INT と DEX（装備などの補正込み）で倍率が掛かる（低ければ 0%、高ければ2倍・3倍、とても高ければ必ず付く）。説明欄にはスキルの効果と使用回数も出す。仲間も装備した武器のスキルを戦闘で使う"
+  },
+  "version": "2",
+  "author": "わさの, R01/Flossian",
+  "settings": {
+    "CHANCE_CRAFT": {
+      "type": "float",
+      "default": 20.0,
+      "min": 0.0,
+      "max": 100.0,
+      "group": {
+        "ja": "スキルが付く確率（%）",
+        "en": "Skill chance (%)"
+      },
+      "label": {
+        "ja": "クラフトで作った武器",
+        "en": "Crafted weapons"
+      },
+      "note": {
+        "ja": "0 で素のゲームのまま（クラフトの武器には付かない）",
+        "en": "0 keeps the base game (crafted weapons never get one)"
+      }
+    },
+    "CHANCE_OTHER": {
+      "type": "float",
+      "default": 5.0,
+      "min": 0.0,
+      "max": 100.0,
+      "group": {
+        "ja": "スキルが付く確率（%）",
+        "en": "Skill chance (%)"
+      },
+      "label": {
+        "ja": "テキスト・イベントで手に入る武器",
+        "en": "Weapons from free text and events"
+      },
+      "note": {
+        "ja": "0 で素のゲームのまま（付かない）",
+        "en": "0 keeps the base game (they never get one)"
+      }
+    },
+    "CHANCE_SHOP": {
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 100.0,
+      "group": {
+        "ja": "スキルが付く確率（%）",
+        "en": "Skill chance (%)"
+      },
+      "label": {
+        "ja": "店の武器（上乗せ）",
+        "en": "Shop weapons (extra)"
+      },
+      "note": {
+        "ja": "ゲームがスキルを付けなかった店の武器に、もう一度だけ抽選する。店の品揃えを入れ替える MOD が並べた武器と、仲間の初期装備（407）など店の主や仲間に作られた武器もこの確率。0 で素のゲームのまま（ゲーム自身が店の品揃えの8本に1本ほど付ける）",
+        "en": "Rolls once more for shop weapons the game left without a skill. Also used for weapons made for shopkeepers and companions, such as shop restocks by mods and companions' starting gear (407). 0 keeps the base game (which gives about 1 in 8 of the shop stock a skill)"
+      }
+    },
+    "ABILITY_SCALING": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "INT・DEX で確率を変える",
+        "en": "Use INT and DEX"
+      },
+      "note": {
+        "ja": "主人公の INT と DEX で、上の確率に倍率を掛ける。切ると上の確率のまま",
+        "en": "Multiplies the chances above by the hero's INT and DEX. Off keeps them as set"
+      },
+      "group": {
+        "ja": "作り手の INT・DEX で確率を変える",
+        "en": "Scale the chance by INT and DEX"
+      }
+    },
+    "ABILITY_SCOPE": {
+      "type": "choice",
+      "values": [
+        "craft_other",
+        "craft"
+      ],
+      "default": "craft_other",
+      "value_labels": {
+        "craft_other": {
+          "ja": "クラフトとそれ以外の武器",
+          "en": "Crafted and other weapons"
+        },
+        "craft": {
+          "ja": "クラフトだけ",
+          "en": "Crafted only"
+        }
+      },
+      "label": {
+        "ja": "倍率を掛ける武器",
+        "en": "Weapons it applies to"
+      },
+      "note": {
+        "ja": "「それ以外」はテキストで作った武器と、イベント・依頼で手に入る武器。店の武器には掛けない",
+        "en": "'Other' means weapons made by free text and those found in events and quests. Shop weapons are never scaled"
+      },
+      "group": {
+        "ja": "作り手の INT・DEX で確率を変える",
+        "en": "Scale the chance by INT and DEX"
+      }
+    },
+    "ABILITY_SURE_AT": {
+      "type": "int",
+      "default": 60,
+      "min": 0,
+      "max": 200,
+      "label": {
+        "ja": "100% になる値（以上）",
+        "en": "Certain at or above"
+      },
+      "note": {
+        "ja": "INT か DEX のどちらかがこの値以上なら、必ずスキルが付く（ほかの段より先に見る）。0 で使わない",
+        "en": "If either INT or DEX is at least this, the weapon always gets a skill (checked before the other tiers). 0 turns it off"
+      },
+      "group": {
+        "ja": "作り手の INT・DEX で確率を変える",
+        "en": "Scale the chance by INT and DEX"
+      }
+    },
+    "ABILITY_ZERO_AT": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "0% になる値（以下）",
+        "en": "Zero at or below"
+      },
+      "note": {
+        "ja": "INT か DEX のどちらかがこの値以下なら、スキルは付かない",
+        "en": "If either INT or DEX is at or below this, no skill"
+      },
+      "group": {
+        "ja": "作り手の INT・DEX で確率を変える",
+        "en": "Scale the chance by INT and DEX"
+      }
+    },
+    "ABILITY_DOUBLE_AT": {
+      "type": "int",
+      "default": 25,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "2段目になる値（両方以上）",
+        "en": "Second tier when both reach"
+      },
+      "note": {
+        "ja": "INT と DEX がどちらもこの値以上なら、2段目の倍率",
+        "en": "If both INT and DEX are at least this, the second-tier rate applies"
+      },
+      "group": {
+        "ja": "作り手の INT・DEX で確率を変える",
+        "en": "Scale the chance by INT and DEX"
+      }
+    },
+    "ABILITY_TRIPLE_SUM": {
+      "type": "int",
+      "default": 61,
+      "min": 0,
+      "max": 200,
+      "label": {
+        "ja": "3段目になる合計（以上）",
+        "en": "Third tier when the sum reaches"
+      },
+      "note": {
+        "ja": "INT と DEX の合計がこの値以上なら、3段目の倍率（2段目より先に見る）",
+        "en": "If INT + DEX is at least this, the third-tier rate applies (checked before the second tier)"
+      },
+      "group": {
+        "ja": "作り手の INT・DEX で確率を変える",
+        "en": "Scale the chance by INT and DEX"
+      }
+    },
+    "ABILITY_DOUBLE_RATE": {
+      "type": "float",
+      "default": 2.0,
+      "min": 0.0,
+      "max": 20.0,
+      "label": {
+        "ja": "2段目の倍率",
+        "en": "Second-tier rate"
+      },
+      "group": {
+        "ja": "作り手の INT・DEX で確率を変える",
+        "en": "Scale the chance by INT and DEX"
+      }
+    },
+    "ABILITY_TRIPLE_RATE": {
+      "type": "float",
+      "default": 3.0,
+      "min": 0.0,
+      "max": 20.0,
+      "label": {
+        "ja": "3段目の倍率",
+        "en": "Third-tier rate"
+      },
+      "group": {
+        "ja": "作り手の INT・DEX で確率を変える",
+        "en": "Scale the chance by INT and DEX"
+      }
+    },
+    "SHOW_EFFECT": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "説明欄にスキルの効果を出す",
+        "en": "Show the skill's effect in the item details"
+      },
+      "note": {
+        "ja": "スキル名の下に効果と使用回数の行を足す（表示だけ。セーブには残らない）。ゲームが付けたスキルにも出る",
+        "en": "Adds effect and uses lines under the skill name (display only, not saved). Also shown for skills the game gave"
+      }
+    },
+    "PARTY_SKILLS": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "仲間も武器のスキルを使う",
+        "en": "Companions use their weapon's skill"
+      },
+      "note": {
+        "ja": "仲間が身に着けている品のスキルを、戦闘の間だけ仲間の技に加える。回数は宿で休養すると戻る。仲間に装備させるには 402_party_inventory_transfer が要る",
+        "en": "Adds the skills of what a companion wears to their moves during battle. Uses refill when resting at an inn. Equipping companions needs 402_party_inventory_transfer"
+      }
+    }
+  },
+  "before": [
+    "109_fix_item_detail_autosize"
+  ]
+}

@@ -144,6 +144,7 @@
 | `407_npc_starting_equipment` | 成立（仲間3人、窓口 `equipment.equip`、起動し直しても残る）。ロード後の戦闘の数は `333_` で直して成立（[§3.77](verification/3.77.md) / [§3.88](verification/3.88.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `408_visual_changes_based_on_equipment` | 一通り成立（仲間と `335_` の描き直しに装備の語）。取り込みと切り出しの経緯は [§2.94](verification/2.94.md) |
 | `409_fix_crafted_item_type` | 店の `consumable` の品に「消費」が出て使えた。鍵を足した品を `134_` 抜きで使うのとクラフトの経路は未（[§3.104](verification/3.104.md)） |
+| `410_weapon_skill_chance` | 主人公・店の主・仲間・敵の経路の分け方、仲間が戦闘で武器のスキルを使える状態になること、休養での回数の戻りは実機で成立（生成はスクリプトから入口を呼んだ）。クラフトの経路と説明欄の実機は未（[§3.120](verification/3.120.md)） |
 | `411_equipment_ability_bonus` | 身に着けている品の補正が窓口を通して火力・防御・手番の順・依頼の出来事に効き、ステータス画面に出た（武器の補正はスクリプトで書いた）。品に付ける経路の実機は未（[§3.119](verification/3.119.md)） |
 
 ### ローダ
@@ -347,6 +348,7 @@ crash_log.txt の 114 件のうち、35件が `llama-server` 起動失敗、40�
 - [3.117 街ごとの依頼の難易度の範囲（`922_town_quest_difficulty`）: 探す経路は実機で成立・初訪問の3件は検査まで](verification/3.117.md)
 - [3.118 難易度と品の価値の 76 超えを報酬と品の強さに効かせる（`923_beyond_76`・窓口 `value_limits`）: 報酬は実機で成立・品の側は検査まで](verification/3.118.md)
 - [3.119 能力値の補正の窓口（`abilities`）と、装備の能力値補正（`411_equipment_ability_bonus`。提供の `802_` を乗せ替え）: 窓口と 411 は実機で成立](verification/3.119.md)
+- [3.120 武器にたまにスキルが付く（`410_weapon_skill_chance`。提供の `801_` を正式化）: 主人公・店の主・仲間・敵の経路と仲間の技は実機で成立](verification/3.120.md)
 <!-- verification-index: end -->
 
 ---

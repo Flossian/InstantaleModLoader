@@ -8,8 +8,8 @@
 手で書き換えても次の生成で消える。
 直す先は各 MOD の `mod.json` か MODS.md の見出し。
 
-同梱 147 本（基盤 2 / 修正 50 / 追加 50 / 計測 45）。
-うち 15 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
+同梱 148 本（基盤 2 / 修正 50 / 追加 51 / 計測 45）。
+うち 16 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
 ほかに 3 本は自作だが、外部からの提案を取り込んでいる（下の「提案を取り込んだ MOD」）。
 
 並びはフォルダ名順。
@@ -96,7 +96,7 @@
 
 ---
 
-## 追加（50本）
+## 追加（51本）
 
 ゲームに無かった遊びを足す。
 
@@ -151,6 +151,7 @@
 | [`405_regional_economy`](MODS.md#405_regional_economy-街ごとの需給表示特産品) | 地域毎に物価が変動する | 街ごとの需給・表示・特産品 | 11 |  |
 | [`407_npc_starting_equipment`](MODS.md#407_npc_starting_equipment-パーティーに加わった-npc-に初期装備を一度だけ持たせる) | NPC初期装備 | パーティーに加わった NPC に初期装備を一度だけ持たせる | - |  |
 | [`408_visual_changes_based_on_equipment`](MODS.md#408_visual_changes_based_on_equipment-立ち絵を再生成すると装備の見た目が描き足される) | 装備品に応じた立ち絵の追加描写 | 立ち絵を再生成すると装備の見た目が描き足される | 1 |  |
+| [`410_weapon_skill_chance`](MODS.md#410_weapon_skill_chance-武器にたまにスキルが付く) | 武器にたまにスキルが付く | 武器にたまにスキルが付く | 13 |  |
 | [`411_equipment_ability_bonus`](MODS.md#411_equipment_ability_bonus-高品質の装備に能力値補正が付く) | 高品質の装備に能力値補正が付く | 高品質の装備に能力値補正が付く | 16 |  |
 
 ---
@@ -211,7 +212,7 @@
 
 ## 提供を受けた MOD
 
-外部の MOD 作者から提供を受けて同梱している 15 本。
+外部の MOD 作者から提供を受けて同梱している 16 本。
 
 番号の帯では数えられない。
 いま提供を取り込む先は出どころの帯（`4xx`）だが、
@@ -238,6 +239,7 @@
 | [`407_npc_starting_equipment`](MODS.md#407_npc_starting_equipment-パーティーに加わった-npc-に初期装備を一度だけ持たせる) | MoririnJP 様 | そのまま取り込み |
 | [`408_visual_changes_based_on_equipment`](MODS.md#408_visual_changes_based_on_equipment-立ち絵を再生成すると装備の見た目が描き足される) | MoririnJP 様 | そのまま取り込み |
 | [`409_fix_crafted_item_type`](MODS.md#409_fix_crafted_item_type-右クリックに消費が出ない飲食物薬を使えるようにする) | わさの 様 | 提供者と共同 |
+| [`410_weapon_skill_chance`](MODS.md#410_weapon_skill_chance-武器にたまにスキルが付く) | わさの 様 | 提供者と共同 |
 | [`411_equipment_ability_bonus`](MODS.md#411_equipment_ability_bonus-高品質の装備に能力値補正が付く) | わさの 様 | 提供者と共同 |
 
 ---
