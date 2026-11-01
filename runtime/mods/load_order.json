@@ -109,6 +109,7 @@
     "333_equipment_slots",
     "407_npc_starting_equipment",
     "408_visual_changes_based_on_equipment",
+    "411_equipment_ability_bonus",
     "335_player_portrait_regenerate",
     "323_npc_carryover",
     "401_battle_character_context",
@@ -144,7 +145,8 @@
     "240_probe_stamina",
     "241_probe_world_bulk",
     "242_probe_world_reads",
-    "243_probe_value_curves"
+    "243_probe_value_curves",
+    "244_probe_ability_reads"
   ],
   "disabled": []
 }

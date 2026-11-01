@@ -2047,11 +2047,12 @@ def _forget_unapplied(results: dict, manifests: dict) -> list[str]:
     from . import prices as _prices
     from . import combat as _combat
     from . import equipment as _equipment
+    from . import abilities as _abilities
     ok = {name for name, verdict in results.items() if verdict == "ok"}
     base, layers = _prices.item_price_sources()
     _inn_answer, inn_layers = _prices.inn_price_sources()
     owners = (set(manifests) | set(_durations.owners()) | {base} | set(layers) | set(inn_layers)
-              | set(_combat.owners()) | set(_equipment.owners()))
+              | set(_combat.owners()) | set(_equipment.owners()) | set(_abilities.owners()))
     gone = []
     for owner in sorted(owners - ok - {""}):
         if _durations.forget(owner, write=log):
@@ -2324,6 +2325,17 @@ def _boot(out_dir: str) -> dict:
             _registry.end_mod()
     except BaseException:
         log_exc("cannot install the stall guard")
+    # 能力値の補正を、ゲームが読む場面の間だけ足して見せる（abilities.py）。MOD の層より後に当てる
+    # （MOD が自分の包みの中で読む攻撃力・能力値にも補正が乗る）。
+    try:
+        from . import abilities as _abilities
+        _registry.begin_mod("(loader)")
+        try:
+            _abilities.install(ctx)
+        finally:
+            _registry.end_mod()
+    except BaseException:
+        log_exc("cannot install the ability bonuses")
     try:
         _patch.drop_stale_layers()
     except BaseException:
@@ -2629,12 +2641,15 @@ def _unload(out_dir: str | None) -> dict:
         from . import prices as _prices
         from . import combat as _combat
         from . import equipment as _equipment
+        from . import abilities as _abilities
         base, layers = _prices.item_price_sources()
         _inn_answer, inn_layers = _prices.inn_price_sources()
         owners = (set(_durations.owners()) | {base} | set(layers) | set(inn_layers)
-                  | set(_combat.owners()) | set(_equipment.owners()))
+                  | set(_combat.owners()) | set(_equipment.owners()) | set(_abilities.owners()))
         for owner in sorted(owners - {""}):
             _durations.forget(owner, write=log)
+        # 読み口はクラスに残る（剥がさない）。場面の包みが剥がれたので補正は足されないが、念のため素通しにする
+        _abilities.detach()
     except Exception:
         log_exc("unload: cannot forget the durations")
     _state["mods"] = {}

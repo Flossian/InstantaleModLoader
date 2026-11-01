@@ -127,7 +127,7 @@ VERIFICATION_LOG.md §2.37。
 import math
 import time
 
-from instantale_modloader import frames, llm, ui
+from instantale_modloader import abilities, frames, llm, ui
 
 LOG_BASENAME = "event_roll.log"
 
@@ -281,11 +281,17 @@ def score_of(character, attribute, source=None):
     キャラクタシートは `attribute_<名前>`）。
     名前を推測して1つだけ見ると、読めなかったのか 0 だったのかが区別できなくなるので、
     順に当たる。
+    最初はローダの能力値の窓口（装備や一時の強化の補正を足した値。TECH.md §3.3.27）に聞く。
     """
     if character is None or attribute not in ABILITIES:
         return None
     raw = None
+    boosted = abilities.scores(ui.find_app(), character)
+    if isinstance(boosted, dict) and boosted.get(attribute) is not None:
+        raw = boosted.get(attribute)
     for name in ("ability_scores", "original_ability_scores"):
+        if raw is not None:
+            break
         table = getattr(character, name, None)
         if isinstance(table, dict) and table.get(attribute) is not None:
             raw = table.get(attribute)

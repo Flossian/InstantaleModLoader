@@ -158,6 +158,7 @@ runtime/instantale_modloader/
     shop_lineup.py  店の品揃えの傾向の一文の窓口。傾向を決める MOD が出し、品揃えを作り直す MOD が聞く（§3.3.22）
     quest_bands.py  街ごとの依頼の難易度の範囲の窓口。範囲を決める MOD が出し、帯を見せる MOD が聞く（§3.3.25）
     value_limits.py  品の価値と難易度が数に効く上限の窓口。76 を超えて効かせる MOD が出し、品を作る MOD が切りに使う（§3.3.26）
+    abilities.py  能力値の補正の窓口。補正を置く MOD が答えか期限つきの補正を出し、ゲームが能力値を読む場面の間だけ足して見せる。ステータス画面に (+n) を出す（§3.3.27）
     sounds.py     曲の置き場所の探し方・戦闘曲の見分け方・重みの読み方（§5.10）
     imagegen.py   画像生成の方式（sdcpp の cuda / vulkan / cpu と diffusers_openvino）を隠して、人物の絵を描く関数を包む（§5.11）
     stalls.py     作業スレッドが死んだときに本文の欄へ出して待機を終える。LLM の 4xx の送り直しを早めに打ち切る（§5.12）
@@ -2235,6 +2236,66 @@ by = value_limits.raised_by()           # ゲームの上限より上げてい�
 
 置き場は `sys` の属性（`_instantale_value_limits`）。検査は `tools\tests\test_wip_beyond_76.py`。
 
+#### 3.3.27 能力値の補正も窓口で分け合う（`abilities`）
+
+装備の補正（`411_equipment_ability_bonus`）や、食事・一時の強化・病気や怪我のように、能力値を足したり引いたりする MOD が補正を置く。
+ローダは、ゲームが能力値を読む場面の間だけ補正を足して見せる。
+人物の能力値には書き込まない。
+置き場は `instantale_modloader/abilities.py`。
+
+```python
+# 状態から決まる補正（装備など）。場面ごとに毎回聞く
+abilities.declare(owner, fn)        # fn(app, holder) -> {"strength": 3, …} | None
+
+# 期限つきの補正
+entry = abilities.add(app, holder, {"strength": 2}, until=abilities.days(3), owner=owner, label="宿の朝食")
+#   until: abilities.days(n)（n 日のあいだ）/ abilities.REST（次に宿で部屋を選ぶまで）
+#          abilities.BATTLE（次の戦闘の終わりまで）/ None（remove するまで）
+abilities.remove(app, entry)
+
+# 読む側（場面の外で能力値を使う MOD。313 の判定）
+abilities.scores(app, holder)       # 補正を足した6つ（下限 1）
+abilities.bonus(app, holder)        # 補正だけの合計
+abilities.breakdown(app, holder)    # [{owner, label, amounts, until}]
+abilities.raw(holder, name)         # 補正を足さない素の値（場面の中から呼んでも素の値）
+```
+
+ゲームが能力値を読む場面は `244_probe_ability_reads` で測った（VERIFICATION.md §1）。
+
+| 場面（この間だけ補正を足して見せる） | 見せる値 | 効くもの |
+|---|---|---|
+| `BattlePhaseManager.calculate_battle_effect` | `attack_power` / `magic_power` に 筋力 / 知力の補正 × m | 素点（主人公・仲間・敵） |
+| `Character.get_npc_defense` | `ability_scores` | 防御 |
+| `BattlePhaseManager.battle` | `ability_scores` | 手番の順（中の `get_initiative` は入れ子の関数で包めない） |
+| `QuestEventManager.execute` | `ability_scores` | 依頼の出来事の換算 |
+| `document_emotion_scores_new` | 第2引数（主人公の魅力）に魅力の補正 | 会話と依頼の後の印象 |
+
+m はレベル係数 (レベル + 5) / 5（GAME.md §2.10.4）。
+
+| 決まり | 理由 |
+|---|---|
+| 補正は覚えて書き込まず、場面の中で読まれるたびに足す | 書き込んで戻す形は、途中でゲームが組み直すと引き過ぎ、包みの層の順で他の MOD の記録とずれる。値段の関所（§3.3.4）と同じ「毎回聞く」形 |
+| 見せ方は `Character` の `ability_scores` / `attack_power` / `magic_power` に置いた読み口（データデスクリプタ）。場面の外は素の値、中は補正を足した写し。書き込みは常に素の値へ | `ability_scores` と `attack_power` はセーブに載らない（載るのは `original_ability_scores`）。場面の外で素の値を返せば、ほかの読み手（保存・画面・MOD）に補正が混ざらない |
+| 筋力・知力の補正は、攻撃力・魔力の側に直して見せる | 素点は `attack_power` / `magic_power` だけを読み、`attack_power` はロードの `Character.__init__` が作った後は組み直されない（実測）。能力値に足しても火力に効かない |
+| 場面の包みと読み口は、MOD の層より後（一番外側）にローダが1枚だけ当てる（`boot()` → `install`） | `319_` / `333_` が自分の包みの中で読む攻撃力・能力値にも補正が乗る。MOD は自分で包まない |
+| 印象は引数に足す。渡った値が主人公の素の魅力と同じときだけ | 呼ぶ側が場面の外で能力値を読んで渡す。ほかの値で呼ばれたときに主人公の補正を混ぜない |
+| 下限は 1。上限は置かない | 攻撃力が 0 だとゲームの `geometric_mean` が投げる（GAME.md §2.10.2）。上限は答える MOD が決める（411 の能力値ごとの上限） |
+| 最大 HP には効かせない | `max_hp` / `original_max_hp` / `current_hp` の3つの扱いが決まっていない（延期） |
+| 期限つきの補正は `state/abilities/<世界>×<主人公>.json` に持つ。宛先は主人公（`player`）と人物の id | セーブと同じ寿命（周回の鍵。§3.11）。敵は id が無いので `declare` で答える |
+| 期限は、日数は読むたびに比べ、`REST` は `VacationStartManager.execute` の前で、`BATTLE` は戦闘の終わり方3つの `end_phase` の後で外す | `REST` は部屋を選んだ時点で切れる（宿泊の中の活動によらない。連泊の「まだ宿泊する」も同じ）。前で外すので、宿泊の中で置かれた補正は残る |
+| `declare` は持ち主ごとに1つ。切った MOD のぶんは `boot()` と `unload()` が外す（`durations.forget` の片付け）。期限つきは、今回適用されなかった持ち主のぶんを数えない（ファイルには残す） | 登録簿は注入をまたいで残る（§3.3.5 と同じ）。期限つきを消さないのは、MOD を戻したときに続きが効くため |
+| 答える関数が投げたら、その答えは無かったことにする。答える関数が同じ人物の能力値を読んでも、その間は素の値を返す | 相手の不具合で戦闘を止めない。読み口から答える関数へ戻って回らない |
+
+ステータス画面（人物欄）の能力値の行には、補正を `筋力: 30(+4)` の形で書き足す（`toggle_character_sheet_visibility` の後）。
+数字はゲームが出した素の値のまま、後ろに補正の合計を付ける。
+開き直しても重ならず、補正が無くなれば消える。
+相手は人物欄の名前で引く（`121_` と同じ）。
+
+> 読み口を置く前から同じ属性にデータデスクリプタがあれば（`244_` の見張り）、読み口はその内側を値の置き場として使う。
+> 後から置かれる側（`244_` が版を上げたとき）は、読み口の `inner` に入る。
+
+置き場は `sys` の属性（`_instantale_abilities` / `_instantale_abilities_hooks`）。検査は `tools\tests\test_abilities.py`。
+
 ### 3.4 まだ現れていない対象を狙う（保留と当て直し）
 
 ゲームは `llama_cpp_runtime_completion` と `scripts.llm.llm_manager` を
@@ -2635,7 +2696,7 @@ GUI の1行に収めると「JSON を手で書く欄」になり、コードを�
 | `apply(ctx)` に渡る `ctx` | §3.1 / §3.6 / §3.8 / §3.11 |
 | `mod.json` の鍵 | §3.1 / §3.2 / §3.8 / §3.9 / §3.12 |
 | §5 の共通部品（`ui` / `frames` / `llm` / `state` / `jobs` / `modnpc` / `modfacility` / `prices` / `sounds` / `imagegen`） | §5 |
-| 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `loads` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons` / `quest_claims` / `quest_clients` / `holdings` / `save_lookup` / `shop_lineup` / `quest_bands` / `value_limits`） | §3.2.3 / §3.3 |
+| 使い方を書いた窓口（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `loads` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons` / `quest_claims` / `quest_clients` / `holdings` / `save_lookup` / `shop_lineup` / `quest_bands` / `value_limits` / `abilities`） | §3.2.3 / §3.3 |
 
 これ以外は内部で、予告なく変わる。
 `patch.py` の `_defer_if_*` や `__init__.py` の `_order()` のような

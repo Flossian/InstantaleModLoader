@@ -144,6 +144,7 @@
 | `407_npc_starting_equipment` | 成立（仲間3人、窓口 `equipment.equip`、起動し直しても残る）。ロード後の戦闘の数は `333_` で直して成立（[§3.77](verification/3.77.md) / [§3.88](verification/3.88.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `408_visual_changes_based_on_equipment` | 一通り成立（仲間と `335_` の描き直しに装備の語）。取り込みと切り出しの経緯は [§2.94](verification/2.94.md) |
 | `409_fix_crafted_item_type` | 店の `consumable` の品に「消費」が出て使えた。鍵を足した品を `134_` 抜きで使うのとクラフトの経路は未（[§3.104](verification/3.104.md)） |
+| `411_equipment_ability_bonus` | 身に着けている品の補正が窓口を通して火力・防御・手番の順・依頼の出来事に効き、ステータス画面に出た（武器の補正はスクリプトで書いた）。品に付ける経路の実機は未（[§3.119](verification/3.119.md)） |
 
 ### ローダ
 
@@ -157,6 +158,7 @@
 | 犯罪まわりの窓口 `wanted` / `guards` / `defeat` / `board` / `confinement` | 成立 | [§3.81](verification/3.81.md)〜[§3.84](verification/3.84.md) |
 | ロード・日数・到着の前後を1枚だけ包む窓口（`loads` / `durations.on_days` / `arrivals.on`）と、会話の相手への差し込みの `modnpc` の notes への寄せ | 31 本を乗せ替え、オフラインで通過。実機は未 | [§3.113](verification/3.113.md) |
 | 当てにならない旗（`in_shopping` を `ui.BUSY_FLAGS` から外した） | 7つの旗を実機で測った。残るのはボス戦と逮捕の経路 | [§3.86](verification/3.86.md) |
+| 能力値の補正の窓口 `abilities` | 素点・防御・手番の順・依頼の出来事・印象・ステータス画面の表示・部屋選びと通常の戦闘の終わりでの期限切れは実機で成立。残るのは自由入力と闘技場の戦闘の終わり方、逃走・倒れたとき | [§3.119](verification/3.119.md) |
 
 ### 計測待機中（発生すれば自動で原因が確定する）
 
@@ -201,8 +203,9 @@
 | `242_probe_world_reads` | 遊んでいる最中に世界の素データを引く箇所と、その要否 | 引く箇所と段を実測（10-19・10-20）。要らない読みは売買・施設の組み立て（世界の名前だけ）・人物の詳細の生成。世界側に無い施設・人物で落ちるのは、売買・人物の詳細の生成（会話と訓練場の入口。セーブが欠ける）・闘技場の試合の3つ。街ごと外した試しで、ほかの場面（強化・クラフト・投獄・雇用・裏の事務所・ゲームオーバーなど）は落ちない。奴隷市場（セーブエディタで足した）・一括生成・新たな道を探す（`325_`）も落ちない。使える世界にある場面は一通り踏んだ（[§3.106](verification/3.106.md)） |
 | `241_probe_world_bulk` | 世界の一括生成で何に時間が掛かるか | 1回目（ローカル。632件を89分、絵が仕事の中の73%、仕事は1件ずつ。GAME.md §2.27「一括生成」）。残るのはクラウドの LLM で流した回 |
 | `243_probe_value_curves` | 難易度と品の価値から作る数が 76 を超えたときの曲線、防具の防御力の出どころ、どこで 76 に切られるか | 曲線は1回目（10-31、テストワールド）。報酬・働いた報酬・訓練の経験・才能点・品の値段の段階は 76 で止まり、武器と回復の数は 76 を過ぎると揺れの中で横ばい（[§3.112](verification/3.112.md) と同じ）。`get_talent_point_by_quest_level` / `get_training_price_quest_clear` は 71 から KeyError。防具の出どころ（`link`）と切りの呼び出し元（`clamp`）は版2から（版1は起動時の MOD の確かめで枠が埋まった） |
+| `244_probe_ability_reads` | ゲームが能力値を読む所と、攻撃力・防御・最大 HP を組み直す時。素点と防御は `attack_power`・`ability_scores`・`original_ability_scores` のどれを読むか | 1回目（11-01、テストワールド。依頼2件・戦闘11回）。素点は `attack_power` / `magic_power` だけを読み、能力値はどちらを変えても動かない。`attack_power` はロードの `Character.__init__` が `original_ability_scores` から作り、その後は組み直されない。`get_npc_defense`・手番の順（`get_initiative`）・依頼の出来事の換算（`QuestEventManager`）・印象に渡る魅力は `ability_scores` を読む（主人公の `ability_scores` だけをずらした試しで、6つともずらした値が渡った）。`original_ability_scores` を読む戦闘の計算は無い。セーブに残るのは `original_ability_scores` だけで、`ability_scores` はロードで元に戻る。`update_ability_scores` は休養・依頼・戦闘・ロードのどれでも走らなかった。残るのは、誰がいつ `update_ability_scores` を呼ぶかと、前の記録（`222_` / `236_`）で `ability_scores` が元より1低かった仲間5件（どれも HP が減っていた）の経路 |
 
-`228_` のほかは読み取り専用（`228_` は窓の間だけ同行者の属性を写しに差し替える。手元では無効）。
+`228_` と `244_` のほかは読み取り専用（`228_` は窓の間だけ同行者の属性を写しに差し替える。手元では無効。`244_` は戦闘の開始の試しの間だけ攻撃力や能力値を差し替えて、すぐ戻す）。
 決着した後も有効のまま残している。ログの量と負荷、読み取り専用の破れは [§3.78](verification/3.78.md) で全本を見直した。
 
 ### 未修正（原因の確度は行ごと）
@@ -343,6 +346,7 @@ crash_log.txt の 114 件のうち、35件が `llama-server` 起動失敗、40�
 - [3.116 到着の会話が売買の窓の上から始まり、店を出ても立ち絵が残る（`300_event_facility_arrival`・ローダの `when_idle`）: 原因はログで特定・直しは検査で成立・実機は未](verification/3.116.md)
 - [3.117 街ごとの依頼の難易度の範囲（`922_town_quest_difficulty`）: 探す経路は実機で成立・初訪問の3件は検査まで](verification/3.117.md)
 - [3.118 難易度と品の価値の 76 超えを報酬と品の強さに効かせる（`923_beyond_76`・窓口 `value_limits`）: 報酬は実機で成立・品の側は検査まで](verification/3.118.md)
+- [3.119 能力値の補正の窓口（`abilities`）と、装備の能力値補正（`411_equipment_ability_bonus`。提供の `802_` を乗せ替え）: 窓口と 411 は実機で成立](verification/3.119.md)
 <!-- verification-index: end -->
 
 ---

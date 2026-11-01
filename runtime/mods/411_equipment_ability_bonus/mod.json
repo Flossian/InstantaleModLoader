@@ -1,0 +1,265 @@
+{
+  "entry": "equipment_ability_bonus.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "High-quality gear grants ability bonuses",
+    "ja": "高品質の装備に能力値補正が付く"
+  },
+  "description": {
+    "en": "When an epic, legendary or mythic weapon or armor is made (shop, crafting, events), it gets random ability bonuses such as STR +3, shown in the item details. Higher rarity gets more and larger bonuses. What the hero and companions wear counts wherever the game reads ability scores (damage, defense, turn order, quest events, impressions), through the loader's ability window, and shows as (+3) on the character sheet. The ability scores themselves are never changed. Items you already own get nothing",
+    "ja": "epic・legendary・mythic の武器・防具が作られたとき（店・クラフト・イベント）、筋力 +3 のような能力値補正がランダムに付き、説明欄に出る。レア度が高いほど数も量も多い。主人公と仲間が身に着けている品の補正は、ローダの能力値の窓口を通して、ゲームが能力値を読むところ（火力・防御・手番の順・依頼の出来事・印象）に効き、ステータス画面の能力値に (+3) の形で出る。能力値そのものは書き換えない。もともと持っている品には付かない"
+  },
+  "version": "2",
+  "author": "わさの, R01/Flossian",
+  "settings": {
+    "EPIC_COUNT_MIN": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 6,
+      "group": {
+        "ja": "epic の補正",
+        "en": "Epic bonuses"
+      },
+      "label": {
+        "ja": "数の下限",
+        "en": "Count, min"
+      }
+    },
+    "EPIC_COUNT_MAX": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 6,
+      "group": {
+        "ja": "epic の補正",
+        "en": "Epic bonuses"
+      },
+      "label": {
+        "ja": "数の上限",
+        "en": "Count, max"
+      }
+    },
+    "EPIC_AMOUNT_MIN": {
+      "type": "int",
+      "default": 1,
+      "min": 1,
+      "max": 50,
+      "group": {
+        "ja": "epic の補正",
+        "en": "Epic bonuses"
+      },
+      "label": {
+        "ja": "1つあたりの量の下限",
+        "en": "Amount, min"
+      }
+    },
+    "EPIC_AMOUNT_MAX": {
+      "type": "int",
+      "default": 2,
+      "min": 1,
+      "max": 50,
+      "group": {
+        "ja": "epic の補正",
+        "en": "Epic bonuses"
+      },
+      "label": {
+        "ja": "1つあたりの量の上限",
+        "en": "Amount, max"
+      }
+    },
+    "LEGENDARY_COUNT_MIN": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 6,
+      "group": {
+        "ja": "legendary の補正",
+        "en": "Legendary bonuses"
+      },
+      "label": {
+        "ja": "数の下限",
+        "en": "Count, min"
+      }
+    },
+    "LEGENDARY_COUNT_MAX": {
+      "type": "int",
+      "default": 2,
+      "min": 0,
+      "max": 6,
+      "group": {
+        "ja": "legendary の補正",
+        "en": "Legendary bonuses"
+      },
+      "label": {
+        "ja": "数の上限",
+        "en": "Count, max"
+      }
+    },
+    "LEGENDARY_AMOUNT_MIN": {
+      "type": "int",
+      "default": 2,
+      "min": 1,
+      "max": 50,
+      "group": {
+        "ja": "legendary の補正",
+        "en": "Legendary bonuses"
+      },
+      "label": {
+        "ja": "1つあたりの量の下限",
+        "en": "Amount, min"
+      }
+    },
+    "LEGENDARY_AMOUNT_MAX": {
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 50,
+      "group": {
+        "ja": "legendary の補正",
+        "en": "Legendary bonuses"
+      },
+      "label": {
+        "ja": "1つあたりの量の上限",
+        "en": "Amount, max"
+      }
+    },
+    "MYTHIC_COUNT_MIN": {
+      "type": "int",
+      "default": 2,
+      "min": 0,
+      "max": 6,
+      "group": {
+        "ja": "mythic の補正",
+        "en": "Mythic bonuses"
+      },
+      "label": {
+        "ja": "数の下限",
+        "en": "Count, min"
+      }
+    },
+    "MYTHIC_COUNT_MAX": {
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 6,
+      "group": {
+        "ja": "mythic の補正",
+        "en": "Mythic bonuses"
+      },
+      "label": {
+        "ja": "数の上限",
+        "en": "Count, max"
+      }
+    },
+    "MYTHIC_AMOUNT_MIN": {
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 50,
+      "group": {
+        "ja": "mythic の補正",
+        "en": "Mythic bonuses"
+      },
+      "label": {
+        "ja": "1つあたりの量の下限",
+        "en": "Amount, min"
+      }
+    },
+    "MYTHIC_AMOUNT_MAX": {
+      "type": "int",
+      "default": 4,
+      "min": 1,
+      "max": 50,
+      "group": {
+        "ja": "mythic の補正",
+        "en": "Mythic bonuses"
+      },
+      "label": {
+        "ja": "1つあたりの量の上限",
+        "en": "Amount, max"
+      }
+    },
+    "STACK_MODE": {
+      "type": "choice",
+      "values": [
+        "sum",
+        "max"
+      ],
+      "default": "sum",
+      "value_labels": {
+        "sum": {
+          "ja": "全部位を足す",
+          "en": "Add up all slots"
+        },
+        "max": {
+          "ja": "能力値ごとに最大の1品",
+          "en": "Best item per ability"
+        }
+      },
+      "group": {
+        "ja": "複数の装備",
+        "en": "Several items"
+      },
+      "label": {
+        "ja": "補正のまとめ方",
+        "en": "How bonuses stack"
+      },
+      "note": {
+        "ja": "333 の「装備欄の品を合算する」とは別に決まる",
+        "en": "Independent of 333's own combine setting"
+      }
+    },
+    "STAT_CAP": {
+      "type": "int",
+      "default": 15,
+      "min": 0,
+      "max": 100,
+      "group": {
+        "ja": "複数の装備",
+        "en": "Several items"
+      },
+      "label": {
+        "ja": "能力値ごとの上限",
+        "en": "Cap per ability"
+      },
+      "note": {
+        "ja": "まとめた後の補正の上限。0 で上限なし",
+        "en": "Cap after stacking. 0 for no cap"
+      }
+    },
+    "INCLUDE_FREE_SLOTS": {
+      "type": "bool",
+      "default": false,
+      "group": {
+        "ja": "複数の装備",
+        "en": "Several items"
+      },
+      "label": {
+        "ja": "自由枠の品も数える",
+        "en": "Count the free slots"
+      },
+      "note": {
+        "ja": "333 の装備欄の自由枠2つ。333 は自由枠を攻撃力・防御力に入れない",
+        "en": "The two free slots of 333, which 333 itself leaves out of attack and defense"
+      }
+    },
+    "APPLY_TO_PARTY": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "効かせる相手",
+        "en": "Who it applies to"
+      },
+      "label": {
+        "ja": "仲間",
+        "en": "Companions"
+      },
+      "note": {
+        "ja": "仲間が身に着けている品の補正も、その仲間に効かせる。OFF なら主人公だけ",
+        "en": "Also applies what each companion wears to that companion. Off: the hero only"
+      }
+    }
+  }
+}

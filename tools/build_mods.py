@@ -206,6 +206,7 @@ BANDS = (
         "407_npc_starting_equipment",
         "408_visual_changes_based_on_equipment",
         "409_fix_crafted_item_type",
+        "411_equipment_ability_bonus",
     )),
 )
 
