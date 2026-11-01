@@ -1066,8 +1066,7 @@ def main():
         check(off["manifests"].get("200_probe"),
               "名乗りは残す（GUI が「消えた」ように見せない）")
         # 伏せたのは設定ではなくローダなので、**報告に出してはいけない**。
-        # 「無効化されています」「記載の無い MOD」「無効な
-        # MOD を指している」のどれで出ても、
+        # 「記載の無い MOD」で出ると、
         # 画面から見れば身に覚えのない警告になる。
         noisy = [line for line in off["problems"] + off["notes"] if "200_probe" in line]
         check(not noisy, "伏せた MOD は報告に出さない: {}".format(noisy or "出ていない"))
@@ -1096,14 +1095,20 @@ def main():
         check("100_fix" in ml.discover(dist_mods)["order"],
               "印の無い MOD は切っていても動く")
         # 切る（disabled）のと伏せる（debug）のは別物。
-        # 切ったものは**必ず見せる**。
+        # 切ったものは disabled に出るが、警告にはしない（切るのは普通の使い方）。
         put_order({"order": ["100_fix", "200_probe", "300_feature"],
                    "disabled": ["100_fix"]})
+        put_mod("300_feature", {"entry": "m.py", "after": ["100_fix"]})
         both = ml.discover(dist_mods)
         check("100_fix" in both["disabled"] and "100_fix" not in both["order"],
               "切ったものは disabled に出る（伏せたものとは別扱い）")
-        check(any("100_fix" in line for line in both["problems"] + both["notes"]),
-              "切ったことは報告する（`disabled` で切ったので見せる）")
+        noisy = [line for line in both["problems"] + both["notes"] if "100_fix" in line]
+        check(not noisy, "切ったことも、切った相手を after で指していることも報告しない: {}"
+              .format(noisy or "出ていない"))
+        put_mod("300_feature", {"entry": "m.py", "after": ["100_missing"]})
+        check(any("100_missing" in line for line in ml.discover(dist_mods)["problems"]),
+              "実体の無い名前を指していれば報告する（書き間違い）")
+        put_mod("300_feature", {"entry": "m.py", "after": ["200_probe"]})
 
         # -- 開発中の MOD（9xx）。読む条件は「順序ファイルに名前がある」かつ
         #    「デバッグモード」の2つ（TECH.md §2.6）。

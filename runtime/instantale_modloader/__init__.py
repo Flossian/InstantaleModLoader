@@ -1294,11 +1294,8 @@ def _order(mods_dir: str, found: list[str],
 
     `hide` に挙げた mod は適用順から外す（デバッグモードが切のときの計測 mod。
     `discover()` が渡す）。
-    `disabled` と違って**報告もしない**。切ったのは設定ではなくローダなので、
-    「無効化されています」「記載の無い MOD」を出すと、
-    伏せたはずのものが警告として画面に出てくる。
-    切られていることを必ず見せる `disabled` とは目的が逆なので、
-    同じ扱いにはできない。
+    切ったのは設定ではなくローダなので、「記載の無い MOD」にも数えない。
+    数えると、伏せたはずのものが警告として画面に出てくる。
 
     戻り値は `(有効な mod の適用順, 一覧に出す順, 切られている mod, 報告)`。
     2つ目は無効な mod も**宣言された位置に**含む（GUI の一覧用）。
@@ -1349,22 +1346,9 @@ def _order(mods_dir: str, found: list[str],
         disabled = []
     off = {name for name in disabled if isinstance(name, str)}
     skipped = sorted(off & set(found))
-    # 報告するのは `disabled` で切ったものだけ。
-    # 伏せている mod は `skipped` に残す（「切る」選択そのものは消さない。
-    # GUI が保存で書き戻すため）が、警告としては出さない。
-    #
-    # `local/` の mod も報告しない。
-    # この行の目的は「入れたのに効かない」を配った先で気付かせることだが、
-    # `local/` は配布物に入らないので知らせる相手が居ない
-    # （手元で切ってあるだけの状態が、静的検査でずっと赤になる）。
-    # 切られていること自体は `skipped` に残るので、GUI のチェックは外れたまま。
-    told = [name for name in skipped
-            if name not in hide and name not in local]
-    if told:
-        # 「入れたのに効かない」を黙って起こさない。
-        # 切ったことは必ず残す。
-        problems.append("無効化されています（読み込まれません）: {}".format(
-            ", ".join(told)))
+    # 切ったものは報告しない（TECH.md §3.2.1）。
+    # MOD が増えて切るのが普通の使い方になり、毎回の警告は見落としを増やすだけになった。
+    # 切られていることは `skipped` に残り、GUI のチェックが外れて見える。
 
     # 一覧に出す順。
     # 無効なものも宣言された位置に残す。
@@ -1655,15 +1639,10 @@ def _sort_dependencies(order: list[str], manifests: dict,
 
     存在しない mod や無効な mod を指した制約は黙って捨てる（消した
     mod の記述が残っていても壊れないように。順序ファイルの扱いと同じ）。
-    ただし**報告は残す**。切った相手を指していることは、
-    順序が変わる理由として見えていてよい。
-
-    `silent` に挙げた相手を指した制約は、報告もしない。
-    伏せている mod（デバッグモードが切のときの計測 mod）が相手で、
-    これを報告すると `300_event_facility_arrival` の
-    `"after": ["205_probe_player_events"]` が「無効な
-    mod を指している」として毎回警告に出る。
-    画面から見れば存在しないはずの mod の名前が出てくることになる。
+    報告するのは存在しない mod を指したときだけ（名前の書き間違いを見つけるため）。
+    切った相手と、`silent` に挙げた伏せている mod（デバッグモードが切のときの計測 mod）が
+    相手のときは報告しない。
+    相手が動いていなければ順序の制約は意味を持たず、切るのは普通の使い方なので。
 
     循環していたら**基準の並びをそのまま返す**。
     ここで例外にすると mod が全滅する。
@@ -1679,19 +1658,15 @@ def _sort_dependencies(order: list[str], manifests: dict,
         for other in manifest.get("after") or []:
             if other in known:
                 edges[other].add(name)
-            elif other in silent:
+            elif other in silent or other in manifests:
                 pass
-            elif other in manifests:
-                notes.append("{}: \"after\" が無効な mod を指しています（{}）".format(name, other))
             else:
                 notes.append("{}: \"after\" の {} が見つかりません".format(name, other))
         for other in manifest.get("before") or []:
             if other in known:
                 edges[name].add(other)
-            elif other in silent:
+            elif other in silent or other in manifests:
                 pass
-            elif other in manifests:
-                notes.append("{}: \"before\" が無効な mod を指しています（{}）".format(name, other))
             else:
                 notes.append("{}: \"before\" の {} が見つかりません".format(name, other))
 

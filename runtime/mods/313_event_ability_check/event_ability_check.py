@@ -125,7 +125,6 @@ VERIFICATION_LOG.md §2.37。
 """
 
 import math
-import time
 
 from instantale_modloader import abilities, frames, llm, ui
 
@@ -416,8 +415,6 @@ def percent_of(credibility):
 
 
 def apply(ctx):
-    import sys
-
     # 未 import でも降りない。
     # `scripts.llm.llm_manager` は最初の LLM リクエストまで
     # import されない（TECH.md §3.4）。
