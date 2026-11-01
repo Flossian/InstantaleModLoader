@@ -7,10 +7,10 @@
     "ja": "評判と二つ名"
   },
   "description": {
-    "en": "Builds a reputation for each land out of what the player actually did there - the deeds the game already writes into area_history, the wanted level, the quests finished, the days stayed - and hands it to the NPCs you talk to. First meetings start from 'I have heard of you'. The epithet is one per world and is only re-coined on qualitative shifts: the set of lands with a reputation changes, a wanted state flips, or total deeds double. Compilation runs in the background only when the material changes, so conversations are never slowed down. Nothing is written to the save; the compiled text lives in state/",
-    "ja": "その土地で実際にやったことから土地ごとの評判を編み、会話する NPC に渡す。素材はゲーム自身が area_history に書いている成した事・手配度・完了した依頼・滞在日数で、この MOD が新しく記録を始めるものは無い。初対面の NPC が「噂は聞いている」から入る。二つ名は世界に1つで、評判の立つ土地の増減・手配の反転・行いの倍増という質的な変化のときだけ編み直す。編纂は素材が変わったときだけ別スレッドで LLM を回すので、会話は遅くならない。セーブには書かず、編纂した文は state\\ に置く"
+    "en": "Builds a reputation for each land out of what the player actually did there - the deeds the game already writes into area_history, the wanted level, the quests finished, the days stayed - and hands it to the NPCs you talk to. First meetings start from 'I have heard of you'. Fame is counted from the quests and story quests you finished and your arena wins, weighted so that heavy deeds count far more than many light ones; notoriety is the running total of every rise in how heavily you are wanted, and never falls. A land where fame plus notoriety is high enough gives you a local name. The epithet is one per world, forms only once fame plus notoriety is high enough and two lands hold a reputation, and is only re-coined on qualitative shifts: the set of lands with a reputation changes, a wanted state flips, or total deeds double. Compilation runs in the background only when the material changes, so conversations are never slowed down. Fame, notoriety, local names and each land's reputation can be read in the Reputation screen from the MOD button at the bottom left. Nothing is written to the save; the compiled text lives in state/",
+    "ja": "その土地で実際にやったことから土地ごとの評判を編み、会話する NPC に渡す。素材はゲーム自身が書いている成した事・手配度・完了した依頼・物語の依頼・闘技場の戦績・滞在日数で、この MOD が新しく記録するのは悪名の累計だけ。初対面の NPC が「噂は聞いている」から入る。名声は片付けた依頼・果たした物語の依頼・闘技場の勝ちから、重い行いほど大きく数える。悪名は手配が重くなった分の累計で、手配が解けても減らない。1つの土地で名声と悪名の合計が線を越えると、その土地での呼び名が付く。二つ名は世界に1つで、名声と悪名の合計が足り、評判の立つ土地が2つ以上になってから付く。評判の立つ土地の増減・手配の反転・行いの倍増という質的な変化のときだけ編み直す。名声・悪名・呼び名・各地の評判は、画面左下の MOD 用のボタンから開く「評判」の画面で見られる。編纂は素材が変わったときだけ別スレッドで LLM を回すので、会話は遅くならない。セーブには書かず、編纂した文は state\\ に置く"
   },
-  "version": "5",
+  "version": "6",
   "author": "R01/Flossian",
   "state": ["reputation"],
   "settings": {
@@ -48,6 +48,60 @@
       "note": {
         "ja": "二つ名は世界に1つ。各地の評判文から編み、質的な変化（評判の立つ土地の増減・手配の反転・行いの倍増）のときだけ編み直す。プロンプトにいままでの名を渡すので、覆す材料が無ければ同じ名が続く。OFF にすると評判文だけを注入し、二つ名の編纂も止まる",
         "en": "One epithet per world, coined from the per-land reputations and re-coined only on qualitative shifts (lands gained or lost, a wanted flip, deeds doubling). The prompt carries the current name, so it stays unless clearly overturned. Off injects reputations only and stops epithet compilation"
+      }
+    },
+    "EPITHET_FAME": {
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 9999,
+      "label": {
+        "ja": "二つ名が付く名声＋悪名",
+        "en": "Fame + notoriety needed for an epithet"
+      },
+      "note": {
+        "ja": "名声と悪名の合計がこれ以上で二つ名が付く。名声は依頼1件ごとに難易度の2乗÷25（難易度25の依頼で25、開始の村の依頼は1件1にも満たない）、物語の依頼は2倍、闘技場は破った相手の格で同じく数える。悪名は手配が重くなった分の累計。既定の100は、中盤の街で依頼を4件ほど片付けた頃に届く",
+        "en": "An epithet forms once fame plus notoriety reaches this. Each quest gives difficulty squared / 25 (25 for a difficulty-25 quest, under 1 for a starting-village quest), story quests count double, and arena wins count the same way by the rank of the opponent. Notoriety is the running total of every rise in how heavily you are wanted. The default 100 is reached about four quests into the middle towns"
+      }
+    },
+    "USE_LAND_NAMES": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "土地ごとの呼び名を使う",
+        "en": "Use local names"
+      },
+      "note": {
+        "ja": "1つの土地で名声と悪名の合計が線を越えると、その土地の人々が呼ぶ呼び名を評判と一緒に編み、その土地の会話に渡す。二つ名と同じく、覆す材料が無ければ同じ名が続く",
+        "en": "Once fame plus notoriety in one land passes the line, a local name is coined along with that land's reputation and handed to conversations there. Like the epithet, it stays unless clearly overturned"
+      }
+    },
+    "LAND_NAME_FAME": {
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 9999,
+      "label": {
+        "ja": "呼び名が付く土地の名声＋悪名",
+        "en": "Fame + notoriety in one land for a local name"
+      },
+      "note": {
+        "ja": "その土地の名声と悪名の合計がこれ以上で呼び名が付く。既定の100は中盤の街の依頼4件、または難易度50の依頼1件に当たる。開始の村では依頼を重ねても届かない",
+        "en": "A land gives you a local name once its fame plus notoriety reaches this. The default 100 is four quests in a middle town, or one difficulty-50 quest. Quests in the starting village never get there"
+      }
+    },
+    "EPITHET_MIN_LANDS": {
+      "type": "int",
+      "default": 2,
+      "min": 1,
+      "max": 99,
+      "label": {
+        "ja": "二つ名が付く土地の数",
+        "en": "Lands needed for an epithet"
+      },
+      "note": {
+        "ja": "評判の立つ土地がこの数に満たなければ、名声が足りていても二つ名は付かない。二つ名は「土地を問わず知られている」名なので、既定は2",
+        "en": "With fewer lands holding a reputation than this, no epithet forms even with enough fame. An epithet is a name known beyond one land, so the default is 2"
       }
     },
     "EPITHET_CHARS": {

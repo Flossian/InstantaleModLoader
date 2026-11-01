@@ -137,11 +137,57 @@ def house():
     return g
 
 
+def laurel():
+    """`317_reputation` の行の絵（月桂冠。緑の葉の環を上で開け、下を金の結び目で留める）。"""
+    g = Grid()
+    leaf = (120, 170, 78)
+    stem = (96, 112, 58)
+    cx, cy, radius = 15.5, 15.0, 9.5
+
+    def point(theta):
+        """環の上の点。theta は真下から測った角度（右回りが正）。"""
+        return cx + radius * math.sin(theta), cy + radius * math.cos(theta)
+
+    def blob(lx, ly, ux, uy, length, width, color, light):
+        for y in range(N):
+            for x in range(N):
+                dx, dy = x + 0.5 - lx, y + 0.5 - ly
+                along, across = dx * ux + dy * uy, -dx * uy + dy * ux
+                if (along / length) ** 2 + (across / width) ** 2 <= 1.0:
+                    g.put(x, y, color, light - 0.012 * (x + y))
+
+    for side in (-1, 1):
+        for step in range(70):                                # 茎（下の結び目から上の開きの手前まで）
+            theta = side * math.radians(14 + step * 2.2)
+            x, y = point(theta)
+            g.put(int(x), int(y), stem, 0.95)
+        for step in range(6):                                 # 葉。茎の外と内に、枝の先（上）へ斜めに
+            theta = side * math.radians(26 + step * 26)
+            sx, sy = point(theta)
+            tx, ty = side * math.cos(theta), -math.sin(abs(theta)) * 1.0  # 茎に沿って上へ向かう向き
+            norm = math.hypot(tx, ty)
+            tx, ty = tx / norm, ty / norm
+            nx, ny = math.sin(theta), math.cos(theta)         # 環の外向き
+            for out in (1, -1):
+                ux, uy = tx + out * nx * 0.75, ty + out * ny * 0.75
+                norm = math.hypot(ux, uy)
+                ux, uy = ux / norm, uy / norm
+                blob(sx + out * nx * 1.7 + ux * 1.0, sy + out * ny * 1.7 + uy * 1.0,
+                     ux, uy, 2.6, 1.45, leaf, 1.18 if out == 1 else 1.0)
+    bow = {(14, 25), (15, 25), (16, 25), (17, 25), (13, 24), (12, 24), (12, 25), (13, 26),
+           (18, 24), (19, 24), (19, 25), (18, 26), (14, 26), (17, 26),
+           (13, 27), (12, 28), (18, 27), (19, 28), (15, 26), (16, 26)}
+    for x, y in bow:
+        g.put(x, y, GOLD, 1.15 if x <= 15 else 0.88)
+    return g
+
+
 #: (書き出す先の頭（拡張子と _hover / _click の前まで）, 絵, 乱数の種)
 ICONS = (
     (os.path.join(ROOT, "runtime", "instantale_modloader", "assets", "hud_mods"), gear, 11),
     (os.path.join(ROOT, "runtime", "mods", "339_town_factions", "icon_flag"), flag, 7),
     (os.path.join(ROOT, "runtime", "instantale_modloader", "assets", "holdings"), house, 13),
+    (os.path.join(ROOT, "runtime", "mods", "317_reputation", "icon_laurel"), laurel, 17),
 )
 
 

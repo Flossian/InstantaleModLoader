@@ -94,9 +94,16 @@ def reputation_epithet(data):
 
     形を決めつけない。読めなければ空文字（＝箱ごと空になる）。
 
-        {"areas": {...}, "epithet": {"epithet": "灰の街の盾", ...}}
+        {"areas": {...}, "epithet": {"epithet": "灰の街の盾", ...},
+         "fame": {"eligible": true, ...}}
+
+    名声が線に届いていなければ（`fame.eligible` が false）、控えに名が残っていても出さない。
+    `fame` が無いのは評判 MOD の版5までのファイルで、そのときは名をそのまま出す。
     """
     if not isinstance(data, dict):
+        return ""
+    fame = data.get("fame")
+    if isinstance(fame, dict) and fame.get("eligible") is False:
         return ""
     record = data.get("epithet")
     value = record.get("epithet") if isinstance(record, dict) else None
@@ -119,18 +126,12 @@ REROLL_POS = {"x": 0.79, "center_y": 0.875}
 #: 二つ名の文字の終わりから引き直しボタンまでの間（upx）。
 REROLL_GAP = 8.0
 
-#: 引き直しボタンの絵柄（0〜1 の座標。角を落としたサイコロの面と3つの目）。
+#: 引き直しボタンの絵柄の名前（角を落としたサイコロの面と3つの目）。形はローダの `ui.icon_strokes` が持つ。
 #: 版3までは円弧＋矢尻で、408 の立ち絵の描き直しボタンと並ぶと
 #: どちらが何を更新するのか見分けが付かなかった。
-#: 目は長さの無い線で、丸い端が点になる。
-#: MOD 固有の絵柄はローダの `icon_strokes` に足さず自分のフォルダに置く決まり。
-REROLL_STROKES = [
-    [(0.28, 0.16), (0.72, 0.16), (0.84, 0.28), (0.84, 0.72), (0.72, 0.84),
-     (0.28, 0.84), (0.16, 0.72), (0.16, 0.28), (0.28, 0.16)],
-    [(0.33, 0.67), (0.34, 0.67)],
-    [(0.50, 0.50), (0.51, 0.50)],
-    [(0.67, 0.33), (0.68, 0.33)],
-]
+#: 版6で `317_` の評判の画面の再生成のボタンも同じ形を使うことになり、自分のフォルダからローダへ移した
+#: （2つ以上の MOD が同じ意味で使う絵柄はローダに置く。TECH.md の HUD の節）。
+REROLL_ICON = "さいころ"
 
 
 def reroll_pos(text_width, padding_left, layout_width, gap):

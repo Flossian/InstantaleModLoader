@@ -18,6 +18,9 @@
   二つ名   … 世界に1つ。質的な変化（評判の立つ土地の増減・手配の反転・
             行いの倍増）のときだけ編み直す。頼み文にいままでの名を渡し、
             据え置きを既定にする。本人の名前の写しは受けない
+  名声    … 依頼・物語の依頼・闘技場を難易度の2乗で数える。悪名は手配が重くなった分の累計で減らない。
+            名声＋悪名と土地の数が線に届くまで二つ名を出さない。線を越えた土地に呼び名を付ける。
+            評判の画面の中身と、MOD 用のボタンの一覧の行
   長さ    … brief は1文、detailed は3文まで。字数でも頭打ちになる
   注入    … 会話5関数すべてで**複製の** profile に足す。ゲーム側の NPC は変わらない
   素通し   … 評判が無い／profile が文字列でない／複製できない／app が無い
@@ -50,6 +53,7 @@ from instantale_modloader import llm as llm_module                  # noqa: E402
 from instantale_modloader import state as state_module              # noqa: E402
 from instantale_modloader import ui as ui_module                    # noqa: E402
 from instantale_modloader import gates, modnpc                      # noqa: E402
+from instantale_modloader import hudicons as hudicons_module        # noqa: E402
 
 CONV = "scripts.llm.llm_manager:"
 CONVERSATION_TARGETS = (
@@ -63,6 +67,7 @@ NARRATOR = CONV + "narrator"
 SHEET_TOGGLE = ("scripts.hud.new_hud:"
                 "InstanTaleHUD.toggle_character_sheet_visibility")
 ELAPSE = "__main__:InstantaleApp.elapse_days"
+LOAD_GAME = "__main__:InstantaleApp.load_game_new"
 AREA_MOVE = "__main__:AreaMoveManager.execute"
 MOVE_PHASE = "__main__:MovePhaseManager.move_phase"
 
@@ -122,6 +127,20 @@ class Area(object):
         self.nodes = {}
 
 
+class Node(object):
+    def __init__(self, facilities):
+        self.facilities = facilities
+
+
+class Facility(object):
+    """闘技場の施設。戦績は `config` の `current_phase` と `enemy_data`（GAME.md の闘技場の節）。"""
+
+    def __init__(self, facility_type, name, config):
+        self.facility_type = facility_type
+        self.name = name
+        self.config = config
+
+
 class Character(object):
     """プレイヤーも NPC も同じ `Character`（GAME.md §2.20）。"""
 
@@ -156,9 +175,12 @@ class App(object):
                            "quests": {}}
 
 
-def quest(area_id, title, status="completed"):
-    return {"quest_title": title, "neighboring_settlement_id": area_id,
+def quest(area_id, title, status="completed", difficulty=None):
+    data = {"quest_title": title, "neighboring_settlement_id": area_id,
             "config": {"status": status, "level_of_detail": 1}}
+    if difficulty is not None:
+        data["difficulty"] = difficulty
+    return data
 
 
 def make_app(achievements=("盗賊団を退けた", "井戸を掘り直した"), lawfulness=10,
@@ -190,9 +212,16 @@ class FakeLLM(object):
     def __init__(self, replies):
         self.replies = list(replies)
         self.asked = []
+        self.others = []
 
     def ask(self, ctx, manager_name, message, *, timeout=None, structure=None,
             max_tokens=None, label="llm", write=None):
+        content = message[0]["content"] if message else ""
+        if OTHER_LAND in content and "土地の噂を集める役" in content:
+            # よその土地（遠い港）の評判。照合は評判の立つ土地をすべて編む（版6）ので、
+            # 並べた返答（いま居る土地と二つ名の分）を使わずに決まった返答を返し、別に控える。
+            self.others.append({"manager": manager_name, "message": message})
+            return OTHER_REPLY
         self.asked.append({"manager": manager_name, "message": message,
                            "timeout": timeout})
         return self.replies.pop(0) if self.replies else None
@@ -259,7 +288,13 @@ def fresh_mod(app, replies=(), **settings):
 
     `sys` に置いた入れ物（ワーカーと控え）も落とす。
     落とさないと前の検査のキャッシュとワーカーが次の検査に残る。
+
+    二つ名の線（名声・土地の数）は、指定が無ければ 0 と1土地に下げる。
+    偽の依頼の多くは難易度を持たないので、既定の線のままだと二つ名の検査が素通りする。
+    線そのものは「名声」の節で既定の値に戻して見る。
     """
+    settings.setdefault("EPITHET_FAME", 0)
+    settings.setdefault("EPITHET_MIN_LANDS", 1)
     module = load_mod()
     for key, value in settings.items():
         setattr(module, key, value)
@@ -355,6 +390,9 @@ EPI_REPLY = json.dumps({"epithet": "灰の街の盾",
                                        "という評判から来た名。"},
                        ensure_ascii=False)
 EPI_RENAME = json.dumps({"epithet": "竜追い"}, ensure_ascii=False)
+#: よその土地（`make_app` の土地7）の名前と、その評判への決まった返答（`FakeLLM`）。
+OTHER_LAND = "遠い港"
+OTHER_REPLY = json.dumps({"reputation": "港で荷を守った者と噂されている。"}, ensure_ascii=False)
 EPI_EMPTY = json.dumps({"epithet": ""}, ensure_ascii=False)
 EPI_ECHO = json.dumps({"epithet": "旅人リン"}, ensure_ascii=False)
 
@@ -409,8 +447,10 @@ def run():
           material.gather(empty, "3")["achievements"] == [])
     stats = material.survey(app)
     check("survey が全土地を1回で数える",
-          stats == {"3": {"deeds": 3, "wanted": False},
-                    "7": {"deeds": 2, "wanted": False}}, stats)
+          {aid: (item["deeds"], item["wanted"]) for aid, item in stats.items()}
+          == {"3": (3, False), "7": (2, False)}, stats)
+    check("survey が成した事と完了した依頼を分けて数える",
+          (stats["3"]["achievements"], stats["3"]["done"]) == (2, 1), stats["3"])
     app.player.area_history["7"]["lawfulness"] = -5
     check("survey が手配も拾う", material.survey(app)["7"]["wanted"])
     app.player.area_history["7"]["lawfulness"] = 10
@@ -466,6 +506,22 @@ def run():
     check("評判の頼み文では二つ名を頼まない", "二つ名" not in prompt)
     check("制限時間を必ず渡す", asked and asked[0]["timeout"] == module.COMPILE_TIMEOUT,
           asked and asked[0]["timeout"])
+    check("居ない土地でも評判の立つ土地は編む（その土地に着くまで待たない）",
+          len(module.llm.others) == 1
+          and (read_cache(module) or {}).get("areas", {}).get("7", {}).get("reputation")
+          == "港で荷を守った者と噂されている。", read_cache(module))
+    order = [line for line in read_log() if "] 編纂を予約: " + TEST_KEY in line][-2:]
+    check("いま居る土地を先に積む",
+          len(order) == 2 and order[0].split(" / ")[1].startswith("3")
+          and order[1].split(" / ")[1].startswith("7"), order)
+    clear_cache(module)
+    module, ctx = fresh_mod(app, replies=[AREA_REPLY, EPI_REPLY])
+    loaded = []
+    ctx.hooks[LOAD_GAME](lambda *a, **k: loaded.append(a), app)
+    drain(module)
+    check("読み込みの後に照合して編む（移動や日送りを待たない）",
+          loaded and managers(module) == [module.MANAGER_COMPILE, module.MANAGER_EPITHET]
+          and len(module.llm.others) == 1, (loaded, managers(module)))
     check("囲み付きの JSON も読める",
           module.parse_result("```json\n" + AREA_REPLY + "\n```")
           == {"reputation": "盗賊団を退けた者としてよく知られている。"})
@@ -484,7 +540,7 @@ def run():
     mark = module.epithet_mark({"3": {"deeds": 3, "wanted": False},
                                 "7": {"deeds": 1, "wanted": False}})
     check("立つ土地だけが印に入り、合計は全土地で数える",
-          mark == {"qualifying": ["3"], "wanted": [], "deeds": 4}, mark)
+          mark == {"qualifying": ["3"], "wanted": [], "deeds": 4, "fame": 0}, mark)
     check("立つ土地が無ければ契機にしない",
           module.epithet_due(None, module.epithet_mark(
               {"3": {"deeds": 1, "wanted": False}}))[0] is False)
@@ -725,6 +781,316 @@ def run():
           read_cache(module)["epithet"]["epithet"] == "峠の渡し手",
           read_cache(module)["epithet"])
 
+    print("名声")
+    # -- 数え方（素の関数）。1件の名声は難易度の2乗÷25 --
+    check("依頼1件の名声は難易度の2乗÷25（25 で 25、5 で 1）",
+          module.deed_fame(25) == 25 and module.deed_fame(5) == 1 and module.deed_fame(None) == 0)
+    check("完了した依頼を1件ずつ数える（成した事は依頼と重なるので足さない）",
+          module.area_fame({"done_difficulties": [25, 5], "done": 2, "achievements": 2,
+                            "difficulties": [5, 25]}) == 26)
+    check("依頼より多い成した事は、その土地の依頼の難易度の中央値で数える",
+          module.area_fame({"done": 0, "achievements": 1,
+                            "difficulties": [24, 19, 23, 21]}) == 19)
+    check("依頼の難易度が分からない土地の余りの成した事は数えない",
+          module.area_fame({"achievements": 2, "difficulties": []}) == 0)
+    check("物語の依頼は2倍",
+          module.area_fame({"story_difficulties": [25]}) == 50)
+    check("闘技場は破った相手の格ごとに数える",
+          module.area_fame({"arena_ranks": [30, 44]}) == 113)
+    check("開始の村の依頼は20件重ねても名声は小さい",
+          module.area_fame({"done_difficulties": [3] * 20, "done": 20}) == 7)
+    check("名声に手配度は混ぜない",
+          module.area_fame({"done_difficulties": [25], "lawfulness": -30}) == 25)
+
+    # -- 悪名（手配の重さが増えた分の累計） --
+    ledger, changed = module.accumulate_notoriety({}, {"3": {"lawfulness": -30},
+                                                       "7": {"lawfulness": 10}})
+    check("初めて見た手配はそのときの重さから数える（平常の土地は載せない）",
+          changed and ledger == {"3": {"total": 30, "last": 30}}, ledger)
+    ledger, changed = module.accumulate_notoriety(ledger, {"3": {"lawfulness": -20}})
+    check("手配が軽くなっても悪名は減らない",
+          changed and ledger["3"] == {"total": 30, "last": 20}, ledger)
+    ledger, changed = module.accumulate_notoriety(ledger, {"3": {"lawfulness": -35}})
+    check("軽くなった後にまた重くなれば、増えた分を足す",
+          ledger["3"] == {"total": 45, "last": 35}, ledger)
+    ledger, changed = module.accumulate_notoriety(ledger, {"3": {"lawfulness": 10}})
+    check("手配が解けても悪名は残る", ledger["3"] == {"total": 45, "last": 0}, ledger)
+    _same, changed = module.accumulate_notoriety(ledger, {"3": {"lawfulness": 10}})
+    check("変わらなければ書かない", changed is False)
+
+    # -- 線（名声＋悪名と土地の数） --
+    stats_f = {"3": {"deeds": 3, "wanted": False, "done_difficulties": [50]},
+               "7": {"deeds": 2, "wanted": False, "done_difficulties": [25]},
+               "9": {"deeds": 1, "wanted": False}}
+    saved = (module.EPITHET_FAME, module.EPITHET_MIN_LANDS, module.LAND_NAME_FAME)
+    module.EPITHET_FAME, module.EPITHET_MIN_LANDS, module.LAND_NAME_FAME = 100, 2, 100
+    try:
+        summary = module.fame_summary(stats_f)
+        check("名声の控えは FAME_RECORD_KEYS の並び",
+              tuple(summary) == module.FAME_RECORD_KEYS, tuple(summary))
+        check("名声と土地の数が線に届けば付く",
+              summary["total"] == 125 and summary["lands"] == 2 and summary["eligible"]
+              and summary["areas"] == {"3": {"fame": 100, "notoriety": 0, "standing": True},
+                                       "7": {"fame": 25, "notoriety": 0, "standing": True}},
+              summary)
+        stats_f["7"]["deeds"] = 1
+        check("名声が足りても土地が1つなら付かない",
+              not module.fame_summary(stats_f)["eligible"])
+        stats_f["7"]["deeds"] = 2
+        stats_f["3"]["done_difficulties"] = [30]
+        check("土地が2つでも名声＋悪名が足りなければ付かない",
+              not module.fame_summary(stats_f)["eligible"])
+        mixed = module.fame_summary(stats_f, {"9": {"total": 40, "last": 40}})
+        check("名声が足りなくても悪名と合わせて届けば付く",
+              mixed["eligible"] and mixed["notoriety"] == 40
+              and mixed["areas"]["9"] == {"fame": 0, "notoriety": 40, "standing": False}, mixed)
+        stats_f["5"] = {"deeds": 2, "wanted": False, "achievements": 2}
+        check("名声が 0 でも評判の立つ土地は控えに載せる（画面が「まだ編んでいない」と言える）",
+              module.fame_summary(stats_f)["areas"]["5"] == {"fame": 0, "notoriety": 0,
+                                                             "standing": True},
+              module.fame_summary(stats_f)["areas"])
+        del stats_f["5"]
+        check("線に届かない印では契機にしない",
+              module.epithet_due(None, module.epithet_mark(stats_f))
+              == (False, "名声が足りない"))
+        check("印の名声は名声＋悪名",
+              module.epithet_mark(stats_f, {"9": {"total": 40, "last": 40}})["fame"] == 101)
+        check("版5までの印は土地の数で見る（1つの土地の中で付いた名）",
+              not module.mark_eligible({"qualifying": ["3"], "deeds": 9}))
+        check("版5までの印でも土地が2つ以上なら付いていたものとみなす",
+              module.mark_eligible({"qualifying": ["3", "7"], "deeds": 9}))
+        fame_block = {"areas": {"3": {"fame": 100, "notoriety": 0},
+                                "7": {"fame": 25, "notoriety": 75},
+                                "9": {"fame": 60, "notoriety": 0}}}
+        check("呼び名はその土地の名声＋悪名が線を越えた土地だけ",
+              module.land_named(fame_block, "3") and module.land_named(fame_block, "7")
+              and not module.land_named(fame_block, "9") and not module.land_named(fame_block, "5"))
+        module.USE_LAND_NAMES = False
+        check("呼び名を切れば付かない", not module.land_named(fame_block, "3"))
+        module.USE_LAND_NAMES = True
+    finally:
+        module.EPITHET_FAME, module.EPITHET_MIN_LANDS, module.LAND_NAME_FAME = saved
+
+    # -- 素材（依頼の帰属・物語の依頼・闘技場） --
+    split = make_app(quests={"1": dict(quest("3", "峠の護送", difficulty=10),
+                                       quest_area_id="7")})
+    stats_s = material.survey(split)
+    check("難易度は1件を1つの土地にだけ足す（件数は両方に数える）",
+          stats_s["3"]["done_difficulties"] == [10] and stats_s["7"]["done_difficulties"] == []
+          and stats_s["3"]["deeds"] == 3 and stats_s["7"]["deeds"] == 2, stats_s)
+    check("片付いていない依頼も土地の格には数える",
+          material.survey(make_app(quests={"1": quest("3", "途中", status="incomplete",
+                                                      difficulty=7)}))["3"]["difficulties"]
+          == [7])
+    saga = make_app()
+    saga.world.story_quests = {"0": quest("3", "霧の境界の捕食者", difficulty=14),
+                               "1": quest("7", "まだの節", status="incomplete", difficulty=28)}
+    saga.world.areas["3"].nodes = {"1": Node({"5": Facility("colosseum", "灰の闘技場", {
+        "current_phase": 4, "enemy_data": {"0": {"data": {"rank": 30}}, "2": {"data": {"rank": 44}},
+                                           "4": {"data": {"rank": 58}}}})})}
+    stats_g = material.survey(saga)
+    check("果たした物語の依頼を土地に数える（果たしていない節は数えない）",
+          stats_g["3"]["story_difficulties"] == [14] and stats_g["7"]["story_difficulties"] == [],
+          stats_g)
+    check("闘技場は勝った試合の相手の格だけを数える（次の相手は数えない）",
+          stats_g["3"]["arena_ranks"] == [30, 44], stats_g["3"])
+    check("物語の依頼と闘技場の勝ちも行いの件数に入る",
+          stats_g["3"]["deeds"] == 2 + 1 + 2, stats_g["3"])
+    item_g = material.gather(saga, "3")
+    check("評判の素材に物語の依頼と闘技場の戦績が載る",
+          item_g["story"] == ["霧の境界の捕食者"]
+          and item_g["arena"] == {"name": "灰の闘技場", "wins": 2, "top_rank": 44}, item_g)
+    prompt_g = module.build_messages(item_g, "旅人リン")[0]["content"]
+    check("頼み文に物語の依頼と闘技場の戦績が載る",
+          "霧の境界の捕食者" in prompt_g and "灰の闘技場で2勝" in prompt_g, prompt_g)
+    check("闘技場も物語の依頼も無ければ印は版5と同じ",
+          material.fingerprint(material.gather(make_app(), "3"))
+          == material.fingerprint({k: v for k, v in material.gather(make_app(), "3").items()
+                                   if k not in ("story", "arena")}))
+
+    # -- 線に届くまで（開始の村の駆除だけ） --
+    npc = Character("宿の主人", profile="この街で三代続く宿の主人。")
+    clear_cache(module)
+    app_f = make_app(quests={"1": quest("3", "鼠退治", difficulty=3)})
+    module, ctx = fresh_mod(app_f, replies=[AREA_REPLY],
+                            EPITHET_FAME=100, EPITHET_MIN_LANDS=2, LAND_NAME_FAME=100)
+    trigger(module, ctx, app_f)
+    check("線に届かなければ評判だけを編む",
+          managers(module) == [module.MANAGER_COMPILE], managers(module))
+    check("呼び名の線に届かない土地では呼び名を頼まない",
+          "呼び名" not in prompt_of(module, 0), prompt_of(module, 0))
+    fame = (read_cache(module) or {}).get("fame", {})
+    check("名声を控える（駆除の依頼は誤差）",
+          fame.get("total") == 1 and fame.get("eligible") is False
+          and fame.get("threshold") == 100 and fame.get("min_lands") == 2, fame)
+    got, _times, _r = call_conv(ctx, CONVERSATION_TARGETS[0], npc)
+    check("線に届かなければ評判だけを注入する",
+          "盗賊団" in got.profile and "二つ名で知られている" not in got.profile
+          and "と呼ばれている" not in got.profile, got.profile)
+    # 版5までに1つの土地の中で付いた名が控えに残っている。
+    data = read_cache(module)
+    data["epithet"] = {"epithet": "鼠捕り", "description": "", "day": 3,
+                       "updated": "2000-01-01 00:00:00",
+                       "mark": {"qualifying": ["3"], "wanted": [], "deeds": 3}}
+    data.pop("fame")
+    ml.write_json(cache_file(module), data)
+    module, ctx = fresh_mod(app_f, EPITHET_FAME=100, EPITHET_MIN_LANDS=2, LAND_NAME_FAME=100)
+    got, _times, _r = call_conv(ctx, CONVERSATION_TARGETS[0], npc)
+    check("線に届く前に付いた名は注入しない",
+          "鼠捕り" not in got.profile and "盗賊団" in got.profile, got.profile)
+    check("版5までのファイルは読んだ直後に名声を数えて足す",
+          (read_cache(module) or {}).get("fame", {}).get("eligible") is False,
+          read_cache(module))
+    ml.write_json(reroll, {"reroll": True})
+    trigger(module, ctx, app_f)
+    check("線に届く前の引き直しの頼みは LLM を回さずに捨てる",
+          not module.llm.asked and not os.path.exists(reroll), managers(module))
+
+    # -- 線に届いた（中盤の依頼と、2つ目の土地） --
+    app_f.world.quests["2"] = quest("3", "峠の魔獣", difficulty=60)
+    app_f.world.quests["3"] = quest("7", "塩の護送", difficulty=30)
+    app_f.world.quests["4"] = quest("7", "港の盗賊", difficulty=30)
+    module.llm.replies = [AREA_REPLY2, EPI_EMPTY]
+    trigger(module, ctx, app_f)
+    fame = read_cache(module)["fame"]
+    check("名声と土地が届けば付く線に乗る",
+          fame["eligible"] and fame["total"] == 216 and fame["lands"] == 2, fame)
+    check("届いたら評判 → 二つ名の順で編む",
+          managers(module) == [module.MANAGER_COMPILE, module.MANAGER_EPITHET],
+          managers(module))
+    check("呼び名の線を越えた土地では呼び名も頼む",
+          "呼び名を1つ書け" in prompt_of(module, 0) and '"nickname"' in prompt_of(module, 0),
+          prompt_of(module, 0))
+    check("呼び名が返らなくても欄を作る（照合のたびに頼み直さない）",
+          read_cache(module)["areas"]["3"].get("nickname") == "", read_cache(module)["areas"]["3"])
+    fresh_prompt = prompt_of(module, 1) if len(module.llm.asked) > 1 else ""
+    check("届く前に付いた名はいままでの名として渡さない",
+          "いままでの二つ名" not in fresh_prompt and "鼠捕り" not in fresh_prompt,
+          fresh_prompt)
+    record = read_cache(module)["epithet"]
+    check("名が付かなかったとき、届く前の名へ戻さない",
+          record["epithet"] == "" and record["mark"]["fame"] == 216, record)
+    check("線に届いたことをログに残す",
+          any("二つ名が付く線に届いた" in line for line in read_log()),
+          read_log()[-3:])
+    ml.write_json(reroll, {"reroll": True})
+    module.llm.replies = [EPI_REPLY]
+    trigger(module, ctx, app_f)
+    got, _times, _r = call_conv(ctx, CONVERSATION_TARGETS[0], npc)
+    check("線に届いた後は二つ名を注入する",
+          "土地を問わず「灰の街の盾」の二つ名で知られている。" in got.profile,
+          got.profile)
+
+    # -- 呼び名 --
+    nick = json.dumps({"reputation": "峠の魔獣を討った者と噂されている。",
+                       "nickname": "峠の守り手"}, ensure_ascii=False)
+    app_f.player.area_history["3"]["achievements"].append("峠を開いた")
+    module.llm.replies = [nick]
+    trigger(module, ctx, app_f)
+    got, _times, _r = call_conv(ctx, CONVERSATION_TARGETS[0], npc)
+    check("呼び名をその土地の注入に載せる",
+          "この土地では「峠の守り手」と呼ばれている。" in got.profile, got.profile)
+    app_f.player.area_history["3"]["achievements"].append("橋を架けた")
+    module.llm.replies = [json.dumps({"reputation": "橋も架けた者と噂されている。",
+                                      "nickname": "灰の街の英雄"}, ensure_ascii=False)]
+    asks = len(module.llm.asked)
+    trigger(module, ctx, app_f)
+    check("2回目からはいまの呼び名を渡して据え置きを既定にする",
+          "いまの呼び名は「峠の守り手」" in prompt_of(module, asks), prompt_of(module, asks))
+    check("土地の名前を使った呼び名は捨てて前の名を残す",
+          read_cache(module)["areas"]["3"]["nickname"] == "峠の守り手",
+          read_cache(module)["areas"]["3"])
+    # 評判の画面の呼び名の再生成（素材が変わっていないので評判の文は前のまま）
+    before_rep = read_cache(module)["areas"]["3"]["reputation"]
+    item_n = material.gather(app_f, "3")
+    job = {"kind": "area", "world": TEST_KEY, "area_id": "3", "material": item_n,
+           "player": "旅人リン", "day": 100, "fingerprint": material.fingerprint(item_n),
+           "nickname": True, "exclude_nickname": "峠の守り手", "keep_reputation": True,
+           "why": "評判の画面の呼び名の再生成"}
+    module.llm.replies = [json.dumps({"reputation": "別の文になった。", "nickname": "峠の灯"},
+                                     ensure_ascii=False)]
+    asks = len(module.llm.asked)
+    store_of(module)["worker"].enqueue(dict(job))
+    drain(module)
+    check("呼び名の再生成はいまの名を除いて頼む",
+          "「峠の守り手」という呼び名は使わない" in prompt_of(module, asks)
+          and "いまの呼び名" not in prompt_of(module, asks), prompt_of(module, asks))
+    check("呼び名の再生成で呼び名だけが変わり、評判の文は前のまま",
+          read_cache(module)["areas"]["3"]["nickname"] == "峠の灯"
+          and read_cache(module)["areas"]["3"]["reputation"] == before_rep,
+          read_cache(module)["areas"]["3"])
+    job["exclude_nickname"] = "峠の灯"
+    module.llm.replies = [json.dumps({"reputation": "文。", "nickname": "峠の灯"}, ensure_ascii=False)]
+    store_of(module)["worker"].enqueue(dict(job))
+    drain(module)
+    check("再生成でも同じ名が返ったら前の名のまま（もう一度押せる）",
+          read_cache(module)["areas"]["3"]["nickname"] == "峠の灯", read_cache(module)["areas"]["3"])
+    data = read_cache(module)
+    del data["areas"]["3"]["nickname"]
+    ml.write_json(cache_file(module), data)
+    module, ctx = fresh_mod(app_f, replies=[nick], EPITHET_FAME=100, EPITHET_MIN_LANDS=2,
+                            LAND_NAME_FAME=100)
+    trigger(module, ctx, app_f)
+    check("呼び名の欄が無い控えは、印が同じでも1回編み直す",
+          managers(module)[:1] == [module.MANAGER_COMPILE]
+          and read_cache(module)["areas"]["3"].get("nickname") == "峠の守り手",
+          (managers(module), read_cache(module)["areas"]["3"]))
+
+    # -- 悪名（通し） --
+    app_f.player.area_history["7"]["lawfulness"] = -30
+    module.llm.replies = []
+    trigger(module, ctx, app_f)
+    check("手配された土地の悪名を控えに積む",
+          read_cache(module)["notoriety"]["7"] == {"total": 30, "last": 30},
+          read_cache(module).get("notoriety"))
+    app_f.player.area_history["7"]["lawfulness"] = 10      # 役場で手配を解いた
+    trigger(module, ctx, app_f)
+    check("手配が解けても悪名は控えに残り、名声の控えにも出る",
+          read_cache(module)["notoriety"]["7"]["total"] == 30
+          and read_cache(module)["fame"]["areas"]["7"]["notoriety"] == 30
+          and read_cache(module)["fame"]["notoriety"] == 30, read_cache(module)["fame"])
+
+    # -- 評判の画面 --
+    check("評判の画面の行を MOD 用のボタンの一覧に足す", module.ICON_KEY in hudicons_module.keys(),
+          hudicons_module.keys())
+    check("行の絵の3枚が揃っている",
+          all(os.path.isfile(os.path.join(MOD_DIR, name)) for name in module.ICON_FILES))
+    bucket = {"areas": {"3": {"name": "灰の街", "reputation": "盗賊団を退けた者として知られている。",
+                              "nickname": "峠の守り手"},
+                        "7": {"name": "遠い港", "reputation": "噂がある。", "nickname": "港の影"}},
+              "epithet": {"epithet": "灰の街の盾"},
+              "fame": {"total": 150, "notoriety": 30, "threshold": 100, "lands": 2, "min_lands": 2,
+                       "eligible": True, "land_threshold": 100,
+                       "areas": {"3": {"fame": 140, "notoriety": 0, "standing": True},
+                                 "7": {"fame": 10, "notoriety": 30},
+                                 "9": {"fame": 0, "notoriety": 5}}}}
+    model = module.view_model(bucket, {"3": "灰の街", "7": "遠い港", "9": "北の砦"},
+                              {"3": 10, "7": -5}, "灰の街")
+    check("土地は名声＋悪名の大きい順",
+          [row["id"] for row in model["rows"]] == ["3", "7", "9"], model["rows"])
+    check("呼び名は線を越えた土地だけ出す",
+          model["rows"][0]["nickname"] == "峠の守り手" and model["rows"][1]["nickname"] == "",
+          model["rows"])
+    check("評判の無い土地も名声か悪名があれば出す",
+          model["rows"][2]["reputation"] == "" and model["rows"][2]["name"] == "北の砦")
+    check("呼び名の再生成のボタンを置く土地（線を越えて評判も編み終わった土地）を画面に渡す",
+          model["rows"][0]["named"] is True and model["rows"][1]["named"] is False
+          and model["rows"][2]["named"] is False, model["rows"])
+    check("再生成のボタンの絵（さいころ）はローダの共有の絵柄から引ける",
+          len(ui_module.icon_strokes(sys.modules["reputation_mod.window"].REROLL_ICON)) == 4)
+    check("評判の立つ土地かを画面に渡す（まだ編んでいない／まだ立たないの言い分け）",
+          model["rows"][0]["standing"] is True and model["rows"][2]["standing"] is False,
+          model["rows"])
+    check("手配度と二つ名・数字を画面に渡す",
+          model["rows"][1]["lawfulness"] == -5 and model["epithet"] == "灰の街の盾"
+          and model["fame"] == 150 and model["notoriety"] == 30 and model["here"] == "灰の街",
+          model)
+    bucket["fame"]["eligible"] = False
+    check("線に届く前は控えに名があっても画面に出さない",
+          module.view_model(bucket, {}, {})["epithet"] == "")
+    check("控えが空でも画面は組める",
+          module.view_model({}, {}, {})["rows"] == [])
+
     print("長さ")
     module, ctx = fresh_mod(app, INJECT_DETAIL="brief")
     long_reply = "一つ目。二つ目。三つ目。四つ目。"
@@ -851,8 +1217,10 @@ def run():
     data = read_cache(module)
     check("state\\ にファイルが1つできる", data is not None, cache_file(module))
     record = (data or {}).get("areas", {}).get("3", {})
+    # 呼び名の欄は線を越えた土地にだけ作る
     check("土地の鍵の並びが RECORD_KEYS のとおり",
-          tuple(record) == module.RECORD_KEYS, tuple(record))
+          tuple(record) == tuple(key for key in module.RECORD_KEYS if key != "nickname"),
+          tuple(record))
     check("土地の控えに二つ名は持たない", "epithet" not in record, tuple(record))
     check("印を控えている",
           record.get("fingerprint") == material.fingerprint(
@@ -943,8 +1311,9 @@ def run():
     check("世界名だけの控えを遊んでいる主人公の周回へ移して読む",
           "古井戸を守った者" in getattr(got, "profile", "")
           and "井戸守" in getattr(got, "profile", ""), getattr(got, "profile", ""))
-    check("移した先は周回の鍵のファイル",
-          read_cache(module, move_mine) == old_cache, read_cache(module, move_mine))
+    moved = dict(read_cache(module, move_mine) or {})
+    moved.pop("fame", None)        # 版5までのファイルには無く、読んだ直後に数えて足す
+    check("移した先は周回の鍵のファイル", moved == old_cache, moved)
     check("世界名だけの控えは消す", not os.path.exists(cache_file(module, move_world)))
     module, ctx = fresh_mod(move_app("前の主人公"))
     got, _times, _r = call_conv(ctx, CONVERSATION_TARGETS[0], npc)

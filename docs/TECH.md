@@ -1883,6 +1883,17 @@ MOD の機能の入口は、その右に置く **MOD 用のボタン1つ** に�
 押すとボタンの上に一覧が開き、行（MOD の絵と名前）を押すと、その MOD の処理を呼ぶ。
 登録が1つでも一覧を出す。
 
+画面やボタンをどこに置くかは、何を出すかで決まる（2026-11-02 に決めた）。
+MOD が新しく持つ情報の画面を開く入口は、この一覧の行だけにする。
+ゲームの画面の中に自分の画面を開くボタンを置くと、入口が MOD ごとに散らばる。
+
+| 何を出すか | 置き場所 | 例 |
+|---|---|---|
+| MOD が新しく持つ情報の画面（いつでも見る状況） | この一覧の行 | `338_` の各地の出来事・`339_` の勢力と情勢・ローダの家と施設・`317_` の評判 |
+| ゲームの既存の表示を出し直す・広げるもの | その表示の隣 | `113_` の本文の欄を広げる・`116_` のパーティ欄・`122_` の流れた本文の読み返し |
+| いま出している物への操作 | その表示の隣 | `121_` の二つ名の引き直し・`335_` の立ち絵の描き直し |
+| 場面に結びつく画面 | その場面の選択肢（`choices`。§3.3.14） | `314_` の移動先・`334_` の闘技場・`336_` の故買屋 |
+
 ```python
 hudicons.add(ctx, key, on_press, strokes=None, images=None, order=0, write=None, label=None)
 #   on_press(app)   一覧の行を押されたとき
@@ -3360,7 +3371,7 @@ ui.CORNERS / ui.AS_TEXT / ui.upx(value) / ui.window_size()
 ui.clamp_into_window(widget)          # 置いた後に必ず通す（はみ出すと押せない）
 ui.popup_button(text, template=None)  # 品の右クリックの popup と同じ見た目（縁つき）。ゲームが popup を出さない品に足すとき
 ui.make_icon_button(text=, size=, square=, font_name=, pos_hint=)
-ui.icon_strokes(icon, flipped)        # 共有の絵柄（二重山形・山形・矢印・枠）
+ui.icon_strokes(icon, flipped)        # 共有の絵柄（二重山形・山形・矢印・枠・さいころ）
 ui.paint_icon(button, strokes, attr=, key=, width=, alpha=, log_exc=)
 ui.show_widget(widget, visible)       # 隠すときは押せなくもし、触りを下へ通す（block_touch=True で止める）
 ```
@@ -3385,6 +3396,7 @@ ui.title_screens() / ui.font_from(screen)
 
 **MOD 固有の絵柄はローダに足さない**（`113_` の「伸縮」、`122_` の本や吹き出しはその MOD だけの語彙）。
 MOD のフォルダへ置き、`ui.icon_strokes()` へ落とす形にする。
+2つ以上の MOD が同じ意味で使う絵柄はローダに置く。「さいころ」（名前の再生成）は `121_` の人物欄の二つ名と `317_` の評判の画面の二つ名・呼び名が使う（2026-11-02 に `121_` から移した）。
 
 **HUD へ自前のウィジェットを1枚足すとき**（GAME.md §2.3）:
 

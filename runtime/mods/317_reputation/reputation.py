@@ -34,6 +34,13 @@
 入力は各地の**編纂済みの評判文**で、素の出来事は渡さない
 （1段目が均した事実をここで並べ直すと、同じことが2度 LLM を通る）。
 
+二つ名が付くのは、名声＋悪名（`fame_summary`）がしきい値に届き、評判の立つ土地が規定の数以上のときだけ。
+開始の村の駆除の依頼を数件片付けただけで「土地を問わず」名が広まるのは過剰なので、
+件数ではなく行いの重さ（依頼・物語の依頼・闘技場を難易度の2乗）で数える（MODS.md `317_reputation` の「名声と悪名」）。
+名声は記録から毎回数え直す。悪名だけはゲームに経過が無いので控えに積む（`accumulate_notoriety`）。
+1つの土地で名声＋悪名が線を越えると、その土地の評判の編纂で呼び名も頼む。
+名声・悪名・呼び名・各地の評判は、MOD 用のボタンの一覧から開く評判の画面（`window`）で見せる。
+
 ## 注入するのは「知っている」であって「好き」ではない
 
 `125_balance_charisma_impression` が直したのは
@@ -96,16 +103,21 @@ import random
 import sys
 import time
 
-from instantale_modloader import arrivals, durations, frames, jobs, llm, modnpc, ui
+from instantale_modloader import (arrivals, durations, frames, hudicons, jobs, llm, loads, modnpc,
+                                  ui, wanted)
 from instantale_modloader.state import WorldStore, world_filename
 
-from . import material
+from . import material, window
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
 USE_EPITHET = True        # 二つ名を編纂し、注入にも載せるか
 EPITHET_CHARS = 8         # 二つ名の上限（全角）。既定8は実機の所感（MODS.md `317_reputation` の「二つ名が編み直される契機」）
 EPITHET_RANDOM_LENGTH = True  # 編纂のたびに狙う長さを揺らすか（下限3〜上限）
+EPITHET_FAME = 100        # 二つ名が付く名声＋悪名（MODS.md `317_reputation` の「名声と悪名」）
+EPITHET_MIN_LANDS = 2     # 二つ名が付くのに要る、評判の立つ土地の数
+USE_LAND_NAMES = True     # 土地ごとの呼び名を付けるか
+LAND_NAME_FAME = 100      # その土地の名声＋悪名がこれ以上で呼び名が付く
 IN_CONVERSATION = True    # 会話5関数に注入するか
 #: 会話の相手の `profile` に評判を足す順（ローダの `modnpc` の notes。小さいほど先）。
 #: 自分で包んでいたときの重なり（外側から 321・317・403・311・326・301）を保つ。TECH.md §3.3.21。
@@ -140,8 +152,9 @@ MANAGER_EPITHET = "mod_reputation_epithet"
 COMPILE_TIMEOUT = 120
 
 #: 待ち行列に積んだままにする仕事の上限。溢れたら古い方を捨てる。
-#: 土地の数だけしか積まれないので小さくてよい。
-MAX_PENDING = 4
+#: 照合は評判の立つ土地をすべて見るので（版6）、遊び込んだ世界を初めて読み込んだ回は土地の数だけ積まれる。
+#: 同じ土地は二度積まない（`job_key`）ので、土地の数より大きければ捨てることはない。
+MAX_PENDING = 64
 
 #: 素材の照合をこの秒数より短い間隔では行わない。
 #: 施設への移動は頻繁に起きるので、そのたびに全依頼を走査しないための間引き。
@@ -168,13 +181,37 @@ EPITHET_DOUBLE = 2
 #: 並びを固定するのは、後から土地ごとに見比べるため（`311_` と同じ）。
 #: 旧版は土地ごとに "epithet" を持っていた。残っていても知らない鍵として
 #: 後ろへ回るだけで、読み側はもう見ない（`ordered_record`）。
-RECORD_KEYS = ("area", "name", "day", "updated", "reputation", "fingerprint")
+RECORD_KEYS = ("area", "name", "day", "updated", "reputation", "nickname", "fingerprint")
 
 #: 二つ名の控え（世界に1つ）の鍵と並び。
 #: `description` はその名が何を指すかの説明。**ゲームには出さない**内部データで、
 #: 後から控えを読んだときに名の由来が分かるように編纂と一緒に書かせる。
 #: `mark` は編纂したときの質的状態（`epithet_mark`）。次の契機の比較相手。
 EPITHET_RECORD_KEYS = ("epithet", "description", "day", "updated", "mark")
+
+#: 名声の控え（世界に1つ）の鍵と並び。`121_` の人物欄が読む（MOD をまたいだ取り決め）。
+#: しきい値と土地の数も一緒に書くのは、読む側にこちらの設定を持たせないため。
+#: `areas` は名声か悪名が 0 でない土地と評判の立つ土地で、中身は `{"fame": 名声, "notoriety": 悪名, "standing": 評判の立つ土地か}`。
+FAME_RECORD_KEYS = ("total", "notoriety", "threshold", "lands", "min_lands", "eligible",
+                    "land_threshold", "areas")
+
+#: 依頼1件の名声は「難易度の2乗 ÷ これ」。難易度 25 の依頼が 25 になる。
+#: 2乗にするのは、開始の村の依頼（1〜5）を何件重ねても誤差に留め、終盤の大物ほど大きく効かせるため
+#: （MODS.md `317_reputation` の「名声と悪名」）。
+FAME_DIVISOR = 25.0
+
+#: 物語の依頼の重み。本編の節目は通常の依頼より広く知られる。
+STORY_WEIGHT = 2.0
+
+#: 呼び名の上限（全角）。二つ名と同じ上限を使う（`EPITHET_CHARS`）。
+LAND_NAME_LINE = "この土地では「{nickname}」と呼ばれている。"
+KEY_NICKNAME = "nickname"
+
+#: 評判の画面の入口（画面左下の MOD 用のボタンの一覧の行。TECH.md §3.3.15）。
+#: 絵は `tools\draw_hud_icons.py` が描き出す（月桂冠）。並びは 338（10）・339（20）・家と施設（30）の後。
+ICON_KEY = "reputation"
+ICON_FILES = ("icon_laurel.png", "icon_laurel_hover.png", "icon_laurel_click.png")
+ICON_ORDER = 40
 
 #: 二つ名の引き直しの頼み（`121_` の人物欄のボタンが書くファイル）。
 #: 在れば消して、いまの名を除いて編み直す。中身は読まない。
@@ -228,10 +265,13 @@ def deeds_count(item):
     依頼を数に入れるのは、どちらも「その土地でやったこと」だから。
     最初の案では achievements だけを数える案だったが、
     依頼を片付けただけの土地で評判が立たないのは素材の取りこぼしになる。
+    物語の依頼と闘技場の勝ちも同じ理由で数える（版6）。
     """
     if not isinstance(item, dict):
         return 0
-    return len(item.get("achievements") or []) + len(item.get("quests") or [])
+    arena = item.get("arena") if isinstance(item.get("arena"), dict) else {}
+    return (len(item.get("achievements") or []) + len(item.get("quests") or [])
+            + len(item.get("story") or []) + (arena.get("wins") or 0))
 
 
 def is_wanted(item):
@@ -255,6 +295,137 @@ def qualifies(item):
     「危険な者が居る」はもう噂になっている。
     """
     return deeds_count(item) >= MIN_DEEDS or is_wanted(item)
+
+
+# --------------------------------------------------------------- 名声と悪名
+def deed_fame(difficulty):
+    """依頼1件・闘技場の1勝の名声。難易度（相手の格）の2乗 ÷ `FAME_DIVISOR`。"""
+    if isinstance(difficulty, bool) or not isinstance(difficulty, (int, float)) or difficulty <= 0:
+        return 0.0
+    return difficulty * difficulty / FAME_DIVISOR
+
+
+def _median(values):
+    values = sorted(values)
+    if not values:
+        return 0
+    middle = len(values) // 2
+    return values[middle] if len(values) % 2 else (values[middle - 1] + values[middle]) / 2.0
+
+
+def area_fame(entry):
+    """土地1つの名声。`material.survey` の1件から数える（MODS.md `317_reputation` の「名声と悪名」）。
+
+    足すのは4つで、どれも `deed_fame` の目盛り。
+      完了した依頼        難易度ごとに1件ずつ
+      依頼の付かない成した事  依頼より多い分だけ、その土地の依頼の難易度の中央値で
+      物語の依頼          `STORY_WEIGHT` 倍
+      闘技場の勝ち        破った相手の格ごとに1勝ずつ（闘技場の相手の格は依頼の難易度と同じ目盛り）
+    成した事は依頼1件につき1文ずつ書かれる（GAME.md §2.20）ので、件数をそのまま足すと二重に数える。
+    悪名はここに入れない（`accumulate_notoriety`）。
+    """
+    if not isinstance(entry, dict):
+        return 0
+    fame = sum(deed_fame(value) for value in entry.get("done_difficulties") or ())
+    extra = max(0, (entry.get("achievements") or 0) - (entry.get("done") or 0))
+    if extra:
+        fame += extra * deed_fame(_median(entry.get("difficulties") or ()))
+    fame += STORY_WEIGHT * sum(deed_fame(value) for value in entry.get("story_difficulties") or ())
+    fame += sum(deed_fame(value) for value in entry.get("arena_ranks") or ())
+    return int(round(fame))
+
+
+def accumulate_notoriety(ledger, stats):
+    """土地ごとの悪名を積んだ写しと、変わったかを返す。`(ledger, changed)`。
+
+    悪名は手配の重さ（`wanted.weight_of`。`309_` / `316_` と同じ物差し）が**増えた分の累計**。
+    時効・罰金・恩赦で重さが減っても引かない。減った後にまた増えれば、増えた分を足す。
+    ゲームには手配の経過の記録が無いので、照合のたびに前の重さ（`last`）と比べる。
+    初めて見た土地は、そのときの重さから数え始める。
+
+        {エリアid: {"total": 悪名, "last": 前に見た重さ}}
+    """
+    out = {}
+    for area_id, record in (ledger or {}).items():
+        if isinstance(record, dict):
+            out[str(area_id)] = {"total": int(record.get("total") or 0),
+                                 "last": int(record.get("last") or 0)}
+    changed = False
+    for area_id, item in (stats or {}).items():
+        weight = wanted.weight_of(item.get("lawfulness") if isinstance(item, dict) else None)
+        record = out.get(area_id)
+        if record is None:
+            if weight <= 0:
+                continue
+            record = out[area_id] = {"total": 0, "last": 0}
+        if weight > record["last"]:
+            record["total"] += weight - record["last"]
+            changed = True
+        if weight != record["last"]:
+            record["last"] = weight
+            changed = True
+    ordered = {key: out[key] for key in sorted(out, key=ui.id_sort_key)}
+    return ordered, changed
+
+
+def fame_summary(stats, notoriety=None):
+    """全土地の名声と悪名の控え（`FAME_RECORD_KEYS` の並び）。
+
+    二つ名が付くのは名声＋悪名がしきい値に届き、かつ評判の立つ土地が規定の数以上のとき。
+    「土地を問わず知られている」と書く以上、1つの土地の中だけの評判では付けない。
+    悪名を足すのは、悪事だけで名を広めた者にも、英雄と悪党が混じった者にも名が付くように。
+    """
+    if not isinstance(stats, dict):
+        stats = {}
+    notoriety = notoriety if isinstance(notoriety, dict) else {}
+    areas = {}
+    for area_id in sorted(set(stats) | set(notoriety), key=ui.id_sort_key):
+        item = stats.get(area_id) if isinstance(stats.get(area_id), dict) else {}
+        fame = area_fame(item)
+        bad = int((notoriety.get(area_id) or {}).get("total") or 0)
+        # 評判の立つ土地か。評判の画面が「まだ編んでいない」と「まだ立たない」を言い分けるのに使う
+        standing = item.get("deeds", 0) >= MIN_DEEDS or bool(item.get("wanted"))
+        if fame or bad or standing:
+            areas[area_id] = {"fame": fame, "notoriety": bad, "standing": standing}
+    total = sum(item["fame"] for item in areas.values())
+    bad_total = sum(item["notoriety"] for item in areas.values())
+    lands = sum(1 for item in areas.values() if item["standing"])
+    return {"total": total, "notoriety": bad_total, "threshold": EPITHET_FAME,
+            "lands": lands, "min_lands": EPITHET_MIN_LANDS,
+            "eligible": total + bad_total >= EPITHET_FAME and lands >= EPITHET_MIN_LANDS,
+            "land_threshold": LAND_NAME_FAME, "areas": areas}
+
+
+def land_named(fame, area_id):
+    """その土地に呼び名が付く線を越えているか。`fame` は `fame_summary` の控え。"""
+    if not USE_LAND_NAMES or not isinstance(fame, dict):
+        return False
+    item = (fame.get("areas") or {}).get(str(area_id))
+    if not isinstance(item, dict):
+        return False
+    return (item.get("fame") or 0) + (item.get("notoriety") or 0) >= LAND_NAME_FAME
+
+
+def fame_shortfall(fame):
+    """二つ名がまだ付かない理由（ログ用）。"""
+    return "名声 {}＋悪名 {}/{}、評判の立つ土地 {}/{}".format(
+        fame.get("total"), fame.get("notoriety", 0), fame.get("threshold"),
+        fame.get("lands"), fame.get("min_lands"))
+
+
+def mark_eligible(mark):
+    """控えた印が「二つ名が付く状態」で取られたか。印の `fame` は名声＋悪名。
+
+    版5までの印には名声が無い。そのときは土地の数だけで見る
+    （1つの土地の中で付いた名を、条件に届いたときに引き継がないため）。
+    """
+    if not isinstance(mark, dict):
+        return False
+    lands = len(mark.get("qualifying") or ())
+    fame = mark.get("fame")
+    if not isinstance(fame, int) or isinstance(fame, bool):
+        return lands >= EPITHET_MIN_LANDS
+    return fame >= EPITHET_FAME and lands >= EPITHET_MIN_LANDS
 
 
 def trim_sentences(text, limit):
@@ -358,7 +529,7 @@ def looks_like_json_attempt(body):
     """
     return body.startswith("{") or body.startswith("```") or any(
         '"' + key + '"' in body or "'" + key + "'" in body
-        for key in (KEY_REPUTATION, KEY_EPITHET, KEY_DESCRIPTION))
+        for key in (KEY_REPUTATION, KEY_EPITHET, KEY_DESCRIPTION, KEY_NICKNAME))
 
 
 def parse_result(raw):
@@ -391,29 +562,40 @@ def parse_result(raw):
     reputation = clean_reputation(data.get(KEY_REPUTATION))
     if not reputation:
         return None
-    return {KEY_REPUTATION: reputation}
+    result = {KEY_REPUTATION: reputation}
+    if KEY_NICKNAME in data:
+        # 呼び名は二つ名と同じ均し方（上限超えは切り詰めずに空）。空は「付けなかった」
+        result[KEY_NICKNAME] = clean_epithet(data.get(KEY_NICKNAME))
+    return result
 
 
 def as_bucket(data):
-    """読んだものを `{"areas": 土地別, "epithet": 世界に1つ}` に均す。
+    """読んだものを `{"areas": 土地別, "epithet": 世界に1つ, "fame": 世界に1つ}` に均す。
 
     旧版のファイル（土地の控えに "epithet" が混ざっている）もこの形に収まる
     （読み側がもう見ないだけで、鍵は `ordered_record` が後ろへ回して残す）。
+    版5までのファイルには "fame" が無い。空のまま読み、次の照合で書く。
     形を均すだけで書き戻しはしないので、2つ目は常に False。
     """
     if not isinstance(data, dict):
         data = {}
-    areas = data.get("areas")
-    epithet = data.get("epithet")
-    return {"areas": areas if isinstance(areas, dict) else {},
-            "epithet": epithet if isinstance(epithet, dict) else {}}, False
+    out = {}
+    for key in BUCKET_KEYS:
+        value = data.get(key)
+        out[key] = value if isinstance(value, dict) else {}
+    return out, False
+
+
+#: 控えの欄の並び。`fame` は照合のたびに数え直す写し、`notoriety` は積んだ悪名（数え直せない）。
+BUCKET_KEYS = ("areas", "epithet", "fame", "notoriety")
 
 
 def stored_bucket(bucket):
-    """書く形。二つ名がまだ無い世界のファイルに空の欄を作らない。"""
+    """書く形。まだ中身の無い欄は作らない（土地の欄だけは空でも書く）。"""
     data = {"areas": bucket["areas"]}
-    if bucket["epithet"]:
-        data["epithet"] = bucket["epithet"]
+    for key in BUCKET_KEYS[1:]:
+        if bucket.get(key):
+            data[key] = bucket[key]
     return data
 
 
@@ -428,12 +610,13 @@ def ordered_record(record):
     return out
 
 
-def reputation_block(record, player, area, epithet=""):
+def reputation_block(record, player, area, epithet="", nickname=""):
     """注入する本文。控えが無ければ空文字（＝何も足さない）。
 
     二つ名は世界に1つだが、**載せるのは評判の立つ土地の中だけ**。
     評判の無い土地で二つ名だけを注入すると、
     「何も無ければ何も足さない」（MODS.md `317_reputation` の「素材とプロンプトの重なり」）が崩れる。
+    呼び名はその土地のものだけを載せる。
     """
     if not isinstance(record, dict):
         return ""
@@ -441,6 +624,9 @@ def reputation_block(record, player, area, epithet=""):
     if not body:
         return ""
     lines = [HEADING.format(area=area or AREA_FALLBACK, player=player), body]
+    nickname = clean_epithet(nickname) if USE_LAND_NAMES else ""
+    if nickname:
+        lines.append(LAND_NAME_LINE.format(nickname=nickname))
     epithet = clean_epithet(epithet) if USE_EPITHET else ""
     if epithet:
         lines.append(EPITHET_LINE.format(epithet=epithet))
@@ -477,12 +663,26 @@ def residency_line(item):
     return "のべ{}日".format(days)
 
 
-def build_messages(item, player):
+def arena_line(item):
+    """闘技場の戦績を1行で。格の目盛りは闘技場の頼み文と同じ言い方で添える（GAME.md の闘技場の節）。"""
+    arena = item.get("arena") if isinstance(item, dict) else None
+    wins = (arena or {}).get("wins") or 0
+    if not wins:
+        return "（記録なし）"
+    line = "{}で{}勝。最後に破った相手の格は {}".format(
+        arena.get("name") or "闘技場", wins, arena.get("top_rank") or "分からない")
+    return line + "（格1が雑魚、格70が歴史に名を残す勇者や魔王に値する強者）"
+
+
+def build_messages(item, player, nickname=None, current_nickname="", exclude_nickname=""):
     """編纂の頼み文。**出来事を並べ直させない**（MODS.md `317_reputation` の「素材とプロンプトの重なり」）。
 
     ゲーム自身が `area_achievements` を会話に渡している以上、
     ここで素材を要約し直すと同じ事実が言い換えで2度載る。
     頼むのは「土地の人々が何を知っていて、どう呼んでいるか」の1点に絞る。
+    `nickname` が真なら、その土地での呼び名も一緒に頼む（呼び名の線を越えた土地だけ）。
+    いまの呼び名があれば渡し、覆す材料が無ければ同じ名を返させる（二つ名と同じ据え置き）。
+    `exclude_nickname` は評判の画面の再生成。据え置きの代わりに、その名を除いて別の名を頼む。
     """
     area = item.get("area_name") or AREA_FALLBACK
     limit = sentence_limit()
@@ -495,6 +695,12 @@ def build_messages(item, player):
         "",
         "【この土地で片付けた依頼】",
         bullet_list(item.get("quests") or []),
+    ]
+    if item.get("story"):
+        body += ["", "【この土地で果たした物語の依頼】", bullet_list(item["story"])]
+    if (item.get("arena") or {}).get("wins"):
+        body += ["", "【この土地の闘技場での戦績】", arena_line(item)]
+    body += [
         "",
         "【この土地での立場】",
         lawfulness_line(item),
@@ -509,10 +715,27 @@ def build_messages(item, player):
         "- 誰かの好意や敵意は書かない。噂の中身だけを書く",
         "- 日本語で{}文以内、{}字以内".format(limit, char_limit()),
     ]
+    if nickname:
+        current = clean_epithet(current_nickname)
+        body += [
+            "",
+            "あわせて、この土地の人々がこの人物を呼ぶ呼び名を1つ書け。",
+            "- 呼び名は評判からの連想で新しく作ってよい",
+            "- 本人の名前や「{}」という土地の名前をそのまま使わない".format(area),
+            "- 全角{}字以内".format(EPITHET_CHARS),
+        ]
+        exclude = clean_epithet(exclude_nickname)
+        if exclude:
+            # 再生成。据え置きの指示と両立しないので、渡すのはどちらか片方だけ（二つ名の引き直しと同じ）
+            body.append("- 「{}」という呼び名は使わないことに決めた。別の名を書け".format(exclude))
+        elif current:
+            body.append("- いまの呼び名は「{}」。新しい記録がこの名を明確に覆すのでなければ、"
+                        "同じ名をそのまま返す".format(current))
     body += [
         "",
         "返答は次の形の JSON オブジェクト1個だけとし、他には何も書かない。",
-        '{"reputation": "評判の文"}',
+        ('{"reputation": "評判の文", "nickname": "呼び名"}' if nickname
+         else '{"reputation": "評判の文"}'),
     ]
     # 二つ名はここでは頼まない。
     # 世界に1つの2段目（`build_epithet_messages`）へ移した（MODS.md `317_reputation` の「二つ名が編み直される契機」）。
@@ -521,13 +744,14 @@ def build_messages(item, player):
 
 
 # ------------------------------------------------------------ 二つ名（世界に1つ）
-def epithet_mark(stats):
+def epithet_mark(stats, notoriety=None):
     """全土地の質的状態。二つ名を編み直す契機は**この印の変化だけ**（MODS.md `317_reputation` の「二つ名が編み直される契機」）。
 
-    入れるのは3つ。
+    入れるのは4つ。
       qualifying  評判の立つ土地の一覧（増減どちらも契機。恩赦で外れる側も拾う）
       wanted      手配されている土地の一覧（0 をまたぐ反転を両方向で拾う）
       deeds       全土地の出来事の合計（前回の倍で契機。倍々なので終盤ほど動かない）
+      fame        全土地の名声＋悪名（`fame_summary`）。契機ではなく、付くかどうかの線
 
     滞在日数を入れないのは土地の印（`material.fingerprint`）と同じ理由。
     いくつから評判が立つか（`MIN_DEEDS`）はこちらの方針なので、
@@ -535,14 +759,16 @@ def epithet_mark(stats):
     """
     if not isinstance(stats, dict):
         stats = {}
+    summary = fame_summary(stats, notoriety)
     qualifying = sorted(
         (aid for aid, item in stats.items()
          if item.get("deeds", 0) >= MIN_DEEDS or item.get("wanted")),
         key=ui.id_sort_key)
-    wanted = sorted((aid for aid, item in stats.items() if item.get("wanted")),
-                    key=ui.id_sort_key)
+    flagged = sorted((aid for aid, item in stats.items() if item.get("wanted")),
+                     key=ui.id_sort_key)
     total = sum(item.get("deeds", 0) for item in stats.values())
-    return {"qualifying": qualifying, "wanted": wanted, "deeds": total}
+    return {"qualifying": qualifying, "wanted": flagged, "deeds": total,
+            "fame": summary["total"] + summary["notoriety"]}
 
 
 def epithet_due(record, mark):
@@ -551,12 +777,16 @@ def epithet_due(record, mark):
     ここが受け持つのは回数を絞る側（契機）。
     結果を絞る側（明確に覆らなければ同じ名を返す）は頼み文が持つ
     （`build_epithet_messages`）。二段構えの理由は MODS.md `317_reputation` の「二つ名が編み直される契機」。
+    名声と土地の数が線に届くまでは何もしない。
+    届く前に付いた名（版5まで）があれば、届いたときに編み直す。
     """
-    if not mark["qualifying"]:
-        return False, "評判の立つ土地が無い"
+    if not mark_eligible(mark):
+        return False, "名声が足りない"
     old = record.get("mark") if isinstance(record, dict) else None
     if not isinstance(old, dict):
         return True, "初回"
+    if not mark_eligible(old):
+        return True, "名声が届いた"
     if old.get("qualifying") != mark["qualifying"]:
         return True, "評判の立つ土地が変わった"
     if old.get("wanted") != mark["wanted"]:
@@ -662,6 +892,52 @@ def parse_epithet(raw):
         return None
     cleaned = clean_epithet(body)
     return {KEY_EPITHET: cleaned, KEY_DESCRIPTION: ""} if cleaned else None
+
+
+# ------------------------------------------------------------ 評判の画面の中身
+def view_model(bucket, area_names, laws, here=""):
+    """評判の画面に出す中身（`window.open_window` が描く）。ゲームも Kivy も要らない。
+
+    `bucket` は控え（`as_bucket` の形）、`area_names` は `{エリアid: 名前}`、
+    `laws` は `{エリアid: 手配度}`、`here` はいま居る土地の名前。
+    土地は名声＋悪名の大きい順。名声も悪名も評判も無い土地は出さない。
+    """
+    bucket = bucket if isinstance(bucket, dict) else {}
+    fame = bucket.get("fame") if isinstance(bucket.get("fame"), dict) else {}
+    records = bucket.get("areas") if isinstance(bucket.get("areas"), dict) else {}
+    scores = fame.get("areas") if isinstance(fame.get("areas"), dict) else {}
+    eligible = bool(fame.get("eligible"))
+    epithet = ""
+    if USE_EPITHET and eligible:
+        epithet = clean_epithet((bucket.get("epithet") or {}).get(KEY_EPITHET, ""))
+    rows = []
+    for area_id in set(scores) | set(records):
+        score = scores.get(area_id) if isinstance(scores.get(area_id), dict) else {}
+        record = records.get(area_id) if isinstance(records.get(area_id), dict) else {}
+        named = land_named(fame, area_id)
+        rows.append({
+            "id": str(area_id),
+            "name": (area_names or {}).get(str(area_id)) or record.get("name") or str(area_id),
+            "fame": int(score.get("fame") or 0),
+            "notoriety": int(score.get("notoriety") or 0),
+            "lawfulness": (laws or {}).get(str(area_id)),
+            "nickname": clean_epithet(record.get(KEY_NICKNAME, "")) if named else "",
+            "reputation": clean_reputation(record.get(KEY_REPUTATION)),
+            "standing": bool(score.get("standing")),
+            # 呼び名の線を越えて、評判も編み終わっている土地（呼び名の再生成のボタンを置く）
+            "named": named and bool(record.get(KEY_REPUTATION)),
+        })
+    rows.sort(key=lambda row: (-(row["fame"] + row["notoriety"]), ui.id_sort_key(row["id"])))
+    return {
+        "use_epithet": USE_EPITHET, "use_land_names": USE_LAND_NAMES,
+        "epithet": epithet, "eligible": eligible,
+        "fame": int(fame.get("total") or 0), "notoriety": int(fame.get("notoriety") or 0),
+        "threshold": int(fame.get("threshold") or EPITHET_FAME),
+        "lands": int(fame.get("lands") or 0),
+        "min_lands": int(fame.get("min_lands") or EPITHET_MIN_LANDS),
+        "land_threshold": int(fame.get("land_threshold") or LAND_NAME_FAME),
+        "min_deeds": MIN_DEEDS, "here": here or "", "rows": rows,
+    }
 
 
 # --------------------------------------------------------------------------
@@ -778,10 +1054,48 @@ def apply(ctx):
             bucket["epithet"] = ordered_epithet(record)
             return flush(key, bucket)
 
+    def fame_record_of(key):
+        """世界の名声の控え。まだ無ければ `None`。"""
+        with data_lock:
+            record = bucket_of(key).get("fame")
+            return dict(record) if isinstance(record, dict) and record else None
+
+    def save_fame(key, fame):
+        """名声の控えを書く。前と同じなら書かない（照合のたびにファイルを触らない）。"""
+        with data_lock:
+            bucket = bucket_of(key)
+            if bucket.get("fame") == fame:
+                return False
+            bucket["fame"] = fame
+            return flush(key, bucket)
+
+    def notoriety_of(key):
+        with data_lock:
+            return dict(bucket_of(key).get("notoriety") or {})
+
+    def refresh_fame(app, world, stats=None):
+        """悪名を積み、いまの名声と悪名を数えて控える。数えた控えを返す。
+
+        悪名は前に見た手配の重さと比べて積むので、錠の中で読み書きを1回で済ませる。
+        """
+        stats = material.survey(app) if stats is None else stats
+        with data_lock:
+            bucket = bucket_of(world)
+            ledger, changed = accumulate_notoriety(bucket.get("notoriety"), stats)
+            if changed:
+                bucket["notoriety"] = ledger
+                flush(world, bucket)
+        fame = fame_summary(stats, ledger)
+        before = fame_record_of(world)
+        if save_fame(world, fame) and (before or {}).get("eligible") != fame["eligible"]:
+            write("名声: {}（{}）".format(
+                "二つ名が付く線に届いた" if fame["eligible"]
+                else "二つ名が付く線に届いていない", fame_shortfall(fame)))
+        return fame
+
     # ------------------------------------------------------------ 素材の照合
-    def snapshot(app):
-        """いま居る土地の素材と、その周回の鍵。撮れなければ `None`。"""
-        area_id = material.current_area_id(app)
+    def snapshot(app, area_id):
+        """その土地の素材と、その周回の鍵。一度も訪れていない土地なら `None`。"""
         if not area_id:
             return None
         item = material.gather(app, area_id)
@@ -790,7 +1104,7 @@ def apply(ctx):
         return {
             "kind": "area",
             "world": worlds.playthrough(app),   # 周回の鍵（世界×主人公）
-            "area_id": area_id,
+            "area_id": str(area_id),
             "material": item,
             "player": material.player_name(app),
             "day": material.game_day(app),
@@ -849,17 +1163,40 @@ def apply(ctx):
         if now - state["last_check"] < CHECK_INTERVAL:
             return
         state["last_check"] = now
-        check_area(app, why)
-        check_epithet(app, why)
+        # 名声と悪名を先に数える（呼び名の線と二つ名の線の両方がこれを見る）。
+        world = worlds.playthrough(app)
+        stats = material.survey(app)
+        fame = refresh_fame(app, world, stats)
+        check_lands(app, why, world, stats, fame)
+        check_epithet(app, why, world, stats, fame)
 
-    def check_area(app, why):
-        """いま居る土地の評判。素材の印（fingerprint）が変わったときだけ立つ。"""
-        shot = snapshot(app)
+    def check_lands(app, why, world, stats, fame):
+        """評判の立つ土地を**すべて**照合する（版6）。いま居る土地を先に積む。
+
+        版5まではいま居る土地だけを見ていたので、評判はその土地に着くまで編まれなかった。
+        読み込み・移動・日送りのたびに全部を見て、素材の変わった土地だけを積む（LLM は変わった土地の分だけ）。
+        控えのある土地も見る（線を下回った土地の控えを外すため）。
+        """
+        here = str(material.current_area_id(app) or "")
+        if LOG_MATERIAL and here:
+            note_once("shape", "素材の形: " + material.describe_shape(app, here))
+        with data_lock:
+            known = set(bucket_of(world)["areas"])
+        standing = {area_id for area_id, item in (stats or {}).items()
+                    if item.get("deeds", 0) >= MIN_DEEDS or item.get("wanted")}
+        for area_id in sorted(standing | known,
+                              key=lambda aid: (aid != here, ui.id_sort_key(aid))):
+            check_area(app, why, fame, area_id)
+
+    def check_area(app, why, fame, area_id):
+        """土地1つの評判。素材の印（fingerprint）が変わったときだけ立つ。
+
+        呼び名の線を越えた土地で、控えにまだ呼び名の欄が無ければ、印が同じでも1回編み直す
+        （版5までの控え・線を越えた直後に素材が変わらなかった回）。
+        """
+        shot = snapshot(app, area_id)
         if shot is None:
             return
-        if LOG_MATERIAL:
-            note_once("shape",
-                      "素材の形: " + material.describe_shape(app, shot["area_id"]))
         item = shot["material"]
         if not qualifies(item):
             note_once("thin:" + shot["area_id"],
@@ -874,25 +1211,41 @@ def apply(ctx):
             return
         mark = material.fingerprint(item)
         record = record_of(shot["world"], shot["area_id"])
-        if record is not None and record.get("fingerprint") == mark:
+        named = land_named(fame, shot["area_id"])
+        if (record is not None and record.get("fingerprint") == mark
+                and not (named and KEY_NICKNAME not in record)):
             return
         shot["fingerprint"] = mark
-        shot["why"] = why
+        shot["why"] = why if record is None or record.get("fingerprint") != mark else \
+            "{}: 呼び名の線を越えた".format(why)
+        shot["nickname"] = named
         enqueue(shot)
 
-    def check_epithet(app, why):
+    def check_epithet(app, why, world, stats, fame):
         """世界の二つ名。質的状態（`epithet_mark`）が変わったときだけ立つ。
 
         いま居る土地が評判の立たない土地でも見る。
         依頼の完了や恩赦は、居る土地と効く土地が別でありうるため。
+        名声と悪名は二つ名を切っていても数えて控える（`check` が先に数える。人物欄と評判の画面が読む）。
         """
         if not USE_EPITHET:
             return
-        world = worlds.playthrough(app)
-        mark = epithet_mark(material.survey(app))
+        mark = epithet_mark(stats, notoriety_of(world))
         record = epithet_record_of(world)
         exclude = ""
         reroll = os.path.exists(reroll_path(world))
+        if not fame["eligible"]:
+            # 線に届く前の名は出さない。人物欄はボタンを隠すが、残った頼みは消しておく。
+            if reroll and take_reroll(world):
+                write("二つ名: 名声が足りないので引き直しの頼みを捨てた（{}）".format(
+                    fame_shortfall(fame)))
+            if state.get("rerolling"):
+                state["rerolling"] = False
+                view_changed()
+            note_inject("二つ名: まだ付かない（{}）".format(fame_shortfall(fame)))
+            return
+        # 線に届く前に付いた名（版5まで）は、いままでの名として渡さない。
+        fresh = bool(record) and not mark_eligible(record.get("mark"))
         if reroll:
             # 人物欄のボタンからの引き直し。質的な変化が無くても編み直す。
             # いまの名を除く指示で渡す（据え置きの指示と入れ替わる）。
@@ -905,7 +1258,7 @@ def apply(ctx):
         queued = enqueue({"kind": "epithet", "world": world,
                           "player": material.player_name(app),
                           "day": material.game_day(app),
-                          "mark": mark, "exclude": exclude,
+                          "mark": mark, "exclude": exclude, "fresh": fresh,
                           "sources": epithet_sources(app, mark),
                           "why": "{}: {}".format(why, reason)})
         if reroll and queued:
@@ -914,9 +1267,35 @@ def apply(ctx):
             take_reroll(world)
 
     # ------------------------------------------------------------------ 編纂
+    def land_nickname(job, parsed, before):
+        """編纂の返答から呼び名を決める。使えない名なら前の名を残す。
+
+        写しの番人は二つ名と同じ（本人の名前・依頼の題名・成した事）に、土地の名前を足す。
+        再生成で除けと言った名がそのまま返ったときも前の名のまま（もう一度押せる）。
+        """
+        item = job["material"]
+        nickname = parsed.get(KEY_NICKNAME, "")
+        area = item.get("area_name") or ""
+        if nickname and (echoes_material(nickname, job["player"], item)
+                         or (area and area in nickname)):
+            write("呼び名: {!r} は本人の名前・土地の名前・素材の写しなので捨てた（{} / {}）".format(
+                nickname, job["world"], job["area_id"]))
+            nickname = ""
+        exclude = clean_epithet(job.get("exclude_nickname", ""))
+        if nickname and exclude and nickname == exclude:
+            write("呼び名: 再生成でも同じ名 {!r} が返った（{} / {}）".format(
+                nickname, job["world"], job["area_id"]))
+            nickname = ""
+        return nickname or before
+
     def compile_area(job):
         item = job["material"]
-        messages = build_messages(item, job["player"])
+        before = record_of(job["world"], job["area_id"]) or {}
+        before_nickname = clean_epithet(before.get(KEY_NICKNAME, ""))
+        named = bool(job.get("nickname"))
+        messages = build_messages(item, job["player"], nickname=named,
+                                  current_nickname=before_nickname,
+                                  exclude_nickname=job.get("exclude_nickname", ""))
         raw = llm.ask(ctx, MANAGER_COMPILE, messages, timeout=COMPILE_TIMEOUT,
                       label="reputation", write=write)
         parsed = parse_result(raw)
@@ -934,9 +1313,19 @@ def apply(ctx):
             "reputation": parsed[KEY_REPUTATION],
             "fingerprint": job["fingerprint"],
         }
+        if job.get("keep_reputation") and clean_reputation(before.get(KEY_REPUTATION)):
+            # 呼び名だけの再生成。素材は前の編纂から変わっていないので、評判の文は前のまま
+            record["reputation"] = before[KEY_REPUTATION]
+        if named:
+            # 線を越えた土地は、名が付かなくても欄を作る（作らないと照合のたびに頼み直す）。
+            record[KEY_NICKNAME] = land_nickname(job, parsed, before_nickname)
+        elif KEY_NICKNAME in before:
+            record[KEY_NICKNAME] = before[KEY_NICKNAME]
         if save_record(job["world"], job["area_id"], record):
-            write("編纂できた: {} / {} 評判={!r}".format(
-                job["world"], job["area_id"], record["reputation"]))
+            write("編纂できた: {} / {} 評判={!r}{}".format(
+                job["world"], job["area_id"], record["reputation"],
+                " 呼び名={!r}".format(record.get(KEY_NICKNAME, "")) if named else ""))
+            view_changed()
 
     def epithet_entries(world, mark):
         """二つ名の編纂に載せる `(土地名, 評判文)`。**編纂済みの土地だけ**。"""
@@ -965,6 +1354,9 @@ def apply(ctx):
         record = epithet_record_of(world) or {}
         before = clean_epithet(record.get(KEY_EPITHET, ""))
         before_desc = clean_epithet_description(record.get(KEY_DESCRIPTION, ""))
+        if job.get("fresh"):
+            # 線に届く前に付いた名。据え置きの候補にも、名が付かなかったときの戻り先にもしない。
+            before = before_desc = ""
         exclude = clean_epithet(job.get("exclude", ""))
         length = pick_epithet_length()
         messages = build_epithet_messages(job["player"], entries,
@@ -1014,9 +1406,19 @@ def apply(ctx):
     def compile_job(job):
         """仕事1件。土地の評判と二つ名で行き先が違うだけ。"""
         if job.get("kind") == "epithet":
-            compile_epithet(job)
+            try:
+                compile_epithet(job)
+            finally:
+                # 読めなかった・見送った回も、画面の「引き直しています」を解いて開き直す
+                state["rerolling"] = False
+                view_changed()
         else:
-            compile_area(job)
+            try:
+                compile_area(job)
+            finally:
+                if job.get("exclude_nickname") is not None:
+                    state.setdefault("rerolling_lands", set()).discard(job["area_id"])
+                    view_changed()
 
     # 編纂は背景で1件ずつ（LLM を待つのでゲームのスレッドでは回せない）。
     # 土地の仕事が先に並ぶので、直列のワーカーが評判を編んでから二つ名がそれを読める。
@@ -1038,9 +1440,16 @@ def apply(ctx):
         record = record_of(world, area_id)
         if record is None:
             return ""
-        epithet = (epithet_record_of(world) or {}).get(KEY_EPITHET, "")
+        epithet = nickname = ""
+        if USE_EPITHET or USE_LAND_NAMES:
+            # 名声の控えが無いのは版5までのファイルを読んだ直後だけ。1回数えて控える。
+            fame = fame_record_of(world) or refresh_fame(app, world)
+            if USE_EPITHET and fame.get("eligible"):
+                epithet = (epithet_record_of(world) or {}).get(KEY_EPITHET, "")
+            if land_named(fame, area_id):
+                nickname = record.get(KEY_NICKNAME, "")
         return reputation_block(record, material.player_name(app),
-                                material.area_name(app, area_id), epithet)
+                                material.area_name(app, area_id), epithet, nickname)
 
     def describe_area_args(arguments):
         """ゲームが会話に渡している `area_*` の形（1回だけ記録する）。
@@ -1155,6 +1564,164 @@ def apply(ctx):
 
     durations.on_days(owner, ctx, after=after_days, write=write)
 
-    ctx.log("reputation: installed (会話={} 情景描写={} 二つ名={} 最低件数={} 長さ={})"
+    # ------------------------------------------------------------ 評判の画面
+    # 入口は MOD 用のボタンの一覧の行だけ（TECH.md §3.3.15。画面を開くボタンを他所に置かない）。
+    icon_dir = os.path.dirname(os.path.abspath(__file__))
+    icon_images = tuple(os.path.join(icon_dir, name) for name in ICON_FILES)
+
+    def close_view():
+        current = store.get("view")
+        store["view"] = None
+        if current is not None:
+            try:
+                current.dismiss()
+            except Exception:
+                ctx.log_exc("reputation: could not close the window")
+
+    def current_model(app):
+        """いまの名声・悪名を数え直してから、画面の中身を組む（開いた瞬間の値を出す）。"""
+        world = worlds.playthrough(app)
+        refresh_fame(app, world)
+        with data_lock:
+            bucket = {key: dict(value) for key, value in bucket_of(world).items()}
+        names = {str(area_id): str(getattr(area, "name", "") or area_id)
+                 for area_id, area in (ui.world_areas(app) or {}).items()}
+        laws = {str(key): value for key, value in
+                (ui.lawfulness_by_area(getattr(app, "player", None)) or {}).items()}
+        here = ui.area_id_of(ui.current_area(app))
+        return view_model(bucket, names, laws, names.get(str(here), "") if here else "")
+
+    def open_view(app, sound=True):
+        model = current_model(app)
+        model["rerolling"] = bool(state.get("rerolling"))
+        busy = state.setdefault("rerolling_lands", set())
+        for row in model["rows"]:
+            row["rerolling"] = row["id"] in busy
+        store["view"] = window.open_window(
+            app, model, write=write, sound=sound,
+            on_reroll=lambda: request_reroll(app),
+            on_land_reroll=lambda area_id: request_land_reroll(app, area_id),
+            on_dismiss=lambda: store.update({"view": None}))
+
+    def toggle_view(app):
+        if store.get("view") is not None:
+            close_view()
+            return
+        if app is None:
+            return
+        try:
+            open_view(app)
+        except Exception:
+            store["view"] = None
+            ctx.log_exc("reputation: could not open the window")
+
+    def refresh_view(_dt=None):
+        """開いている画面を新しい中身で開き直す（表のスレッドで）。開いていなければ何もしない。"""
+        state["refresh_pending"] = False
+        if store.get("view") is None:
+            return
+        app = ui.find_app()
+        if app is None:
+            return
+        try:
+            current = store.get("view")
+            store["view"] = None
+            current.dismiss()
+            open_view(app, sound=False)
+        except Exception:
+            store["view"] = None
+            ctx.log_exc("reputation: could not refresh the window")
+
+    def view_changed():
+        """編纂が終わった（ワーカーのスレッドから呼ばれる）。画面が開いていれば表のスレッドで開き直す。
+
+        読み込みの直後は土地の編纂が続けて終わるので、0.5秒まとめてから1回だけ開き直す。
+        """
+        if store.get("view") is None or state.get("refresh_pending"):
+            return
+        state["refresh_pending"] = True
+        try:
+            from kivy.clock import Clock
+            Clock.schedule_once(refresh_view, 0.5)
+        except Exception:
+            state["refresh_pending"] = False
+
+    def request_reroll(app):
+        """評判の画面の「引き直す」。人物欄のさいころと同じ頼みのファイルを書き、すぐ照合する。
+
+        頼みは `check_epithet` が拾い、いまの名を除いて編み直す（`REROLL_SUFFIX`）。
+        終わったら `view_changed` が画面を開き直す。
+        """
+        world = worlds.playthrough(app)
+        path = reroll_path(world)
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            if not ctx.write_json(path, {"reroll": True}):
+                return False
+        except Exception:
+            ctx.log_exc("reputation: could not request a reroll")
+            return False
+        state["rerolling"] = True
+        state["last_check"] = 0.0
+        check(app, "評判の画面の引き直し")
+        return True
+
+    def request_land_reroll(app, area_id):
+        """評判の画面の土地の札の再生成。その土地の呼び名を、いまの名を除いて付け直す。
+
+        素材が前の編纂から変わっていなければ評判の文は前のまま残す（呼び名だけ）。
+        変わっていれば評判の文も一緒に編み直す（古い文に新しい印を付けないため）。
+        終わったら `view_changed` が画面を開き直す。
+        """
+        world = worlds.playthrough(app)
+        record = record_of(world, area_id)
+        shot = snapshot(app, area_id)
+        if record is None or shot is None:
+            return False
+        mark = material.fingerprint(shot["material"])
+        shot.update({"fingerprint": mark, "nickname": True,
+                     "exclude_nickname": clean_epithet(record.get(KEY_NICKNAME, "")),
+                     "keep_reputation": record.get("fingerprint") == mark,
+                     "why": "評判の画面の呼び名の再生成"})
+        if not enqueue(shot):
+            return False
+        state.setdefault("rerolling_lands", set()).add(str(area_id))
+        return True
+
+    hudicons.add(ctx, ICON_KEY, toggle_view, images=icon_images, order=ICON_ORDER,
+                 label=window.TITLE, write=write)
+
+    # ------------------------------------------------------------ 読み込みの後
+    # 読み込んだ時点で評判の立つ土地をすべて照合し、変わった土地を編む（その土地に着くまで待たない）。
+    def after_load(call):
+        try:
+            state["last_check"] = 0.0
+            check(call.app, "読み込み")
+        except Exception:
+            ctx.log_exc("reputation: 読み込みの後の照合で失敗した")
+
+    loads.on(owner, ctx, (loads.LOAD, loads.NEW_GAME), after=after_load, write=write)
+
+    # 起動直後は注入のやり直し（約6秒後）と読み込みが重なり、読み込みの包みが効く前に世界が読み込まれることがある
+    # （実機。起動から14秒で世界を選んだ回に読み込みの後の照合が来なかった）。
+    # 注入が済んだ時点で世界が読み込まれていれば、その場で1回照合する。
+    def after_inject(_dt=None):
+        try:
+            app = ui.find_app()
+            if app is None or material.player_of(app) is None or not ui.world_areas(app):
+                return
+            state["last_check"] = 0.0
+            check(app, "注入")
+        except Exception:
+            ctx.log_exc("reputation: 注入の後の照合で失敗した")
+
+    try:
+        from kivy.clock import Clock
+        Clock.schedule_once(after_inject, 1.0)
+    except Exception:
+        pass        # ゲームの外（検査）には Kivy が無い
+
+    ctx.log("reputation: installed (会話={} 情景描写={} 二つ名={} 最低件数={} 長さ={}"
+            " 二つ名の名声={} 土地={})"
             .format(IN_CONVERSATION, IN_NARRATION, USE_EPITHET, MIN_DEEDS,
-                    INJECT_DETAIL))
+                    INJECT_DETAIL, EPITHET_FAME, EPITHET_MIN_LANDS))

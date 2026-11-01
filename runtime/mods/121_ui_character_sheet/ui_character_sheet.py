@@ -232,7 +232,7 @@ def apply(ctx):
         """二つ名の引き直しボタンを1度だけ作る。作れない環境では None。
 
         押すと評判 MOD への頼みのファイルを書く（`request_reroll`）。
-        絵柄はサイコロ（`sheet.REROLL_STROKES`）。文字ではないので書体は要らない。
+        絵柄はサイコロ（ローダの `ui.icon_strokes(sheet.REROLL_ICON)`）。文字ではないので書体は要らない。
         """
         button = getattr(layout, MARK + "_reroll", None)
         if button is not None and frames.attr(button, "parent") is layout:
@@ -248,7 +248,7 @@ def apply(ctx):
         button.bind(on_release=lambda *_args: request_reroll(button))
 
         def repaint(*_args):
-            ui.paint_icon(button, sheet.REROLL_STROKES, attr=MARK + "_icon",
+            ui.paint_icon(button, ui.icon_strokes(sheet.REROLL_ICON), attr=MARK + "_icon",
                           key=("dice",), log_exc=ctx.log_exc)
 
         button.bind(pos=repaint, size=repaint)

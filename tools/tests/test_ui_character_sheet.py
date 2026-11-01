@@ -593,6 +593,13 @@ def run():
           and sheet.reputation_epithet({"epithet": "文字列"}) == ""
           and sheet.reputation_epithet(None) == ""
           and sheet.reputation_epithet({}) == "")
+    check("名声が線に届いていなければ控えに名があっても出さない",
+          sheet.reputation_epithet({"epithet": {"epithet": "鼠捕り"},
+                                    "fame": {"eligible": False}}) == ""
+          and sheet.reputation_epithet({"epithet": {"epithet": "竜追い"},
+                                        "fame": {"eligible": True}}) == "竜追い")
+    check("名声の控えが無い（評判 MOD の版5まで）なら名をそのまま出す",
+          sheet.reputation_epithet({"epithet": {"epithet": "竜追い"}}) == "竜追い")
     check("二つ名が空なら文も空",
           sheet.epithet_text("") == "" and sheet.epithet_text(None) == ""
           and sheet.epithet_text("竜追い") == "「竜追い」")
