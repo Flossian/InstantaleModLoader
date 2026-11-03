@@ -1,0 +1,32 @@
+{
+  "entry": "probe_shop_negotiation.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Probe: where a haggled price is written and how long it lasts",
+    "ja": "計測: 値切りで決まった額の書き先と残り方"
+  },
+  "description": {
+    "en": "Records what the shop's free input does to prices: the text sent to shopping_negotiator and the player_attempt it returns, the buy and sell prices of the shop's and the hero's items that moved across ShoppingNegotiateManager.execute / shopping_negotiate_method, the gold, and the shallow attributes of the app and the manager that changed. The haggled items are then followed by id, and the probe writes when their price moves after reload_twin_inventory, the trade window, the item detail, buying, selling, the game's repricing, saving and closing the window, along with the mods that currently set item prices through the loader. Read-only",
+    "ja": "店の入力欄が値段に何をするかを録る。shopping_negotiator に送った文と返った player_attempt、ShoppingNegotiateManager.execute / shopping_negotiate_method の前後で動いた店と手持ちの品の買価・売価、所持金、app とマネージャの浅い属性の増減。値切った品はその後も id で追い、一覧の描き直し・売買の窓・品の詳細・売買・ゲームの付け直し・保存・窓を閉じる、の後で額が動いたら、いまローダで値段を決めている MOD と一緒に書く。読み取りだけでゲームは変えない"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "debug": true,
+  "settings": {
+    "SAMPLES": {
+      "type": "int",
+      "default": 400,
+      "min": 1,
+      "max": 99999,
+      "label": {
+        "ja": "記録の件数",
+        "en": "Records to write"
+      },
+      "note": {
+        "ja": "1プロセスあたり。値切りの境目・LLM の戻り・値切った品の額の変化・売買を合わせて数える",
+        "en": "Per process, counting negotiations, negotiator results, price changes of haggled items and trades together"
+      }
+    }
+  }
+}

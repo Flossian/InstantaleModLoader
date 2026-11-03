@@ -506,9 +506,13 @@ def main():
           and inner_app.player.gold == 50000 - inner_item.attributes["買価"],
           (outer_app.player.gold, inner_app.player.gold, outer_item.attributes["買価"]))
 
+    # 売買の地点は関所も包む（持ち主が替わった品を組み直す。VERIFICATION.md §3.121）ので、
+    # 残っていてよいのは関所の包みだけ。
     module, ctx = fresh_mod(RECONCILE_GOLD=False)
+    left = {target: getattr(ctx.hooks.get(target), "__module__", None)
+            for target in ("__main__:InstantaleApp.buy_item", "__main__:InstantaleApp.sell_item")}
     check("切れば決済の経路は当たらない",
-          "__main__:InstantaleApp.buy_item" not in ctx.hooks, sorted(ctx.hooks))
+          all(owner in (None, "instantale_modloader.prices") for owner in left.values()), left)
 
     # -- べき等 -------------------------------------------------------------
     module, ctx = fresh_mod()

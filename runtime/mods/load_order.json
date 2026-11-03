@@ -147,7 +147,8 @@
     "241_probe_world_bulk",
     "242_probe_world_reads",
     "243_probe_value_curves",
-    "244_probe_ability_reads"
+    "244_probe_ability_reads",
+    "245_probe_shop_negotiation"
   ],
   "disabled": []
 }

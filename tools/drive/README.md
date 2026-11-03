@@ -115,8 +115,8 @@ python tools/drive/drive.py <ファイル> --args '<JSON>' --wait <秒>
 | `setmod.py` | `mod`・`name`・`value` | MOD の定数を書き換える |
 | `act.py` | `text`・`timeout` | 入力欄に書いて送り、手が空くまで待つ |
 | `trade.py` | `do`（open / close / status / prices / shop） | 売買の窓。`prices` は手持ちの品の売値を、`shop` は棚の品の買値を、値段の計算の段ごとに並べる |
-| `sell.py` | `item` | 開いている売買の窓で、手持ちの品を1つ売る |
-| `buy.py` | `item` | 開いている売買の窓で、店の棚の品を1つ買う（手持ちの空いたマスへ落として「買う」を押す）。2x2 以上の品は落とす位置が合わず、まだ買えない |
+| `sell.py` | `item` | 開いている売買の窓で、手持ちの品を1つ売る。空きの探し方と掴む位置は `buy.py` と同じ |
+| `buy.py` | `item` | 開いている売買の窓で、店の棚の品を1つ買う（手持ちの空いたマスへ落として「買う」を押す）。空きは品の大きさで探し、品の真ん中を掴む（2x2 の品は左下のマスを掴むと動かない） |
 | `steal.py` | `mode`・`enter` | `336_crime_overhaul` の店で盗む（乱数をその間だけ固定する） |
 | `incident.py` | `kind`・`area`・`elapse`・`force` | `338_town_incidents` の出来事を、決めた街（id か名前。省くといまいる街）に決めた種類で起こす。次の1回の抽選だけ候補を絞り、日数を送る。`force` でその街の収まった後の休みを外す |
 | `typein.py` | `fields` | 入力欄に文字を書く（押さない）。欄は `hint_text` の一部で選ぶ（世界を作る画面の「名前」「概要」など） |

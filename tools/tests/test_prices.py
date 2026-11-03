@@ -17,7 +17,8 @@ import types
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 
-from instantale_modloader import durations, prices  # noqa: E402
+import instantale_modloader as loader  # noqa: E402
+from instantale_modloader import durations, loads, prices  # noqa: E402
 
 
 def check(label, cond, detail=""):
@@ -86,6 +87,8 @@ def main():
                 and durations.source_of(durations.INN_STAY) == "")
 
     ok &= gate_main()
+    ok &= haggle_main()
+    ok &= trade_main()
 
     print("all ok" if ok else "FAILED")
     return 0 if ok else 1
@@ -347,16 +350,21 @@ def gate_main():
     ok &= check("ゲームが書く地点では付け直す", old.attributes[prices.BUY] == 800)
 
     print("[関所は1世代に1枚]")
+
+    def own_hooks(gate_ctx):
+        # 値切りの固定はロードの窓口（`loads`）にも載る。あちらは別の関所なので数えない。
+        return [target for target in gate_ctx.hooks if target not in loads.TARGETS.values()]
+
     ctx = fresh_gate(generation=7)
-    before = len(ctx.hooks)
+    before = len(own_hooks(ctx))
     again = GateCtx(generation=7)
     prices.install(again)
-    ok &= check("同じ世代なら包み直さない", not again.hooks, again.hooks)
+    ok &= check("同じ世代なら包み直さない", not own_hooks(again), again.hooks)
     ok &= check("立っている対象を返す",
                 len(prices.item_gate()["targets"]) == before, before)
     newer = GateCtx(generation=8)
     prices.install(newer)
-    ok &= check("世代が変われば立て直す", len(newer.hooks) == before)
+    ok &= check("世代が変われば立て直す", len(own_hooks(newer)) == before)
 
     print("[記録の1行で段が効いたか分かる]")
     ctx = fresh_gate()
@@ -492,6 +500,301 @@ def gate_main():
     price_owner(ctx, plain)
     ok &= check("誰も居なければ素の額のまま", plain.attributes[prices.BUY] == 100)
 
+    return ok
+
+
+# ---------------------------------------------------------------------------
+# 値切りで決まった額（VERIFICATION.md §3.121）
+# ---------------------------------------------------------------------------
+
+
+class Holder:
+    """店主か主人公。持ち物は `{鍵: 品}`。"""
+
+    def __init__(self, ident, *items):
+        self.id = ident
+        self.inventory = {}
+        for item in items:
+            self.take(item)
+
+    def take(self, item):
+        item.obtainer = self
+        self.inventory[item.id] = item
+
+
+def shop_item(ident, attributes=None):
+    item = Item(name=ident, attributes=attributes)
+    item.id = ident
+    return item
+
+
+class StateCtx(GateCtx):
+    """`state\\` の置き場と JSON の読み書きを持つ偽 ctx（周回の控えまで通す）。"""
+
+    def __init__(self, state_dir, generation=1):
+        super().__init__(generation)
+        self.state_dir = state_dir
+
+    def state_path(self, *parts):
+        path = os.path.join(self.state_dir, *parts)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        return path
+
+    def read_json(self, path, default=None):
+        return loader.read_json(path, default)
+
+    def write_json(self, path, data, *, indent=1):
+        return loader.write_json(path, data, indent=indent)
+
+
+def haggle(ctx, manager, write_price):
+    """値切りを1回通す。ゲームは中で額を書き、続けて保存する（実機の順）。"""
+    seen = {}
+
+    def negotiate(self, *args, **kwargs):
+        write_price()
+        ctx.hooks[prices.SAVE_TARGETS[0]](
+            lambda *a, **k: seen.setdefault("saved", dict(snapshot())), None)
+
+    snapshot = manager.snapshot
+    ctx.hooks[prices.HAGGLE_TARGET](negotiate, manager, "まけて")
+    return seen.get("saved")
+
+
+def haggle_main():
+    ok = True
+
+    def fresh(state_dir=None, generation=1):
+        for attr in (prices._ITEM_ATTR, prices._ITEM_GATE_ATTR, prices._HAGGLE_STORE_ATTR):
+            if hasattr(sys, attr):
+                delattr(sys, attr)
+        loads.reset()
+        gate_ctx = StateCtx(state_dir, generation) if state_dir else GateCtx(generation)
+        prices.install(gate_ctx)
+        return gate_ctx
+
+    print("[値切りの額は式と一時の段を越えて残る]")
+    ctx = fresh()
+    prices.declare_base("129", lambda it: {prices.BUY: 800, prices.SELL: 320})
+    prices.adjust("341", lambda it, key, price: price * 1.5, temporary=True)
+    knife = shop_item("item_1", {prices.BUY: 100, "item_detail": "small_weapon"})
+    owner = Holder("99", knife)
+    player = Holder(None)
+    app = types.SimpleNamespace(player=player)
+    manager = types.SimpleNamespace(app=app,
+                                    snapshot=lambda: {"buy": knife.attributes[prices.BUY]})
+    call(ctx, prices.SIGHT_TARGETS[0][0], app, owner, player, None, "shop")
+    ok &= check("窓を開くと式 × 段", knife.attributes[prices.BUY] == 1200,
+                knife.attributes[prices.BUY])
+    saved = haggle(ctx, manager, lambda: knife.attributes.__setitem__(prices.BUY, 1000))
+    ok &= check("値切りの中の保存にも値切った額", saved == {"buy": 1000}, saved)
+    ok &= check("値切りの後も値切った額", knife.attributes[prices.BUY] == 1000,
+                knife.attributes[prices.BUY])
+    ok &= check("固定として読める", prices.haggled(knife) == {prices.BUY: 1000},
+                prices.haggled(knife))
+    call(ctx, prices.SIGHT_TARGETS[0][0], app, owner, player, None, "shop")
+    call(ctx, prices.SIGHT_TARGETS[1][0], None, knife)
+    price_owner(ctx, knife)
+    call(ctx, prices.NORMALIZE_TARGET, app, owner, player)
+    prices.refresh("test")
+    ok &= check("窓・詳細・付け直し・均し・refresh を通しても残る",
+                knife.attributes[prices.BUY] == 1000, knife.attributes[prices.BUY])
+    kept = {}
+    ctx.hooks[prices.SAVE_TARGETS[0]](
+        lambda *a, **k: kept.setdefault("buy", knife.attributes[prices.BUY]), None)
+    ok &= check("あとの保存でも外さない", kept.get("buy") == 1000, kept)
+
+    print("[ロードで作り直された同じ品にも当たる]")
+    loaded = shop_item("item_1", {prices.BUY: 1000, "item_detail": "small_weapon"})
+    ctx.hooks["__main__:InstantaleApp.generate_item_from_dict"](lambda *a, **k: loaded, app)
+    ok &= check("作り直しても値切った額", loaded.attributes[prices.BUY] == 1000,
+                loaded.attributes[prices.BUY])
+
+    print("[売買で鍵が替わったら外れる]")
+    owner.inventory.pop(knife.id)
+    player.take(knife)
+    knife.attributes.pop(prices.BUY)
+    knife.attributes[prices.SELL] = 40          # ゲームが主人公の持ち物として付け直した
+    call(ctx, "__main__:InstantaleApp.set_shop_price_for_player", app, knife)
+    ok &= check("固定が外れる", prices.haggled(knife) == {}, prices.haggled(knife))
+    ok &= check("売価は式 × 段", knife.attributes[prices.SELL] == 480,
+                knife.attributes[prices.SELL])
+
+    print("[ゲームが付け直したら外れる]")
+    ctx = fresh()
+    prices.declare_base("129", lambda it: {prices.BUY: 800, prices.SELL: 320})
+    cup = shop_item("item_2", {prices.BUY: 100, "item_detail": "tool"})
+    owner = Holder("99", cup)
+    app = types.SimpleNamespace(player=Holder(None))
+    manager = types.SimpleNamespace(app=app, snapshot=dict)
+    call(ctx, prices.SIGHT_TARGETS[0][0], app, owner, app.player, None, "shop")
+    haggle(ctx, manager, lambda: cup.attributes.__setitem__(prices.BUY, 600))
+    ok &= check("値切った額が残る", cup.attributes[prices.BUY] == 600, cup.attributes)
+    cup.attributes[prices.BUY] = 100            # ゲームの付け直し
+    price_owner(ctx, cup)
+    ok &= check("式の額へ戻る", cup.attributes[prices.BUY] == 800, cup.attributes)
+    ok &= check("固定も外れる", prices.haggled(cup) == {}, prices.haggled(cup))
+
+    print("[段だけでも残る（式の無い組み合わせ）]")
+    ctx = fresh()
+    prices.adjust("405", lambda it, key, price: price * 2, temporary=True)
+    herb = shop_item("item_3", {prices.BUY: 100, "item_detail": "plant"})
+    owner = Holder("99", herb)
+    app = types.SimpleNamespace(player=Holder(None))
+    manager = types.SimpleNamespace(app=app, snapshot=dict)
+    price_owner(ctx, herb)
+    ok &= check("段が乗る", herb.attributes[prices.BUY] == 200, herb.attributes)
+    haggle(ctx, manager, lambda: herb.attributes.__setitem__(prices.BUY, 150))
+    ctx.hooks[prices.SAVE_TARGETS[0]](lambda *a, **k: None, None)
+    call(ctx, prices.SIGHT_TARGETS[1][0], None, herb)
+    ok &= check("保存と詳細を通しても値切った額", herb.attributes[prices.BUY] == 150,
+                herb.attributes)
+
+    print("[値切りの最中に関所が組み直した額は固定しない]")
+    ctx = fresh()
+    prices.declare_base("129", lambda it: {prices.BUY: 100, prices.SELL: 40})
+    rate = {"x": 1.0}
+    prices.adjust("341", lambda it, key, price: price * rate["x"], temporary=True)
+    bread = shop_item("item_4", {prices.BUY: 100, "item_detail": "food"})
+    owner = Holder("99", bread)
+    app = types.SimpleNamespace(player=Holder(None))
+    manager = types.SimpleNamespace(app=app, snapshot=dict)
+    call(ctx, prices.SIGHT_TARGETS[0][0], app, owner, app.player, None, "shop")
+
+    def judged():
+        rate["x"] = 0.9                         # 店主の態度が決まった（段の答えが変わった）
+        prices.refresh("test")
+
+    haggle(ctx, manager, judged)
+    ok &= check("段の額になる", bread.attributes[prices.BUY] == 90, bread.attributes)
+    ok &= check("固定はしない", prices.haggled(bread) == {}, prices.haggled(bread))
+
+    print("[同じ額の逆提示は固定しない]")
+    haggle(ctx, manager, lambda: bread.attributes.__setitem__(prices.BUY, 90))
+    ok &= check("固定はしない", prices.haggled(bread) == {}, prices.haggled(bread))
+
+    print("[店がもう持っていない品の固定は、窓を開いたとき片付く]")
+    haggle(ctx, manager, lambda: bread.attributes.__setitem__(prices.BUY, 70))
+    ok &= check("固定される", prices.haggled(bread) == {prices.BUY: 70}, prices.haggled(bread))
+    owner.inventory.clear()                     # 店の入れ替えで消えた
+    call(ctx, prices.SIGHT_TARGETS[0][0], app, owner, app.player, None, "shop")
+    ok &= check("片付く", prices.haggled(bread) == {}, prices.haggled(bread))
+
+    print("[周回の控えに書き、読み直しても当たる]")
+    import tempfile
+    with tempfile.TemporaryDirectory() as root:
+        ctx = fresh(state_dir=root)
+        prices.declare_base("129", lambda it: {prices.BUY: 800, prices.SELL: 320})
+        ring = shop_item("item_5", {prices.BUY: 100, "item_detail": "accessory"})
+        owner = Holder("99", ring)
+        app = types.SimpleNamespace(player=Holder(None),
+                                    world_dict={"world_data": {"name": "試しの世界"}},
+                                    save_data_dict={"player_data": {"name": "主"}})
+        manager = types.SimpleNamespace(app=app, snapshot=dict)
+        call(ctx, prices.SIGHT_TARGETS[0][0], app, owner, app.player, None, "shop")
+        haggle(ctx, manager, lambda: ring.attributes.__setitem__(prices.BUY, 500))
+        path = os.path.join(root, prices.HAGGLE_DIRNAME, "試しの世界×主.json")
+        stored = loader.read_json(path, {})
+        ok &= check("控えに書く",
+                    (stored.get("haggled") or {}).get("item_5", {}).get("price") == 500, stored)
+        ok &= check("持ち主も控える",
+                    (stored.get("haggled") or {}).get("item_5", {}).get("owner") == "99", stored)
+
+        # 起動し直して（控えは手元に無い）同じ周回を読む。
+        ctx = fresh(state_dir=root, generation=2)
+        prices.declare_base("129", lambda it: {prices.BUY: 800, prices.SELL: 320})
+        world = loads.TARGETS[loads.WORLD]
+        ctx.hooks[world](lambda *a, **k: None, object(),
+                         {"world_data": {"name": "試しの世界"}, "player_data": {"name": "主"}},
+                         app)
+        again = shop_item("item_5", {prices.BUY: 500, "item_detail": "accessory"})
+        ctx.hooks["__main__:InstantaleApp.generate_item_from_dict"](lambda *a, **k: again, app)
+        ok &= check("ロードで作られた品へ当たる", again.attributes[prices.BUY] == 500,
+                    again.attributes)
+
+        other = shop_item("item_5", {prices.BUY: 500, "item_detail": "accessory"})
+        ctx.hooks[world](lambda *a, **k: None, object(),
+                         {"world_data": {"name": "別の世界"}, "player_data": {"name": "主"}},
+                         app)
+        ctx.hooks["__main__:InstantaleApp.generate_item_from_dict"](lambda *a, **k: other, app)
+        ok &= check("別の周回の同じ id には当たらない", other.attributes[prices.BUY] == 800,
+                    other.attributes)
+    loads.reset()
+    return ok
+
+
+# ---------------------------------------------------------------------------
+# 売買で持ち主が替わった品（VERIFICATION.md §3.121）
+# ---------------------------------------------------------------------------
+
+
+def trade(ctx, target, item, to, key, game_price, by_keyword=False):
+    """売買を1回通す。ゲームは中で品を移し、新しい持ち主の鍵へ自分の額を付ける。"""
+    paid = {}
+
+    def move(self, *args, **kwargs):
+        old = prices.SELL if key == prices.BUY else prices.BUY
+        paid["price"] = item.attributes.pop(old)
+        item.obtainer.inventory.pop(item.id)
+        to.take(item)
+        item.attributes[key] = game_price
+
+    if by_keyword:
+        ctx.hooks[target](move, None, item_instance=item)
+    else:
+        ctx.hooks[target](move, None, item)
+    return paid.get("price")
+
+
+def trade_main():
+    ok = True
+    sold_at = "__main__:InstantaleApp.sell_item"
+    bought_at = "__main__:InstantaleApp.buy_item"
+
+    print("[売った品・買った品はその場で組み直す]")
+    ctx = fresh_gate()
+    prices.declare_base("129", lambda it: {prices.BUY: 800, prices.SELL: 320})
+    prices.adjust("405", lambda it, key, price: price * 1.5)
+    sword = shop_item("item_9", {prices.SELL: 40, "item_detail": "small_weapon"})
+    player = Holder(None, sword)
+    owner = Holder("99")
+    open_window(ctx, owner, player)
+    ok &= check("売る前は式 × 段", sword.attributes[prices.SELL] == 480, sword.attributes)
+    paid = trade(ctx, sold_at, sword, owner, prices.BUY, 300)
+    ok &= check("売った額は関所の額", paid == 480, paid)
+    ok &= check("店の買価はゲームの額でなく式 × 段", sword.attributes.get(prices.BUY) == 1200,
+                sword.attributes)
+    paid = trade(ctx, bought_at, sword, player, prices.SELL, 30, by_keyword=True)
+    ok &= check("買い戻す額も関所の額", paid == 1200, paid)
+    ok &= check("手持ちの売価も式 × 段（名前で渡されても）",
+                sword.attributes.get(prices.SELL) == 480, sword.attributes)
+
+    print("[式が無い品はゲームの新しい額に段が乗る]")
+    ctx = fresh_gate()
+    prices.adjust("405", lambda it, key, price: price * 1.5)
+    cup = shop_item("item_10", {prices.SELL: 40, "item_detail": "tool"})
+    player = Holder(None, cup)
+    owner = Holder("99")
+    call(ctx, "__main__:InstantaleApp.set_shop_price_for_player", None, cup)
+    ok &= check("売る前はゲームの額 × 段", cup.attributes[prices.SELL] == 60, cup.attributes)
+    trade(ctx, sold_at, cup, owner, prices.BUY, 100)
+    ok &= check("ゲームの買価 × 段", cup.attributes.get(prices.BUY) == 150, cup.attributes)
+
+    print("[値切った売価は売ったら外れる]")
+    ctx = fresh_gate()
+    prices.declare_base("129", lambda it: {prices.BUY: 800, prices.SELL: 320})
+    ring = shop_item("item_11", {prices.SELL: 40, "item_detail": "accessory"})
+    player = Holder(None, ring)
+    owner = Holder("99")
+    app = types.SimpleNamespace(player=player)
+    manager = types.SimpleNamespace(app=app, snapshot=dict)
+    call(ctx, prices.SIGHT_TARGETS[0][0], app, owner, player, None, "shop")
+    haggle(ctx, manager, lambda: ring.attributes.__setitem__(prices.SELL, 500))
+    ok &= check("値切った売価", prices.haggled(ring) == {prices.SELL: 500}, prices.haggled(ring))
+    paid = trade(ctx, sold_at, ring, owner, prices.BUY, 300)
+    ok &= check("値切った額で売れる", paid == 500, paid)
+    ok &= check("固定が外れる", prices.haggled(ring) == {}, prices.haggled(ring))
+    ok &= check("店の買価は式の額", ring.attributes.get(prices.BUY) == 800, ring.attributes)
     return ok
 
 

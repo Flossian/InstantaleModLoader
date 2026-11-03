@@ -7,6 +7,9 @@
 - 事務所の選択肢に「盗品を売る」（盗品を持っているときだけ）。押すと、事務所の主を相手に
   ゲーム自身の売買の窓（`toggle_twin_inventory_window`）を開く。ドラッグ・確認の窓・支払いはゲームのまま
   （店でない施設でも開け、売れる。2026-10-05 の実機）。開くのはゲームの店と同じく `process_choice` を通した自前のフェーズから
+- 店と同じく入力欄で値切れる。窓を開いたら、ゲームの店の「売買する」と同じく入力欄の行き先（`function_correspond_to_input`）を
+  `ShoppingNegotiateManager` へ差し替え、閉じたら開く前の行き先へ戻す（GAME.md §2.13.1.4。窓を直に開くだけでは自由行動へ流れた。
+  2026-11-03 の実機）。値切った額はローダの値段の関所が固定する
 - 盗品でない品は主が押し返す（`theft.sell_item`）。主の棚から買うことはできない
 - 売った品はゲームが主の持ち物へ積む。窓を閉じたら（ゲームの後始末 `on_close_window` の後）、開く前に無かった品を主の持ち物から外す（セーブに積もらない）。
   閉じる前にゲームが落ちたときのために、開く前の主の持ち物の鍵を控えの `fence` に持ち、窓の開いていないときに選択肢を組んだら片付ける
@@ -31,6 +34,10 @@ NO_BUY_TEXT = "{broker}は品を引き寄せた。\n「買い取った品は売�
 TWIN_WINDOW_DATA = "visible_twin_inventory_data"
 #: 窓を開いている間に残す選択肢（施設の「出る」「会話する」）。閉じたら `set_buttons_to_normal` で戻す。
 KEEP_WHILE_OPEN = (common.FACILITY_MARK, "DisplayTalkChoice")
+#: 入力欄の行き先（`PhaseSpec`）と、店の窓の間にゲームが入れる値切りのマネージャ（GAME.md §2.13.1.4）。
+INPUT_SPEC_ATTR = "function_correspond_to_input"
+INPUT_BACKUP_ATTR = "input_backup_for_shopping"
+NEGOTIATE_CLS = "ShoppingNegotiateManager"
 
 
 def rate_label(pct):
@@ -80,6 +87,7 @@ def install(env):
         主が引けないとき（ロードの途中は人物がまだ空）は、控えを残して次の組み直しに回す。
         先に控えを捨てると、売った品が主の持ち物に残り続ける。
         """
+        end_haggle(app)
         env.fence.update(broker=None, opening=False)
         playthrough = worlds.playthrough(app)
         with worlds.lock:
@@ -163,6 +171,35 @@ def install(env):
             return
         env.fence["opening"] = False
         write("fence: opened with {!r} ({})".format(getattr(broker, "name", None), broker_id))
+        allow_haggle(app)
+
+    def spec_name(spec):
+        data = ui.spec_data(spec)
+        return data.get("cls_name") if isinstance(data, dict) else None
+
+    def allow_haggle(app):
+        """入力欄を値切りへ向ける。開く前の行き先は控えに持ち、閉じたら `end_haggle` で戻す。"""
+        current = getattr(app, INPUT_SPEC_ATTR, None)
+        if spec_name(current) == NEGOTIATE_CLS:
+            return
+        spec_cls = ui.cls_of("PhaseSpec")
+        try:
+            spec = spec_cls(NEGOTIATE_CLS, []) if spec_cls is not None else None
+        except Exception:
+            ctx.log_exc("crime incentive: cannot make the haggling spec for the fence")
+            spec = None
+        if spec is None:
+            write("WARN fence: no haggling at the fence (PhaseSpec unavailable)")
+            return
+        env.fence["input"] = current
+        setattr(app, INPUT_BACKUP_ATTR, current)
+        setattr(app, INPUT_SPEC_ATTR, spec)
+
+    def end_haggle(app):
+        """入力欄を開く前の行き先へ戻す（値切りのままなら）。"""
+        before = env.fence.pop("input", None)
+        if before is not None and spec_name(getattr(app, INPUT_SPEC_ATTR, None)) == NEGOTIATE_CLS:
+            setattr(app, INPUT_SPEC_ATTR, before)
 
     def restore_choices(app):
         """事務所の選択肢に戻す（ゲーム自身の `set_buttons_to_normal`。選択肢を組み直す合図で 336 のボタンも付き直る）。"""
@@ -205,13 +242,32 @@ def install(env):
         選択肢の組み直しの合図だけに頼ると、閉じても片付かない回があった（会話の画面の上で閉じた回。実機）。
         """
         result = orig(self, *args, **kwargs)
-        if env.fence.get("broker") and not env.fence.get("opening"):
-            try:
-                clear_bought(self)
-            except Exception:
-                ctx.log_exc("crime incentive: cannot clear the fence")
-            restore_choices(self)
+        after_close(self)
         return result
+
+    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.turnoff_window_visibility", required=False, safe=True)
+    def turnoff_window_visibility(orig, self, *args, **kwargs):
+        """窓を消した（外側を押した）。ゲームの後始末の後のフレームで、上と同じ片付けをする。
+
+        HUD は作られたときの `on_close_window` を `on_backdrop_callback` に握るので、注入より前に作られた HUD では
+        上の包みを通らなかった（閉じても選択肢が絞ったまま・入力欄が値切りのまま。2026-11-03 の実機）。
+        """
+        result = orig(self, *args, **kwargs)
+        if env.fence.get("broker") and not env.fence.get("opening"):
+            app = ui.find_app()
+            if app is not None:
+                screen.schedule(lambda: after_close(app))
+        return result
+
+    def after_close(app):
+        """盗品買取商の窓が閉じていれば、主の持ち物を片付けて事務所の選択肢へ戻す（入力欄も `clear_bought` が戻す）。"""
+        if not env.fence.get("broker") or env.fence.get("opening") or window_open(app):
+            return
+        try:
+            clear_bought(app)
+        except Exception:
+            ctx.log_exc("crime incentive: cannot clear the fence")
+        restore_choices(app)
 
     @ctx.wrap("scripts.hud.new_hud:InventoryItem.buy_item", required=False, safe=True)
     def buy_item(orig, self, *args, **kwargs):

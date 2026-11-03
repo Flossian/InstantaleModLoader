@@ -15,16 +15,24 @@ def main(say):
         say("player has item: {}".format(widget is not None))
         grid = [n for n in widget.parent.children
                 if getattr(n, "obtainer", None) is not app().player and hasattr(n, "place_new_item")][0]
+        # 大きな品（2x2 など）は品の大きさで空きを探す。掴むのは品の真ん中で、落とす先も同じずれで
+        # （2x2 の品は左下のマスの真ん中を掴むと動かなかった。2026-11-03 の実機）
+        w = int(getattr(widget.item_instance, "width_slots", 1) or 1)
+        h = int(getattr(widget.item_instance, "height_slots", 1) or 1)
         cell = None
-        for gy in range(grid.rows - 1, -1, -1):
-            for gx in range(grid.cols):
-                if grid.is_valid_placement(gx, gy, 1, 1):
+        for gy in range(grid.rows - h, -1, -1):
+            for gx in range(grid.cols - w + 1):
+                if grid.is_valid_placement(gx, gy, w, h):
                     cell = (gx, gy)
                     break
             if cell:
                 break
-        start = widget.parent.to_window(widget.x + 32, widget.y + 32)
-        end = grid.parent.to_window(grid.x + cell[0] * 65 + 32, grid.y + cell[1] * 65 + 32)
+        say("free cell {} for {}x{}".format(cell, w, h))
+        if cell is None:
+            return 0.2
+        dx, dy = widget.width / 2.0, widget.height / 2.0
+        start = widget.parent.to_window(widget.x + dx, widget.y + dy)
+        end = grid.parent.to_window(grid.x + cell[0] * 65 + dx, grid.y + cell[1] * 65 + dy)
         st["gold"] = app().player.gold
         _touch([start, end])
         return 0.8

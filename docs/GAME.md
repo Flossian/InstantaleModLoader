@@ -2095,7 +2095,8 @@ generate_item_in_shopping(item_data, shop_owner_instance, item_stock_tier=2)
   ```
 
   売買の確認の窓は、品を落とした後のフレームでゲームが作る `ConfirmationWindow`（直下に `FloatLayout` と `Label`「品名:額G」、`FloatLayout` の下に `Button`「買う」「キャンセル」。ボタンは `on_press` で動く）。落とした呼び出しの中ではまだ出ていない。同じクラスを MOD が自分で作って品と同じ親へ足しても、中のボタンが 40×24 のまま並ばず画面に出ない（`336_` の実機。ゲームはこの窓を別の手順で出していると見られるが測っていない）。`ConfirmationModalView` は開けるが、ボタンが売買の確認より大きく、ModalView の覆いで後ろが暗くなる。ゲームが出した窓の文言を差し替えて借りることはできる（`336_` の盗む確認）
-- 窓の外側を押したときの閉じ方（2026-10-04 に実機で引数を写した）: `InstanTaleHUD._on_backdrop_touch(instance, touch)` が `turnoff_window_visibility(instance, 窓の表示の辞書)`（売買の窓は `hud.visible_twin_inventory_data` そのもの。`{'TorF': True, 'situation': 'shop', …}`）を呼び、続けて `hud.on_backdrop_callback()`（= `app.on_close_window`）で後始末する。後始末を呼ばないと窓は消えるが `is_popup_window_opened` が残る。後始末は `app.buttons_backup_for_shopping`（窓を開いたときの選択肢）を戻すので、窓を開いたまま戦闘を始めて後から閉じると、戦闘のボタンが店の選択肢に置き換わる
+- 窓の外側を押したときの閉じ方（2026-10-04 に実機で引数を写した）: `InstanTaleHUD._on_backdrop_touch(instance, touch)` が `turnoff_window_visibility(instance, 窓の表示の辞書)`（売買の窓は `hud.visible_twin_inventory_data` そのもの。`{'TorF': True, 'situation': 'shop', …}`）を呼び、続けて `hud.on_backdrop_callback()`（= `app.on_close_window`）で後始末する。後始末を呼ばないと窓は消えるが `is_popup_window_opened` が残る。後始末は `app.buttons_backup_for_shopping`（窓を開いたときの選択肢）を戻すので、窓を開いたまま戦闘を始めて後から閉じると、戦闘のボタンが店の選択肢に置き換わる。
+  `on_backdrop_callback` は HUD が作られたときの `app.on_close_window`（束ねたメソッド）なので、注入より前に作られた HUD では `InstantaleApp.on_close_window` の包みを通らない（2026-11-03 の実機。`relaunch.sh` の起動で、包みは型に掛かっていたが HUD の呼び口は素のままだった）。閉じたことを拾うなら、HUD がその場で引く `InstanTaleHUD.turnoff_window_visibility` を包む
 - 店でない施設でも、`toggle_twin_inventory_window(相手, 主人公, 見出し, 'shop')` で売買の窓が開く（2026-10-05、`336_` の盗品買取商。相手は裏の事務所の主で、持ち物は空）。
   ドラッグ・確認の窓・`Item.sell` の支払い・「〈品〉を売却した。」はゲームのまま動き、売った品は相手の持ち物へ積まれる。
   値段は開く前に `normalize_shop_inventory_prices(相手, 主人公)` で付ける。
@@ -2122,6 +2123,24 @@ generate_item_in_shopping(item_data, shop_owner_instance, item_stock_tier=2)
 
 > 回復アイテムだけは同じ品を何度でも買えて、在庫が尽きない。
 > `312_shop_restock` の「買った品を作り直させない」（既定 ON）が、その来店で増えたぶんを窓が組み上がる前に外す。
+
+##### 2.13.1.4 値切りは品の額を直に書き換える（実測。VERIFICATION.md §3.121）
+
+売買の窓を開いている間の入力欄は値切りになる（`ShoppingNegotiateManager.execute(choice_text)` → `shopping_negotiate_method` → LLM の `shopping_negotiator`）。
+値切りになるのは、入力欄の行き先 `app.function_correspond_to_input`（`PhaseSpec`）が `ShoppingNegotiateManager` のとき（2026-11-03 の実機）。
+ゲームの店の「売買する」は、窓を開くときにこれを差し替える（元の行き先は `app.input_backup_for_shopping` に控える）。窓を閉じても戻さず、次の場面（「出る」など）で `FreeInputStart` に戻る。
+`toggle_twin_inventory_window` を直に呼んで開いた窓では差し替わらず、入力は自由行動へ流れる（`336_` の盗品買取商は版5から自分で差し替え、閉じたら戻す）。
+同じ「売買する」で `in_shopping` も立つが、ゲームは読まない（§2.6）。
+`ShoppingNegotiateManager` は相手を今いる施設の主（`Facility.owner`。文字列の id）で引く。数の id を入れた施設では `KeyError` でスレッドが落ちた（試しで施設を書き換えたときの誤り）。
+LLM へ渡る品の額は、そのときの `attributes` の額（店の品は「価格」、手持ちの品は「参考買取価格」）。値段の MOD が書いた額がそのまま渡る。
+`player_attempt` は `bargaining` / `inspect_item` / `availability_inquiry` / null のどれかで、値切りなら `trade_direction`（`player_buys` / `player_sells`）・`target_item`・`decision`・`new_offer` が返る。
+
+- ゲームは `new_offer` を品の `attributes` へ直に書く。買う側は店の品の `買価`、売る側は手持ちの品の `売価`。`decision` が `counter`（店主の逆提示）でも書く
+- 書くのは `execute` の中で、値段の地点（`set_shop_price_for_*` / `normalize_shop_inventory_prices`）は通らない。同じ処理の中で保存も走る
+- 未検品の品を売ろうとすると、先に `inspect_item` で検品し、`app.inspected_item_ids` に足す。値段は検品の後の頼みで返る
+- 店の品の `買価` に書いた額は、窓を閉じても・店を出ても・読み直してもセーブに残る。店の窓を開き直しても付け直されない
+- 手持ちの品の `売価` に書いた額は、次に売買の窓を開いたときにゲームが付け直す（`set_shop_price_for_player`）。売る側の値切りは、その窓を閉じるまで
+- 売買の確認の表示と動く額はその額どおり。持ち主が変わると、ゲームが新しい持ち主の鍵で額を付け直す（`buy_item` / `sell_item` の中。値段の地点は通らない）
 
 ##### 店の主は `job` が施設の種類と一致している
 
