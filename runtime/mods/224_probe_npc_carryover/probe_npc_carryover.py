@@ -34,7 +34,7 @@ r"""計測: ロードのどの地点から NPC を世界へ入れられるか（
 名前だけでは新規と続きの別は決められない（GAME.md §1.3）ので両方包み、
 ログで見分ける。
 
-そのうえで**3地点目**を録る ― ロードの後、最初に選択肢が組み直される瞬間
+そのうえで**3地点目**を録る。ロードの後、最初に選択肢が組み直される瞬間
 （`refresh_choice_buttons`）。
 上の2つが早すぎたときの逃げ場になるかを、同じ物差しで測るため。
 ここは1回のロードにつき1度だけ録る（毎回録るとログが選択肢の数だけ埋まる）。
@@ -48,6 +48,12 @@ r"""計測: ロードのどの地点から NPC を世界へ入れられるか（
 200番台の約束どおり読み取りだけ。
 数えるだけで、`make_npc` は**呼ばない**（呼べば世界に人が増える）。
 記録に失敗しても本体は必ず呼ぶ。
+
+## 版の記録
+
+版3: 注入時（`on_ready`）の記録は毎プロセス4行で、起動直後の注入では世界の鍵が `"_"`
+（ロード前）なので全部 0・`NOT READY` だった。そのときは同じ数を1行に縮めて書く。
+ロードの後に注入し直したときは、これまでどおり4行で書く。
 """
 
 from instantale_modloader import ids, npcs as npc_tools, state, ui
@@ -94,8 +100,11 @@ def apply(ctx):
                 placeable_areas += 1
         return len(areas or {}), kinds, placeable_areas
 
-    def record(app, label):
-        """その瞬間に揃っているものを1件ぶん書く。"""
+    def record(app, label, compact=False):
+        """その瞬間に揃っているものを1件ぶん書く。
+
+        `compact` のときは、世界の鍵が `"_"`（ロード前）なら4行を1行に縮める（版3）。
+        """
         if app is None:
             write("{}: no app; nothing to look at".format(label))
             return
@@ -128,6 +137,15 @@ def apply(ctx):
         areas, kinds, placeable_areas = count_facilities(app)
         if not placeable_areas:
             missing.append("guild/inn")
+
+        if compact and key == state.UNKNOWN_WORLD:
+            # 版3: ロード前の注入は1行に縮める。数は同じものを並べる。
+            write("{}: world_key={!r} (no world loaded yet) index.npc={} areas={} "
+                  "placeable_areas={} stores={} {} <- missing {}".format(
+                      label, key, counter, areas, placeable_areas, len(stores),
+                      "READY" if not missing else "NOT READY",
+                      ", ".join(missing) or "-"))
+            return
 
         write("{}: world_key={!r} index.npc={} areas={} placeable_areas={} "
               "{}".format(label, key, counter, areas, placeable_areas,
@@ -196,7 +214,7 @@ def apply(ctx):
 
     def on_ready():
         try:
-            record(ui.find_app(), "at injection (on_ready)")
+            record(ui.find_app(), "at injection (on_ready)", compact=True)
         except Exception:
             ctx.log_exc("npc carryover probe: cannot record the injection")
 

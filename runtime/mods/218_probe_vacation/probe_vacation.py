@@ -19,7 +19,8 @@
 残っている問いが1つあるため:
 
 - **`period_months` の年齢ごとの境目**。
-  仕様は「若いと3ヵ月・年を取ると最長 6ヵ月」で、実測は 20代=3・31歳=4 の2点だけ。
+  仕様は「若いと3ヵ月・年を取ると最長 6ヵ月」で、版4を書いた時点の実測は 20代=3・31歳=4 の2点だけだった。
+  版5の時点の記録には 6ヵ月を超える組もあり、上限も境目も決まっていない（GAME.md §2.17 に表を足す）。
   `display_vacation_choice` の行は `period_months` と
   `player.age` を毎回対で残すので、遊ぶほど表が埋まる
 
@@ -54,10 +55,14 @@
 （キーワードで来た引数を位置へ直さない。VERIFICATION.md §3.76 の `333_` の件）。
 `change_background_image_to_inn_room` の呼び出し元は窓の外の1行にだけ付ける
 （窓の中は所属する段が分かっている。呼び出し元を組むのは1回あたり約1ms）。
+
+版5: 各段の窓（`Vacation*Manager.execute`）の包みも `safe=True` にした。
+版4までは「本体の例外を窓の片付けの後にそのまま上げたい」として外していたが、
+`safe=True` は本体が投げた例外をそのまま通す（呼び直さない）ので、片付けの後に上がる形は同じ。
+あわせて使っていない `import json` を外した。
 """
 
 import datetime
-import json
 import time
 import weakref
 
@@ -198,12 +203,14 @@ def apply(ctx):
                 pass
             return result
 
-        @ctx.wrap("__main__:{}.execute".format(cls_name), required=False)
+        @ctx.wrap("__main__:{}.execute".format(cls_name), required=False,
+                  safe=True)
         def manager_execute(orig, self, *args, **kwargs):
             """窓の前後の所持金と、窓の間の日数・文言・背景切り替えを1行に。
 
-            `safe=True` を付けないのは、本体が投げた例外を窓の片付けの後にそのまま
-            上げたいため。本体を呼ぶ前の控えは try に入れ、失敗しても本体は必ず1回呼ぶ（版3）。
+            本体を呼ぶ前の控えは try に入れ、失敗しても本体は必ず1回呼ぶ（版3）。
+            本体が投げた例外は `finally` で窓を片付けた後にそのまま上がる
+            （`safe=True` は本体の例外を呼び直さずに通す。版5）。
             """
             app = choice_text = gold_before = None
             window = {"cls": cls_name, "texts": [], "days": [], "dots": 0,

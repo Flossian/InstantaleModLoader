@@ -86,7 +86,7 @@ HP は**最大 HP に対する割合**で書く（`回復: 25%`）。
 import sys
 import threading
 
-from instantale_modloader import frames, ui
+from instantale_modloader import frames, items, ui
 
 from . import healing
 
@@ -233,31 +233,35 @@ def apply(ctx):
     def rework_inventory(obtainer, why):
         inventory = frames.attr(obtainer, "inventory", None)
         if isinstance(inventory, dict):
-            items = list(inventory.values())
+            held = list(inventory.values())
         elif isinstance(inventory, (list, tuple)):
-            items = list(inventory)
+            held = list(inventory)
         else:
             return 0
-        return sum(1 for item in items if rework_one(item, why))
+        return sum(1 for item in held if rework_one(item, why))
 
     # ---- 生成の経路（`129_` と同じ3本）---------------------------------
+    # 戻り値は入口で違う（`(Item, 鍵)` か None）。品は `items.made_item` で取り出す。
     @ctx.wrap("__main__:InstantaleApp.generate_item_from_item_data", safe=True)
     def generated_from_data(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
-        rework_one(result, "generated")
+        rework_one(items.made_item("generate_item_from_item_data", result, args, kwargs),
+                   "generated")
         return result
 
     @ctx.wrap("__main__:InstantaleApp.generate_item_from_dict", safe=True)
     def generated_from_dict(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
-        rework_one(result, "generated/dict")
+        rework_one(items.made_item("generate_item_from_dict", result, args, kwargs),
+                   "generated/dict")
         return result
 
     @ctx.wrap("__main__:InstantaleApp.generate_item_from_ready_made_data",
               safe=True, required=False)
     def generated_ready_made(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
-        rework_one(result, "generated/ready_made")
+        rework_one(items.made_item("generate_item_from_ready_made_data", result, args, kwargs),
+                   "generated/ready_made")
         return result
 
     # ---- 既にセーブに在る品 ----------------------------------------------

@@ -211,6 +211,14 @@ count = len(records("set"))
 touch_shopping(app, False)
 check("1回の書き込みは1行", len(records("set")) == count + 1, len(records("set")) - count)
 check("値は保たれている", app.in_shopping is False and app.in_battle == 0)
+with io.open(os.path.join(OUT_DIR, "game_flags.log"), encoding="utf-8") as fh:
+    now_lines = [line for line in fh if "] now {" in line]
+check("見張りを置いた時の旗（now）は1プロセスに1行", len(now_lines) == 1, now_lines)
+touch_shopping(app, False)
+touch_shopping(app, False)
+rewrites = [r for r in records("rewrite") if r["flag"] == "in_shopping"]
+check("当て直しの後も同じ所の書き直しは数え直さない（新値が違えば1行）",
+      len(rewrites) == 2, rewrites)
 
 print("保存")
 vars(app)["in_shopping"] = True     # 見張りを通らない書き換え

@@ -10,7 +10,7 @@
     "en": "When a world is generated, the overview typed in is only handed to the LLM as a hint; what gets saved as world_data['overview'] is the LLM's own rewrite, and everything after that (story, settlements, quests) is built from the rewrite instead of what was written. Puts the text back verbatim right after the first response, before the story is generated. The geography and the nine-area structure are still the ones the LLM wrote",
     "ja": "世界生成で入力した概要は最初のプロンプトに渡るだけで、world_data['overview'] に保存されるのは LLM が書き直した文章。以後の生成（物語・集落・依頼）は書き直しの方を読むため、入力した設定が落ちたり書いていないものが混ざったりする。最初の応答が返った直後、物語の生成より前に、入力した文章そのものへ戻す。地理の説明と3層9エリアの構造は LLM が書いたものを使う"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "KEEP_GENERATED": {

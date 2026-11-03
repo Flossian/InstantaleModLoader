@@ -175,7 +175,7 @@ id は採番台帳から採る（`ids.claim`）。
 import sys
 import typing
 
-from instantale_modloader import frames, ids, llm, shop_lineup, ui, value_limits
+from instantale_modloader import frames, ids, items, llm, shop_lineup, ui, value_limits
 from instantale_modloader.state import WorldStore
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
@@ -774,7 +774,9 @@ def apply(ctx):
                 continue
             before = set(inventory_of(owner) or {})
             try:
-                item = maker(*(fields + (owner,)))
+                call = fields + (owner,)
+                # 戻りは `(Item, 鍵)`。品だけを取り出す（tuple のまま棚へ入れない）。
+                item = items.made_item("generate_item_from_item_data", maker(*call), call, {})
             except Exception:
                 ctx.log_exc("shop restock: generate_item_from_item_data failed")
                 continue

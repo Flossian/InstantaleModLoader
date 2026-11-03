@@ -32,6 +32,10 @@ probe が確かめるのは枝の正体ではなく、**落ちた呼び出しを
   後段       … `write_crash_log_to_file` /
                  `should_skip_crash_log_server_send` /
                  `send_crash_log_to_server` は素通しで、値を変えない
+  版2        … 包みは全部 `safe=True`。やり直しは `orig` ではなく素の関数で行う
+                 （`orig` は1回しか呼ばない）。`mods in path` は `orig` をそのまま呼ぶだけの
+                 包みの層を数えず、MOD が直に呼んだ回だけ yes。経路の書き方は
+                 `traceback.extract_stack()` で組んだ版1と同じ
 """
 import datetime
 import importlib.util
@@ -39,6 +43,7 @@ import io
 import json
 import os
 import sys
+import traceback
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
@@ -133,6 +138,7 @@ class FakeCtx:
     def __init__(self, out_dir):
         self.out_dir = out_dir
         self.hooks = {}
+        self.kws = {}
         self.errors = []
         self.logs = []
 
@@ -156,6 +162,7 @@ class FakeCtx:
     def wrap(self, target, **kw):
         def decorator(func):
             self.hooks[target] = func
+            self.kws[target] = kw
             return func
         return decorator
 
@@ -289,11 +296,17 @@ def main():
     before = MAIN.datetime
     marker = len(read_log(ctx))
     raised = None
+    # やり直しは `__main__` の素の関数で行う（版2）ので、そちらも直らない代役にする。
+    # このテストを直に走らせると `__main__` はこのモジュール自身なので、戻す値は先に控える。
+    saved = MAIN.make_crash_log
+    MAIN.make_crash_log = make_crash_log_always_broken
     try:
         hook(make_crash_log_always_broken, KeyError, exc, exc.__traceback__,
              "THREAD CRASH: Thread-3 (execute)")
     except AttributeError as caught:
         raised = caught
+    finally:
+        MAIN.make_crash_log = saved
     check("元の例外を投げ直す", raised is not None, raised)
     check("落ちても datetime を戻す", MAIN.datetime is before, MAIN.datetime)
     tail = read_log(ctx)[marker:]
@@ -326,6 +339,76 @@ def main():
         got = step(getattr(MAIN, target.rpartition(":")[2]), *args)
         check("{} は値を変えない".format(target.rpartition(":")[2]),
               got == expected, got)
+
+    # -- 版2 ---------------------------------------------------------------
+    print("\n[版2: safe=True と、やり直しは素の関数で]")
+    for target in ("__main__:make_crash_log", "__main__:write_crash_log_to_file",
+                   "__main__:should_skip_crash_log_server_send",
+                   "__main__:send_crash_log_to_server"):
+        check("{} は safe=True".format(target.rpartition(":")[2]),
+              (ctx.kws.get(target) or {}).get("safe") is True, ctx.kws.get(target))
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(args)
+        return make_crash_log(*args, **kwargs)
+
+    marker = len(read_log(ctx))
+    try:
+        hook(counted, KeyError, exc, exc.__traceback__, "THREAD CRASH: Thread-5 (execute)")
+    except AttributeError:
+        pass
+    tail = read_log(ctx)[marker:]
+    check("やり直しで orig を呼び直さない（orig は1回だけ）", len(calls) == 1, calls)
+    check("やり直しは素の関数で通る", "RETRY with the shim -> OK" in tail, tail)
+
+    print("\n[版2: mods in path は通過する包みを数えない]")
+    # MOD の置き場に在るファイル名でコードを組み、MOD の枠を作る（ファイルは要らない）。
+    fake_file = os.path.join(MODS_DIR, "999_fake_layer", "fake_layer.py")
+    source = (
+        "def layer(orig, *args, **kwargs):\n"
+        "    return orig(*args, **kwargs)\n"
+        "\n"
+        "def make_direct(hook, game):\n"
+        "    def direct(*args):\n"
+        "        return hook(game, *args)\n"
+        "    return direct\n")
+    fake = {}
+    exec(compile(source, fake_file, "exec"), fake)
+    marker = len(read_log(ctx))
+    fake["layer"](lambda *a: hook(make_crash_log, *a),
+                  KeyError, exc, exc.__traceback__, "MAIN CRASH")
+    tail = read_log(ctx)[marker:]
+    check("orig をそのまま呼ぶだけの層は数えない（mods in path = no）",
+          "mods in path = no" in tail, tail)
+    check("経路にはその層が [mod] の印つきで残る", "layer[mod]" in tail, tail)
+    marker = len(read_log(ctx))
+    fake["make_direct"](hook, make_crash_log)(
+        KeyError, exc, exc.__traceback__, "MAIN CRASH")
+    tail = read_log(ctx)[marker:]
+    check("MOD が直に呼んだ回は yes と起点の枠",
+          "mods in path = yes (direct (" in tail, tail)
+
+    print("\n[版2: 経路の書き方は版1と同じ]")
+
+    def old_route(skip_innermost=1):
+        """版1の `_route` の経路の部分（`traceback.extract_stack()` で組む形）。"""
+        stack = traceback.extract_stack()
+        stack = stack[:-(skip_innermost + 1)] if skip_innermost + 1 <= len(stack) else []
+        stack = stack[-module.ROUTE_DEPTH:]
+        parts = []
+        for entry in stack:
+            name = entry.filename.rsplit("\\", 1)[-1].rsplit("/", 1)[-1]
+            mark = "[mod]" if module.frames.is_ours(entry.filename) else ""
+            parts.append("{}:{} {}{}".format(name, entry.lineno, entry.name, mark))
+        return " > ".join(parts), None
+
+    def deep(count, fn):
+        return fn() if count == 0 else deep(count - 1, fn)
+
+    for count in (0, 3, 12):
+        pair = (deep(count, module._route)[0], deep(count, old_route)[0])
+        check("深さ {} で同じ経路".format(count), pair[0] == pair[1], pair)
 
     check("計測の中で例外を握り潰していない", not ctx.errors, ctx.errors)
 

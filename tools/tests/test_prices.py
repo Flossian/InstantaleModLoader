@@ -89,6 +89,7 @@ def main():
     ok &= gate_main()
     ok &= haggle_main()
     ok &= trade_main()
+    ok &= made_main()
 
     print("all ok" if ok else "FAILED")
     return 0 if ok else 1
@@ -528,6 +529,32 @@ def shop_item(ident, attributes=None):
     return item
 
 
+DICT_MAKER = "__main__:InstantaleApp.generate_item_from_dict"
+DATA_MAKER = "__main__:InstantaleApp.generate_item_from_item_data"
+
+
+def make_from_dict(ctx, item, owner, by_keyword=False):
+    """ゲームの `generate_item_from_dict` の形で作る。品は渡した鍵で持ち物へ入り、戻りは None（GAME.md §2.13.1.5）。"""
+    def orig(self, item_dict, item_id, obtainer):
+        obtainer.inventory[item_id] = item
+        item.obtainer = obtainer
+        return None
+
+    if by_keyword:
+        return ctx.hooks[DICT_MAKER](orig, None, item_dict={}, item_id=item.id, obtainer=owner)
+    return ctx.hooks[DICT_MAKER](orig, None, {}, item.id, owner)
+
+
+def make_from_data(ctx, item, owner):
+    """ゲームの `generate_item_from_item_data` の形で作る。戻りは `(Item, 鍵)`。"""
+    def orig(self, *args):
+        owner.take(item)
+        return item, item.id
+
+    return ctx.hooks[DATA_MAKER](orig, None, item.name, "説明", item.item_type, "small",
+                                 item.value, "a dagger", item.rarity, owner)
+
+
 class StateCtx(GateCtx):
     """`state\\` の置き場と JSON の読み書きを持つ偽 ctx（周回の控えまで通す）。"""
 
@@ -606,7 +633,7 @@ def haggle_main():
 
     print("[ロードで作り直された同じ品にも当たる]")
     loaded = shop_item("item_1", {prices.BUY: 1000, "item_detail": "small_weapon"})
-    ctx.hooks["__main__:InstantaleApp.generate_item_from_dict"](lambda *a, **k: loaded, app)
+    make_from_dict(ctx, loaded, Holder("99"))
     ok &= check("作り直しても値切った額", loaded.attributes[prices.BUY] == 1000,
                 loaded.attributes[prices.BUY])
 
@@ -708,7 +735,7 @@ def haggle_main():
                          {"world_data": {"name": "試しの世界"}, "player_data": {"name": "主"}},
                          app)
         again = shop_item("item_5", {prices.BUY: 500, "item_detail": "accessory"})
-        ctx.hooks["__main__:InstantaleApp.generate_item_from_dict"](lambda *a, **k: again, app)
+        make_from_dict(ctx, again, Holder("99"))
         ok &= check("ロードで作られた品へ当たる", again.attributes[prices.BUY] == 500,
                     again.attributes)
 
@@ -716,7 +743,7 @@ def haggle_main():
         ctx.hooks[world](lambda *a, **k: None, object(),
                          {"world_data": {"name": "別の世界"}, "player_data": {"name": "主"}},
                          app)
-        ctx.hooks["__main__:InstantaleApp.generate_item_from_dict"](lambda *a, **k: other, app)
+        make_from_dict(ctx, other, Holder("99"))
         ok &= check("別の周回の同じ id には当たらない", other.attributes[prices.BUY] == 800,
                     other.attributes)
     loads.reset()
@@ -795,6 +822,46 @@ def trade_main():
     ok &= check("値切った額で売れる", paid == 500, paid)
     ok &= check("固定が外れる", prices.haggled(ring) == {}, prices.haggled(ring))
     ok &= check("店の買価は式の額", ring.attributes.get(prices.BUY) == 800, ring.attributes)
+    return ok
+
+
+# ---------------------------------------------------------------------------
+# 品を作る入口の戻り（GAME.md §2.13.1.5・VERIFICATION.md §3.121）
+# ---------------------------------------------------------------------------
+
+
+def made_main():
+    from instantale_modloader import items
+    ok = True
+
+    print("[品を作る入口の戻り]")
+    ctx = fresh_gate()
+    prices.declare_base("129", lambda it: {prices.BUY: 800, prices.SELL: 320})
+    dagger = shop_item("item_20", {prices.BUY: 100, "item_detail": "small_weapon"})
+    result = make_from_data(ctx, dagger, Holder("99"))
+    ok &= check("戻りはそのまま返す", result == (dagger, "item_20"), result)
+    ok &= check("tuple の戻りでも作った品を組み直す", dagger.attributes[prices.BUY] == 800,
+                dagger.attributes)
+    loaded = shop_item("item_21", {prices.BUY: 100, "item_detail": "accessory"})
+    owner = Holder("99")
+    ok &= check("None の戻りはそのまま返す", make_from_dict(ctx, loaded, owner) is None)
+    ok &= check("None の戻りは渡した鍵で持ち物から引いて組み直す",
+                loaded.attributes[prices.BUY] == 800, loaded.attributes)
+    named = shop_item("item_22", {prices.BUY: 100, "item_detail": "accessory"})
+    make_from_dict(ctx, named, Holder("99"), by_keyword=True)
+    ok &= check("キーワードで来た引数でも引く", named.attributes[prices.BUY] == 800,
+                named.attributes)
+
+    entry = "generate_item_from_item_data"
+    ok &= check("品の無い tuple は None", items.made_item(entry, ("a", "b"), (), {}) is None)
+    ok &= check("鍵の無い入口の None は None",
+                items.made_item("generate_item_from_ready_made_data", None, (Holder("99"),), {})
+                is None)
+    ok &= check("辞書は品と読まない",
+                items.made_item(entry, ({"attributes": {}}, "k"), (), {}) is None)
+    ok &= check("持ち物に無い鍵は None",
+                items.made_item("generate_item_from_dict", None, ({}, "nope", Holder("99")), {})
+                is None)
     return ok
 
 

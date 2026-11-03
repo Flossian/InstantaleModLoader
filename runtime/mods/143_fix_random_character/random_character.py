@@ -474,9 +474,8 @@ def apply(ctx):
                 "・".join(k for k, _l in plan["low"])))
         return new_texts
 
-    hooks = wrap_outgoing(
-        ctx, run, label="random character",
-        on_arm=lambda target: write("[ARM] 遅れて仕掛けた: {}".format(target)))
+    # 掛け直しの時点はローダが `modloader.log` に `late-armed on` で残す（こちらの記録へは写さない）。
+    hooks = wrap_outgoing(ctx, run, label="random character")
 
     _verify(ctx)
 

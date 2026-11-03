@@ -10,7 +10,7 @@
     "en": "Measures the EVENTLOG / DEDUP / sidecar launch prompt bloat behaviours, and prompt/output tokens per local LLM request",
     "ja": "EVENTLOG / DEDUP / サイドカー起動という3つのプロンプト肥大化挙動と、ローカル LLM の頼みごとのトークン数を実測する"
   },
-  "version": "4",
+  "version": "5",
   "author": "R01/Flossian",
   "debug": true,
   "after": [

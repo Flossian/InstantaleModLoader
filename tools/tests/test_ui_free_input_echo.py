@@ -59,6 +59,18 @@ class ConversationInQuestPhase:
     pass
 
 
+class ShoppingNegotiateManager:
+    pass
+
+
+class UtteranceInBattleManager:
+    pass
+
+
+class QuestPhaseManager:
+    pass
+
+
 class App:
     def __init__(self, player=Player("ヴァルカ")):
         self.player = player
@@ -144,9 +156,25 @@ app = App()
 send(app, BattlePhaseManager(), "防御に徹して身を守る", keyword=True)
 check("戦闘でもキーワード渡しでも足す",
       app.events[0] == ("text", "防御に徹して身を守る"), app.events)
+app = App()
+send(app, QuestPhaseManager(), "残骸を足で転がして裏を確かめる")
+check("依頼の中の行動にも足す",
+      app.events[0] == ("text", "残骸を足で転がして裏を確かめる"), app.events)
 
-print("会話")
-for manager in (ConversationPhaseManager(), ConversationInQuestPhase()):
+print("依頼の中の会話")
+app = App()
+send(app, ConversationInQuestPhase(), " 後ろを頼む ")
+check("主人公名を付けてゲームの処理より先に足す",
+      app.events == [("text", "ヴァルカ: 後ろを頼む"),
+                     ("choice", "ConversationInQuestPhase", " 後ろを頼む ")], app.events)
+app = App(player=Player(""))
+send(app, ConversationInQuestPhase(), "後ろを頼む")
+check("名前が取れなければ文だけで足す",
+      app.events[0] == ("text", "後ろを頼む"), app.events)
+
+print("ゲームが自分で出す送り先")
+for manager in (ConversationPhaseManager(),
+                ShoppingNegotiateManager(), UtteranceInBattleManager()):
     app = App()
     send(app, manager, "最近の試合で手強かった相手はいるか？")
     check("{} には足さない".format(type(manager).__name__),

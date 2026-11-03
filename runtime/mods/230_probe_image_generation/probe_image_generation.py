@@ -35,6 +35,20 @@ recon（`out\recon\targets.txt`）から読めるのは「そこに関数が在�
     注入し直しと遅延の当て直しのたびに出ていた（約 350 回、1回 10 行前後）
   * 呼び出し元を2回組んでいた所（出口・構築・組み立て・import の直後）を1回に
   * `counts` をワーカースレッドから錠なしで足していたので、錠を付けた
+
+版9: 切って注入し直した後の古い観測者は、記録も当て直しもしない（`ctx.superseded()`）。
+
+版10（見直し）:
+  * 元の関数が投げた回も jsonl に残す。前は構築（`__init__`）・組み立て（`load_sd_pipeline`）が
+    投げると何も録らず、出口も前置きの1行が log に出るだけだった
+    （modloader.log には構築の `access violation` と出口の同じ失敗が出ていたのに、jsonl には1件も無かった）。
+    投げたら `event` を `pipe_init_raised` / `load_sd_pipeline_raised` / `exit_raised` にして、
+    その時点で読める引数と例外の型と文を1行書き、そのまま投げ直す。
+    上の層（`manager`）の行にも `raised` を足した
+  * `import_seen` の行は、`import_done` が後に来ないときだけ書く
+    （spec が見つからない・loader が無い・loader を包めなかった）。
+    来るときの `import_seen` は `import_done` とほぼ同数の対で、足す情報が無かった。
+    本体が import の途中で投げた回は、`import_done` の代わりに `import_raised` を書く
 """
 import datetime
 import inspect
@@ -135,8 +149,16 @@ class _LoaderProxy(object):
         return self._loader.create_module(spec)
 
     def exec_module(self, module):
-        self._loader.exec_module(module)
-        self._after(self._name, module)
+        # 版10: 本体が投げた回も知らせる（`import_raised`）。知らせ側の失敗は import に混ぜない。
+        try:
+            self._loader.exec_module(module)
+        except BaseException as exc:
+            try:
+                self._after(self._name, module, exc)
+            except Exception:
+                pass
+            raise
+        self._after(self._name, module, None)
 
     def __getattr__(self, item):
         return getattr(self._loader, item)
@@ -193,13 +215,15 @@ class _ImportObserver(object):
                     break
         finally:
             self._busy.on = False
-        self._on_seen(name, spec)
-        if spec is None or frames.attr(spec, "loader", None) is None:
-            return spec
-        try:
-            spec.loader = _LoaderProxy(spec.loader, name, self._after)
-        except Exception:
-            pass
+        # 版10: 包めたかを `_on_seen` に渡す（包めたなら `import_done` か `import_raised` が後に来る）。
+        watched = False
+        if spec is not None and frames.attr(spec, "loader", None) is not None:
+            try:
+                spec.loader = _LoaderProxy(spec.loader, name, self._after)
+                watched = True
+            except Exception:
+                pass
+        self._on_seen(name, spec, watched)
         return spec
 
 
@@ -211,8 +235,9 @@ def apply(ctx):
     seen = {"targets": set()}
 
     #: 数える用。出口1本で漏れが無いかは `manager` と `exit` の差で分かる。
+    #: 版10: `raised` は元の関数が投げた回（構築・組み立て・出口・上の層の合計）。
     counts = {"manager": 0, "exit": 0, "exit_unmarked": 0,
-              "init": 0, "pipeline": 0}
+              "init": 0, "pipeline": 0, "raised": 0}
     #: 版8: 生成はワーカースレッドで走るので、足すときは錠を取る。
     counts_lock = threading.Lock()
 
@@ -296,6 +321,28 @@ def apply(ctx):
             return {"type": None if value is None else type(value).__name__}
         return {"len": len(value), "head": value[:PROMPT_HEAD],
                 "lora": LORA_TAG.findall(value)}
+
+    def exc_brief(exc):
+        """例外の型と文（版10。元の関数が投げた回の記録用）。"""
+        try:
+            message = frames.short(str(exc), 300)
+        except Exception:
+            message = "<str failed>"
+        return {"type": type(exc).__name__, "message": message}
+
+    def note_raised(event, label, started, exc, fields):
+        """元の関数が投げた回を1行ずつ log と jsonl に残す（版10）。呼び側で投げ直す。"""
+        call = bump("raised")
+        error = exc_brief(exc)
+        chain = frames.caller(depth=4)
+        write("{} {} raised {}: {} after {:.1f}s from {}".format(
+            event, label, error["type"], error["message"], time.time() - started, chain))
+        row = {"at": now(), "event": event, "target": label, "raised_call": call,
+               "error": error, "seconds": round(time.time() - started, 2),
+               "thread": threading.current_thread().name, "caller": chain}
+        row.update(fields)
+        row["counts"] = counts_now()
+        record(row)
 
     def image_brief(value):
         """`init_image` / `mask_image` は在るかと寸法だけ。"""
@@ -424,26 +471,37 @@ def apply(ctx):
             MARKS.kind = "{}:{}".format(kind, fn_name)
             bump("manager")
             started = time.time()
+            raised = None
             try:
                 return orig(*args, **kwargs)
+            except BaseException as exc:
+                raised = exc        # 版10: 投げた回も行に残す（投げ直しはそのまま）
+                raise
             finally:
                 MARKS.kind = before
-                named, positional = params_of(sig, args, kwargs)
-                row = {"at": now(), "event": "manager", "module": module_name,
-                       "func": fn_name, "kind": kind, "nested": before,
-                       "seconds": round(time.time() - started, 2),
-                       "thread": threading.current_thread().name,
-                       "caller": chain,
-                       "width": frames.repr_value(named.get("width")),
-                       "height": frames.repr_value(named.get("height")),
-                       "positive": text_brief(named.get("positive_prompt")),
-                       "negative": text_brief(named.get("negative_prompt")),
-                       "positional": positional}
-                write("manager {}.{} kind={} {}x{} {:.2f}s lora={}".format(
-                    module_name.rsplit(".", 1)[-1], fn_name, kind,
-                    row["width"], row["height"], row["seconds"],
-                    row["positive"].get("lora")))
-                record(row)
+                try:
+                    if raised is not None:
+                        bump("raised")
+                    named, positional = params_of(sig, args, kwargs)
+                    row = {"at": now(), "event": "manager", "module": module_name,
+                           "func": fn_name, "kind": kind, "nested": before,
+                           "seconds": round(time.time() - started, 2),
+                           "thread": threading.current_thread().name,
+                           "caller": chain,
+                           "width": frames.repr_value(named.get("width")),
+                           "height": frames.repr_value(named.get("height")),
+                           "positive": text_brief(named.get("positive_prompt")),
+                           "negative": text_brief(named.get("negative_prompt")),
+                           "positional": positional,
+                           "raised": exc_brief(raised) if raised is not None else None}
+                    write("manager {}.{} kind={} {}x{} {:.2f}s lora={}{}".format(
+                        module_name.rsplit(".", 1)[-1], fn_name, kind,
+                        row["width"], row["height"], row["seconds"],
+                        row["positive"].get("lora"),
+                        " raised {}".format(row["raised"]) if raised is not None else ""))
+                    record(row)
+                except Exception:
+                    ctx.log_exc("image generation probe: cannot record {}".format(fn_name))
         return hook
 
     def make_pipeline_hook(module_name, sig):
@@ -453,7 +511,21 @@ def apply(ctx):
             before = type_of(frames.attr(mod, "txt2img_pipe", None))
             before_globals = globals_of(mod)
             started = time.time()
-            result = orig(*args, **kwargs)
+            try:
+                result = orig(*args, **kwargs)
+            except BaseException as exc:
+                # 版10: 投げた回も残す。組み立てが途中で何を変えたかも読めるだけ読む。
+                try:
+                    after_mod = sys.modules.get(module_name)
+                    note_raised("load_sd_pipeline_raised", module_name, started, exc, {
+                        "module": module_name,
+                        "pipe_before": before,
+                        "pipe_after": type_of(frames.attr(after_mod, "txt2img_pipe", None)),
+                        "globals_before": before_globals,
+                        "globals_after": globals_of(after_mod)})
+                except Exception:
+                    ctx.log_exc("image generation probe: cannot record the failed pipeline")
+                raise
             call = bump("pipeline")
             chain = frames.caller(depth=4)
             mod = sys.modules.get(module_name)
@@ -487,16 +559,30 @@ def apply(ctx):
 
     def make_init_hook(label, sig):
         """出口のクラスの構築。TAESD とチェックポイントが実際に何で渡るか。"""
-        def hook(orig, self, *args, **kwargs):
-            started = time.time()
-            result = orig(self, *args, **kwargs)
-            call = bump("init")
-            chain = frames.caller(depth=4)
-            named, positional = params_of(sig, (self,) + tuple(args), kwargs)
+        def init_keys(named):
             got = {}
             for key in INIT_KEYS:
                 if key in named:
                     got[key] = frames.repr_value(named.get(key))
+            return got
+
+        def hook(orig, self, *args, **kwargs):
+            started = time.time()
+            try:
+                result = orig(self, *args, **kwargs)
+            except BaseException as exc:
+                # 版10: 構築が投げた回（実機の `access violation`）も、渡った引数ごと残す。
+                try:
+                    named, positional = params_of(sig, (self,) + tuple(args), kwargs)
+                    note_raised("pipe_init_raised", label, started, exc,
+                                {"kwargs": init_keys(named), "positional": positional})
+                except Exception:
+                    ctx.log_exc("image generation probe: cannot record the failed build")
+                raise
+            call = bump("init")
+            chain = frames.caller(depth=4)
+            named, positional = params_of(sig, (self,) + tuple(args), kwargs)
+            got = init_keys(named)
             write("-" * 72)
             write("{} built #{} ({:.1f}s) from {}".format(
                 label, call, time.time() - started, chain))
@@ -510,6 +596,14 @@ def apply(ctx):
                     "kwargs": got, "positional": positional})
             return result
         return hook
+
+    def exit_params(named):
+        """出口の引数のうち `PARAM_KEYS` に挙げたもの。"""
+        params = {}
+        for key in PARAM_KEYS:
+            if key in named:
+                params[key] = frames.repr_value(named.get(key))
+        return params
 
     def make_exit_hook(label, method, sig):
         """出口。印（種類）ごと引数一式を残す。ゲームへは素通し。"""
@@ -528,12 +622,25 @@ def apply(ctx):
                 frames.repr_value(before.get("height")),
                 text_brief(before.get("prompt")).get("lora")))
             started = time.time()
-            result = orig(self, *args, **kwargs)
+            try:
+                result = orig(self, *args, **kwargs)
+            except BaseException as exc:
+                # 版10: 投げた回は前置きの1行だけだったので、引数一式と例外を jsonl にも残す。
+                try:
+                    named, positional = params_of(sig, (self,) + tuple(args), kwargs)
+                    note_raised("exit_raised", label, started, exc, {
+                        "method": method, "call": call, "kind": kind,
+                        "params": exit_params(named),
+                        "positive": text_brief(named.get("prompt")),
+                        "negative": text_brief(named.get("negative_prompt")),
+                        "init_image": image_brief(named.get("init_image")),
+                        "mask_image": image_brief(named.get("mask_image")),
+                        "positional": positional})
+                except Exception:
+                    ctx.log_exc("image generation probe: cannot record the failed exit")
+                raise
             named, positional = params_of(sig, (self,) + tuple(args), kwargs)
-            params = {}
-            for key in PARAM_KEYS:
-                if key in named:
-                    params[key] = frames.repr_value(named.get(key))
+            params = exit_params(named)
             chain = frames.caller(depth=4)
             row = {"at": now(), "event": "exit", "target": label,
                    "method": method, "call": call, "kind": kind,
@@ -630,22 +737,40 @@ def apply(ctx):
 
     # ------------------------------------------------------- import の瞬間を見る
 
-    def on_import_seen(name, spec):
-        """spec を作らせた直後（本体はまだ走っていない）。"""
-        if ctx.superseded():
+    def on_import_seen(name, spec, watched):
+        """spec を作らせた直後（本体はまだ走っていない）。
+
+        版10: `watched`（loader を包めた）なら後で `import_done` か `import_raised` が来るので書かない。
+        書くのは、spec が無い・loader が無い・包めなかった回だけ。
+        """
+        if watched or ctx.superseded():
             return          # 切って注入し直した後の古い観測者は動かない
         try:
             record({"at": now(), "event": "import_seen", "module": name,
                     "found": spec is not None,
+                    "has_loader": frames.attr(spec, "loader", None) is not None,
                     "thread": threading.current_thread().name,
                     "caller": frames.caller(depth=4)})
         except Exception:
             pass
 
-    def on_import_done(name, module):
-        """モジュールの本体が走り終えた直後。**MOD が値を差し替えられる時点**。"""
+    def on_import_done(name, module, raised=None):
+        """モジュールの本体が走り終えた直後。**MOD が値を差し替えられる時点**。
+
+        版10: 本体が投げたときは `raised` に例外が来る。`import_raised` を1行書いて当て直さない。
+        """
         if ctx.superseded():
             return          # 切って注入し直した後に、古い閉包が包みを当て直さない
+        if raised is not None:
+            try:
+                record({"at": now(), "event": "import_raised", "module": name,
+                        "error": exc_brief(raised),
+                        "thread": threading.current_thread().name,
+                        "caller": frames.caller(depth=4)})
+                write("import raised: {} {}".format(name, exc_brief(raised)))
+            except Exception:
+                pass
+            return
         try:
             pipe = frames.attr(module, "txt2img_pipe", None)
             built = pipe is not None

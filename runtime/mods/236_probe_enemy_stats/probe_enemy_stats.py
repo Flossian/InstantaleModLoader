@@ -46,6 +46,14 @@ HP・防御が別々に散っていることまでは読めた（Lv77 で素点 
     - `start_battle` の包みで、try の中で作る値を try の外の試し打ちが使っていたので、先に None で用意した
   * 版4: 戦闘の開始の写しで `get_npc_defense()` を呼ぶ間も `DRY_THREAD_MARK` を置く。
     置いていなかったので、`222_` がこの呼び出しを「手の外の計算」として録り、件数の枠も食っていた
+  * 版5（見直し）:
+    - `resolve_battle_effect` の段の `act` から `actor` と `entries` を外した。
+      この段の引数は `(character_key, character_side, battle_action, effect_to_enemies, *args)`
+      （recon の signatures.json）で、第1引数は `battle_action` ではない。
+      それを `battle_action` の dict として読んでいたので、この段の `act` は全部 `actor=None, entries=[]` だった。
+      代わりに、この段の引数の型と主な属性を1プロセス1回だけ `kind: resolve_args` で録る（控えは `sys` の `RESOLVE_ARGS_MARK`）
+    - `DRY_THREAD_MARK` は、立てる前の値を控えて終わったら戻す（`mark_dry_thread` / `unmark_dry_thread`）。
+      前は終わりに消していたので、印の中で印を立てると外側の印まで消えていた
 
 この probe は読み込み順で `319_` / `333_` より外側に入る。
 `get_instant_damage` の引数（素点と防御）は誰も書き換えないので素の値が録れるが、戻りは 319 が置き換えた後の値。
@@ -102,6 +110,12 @@ DRY_SEEN_MARK = "_instantale_probe_236_dry_seen"
 #: のあいだ記録を控えてよい。
 DRY_THREAD_MARK = "_instantale_probe_dry_run_thread"
 
+#: `resolve_battle_effect` の引数の形を録り終えた印。1プロセス1回にするため `sys` に置く（版5）。
+RESOLVE_ARGS_MARK = "_instantale_probe_236_resolve_args_done"
+
+#: `resolve_battle_effect` の引数の名前（`self` を除く。recon の signatures.json。版5）。
+RESOLVE_ARG_NAMES = ("character_key", "character_side", "battle_action", "effect_to_enemies")
+
 #: 乱数の控えを探すモジュール（`random.Random` を持っていれば状態を戻す。版3の続き）。
 RNG_MODULES = ("__main__", "scripts.functions")
 
@@ -136,6 +150,53 @@ def rng_restore(saved):
             setter(state)
         except Exception:
             pass
+
+
+def mark_dry_thread():
+    """`DRY_THREAD_MARK` に自分のスレッドの id を置く。戻り値は置く前の値（`unmark_dry_thread` に渡す）。
+
+    版5: 入れ子にしても外側の印を消さないよう、前の値を返す。
+    """
+    previous = getattr(sys, DRY_THREAD_MARK, None)
+    setattr(sys, DRY_THREAD_MARK, threading.get_ident())
+    return previous
+
+
+def unmark_dry_thread(previous):
+    """`mark_dry_thread` の前の値へ戻す。前に何も無ければ印を消す。"""
+    if previous is None:
+        try:
+            delattr(sys, DRY_THREAD_MARK)
+        except AttributeError:
+            pass
+    else:
+        setattr(sys, DRY_THREAD_MARK, previous)
+
+
+def arg_shape(value):
+    """引数の型と主な属性（版5。`resolve_battle_effect` の引数の形を1度だけ録るため）。"""
+    cls = type(value)
+    shape = {"type": "{}.{}".format(getattr(cls, "__module__", "?"),
+                                    getattr(cls, "__qualname__", cls.__name__))}
+    if value is None or isinstance(value, (bool, int, float, str)):
+        shape["value"] = plain(value)
+    elif isinstance(value, dict):
+        shape["keys"] = [frames.short(str(k), 40) for k in list(value)[:30]]
+        shape["len"] = len(value)
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        items = list(value)
+        shape["len"] = len(items)
+        shape["first"] = arg_shape(items[0]) if items else None
+    else:
+        try:
+            names = sorted(k for k in vars(value) if not k.startswith("_"))
+        except TypeError:
+            names = []
+        shape["attrs"] = names[:30]
+        name = getattr(value, "name", None)
+        if isinstance(name, str):
+            shape["name"] = frames.short(name, 40)
+    return shape
 
 
 def dry_seen():
@@ -268,7 +329,8 @@ def apply(ctx):
                 allies.append(ui.character_of(app, member_id))
             # 版4: 写しで能動に呼ぶ get_npc_defense も、試し打ちと同じ印の下で呼ぶ。
             # 印が無いと、同じ関数を包む 222_ がこれを「手の外の計算」として録り、件数の枠も食う。
-            setattr(sys, DRY_THREAD_MARK, threading.get_ident())
+            # 版5: 終わったら前の値へ戻す（入れ子でも外側の印を消さない）。
+            previous = mark_dry_thread()
             try:
                 event("start",
                       enemy_type=plain(getattr(self, "enemy_type", None)),
@@ -278,10 +340,7 @@ def apply(ctx):
                       if isinstance(enemies, dict) else plain(enemies),
                       allies=[snapshot(c) for c in allies if c is not None])
             finally:
-                try:
-                    delattr(sys, DRY_THREAD_MARK)
-                except AttributeError:
-                    pass
+                unmark_dry_thread(previous)
         except Exception:
             ctx.log_exc("enemy stats probe: recording the battle start failed")
         if DRY_RUN and not dry_state["stopped"] and app is not None:
@@ -323,7 +382,7 @@ def apply(ctx):
         # 版3の続き: ゲームの素点には乱数が入るので、呼ぶ前の乱数の状態を控えて最後に戻す。
         rng = rng_saved()
         local.dry = True
-        setattr(sys, DRY_THREAD_MARK, threading.get_ident())
+        previous = mark_dry_thread()
         count = 0
         try:
             for key, side, name, person, target in fresh:
@@ -346,10 +405,7 @@ def apply(ctx):
                           raws=raws, calls=calls)
         finally:
             local.dry = False
-            try:
-                delattr(sys, DRY_THREAD_MARK)
-            except AttributeError:
-                pass
+            unmark_dry_thread(previous)
             rng_restore(rng)
         if not dry_state["rng_noted"]:
             dry_state["rng_noted"] = True
@@ -368,20 +424,42 @@ def apply(ctx):
                 count // max(1, len(people)), DRY_REPEAT, len(people)))
 
     # ------------------------------------------------------------ 1手の素点
-    def open_act(stage, self, battle_action):
+    def open_act(stage, battle_action):
+        """手の記録を開く。既に開いていれば（`calculate` の中の `resolve`）それに束ねる。
+
+        版5: `actor` と `entries` は `calculate` の段だけ。`resolve` の段の第1引数は
+        `battle_action` ではない（`character_key`。recon の signatures.json）。
+        """
         act = getattr(local, "act", None)
         if act is None:
-            act = {"stage": stage, "actor": plain(battle_action.get("actor"))
-                   if isinstance(battle_action, dict) else None,
-                   "entries": damage_entries(battle_action), "calls": []}
+            act = {"stage": stage, "calls": []}
+            if stage == "calculate":
+                act["actor"] = (plain(battle_action.get("actor"))
+                                if isinstance(battle_action, dict) else None)
+                act["entries"] = damage_entries(battle_action)
             local.act = act
             return act, True
         return act, False
 
     def close_act(act):
         local.act = None
-        if act["entries"] or act["calls"]:
+        if act.get("entries") or act["calls"]:
             event("act", **act)
+
+    def note_resolve_args(args, kwargs):
+        """`resolve_battle_effect` の引数の型と主な属性を1プロセス1回だけ録る（版5）。"""
+        if getattr(sys, RESOLVE_ARGS_MARK, False):
+            return
+        setattr(sys, RESOLVE_ARGS_MARK, True)
+        named = {}
+        for index, value in enumerate(args):
+            name = (RESOLVE_ARG_NAMES[index] if index < len(RESOLVE_ARG_NAMES)
+                    else "args[{}]".format(index))
+            named[name] = arg_shape(value)
+        for key, value in kwargs.items():
+            named[str(key)] = arg_shape(value)
+        event("resolve_args", positional=len(args), kwargs=sorted(str(k) for k in kwargs),
+              args=named)
 
     def combatants_state(app):
         """全員の HP と状態異常（`calculate` の前後で比べる。版2）。"""
@@ -403,10 +481,18 @@ def apply(ctx):
         def wrapper(orig, self, *args, **kwargs):
             if getattr(local, "dry", False):
                 return orig(self, *args, **kwargs)     # 試し打ちは dry の行で録る
-            battle_action = args[0] if args else kwargs.get("battle_action")
+            # `calculate_battle_effect(self, battle_action)` の第1引数。
+            # `resolve` の段では読まない（版5。引数の形は `note_resolve_args` が1度だけ録る）。
+            battle_action = (args[0] if args else kwargs.get("battle_action")) \
+                if stage == "calculate" else None
             before = None
             try:
-                act, mine = open_act(stage, self, battle_action)
+                if stage == "resolve":
+                    note_resolve_args(args, kwargs)
+            except Exception:
+                ctx.log_exc("enemy stats probe: recording the resolve arguments failed")
+            try:
+                act, mine = open_act(stage, battle_action)
                 if mine and stage == "calculate":
                     # 版2: 素点がどこに出るか（戻りか、battle_action への書き込みか）と、
                     # この段が HP や状態を動かすかを録る。試し打ち（案 A）に使えるかの判断材料

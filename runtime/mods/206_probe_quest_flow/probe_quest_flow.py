@@ -48,6 +48,16 @@ HUD の文字はメインスレッドの上でだけ読む。
 版4: `generate_random_quest` の前後で増えた依頼を、生きた一覧と雛形の合併で数えるようにした
 （前は雛形だけを見ていて、掲示板で作った依頼が毎回 `[]` だった）。
 いまいる土地、増えた依頼の `neighboring_settlement_id` / `quest_area_id`、増えた土地も書く。
+
+版5: 押した枠の記録と、写し取りの部品を直した。
+`on_button_press` の記録は `app.buttons[添字]` を直に引いていて、
+選択肢が1ページに収まらないときの「次」（ページ送り）を押した回も、8件目の候補を押したと書いていた。
+ゲームは地図（`display_button_map`）で添字を引き直し、ページ送りの枠には文字列 `'next'` を入れている（GAME.md §2.2）。
+ローダの `ui.pressed_entry` で引き、ボタンでない枠は「ページ送り（next）」と地図の値を書く。
+`PhaseSpec` の読み方は `ui.spec_data`、ウィジェットの文字は `frames.text_of` に寄せた（どちらもこの MOD の写しだった）。
+記録の文字列の形は変えていない（読めなかったときの `<PhaseSpec unreadable: 例外名>` も同じ形で残す）。
+起動時の写しは行を貯めて1回で書く（`210_` の版3と同じ手。版4までは1行ごとにファイルを開いていた）。
+`ctx.logger` は複数行を1回で書けるが、時刻は先頭の行にだけ付く。
 """
 
 import os
@@ -132,25 +142,30 @@ def apply(ctx):
         `PhaseSpec.__init__(self, cls_name, args)` なので、ボタンは**マネージャの
         インスタンスではなくその作り方**を持っている（GAME.md §2.2）。自前で
         ボタンを足すにはこの `args` の並びを知る必要がある。
+
+        版5: 読み方はローダの `ui.spec_data`（`to_dict()` → `cls_name`/`args` → `vars()` の順）。
         """
         if spec is None:
             return "None"
-        data = None
-        try:
-            to_dict = getattr(spec, "to_dict", None)
-            if callable(to_dict):
-                data = to_dict()
-        except Exception:
-            data = None
+        data = ui.spec_data(spec)
         if not isinstance(data, dict):
-            try:
-                data = dict(vars(spec))
-            except Exception as exc:
-                return "<PhaseSpec unreadable: {}>".format(type(exc).__name__)
+            return "<PhaseSpec unreadable: {}>".format(_unreadable_reason(spec))
         # repr_value は dict をキー一覧に畳んでしまう。
         # ここで欲しいのは cls_name と args の中身なので、自前で組み立てる。
         return "{}(app, *{!r})".format(
             data.get("cls_name"), data.get("args"))[:300]
+
+    def _unreadable_reason(spec):
+        """`ui.spec_data` が読めなかった理由（例外名）。記録の形を版4までと揃えるため（版5）。
+
+        `ui.spec_data` が None を返すのは最後の `vars()` が通らなかったときで、
+        版4まではその例外名を書いていた（実機では関数が入っていて `TypeError`）。
+        """
+        try:
+            vars(spec)
+        except Exception as exc:
+            return type(exc).__name__
+        return "?"
 
     def describe_button(entry):
         if not isinstance(entry, dict):
@@ -203,29 +218,31 @@ def apply(ctx):
             write("      after  = {}".format(after[key]))
 
     # ------------------------------------------------------- 一発計測: 現在の状態
-    def dump_quest(quest, label, indent="    "):
+    def dump_quest(quest, label, indent="    ", emit=None):
+        """`emit` は1行を受け取る関数。既定は `write`（起動時の写しは行の並びに貯める。版5）。"""
+        emit = emit or write
         if isinstance(quest, dict):
-            write("{}{} [dict] keys={}".format(indent, label, list(quest)))
+            emit("{}{} [dict] keys={}".format(indent, label, list(quest)))
             for key in QUEST_TOP_KEYS:
                 if key in quest:
-                    write("{}  {:<26} = {}".format(indent, key, repr_value(quest[key])))
+                    emit("{}  {:<26} = {}".format(indent, key, repr_value(quest[key])))
             area = quest.get("area")
             if isinstance(area, dict):
-                write("{}  area.name/atomosphere    = {!r} / {!r}".format(
+                emit("{}  area.name/atomosphere    = {!r} / {!r}".format(
                     indent, area.get("name"), area.get("atomosphere")))
             return
-        write("{}{} [{}]".format(indent, label, type(quest).__name__))
+        emit("{}{} [{}]".format(indent, label, type(quest).__name__))
         try:
             items = sorted(vars(quest).items())
         except Exception:
-            write("{}  <vars() unavailable>".format(indent))
+            emit("{}  <vars() unavailable>".format(indent))
             return
-        write("{}  attrs({}): {}".format(indent, len(items), ", ".join(n for n, _ in items)))
+        emit("{}  attrs({}): {}".format(indent, len(items), ", ".join(n for n, _ in items)))
         for name, value in items:
             if name in QUEST_TOP_KEYS or name in ("quest_value", "area"):
-                write("{}    {:<24} = {}".format(indent, name, repr_value(value)))
+                emit("{}    {:<24} = {}".format(indent, name, repr_value(value)))
 
-    def dump_class(name, module_name="__main__"):
+    def dump_class(name, emit, module_name="__main__"):
         """クラスが持つメソッド一覧と __init__ の形。
 
         targets.txt はモジュールレベルのスキャンなので、
@@ -236,13 +253,13 @@ def apply(ctx):
         module = sys.modules.get(module_name)
         cls = getattr(module, name, None) if module is not None else None
         if not isinstance(cls, type):
-            write("  {}: not found in {}".format(name, module_name))
+            emit("  {}: not found in {}".format(name, module_name))
             return
         members = sorted(n for n in vars(cls) if not n.startswith("__"))
-        write("  {}: methods={}".format(name, members))
+        emit("  {}: methods={}".format(name, members))
         init = getattr(cls, "__init__", None)
         if init is not None:
-            write("      __init__{}".format(_sig_of(init)))
+            emit("      __init__{}".format(_sig_of(init)))
 
     # **画面を塗っているのは HUD 側**（GAME.md §2.3）。
     # `app.to_display_buttons` は監視対象ではないので、
@@ -271,8 +288,8 @@ def apply(ctx):
         return out or None
 
     def _widget_text(widget):
-        text = getattr(widget, "text", None)
-        return text if isinstance(text, str) else ""
+        # 版5: 読み方はローダの `frames.text_of`（文字列でなければ None）。記録の形は空文字のまま。
+        return frames.text_of(widget) or ""
 
     def ui_find_hud(app):
         try:
@@ -288,7 +305,7 @@ def apply(ctx):
             list(getattr(app, "to_display_buttons", []) or [])[:6],
             hud_texts(app))
 
-    def dump_hud(app):
+    def dump_hud(app, emit):
         """HUD が持っている属性を一度だけ全部出す。
 
         ラベルを保持しているプロパティの名前が分からないと監視できない。
@@ -296,27 +313,28 @@ def apply(ctx):
         """
         hud = ui_find_hud(app)
         if hud is None:
-            write("hud: not found")
+            emit("hud: not found")
             return
-        write("hud: {}".format(type(hud).__name__))
+        emit("hud: {}".format(type(hud).__name__))
         try:
             items = sorted(vars(hud).items())
         except Exception:
-            write("  <vars() unavailable>")
+            emit("  <vars() unavailable>")
             return
-        write("  attrs({}): {}".format(len(items), ", ".join(n for n, _ in items)))
+        emit("  attrs({}): {}".format(len(items), ", ".join(n for n, _ in items)))
         for name, value in items:
             if isinstance(value, (list, tuple)) and value and \
                     all(isinstance(v, str) for v in value):
-                write("    {:<32} = {!r}".format(name, list(value)[:8]))
+                emit("    {:<32} = {!r}".format(name, list(value)[:8]))
             elif isinstance(value, str) and value:
-                write("    {:<32} = {!r}".format(name, value[:60]))
+                emit("    {:<32} = {!r}".format(name, value[:60]))
 
     def snapshot():
         """起動時の写し。1プロセス1回・メインスレッド（版3）。
 
         印はゲームの中（app と player が揃っている）で取れたときにだけ付ける。
         タイトル画面の注入で印を付けると、そのプロセスでは二度と取れない。
+        版5: 行を貯めて最後に1回で書く。途中で落ちても、そこまでの行は書く。
         """
         if getattr(sys, SNAPSHOT_MARK, False):
             return
@@ -325,82 +343,91 @@ def apply(ctx):
             return
         setattr(sys, SNAPSHOT_MARK, True)
 
-        write("=" * 78)
-        write("quest snapshot (pid {})".format(os.getpid()))
+        lines = []
+        try:
+            snapshot_lines(app, lines.append)
+        finally:
+            if lines:
+                write("\n".join(lines))
+
+    def snapshot_lines(app, emit):
+        """`snapshot` の中身。1行ずつ `emit` に渡すだけで、書かない（版5）。"""
+        emit("=" * 78)
+        emit("quest snapshot (pid {})".format(os.getpid()))
 
         # --- 1. ボタン関係の今の姿。
         # ここが「選択肢の出し方」の出発点。
-        write("  -- button/choice state --")
+        emit("  -- button/choice state --")
         for key, value in sorted(button_state(app).items()):
-            write("    app.{:<28} = {}".format(key, value))
+            emit("    app.{:<28} = {}".format(key, value))
         # 画面を塗っている HUD の実体。
         # 待機表示（「…」）を探す手掛かり。
-        dump_hud(app)
+        dump_hud(app, emit)
         # 会話中の選択肢は下の choice ボタンではなく HUD 上部に出ているらしい。
         # その文字列はここにある。
-        write("    app.hud_top_info_texts       = {}".format(
+        emit("    app.hud_top_info_texts       = {}".format(
             repr_value(getattr(app, "hud_top_info_texts", None))))
-        write("    app.hud_top_info_label       = {}".format(
+        emit("    app.hud_top_info_label       = {}".format(
             repr_value(getattr(app, "hud_top_info_label", None))))
         for flag in ("in_conversation", "in_free_input", "in_action_in_conversation",
                      "is_button_enabled", "text_input_disabled"):
-            write("    app.{:<28} = {!r}".format(flag, getattr(app, flag, "<missing>")))
+            emit("    app.{:<28} = {!r}".format(flag, getattr(app, flag, "<missing>")))
 
         # --- 2. 受注経路に関わるクラスの実像。
-        write("  -- quest classes --")
+        emit("  -- quest classes --")
         for name in ("DisplayQuestChoice", "QuestChoiceManager", "QuestStartManager",
                      "QuestSearchManager", "QuestPhaseManager", "QuestEndManager",
                      "Quest", "World", "DisplayTalkChoice", "ConversationStartManager",
                      "ConversationPhaseManager", "ConversationEndManager"):
-            dump_class(name)
+            dump_class(name, emit)
 
         # --- 3. クエストの実体。world 側と world_dict 側の両方を見る。
         #        どちらが「正」なのかで、新規クエストを差し込む先が決まる。
-        write("  -- quest storage --")
+        emit("  -- quest storage --")
         world = getattr(app, "world", None)
         for attr in ("quests", "story_quests", "areas"):
             value = getattr(world, attr, "<missing>")
-            write("    app.world.{:<22} = {}".format(attr, repr_value(value)))
+            emit("    app.world.{:<22} = {}".format(attr, repr_value(value)))
         world_dict = getattr(app, "world_dict", None)
         if isinstance(world_dict, dict):
-            write("    app.world_dict keys        = {}".format(list(world_dict)))
-            write("    app.world_dict['index']    = {}".format(
+            emit("    app.world_dict keys        = {}".format(list(world_dict)))
+            emit("    app.world_dict['index']    = {}".format(
                 repr_value(world_dict.get("index"))))
             quests = world_dict.get("quests")
             if isinstance(quests, dict) and quests:
-                write("    app.world_dict['quests']   = {} entries".format(len(quests)))
+                emit("    app.world_dict['quests']   = {} entries".format(len(quests)))
                 statuses = {}
                 for qid, quest in quests.items():
                     if isinstance(quest, dict):
                         cfg = quest.get("config")
                         status = cfg.get("status") if isinstance(cfg, dict) else None
                         statuses[status] = statuses.get(status, 0) + 1
-                write("    config.status census       = {}".format(statuses))
+                emit("    config.status census       = {}".format(statuses))
                 first = next(iter(quests))
-                dump_quest(quests[first], "quests[{!r}]".format(first))
+                dump_quest(quests[first], "quests[{!r}]".format(first), emit=emit)
 
         # world 側が Quest インスタンスなら、その形も見る（dict とは限らない）。
         wquests = getattr(world, "quests", None)
         if isinstance(wquests, dict) and wquests:
             first = next(iter(wquests))
-            dump_quest(wquests[first], "app.world.quests[{!r}]".format(first))
+            dump_quest(wquests[first], "app.world.quests[{!r}]".format(first), emit=emit)
 
         # --- 4. 現在地とプレイヤーの進捗。
         # 受注可能な難易度の判定に要る。
-        write("  -- player / location --")
+        emit("  -- player / location --")
         player = getattr(app, "player", None)
         area = getattr(player, "current_area", None)
         facility = getattr(player, "location", None)
-        write("    current area   = {!r} (id={!r})".format(
+        emit("    current area   = {!r} (id={!r})".format(
             getattr(area, "name", None), getattr(area, "id", None)))
-        write("    current facility = {!r} type={!r} owner={!r}".format(
+        emit("    current facility = {!r} type={!r} owner={!r}".format(
             getattr(facility, "name", None), getattr(facility, "facility_type", None),
             getattr(facility, "owner", None)))
-        write("    app.current_quest_data = {}".format(
+        emit("    app.current_quest_data = {}".format(
             repr_value(getattr(app, "current_quest_data", None))))
-        write("    app.quest_log          = {}".format(
+        emit("    app.quest_log          = {}".format(
             repr_value(getattr(app, "quest_log", None))))
-        write("    app.highest_cleared_quest_difficulty = {!r}".format(
+        emit("    app.highest_cleared_quest_difficulty = {!r}".format(
             getattr(app, "highest_cleared_quest_difficulty", None)))
 
         # --- 5. ゲーム自身のヘルパを実データで呼ぶ（副作用の無い参照関数）。
@@ -412,21 +439,21 @@ def apply(ctx):
                                 ("get_active_quest_difficulties", (area, world))):
                 fn = getattr(functions, fname, None)
                 if fn is None:
-                    write("    {}: missing".format(fname))
+                    emit("    {}: missing".format(fname))
                     continue
                 try:
-                    write("    {}(area, world) -> {}".format(
+                    emit("    {}(area, world) -> {}".format(
                         fname, repr_value(fn(*args))))
                 except Exception as exc:
-                    write("    {}(area, world) !! {}: {}".format(
+                    emit("    {}(area, world) !! {}: {}".format(
                         fname, type(exc).__name__, exc))
             reward = getattr(functions, "get_quest_reward", None)
             if reward is not None:
                 try:
-                    write("    get_quest_reward(1/10/30) -> {} / {} / {}".format(
+                    emit("    get_quest_reward(1/10/30) -> {} / {} / {}".format(
                         reward(1), reward(10), reward(30)))
                 except Exception as exc:
-                    write("    get_quest_reward !! {}: {}".format(type(exc).__name__, exc))
+                    emit("    get_quest_reward !! {}: {}".format(type(exc).__name__, exc))
 
     def guarded_snapshot():
         try:
@@ -522,6 +549,14 @@ def apply(ctx):
         note(record)
         return result
 
+    def map_slot(app, button_index):
+        """`display_button_map` の `button_index` 番目の値。地図が無い・枠の外なら `frames.MISSING`（版5）。"""
+        mapping = getattr(app, "display_button_map", None)
+        if isinstance(mapping, (list, tuple)) and isinstance(button_index, int) \
+                and 0 <= button_index < len(mapping):
+            return mapping[button_index]
+        return frames.MISSING
+
     # 版3: 版2は `on_button_press` を2回包んでいた（待機表示の前後と、押された枠の spec）。
     # 同じ世代の層は両方残るので1回の押下で2層走っていた。1つにまとめた。
     @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False, safe=True)
@@ -533,13 +568,24 @@ def apply(ctx):
         button_index = frames.arg(args, kwargs, "button_index", 0)
 
         def before():
-            buttons = getattr(self, "buttons", None)
-            entry = None
-            if isinstance(buttons, (list, tuple)) and isinstance(button_index, int):
-                if 0 <= button_index < len(buttons):
-                    entry = buttons[button_index]
-            write("on_button_press(index={!r}) {}".format(
-                button_index, describe_button(entry)))
+            # 版5: 押された枠はゲームと同じく地図で引き直す（`ui.pressed_entry`）。
+            # 版4までは `buttons[添字]` を直に引いていて、「次」を押した回も8件目を押したと書いていた。
+            entry = ui.pressed_entry(self, button_index)
+            if entry is not None:
+                pressed = describe_button(entry)
+            else:
+                # 地図の枠が整数でなければページ送り（ゲームは `'next'` を入れる）。
+                # 整数なのに引けなかった枠は、ページ送りとは書かずに地図の値と候補の数を出す。
+                slot = map_slot(self, button_index)
+                if slot is not frames.MISSING and (
+                        isinstance(slot, bool) or not isinstance(slot, int)):
+                    pressed = "ページ送り（next） map[{!r}]={!r}".format(button_index, slot)
+                else:
+                    buttons = getattr(self, "buttons", None)
+                    pressed = "<no button> map[{!r}]={!r} buttons={}".format(
+                        button_index, slot,
+                        len(buttons) if isinstance(buttons, (list, tuple)) else repr_value(buttons))
+            write("on_button_press(index={!r}) {}".format(button_index, pressed))
             write("on_button_press({}) before -> {}".format(
                 button_index, wait_state(self)))
         note(before)
@@ -670,8 +716,10 @@ def apply(ctx):
         try:
             result = orig(self, *args, **kwargs)
         except Exception as exc:
-            note(lambda: write("QuestChoiceManager(quest_type={!r}, quest_id={!r}) !! {}: {}"
-                               .format(quest_type, quest_id, type(exc).__name__, exc)))
+            # 例外は既定値で閉じ込める（`except` を抜けると名前が消えるので、検算が未定義名と読む）。
+            note(lambda exc=exc: write(
+                "QuestChoiceManager(quest_type={!r}, quest_id={!r}) !! {}: {}"
+                .format(quest_type, quest_id, type(exc).__name__, exc)))
             raise
         if sample("QuestChoiceManager.__init__", MAX_RARE_SAMPLES):
             note(lambda: write("QuestChoiceManager(quest_type={!r} [{}], quest_id={!r} [{}]) ok"

@@ -70,6 +70,18 @@ NPC のセーブ項目にも `memory` / `life_log` / `relationship` /
 版7: 会話終了の resolver 判定を NPC の引き当てより先にした。
 世界が変わった回は旧世界の id が新世界に居ないと判定が書かれず、居れば別人を差分として控えていた。
 世界が変わった回は判定だけ書いて NPC を引かない。
+
+版8: 記録の書き方と控えの置き場を直した（読む行の見た目は変えていない）。
+
+- 1件ぶん（初見の NPC は100行を超える）を行のリストに貯めて、`write` を1回だけ呼ぶ。
+  版7は1行ずつ書いていて、1件で8〜30回ファイルを開き直していた。
+  ローダの書き口は改行を含む文をそのまま1回で足す（末尾の改行だけ落とす）ので、行の並びは同じ
+- NPC の控え（`state["npc"]`）を `sys` の `NPC_STORE_MARK` へ移した。
+  注入し直しのたびに控えが空になり、会話した相手の first sight を全文で出し直していた
+- 包みを全部 `safe=True` にした（会話系5関数と送信境界）
+- 画面を持たない計測なのに `ui.Screen` を Clock の非公開の `_interval` のためだけに作っていた。
+  1回きりの予約は公開の `ui.scheduler` に寄せ、見張りの周期実行は Kivy の `Clock` を直に使う
+  （ローダに周期実行の公開の口が無いため。`214_` / `234_` と同じ形）
 """
 
 import datetime
@@ -129,6 +141,9 @@ DUP_MIN_LINE = 30
 DUP_TOP = 3
 # 控えを持つ NPC の上限（会話した相手だけなので普通は数人）。
 MAX_TRACKED_NPCS = 30
+# NPC の控えの置き場（`sys` に置く。版8）。
+# 注入し直しで MOD のモジュールが読み直されても控えが残るので、同じ相手の first sight を出し直さない。
+NPC_STORE_MARK = "_instantale_probe_npc_memory_npcs"
 
 # 会話の終了の見張り。
 # 落ちた直後は後始末の最中なので、少し置いてから写す。
@@ -279,13 +294,24 @@ def duplicated_lines(joined):
     return len(dups), wasted, top
 
 
+def npc_store():
+    """NPC の控え。"世界名:npc_id" -> {"name", "fields": {...}}。1プロセスに1つ（`sys` に置く。版8）。
+
+    鍵に世界名を含める。
+    id だけで引くと、セーブを切り替えたときに別世界の別人を同一人物として diff してしまう（別世界で同じ id が振られるため。
+    311_ が `world_key` で分けているのと同じ理由）。
+    """
+    store = getattr(sys, NPC_STORE_MARK, None)
+    if not isinstance(store, dict):
+        store = {}
+        setattr(sys, NPC_STORE_MARK, store)
+    return store
+
+
 def apply(ctx):
     # 錠は `ctx.logger` が中に持っている（この計測は別スレッドからも書く）。
 
-    #: `npc` は "世界名:npc_id" -> {"name", "fields": {...}}。
-    #: **鍵に世界名を含める。**
-    #: id だけで引くと、セーブを切り替えたときに別世界の別人を同一人物として diff してしまう（別世界で同じ id が振られるため。:
-    #: 311_ が `world_key` で分けているのと同じ理由）。
+    #: NPC の控えは `npc_store()`（`sys` に置く。版8）。
     #: `by_thread` は会話関数の中で send_request が呼ばれたときに、
     #: どの NPC の会話かを送信境界へ伝える（同じスレッドで降りてくる）。
     #: `in_conv` は前回見た `app.in_conversation`（落ちた瞬間の検出用）。
@@ -293,17 +319,27 @@ def apply(ctx):
     #: resolver が発火していれば要約された）。
     #: `last_world` は最後に会話ターンを見た世界。
     #: 閉じの検出時に世界が変わっていれば「放置されたままロードで消えた会話」と読める。
-    state = {"npc": {}, "by_thread": {}, "in_conv": None, "sends": 0,
+    state = {"by_thread": {}, "in_conv": None, "sends": 0,
              "last_conv_call": None, "last_resolver": None, "last_world": None}
+    known_npcs = npc_store()
 
     write = ctx.logger(LOG_BASENAME, stamp=False)
+
+    def flush(lines):
+        """1件ぶんの行をまとめて1回で書く（版8）。
+
+        ローダの書き口は改行を含む文をそのまま足す（末尾の改行だけ落とす）ので、
+        1行ずつ書いたときと同じ並びになる。
+        """
+        if lines:
+            write("\n".join(lines))
 
     def stamp():
         return datetime.datetime.now().isoformat(timespec="milliseconds")
 
-    # ボタンは出さない。
-    # Clock の `schedule` / `_interval` と例外の握りだけ借りる。
-    screen = ui.Screen(ctx, write, tag="npc memory probe")
+    # 会話の終了の後に少し置いて写すための1回きりの予約（公開の `ui.scheduler`。版8）。
+    # Clock から呼ぶ関数の例外はローダの側で握られる。
+    schedule = ui.scheduler(ctx, "npc memory probe")
 
     # ------------------------------------------------------------ NPC の項目
     def npc_id_of(npc):
@@ -331,20 +367,21 @@ def apply(ctx):
                          "text": text[:KEEP_CHARS], "leaves": leaf_texts(value)}
         return out
 
-    def dump_first_sight(npc_id, npc_name, fields):
-        write("\n" + "=" * 72)
-        write("[{}] first sight: {!r} ({})".format(stamp(), npc_name, npc_id))
+    # 以下の `out` は1件ぶんの行を貯めるリスト。書くのは呼び手の `flush` で1回だけ（版8）。
+    def dump_first_sight(out, npc_id, npc_name, fields):
+        out.append("\n" + "=" * 72)
+        out.append("[{}] first sight: {!r} ({})".format(stamp(), npc_name, npc_id))
         for name in WATCHED_FIELDS:
             field = fields[name]
-            write("  {} = {}".format(name, field["kind"]))
+            out.append("  {} = {}".format(name, field["kind"]))
             text = field["text"]
             if text:
                 for line in text[:DUMP_CHARS].split("\n"):
-                    write("      | " + line)
+                    out.append("      | " + line)
                 if len(text) > DUMP_CHARS:
-                    write("      | …（あと{}字）".format(len(text) - DUMP_CHARS))
+                    out.append("      | …（あと{}字）".format(len(text) - DUMP_CHARS))
 
-    def note_changes(old_fields, new_fields, reason):
+    def note_changes(out, old_fields, new_fields, reason):
         """指紋が動いた項目だけを書く。何も動かなくても、その事実を残す。
 
         「会話しても memory が変わらない」は「変わる」と同じ重さの答え。
@@ -356,42 +393,52 @@ def apply(ctx):
             if old["digest"] == new["digest"]:
                 continue
             changed.append(name)
-            write("  {}: {} -> {}".format(name, old["kind"], new["kind"]))
+            out.append("  {}: {} -> {}".format(name, old["kind"], new["kind"]))
             tail = new["text"][-CHANGE_TAIL_CHARS:]
-            write("      新: …{}".format(one_line(tail, CHANGE_TAIL_CHARS)))
+            out.append("      新: …{}".format(one_line(tail, CHANGE_TAIL_CHARS)))
             # 末尾追記か全体の書き直しかは、古い先頭が残っているかで読める。
             head = old["text"][:PROBE_CHUNK]
             if head:
-                write("      旧の先頭は{}".format(
+                out.append("      旧の先頭は{}".format(
                     "残っている（追記に見える）" if head in new["text"]
                     else "消えている（書き直しに見える）"))
         if not changed:
-            write("  変化した項目なし（{}）".format(reason))
+            out.append("  変化した項目なし（{}）".format(reason))
 
-    def remember(store_key, npc_id, npc_name, fields, reason):
+    def remember(out, store_key, npc_id, npc_name, fields, reason):
         """控えと比べて差分を書き、控えを差し替える。鍵は「世界名:npc_id」。"""
-        known = state["npc"].get(store_key)
+        known = known_npcs.get(store_key)
         if known is None:
-            if len(state["npc"]) >= MAX_TRACKED_NPCS:
-                write("[{}] {!r} ({}) は控えの上限（{}人）で追跡しない".format(
+            if len(known_npcs) >= MAX_TRACKED_NPCS:
+                out.append("[{}] {!r} ({}) は控えの上限（{}人）で追跡しない".format(
                     stamp(), npc_name, npc_id, MAX_TRACKED_NPCS))
                 return
-            dump_first_sight(npc_id, npc_name, fields)
+            dump_first_sight(out, npc_id, npc_name, fields)
         else:
-            write("\n[{}] {}: {!r} ({})".format(stamp(), reason, npc_name, npc_id))
-            note_changes(known["fields"], fields, reason)
-        state["npc"][store_key] = {"name": npc_name, "fields": fields}
+            out.append("\n[{}] {}: {!r} ({})".format(stamp(), reason, npc_name, npc_id))
+            note_changes(out, known["fields"], fields, reason)
+        known_npcs[store_key] = {"name": npc_name, "fields": fields}
 
     # ------------------------------------------------------------ 会話系の入口
     def describe_conv_call(fn_name, args, kwargs):
-        """会話関数1回ぶんの引数の実体を書き、スレッドの控えを返す。"""
+        """会話関数1回ぶんの引数の実体を書き、スレッドの控えを返す。
+
+        行は貯めて最後に1回で書く。途中で投げても、そこまでの行は `finally` で書く（版8）。
+        """
+        out = []
+        try:
+            return _describe_conv_call(out, fn_name, args, kwargs)
+        finally:
+            flush(out)
+
+    def _describe_conv_call(out, fn_name, args, kwargs):
         npc = kwargs.get("character_instance")
         if npc is None and len(args) >= 4:
             npc = args[3]
         if npc is None:
-            write("[{}] {}: character_instance が見つからない "
-                  "(args={} kwargs={})".format(stamp(), fn_name, len(args),
-                                               sorted(kwargs)))
+            out.append("[{}] {}: character_instance が見つからない "
+                       "(args={} kwargs={})".format(stamp(), fn_name, len(args),
+                                                    sorted(kwargs)))
             return None
         npc_id = npc_id_of(npc)
         npc_name = one_line(flat(getattr(npc, "name", "")), 40) or "?"
@@ -400,7 +447,7 @@ def apply(ctx):
         state["last_world"] = wkey
 
         fields = capture_fields(npc)
-        remember("{}:{}".format(wkey, npc_id), npc_id, npc_name, fields, fn_name)
+        remember(out, "{}:{}".format(wkey, npc_id), npc_id, npc_name, fields, fn_name)
 
         messages = args[0] if args else None
         if isinstance(messages, list):
@@ -412,11 +459,11 @@ def apply(ctx):
                 roles[role] = roles.get(role, 0) + 1
                 chars += len(flat(message.get("content")
                                   if isinstance(message, dict) else message))
-            write("  messages: {}件 {}字 ({})".format(
+            out.append("  messages: {}件 {}字 ({})".format(
                 len(messages), chars,
                 ", ".join("{} x{}".format(k, v) for k, v in sorted(roles.items()))))
         else:
-            write("  messages: {}".format(kind_of(messages)))
+            out.append("  messages: {}".format(kind_of(messages)))
 
         # 第2引数のライフログは誰のものかを突き合わせる。
         # NPC の `life_log` と一致するのか、プレイヤー側なのかで読み方が変わる。
@@ -431,7 +478,7 @@ def apply(ctx):
             player_log = getattr(args[2], "life_log", None)
             if player_log is not None and _digest(flat(player_log)) == log_digest:
                 owners.append("player.life_log と同内容")
-            write("  character_life_log: {} [{}]".format(
+            out.append("  character_life_log: {} [{}]".format(
                 kind_of(life_log, log_text), " / ".join(owners) or "どちらとも不一致"))
 
         # 5番目以降は版で動きうるので、名前を決め打ちせず全部書く（`retrieved_knowledge` /
@@ -442,17 +489,17 @@ def apply(ctx):
             return "{} {!r}".format(kind_of(value, text), one_line(text[:200], 120))
 
         for index, value in enumerate(args[4:], start=4):
-            write("  args[{}]: {}".format(index, arg_line(value)))
+            out.append("  args[{}]: {}".format(index, arg_line(value)))
         for key, value in sorted(kwargs.items()):
             if key == "character_instance":
                 continue
-            write("  kwargs[{}]: {}".format(key, arg_line(value)))
+            out.append("  kwargs[{}]: {}".format(key, arg_line(value)))
 
         return {"fn": fn_name, "npc_id": npc_id, "npc_name": npc_name,
                 "fields": fields}
 
     def make_conv_probe(fn_name):
-        @ctx.wrap("{}:{}".format(CONV_MODULE, fn_name), required=False)
+        @ctx.wrap("{}:{}".format(CONV_MODULE, fn_name), required=False, safe=True)
         def probe(orig, *args, **kwargs):
             token = threading.get_ident()
             try:
@@ -473,18 +520,22 @@ def apply(ctx):
         make_conv_probe(_fn_name)
 
     # ------------------------------------------------------------ 送信境界
-    #: 1件の記録が 8〜12 行に分かれているので、行ごとの錠では足りない。
     #: LLM の経路は同時に2本走ることがあり（それを測るのが `216_`）、
-    #: 錠が無いと**別の NPC の見出しの下に判定が並ぶ**。
-    #: 記録が汚いのではなく、測定として誤った答えになる。
+    #: 1件の記録が他のスレッドの行と混ざると**別の NPC の見出しの下に判定が並ぶ**。
+    #: 版8から1件ぶんを1回で書くので行は混ざらない。
+    #: 錠は `send #N` の番号とファイルの並びを揃えるために残す。
     record_lock = threading.Lock()
 
     def inspect_send(target, args, kwargs):
-        """1件ぶんの記録をまとめて書く（途中に他のスレッドを挟ませない）。"""
+        """1件ぶんの記録をまとめて1回で書く（版8）。"""
+        out = []
         with record_lock:
-            return _inspect_send(target, args, kwargs)
+            try:
+                return _inspect_send(out, target, args, kwargs)
+            finally:
+                flush(out)
 
-    def _inspect_send(target, args, kwargs):
+    def _inspect_send(out, target, args, kwargs):
         manager = args[0] if args else kwargs.get("manager_name")
         manager = manager if isinstance(manager, str) else repr(manager)
         # 311_ など MOD 自前の呼び出しは測らない（docstring のとおり）。
@@ -503,15 +554,15 @@ def apply(ctx):
         elif isinstance(kwargs.get("messages"), list):
             messages = kwargs["messages"]
         if messages is None:
-            write("[{}] send {}: 本文がリストで見つからない (args={} kwargs={})"
-                  .format(stamp(), manager, len(args), sorted(kwargs)))
+            out.append("[{}] send {}: 本文がリストで見つからない (args={} kwargs={})"
+                       .format(stamp(), manager, len(args), sorted(kwargs)))
             return
 
         joined = "\n".join(
             flat(message.get("content") if isinstance(message, dict)
                  else message) for message in messages)
         state["sends"] += 1
-        write("\n[{}] send #{}: manager={!r} via {} messages={}件 {}字".format(
+        out.append("\n[{}] send #{}: manager={!r} via {} messages={}件 {}字".format(
             stamp(), state["sends"], manager,
             target.rpartition(":")[2], len(messages), len(joined)))
 
@@ -520,18 +571,18 @@ def apply(ctx):
         # 後者は「取りこぼしを MOD から回す」修正（方向1）のための recon。
         if manager == "conversation_resolver":
             state["last_resolver"] = time.monotonic()
-            write("  呼び出し元: {}".format(frames.caller(depth=10)))
+            out.append("  呼び出し元: {}".format(frames.caller(depth=10)))
 
         profile_count = joined.count(HEADING_311_PROFILE)
         player_count = joined.count(HEADING_311_PLAYER)
-        write("  311_の見出し: profile x{}, about_player x{}".format(
+        out.append("  311_の見出し: profile x{}, about_player x{}".format(
             profile_count, player_count))
 
         kinds, wasted, top = duplicated_lines(joined)
-        write("  重複行(>= {}字): {}種 / 損 {}字".format(
+        out.append("  重複行(>= {}字): {}種 / 損 {}字".format(
             DUP_MIN_LINE, kinds, wasted))
         for line, count in top:
-            write("      x{} ({}字) {!r}".format(
+            out.append("      x{} ({}字) {!r}".format(
                 count, len(line), one_line(line, 70)))
 
         if context is not None:
@@ -546,13 +597,13 @@ def apply(ctx):
                     hits += leaf_hits
                     tries += leaf_tries
                 parts.append("{}={}".format(name, verdict(hits, tries)))
-            write("  {}({}) の載り方: {}".format(
+            out.append("  {}({}) の載り方: {}".format(
                 context["npc_name"], context["npc_id"], "  ".join(parts)))
         else:
-            write("  （会話関数の外からの呼び出し。項目の照合は無し）")
+            out.append("  （会話関数の外からの呼び出し。項目の照合は無し）")
 
     def hook_send(target):
-        @ctx.wrap(target, required=False)
+        @ctx.wrap(target, required=False, safe=True)
         def send_probe(orig, *args, **kwargs):
             try:
                 inspect_send(target, args, kwargs)
@@ -571,13 +622,23 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 会話の終了
     def after_close(npc_id):
-        """`in_conversation` が落ちた少し後。要約の書き込みがここに写る。"""
+        """`in_conversation` が落ちた少し後。要約の書き込みがここに写る。
+
+        判定の行と差分は1回で書く（版8）。
+        """
+        out = []
+        try:
+            _after_close(out, npc_id)
+        finally:
+            flush(out)
+
+    def _after_close(out, npc_id):
         app = ui.find_app()
         characters = getattr(getattr(app, "world", None), "characters", None) \
             if app is not None else None
         if not isinstance(characters, dict):
             # 世界が読めないうちは世界の鍵も `"_"` に落ちるので、判定もしない。
-            write("[{}] 会話終了: NPC {!r} が world.characters に居ない".format(
+            out.append("[{}] 会話終了: NPC {!r} が world.characters に居ない".format(
                 stamp(), npc_id))
             return
         wkey = world_key(app)
@@ -594,27 +655,27 @@ def apply(ctx):
             # その会話は要約されていない。
             # 旧世界の id で新世界を引くと別人を会話終了の差分として控えるので、
             # NPC は引かずに終える。
-            write("[{}] resolver: ★不発★ 会話を閉じないまま世界が変わった"
-                  "（{} での会話は要約されずに消えた）".format(
-                      stamp(), state["last_world"]))
+            out.append("[{}] resolver: ★不発★ 会話を閉じないまま世界が変わった"
+                       "（{} での会話は要約されずに消えた）".format(
+                           stamp(), state["last_world"]))
             return
         elif last_call is None:
-            write("[{}] resolver: 判定不能（この起動で会話ターンを見ていない）"
-                  .format(stamp()))
+            out.append("[{}] resolver: 判定不能（この起動で会話ターンを見ていない）"
+                       .format(stamp()))
         elif last_resolver is not None and last_resolver >= last_call:
-            write("[{}] resolver: 発火（最終ターンの {:.0f} 秒後）".format(
+            out.append("[{}] resolver: 発火（最終ターンの {:.0f} 秒後）".format(
                 stamp(), last_resolver - last_call))
         else:
-            write("[{}] resolver: ★不発★ 最終ターン後に要約が走らないまま"
-                  "会話が閉じた（この会話はゲーム側のどこにも要約されない）"
-                  .format(stamp()))
+            out.append("[{}] resolver: ★不発★ 最終ターン後に要約が走らないまま"
+                       "会話が閉じた（この会話はゲーム側のどこにも要約されない）"
+                       .format(stamp()))
         npc = characters.get(npc_id)
         if npc is None:
-            write("[{}] 会話終了: NPC {!r} が world.characters に居ない".format(
+            out.append("[{}] 会話終了: NPC {!r} が world.characters に居ない".format(
                 stamp(), npc_id))
             return
         npc_name = one_line(flat(getattr(npc, "name", "")), 40) or "?"
-        remember("{}:{}".format(wkey, npc_id), npc_id, npc_name,
+        remember(out, "{}:{}".format(wkey, npc_id), npc_id, npc_name,
                  capture_fields(npc), "会話終了の後")
 
     def close_tick(_dt):
@@ -630,12 +691,26 @@ def apply(ctx):
             state["in_conv"] = current
             if previous and not current:
                 npc_id = str(previous)
-                screen.schedule(lambda: after_close(npc_id),
-                                delay=CLOSE_DELAY_SECONDS)
+                schedule(lambda: after_close(npc_id), delay=CLOSE_DELAY_SECONDS)
         except Exception:
             ctx.log_exc("npc memory probe: close watch failed")
 
-    ctx.on_ready(lambda: screen._interval(close_tick, CLOSE_POLL_SECONDS),
+    def start_close_watch():
+        """会話の終了の見張りを周期で回す。メインスレッドの `on_ready` から呼ぶ。
+
+        ローダの `ui` に周期実行の公開の口が無いので、Kivy の `Clock` を直に使う
+        （`214_` / `234_` と同じ形。版8で `ui.Screen._interval` から移した）。
+        `close_tick` は自分の中で例外を握るので、Clock の中で投げない。
+        """
+        try:
+            from kivy.clock import Clock
+        except Exception:
+            ctx.log("npc memory probe: no kivy Clock; close watch disabled",
+                    level="WARN")
+            return
+        Clock.schedule_interval(close_tick, CLOSE_POLL_SECONDS)
+
+    ctx.on_ready(start_close_watch,
                  key="213_probe_npc_memory:poll:{}".format(ctx.generation))
 
     ctx.log("npc memory probe: conversation fields + prompt overlap "

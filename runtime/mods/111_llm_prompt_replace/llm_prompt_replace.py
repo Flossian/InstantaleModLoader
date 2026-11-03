@@ -1068,10 +1068,8 @@ def apply(ctx):
     # ローカルの3点もクラウドの `llm_manager` 別名も、
     # 別名の後生えの見張りも向こうにある。
     # こちらが渡すのは「この並びをどう書き換えるか」だけ。
-    hooks = wrap_outgoing(
-        ctx, run, label="prompt replace",
-        on_arm=lambda target: report(
-            "[RULES] 遅れて仕掛けた: {}".format(target), force=True))
+    # 掛け直しの時点はローダが `modloader.log` に `late-armed on` で残す（こちらの記録へは写さない）。
+    hooks = wrap_outgoing(ctx, run, label="prompt replace")
 
     # 注入した時点で、作ったデータで正しさを確かめておく。
     # 実経路はゲームが LLM を呼ぶまで通らず、

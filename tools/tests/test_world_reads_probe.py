@@ -94,6 +94,12 @@ class FakeCtx:
     def write_json(self, path, data, *, indent=1):
         return ml.write_json(path, data, indent=indent, report=self.log_exc)
 
+    readies = []
+
+    def on_ready(self, fn, *, key=None, **kw):
+        FakeCtx.readies.append(key)
+        return True
+
     def wrap(self, target, **kw):
         def decorator(func):
             self.hooks[target] = func
@@ -166,6 +172,20 @@ try:
         summary = json.load(fh)
     check("箇所と回数が並ぶ", summary["sites"] and summary["sites"][0]["count"] >= 3, summary)
     check("書き手も並ぶ", summary["world_file_writes"] and summary["world_file_writes"][0]["count"] == 2, summary)
+    check("箇所の連鎖はゲーム側の名前", reads and reads[0]["chain"] and "game_shop" in reads[0]["chain"][0], reads)
+    check("書き手の連鎖も名前で残る",
+          all(isinstance(c, str) for e in store["writes"].values() for c in e["chain"]), store["writes"])
+
+    print("閉じるとき")
+    check("on_stop を1プロセス1回の鍵で結ぶ", "242_probe_world_reads:on_stop" in FakeCtx.readies, FakeCtx.readies)
+    game_shop()
+    game_shop()
+    module.flush_at_exit()
+    with io.open(os.path.join(OUT_DIR, "world_reads.json"), encoding="utf-8") as fh:
+        summary = json.load(fh)
+    shop = [e for e in summary["sites"] if "game_shop" in e["site"]]
+    check("30秒を待たずに書き出す", shop and shop[0]["count"] == 5, shop)
+    check("数が変わっていなければ書かない", store["dirty"] is False)
     print("段の記録")
     module.TRACE_PATHS = True
     original = {"areas": {"8": {"nodes": {"32": {"facilities": {"228": {"config": {}}}}}}}, "npcs": {"98": {}}}

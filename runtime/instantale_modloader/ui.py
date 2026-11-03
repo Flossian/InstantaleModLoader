@@ -2090,6 +2090,67 @@ def character_name(app, character_id, limit=40, fallback=None):
     return str(character_id) if fallback is None else fallback
 
 
+#: 戦闘で逃げた者の預かり。逃げる手で `app.party` から外した者を、ゲームはここへ入れる（GAME.md §2.10）。
+ESCAPED_ATTR = "escaped_member_in_battle"
+
+
+def put_back_party(app, members):
+    """一覧（`app.party`）に居ない者を戻す。`(戻した id, 引けなかった id)` を返す。
+
+    `members` は `(id, 実体)` の並び。実体が None か id のままなら、主人公は `app.player`、
+    仲間は `character_of` で引く。
+    戻した者は預かり（`ESCAPED_ATTR`。実行中は `{id: Character}`）から外す。
+    主人公を戻したら一覧の先頭へ置く（セーブの並びを崩さない）。
+
+    逃げる手で敵も倒し切ると、ゲームは勝ちの終わり方へ進み、預かりを一覧へ戻さない（GAME.md §2.10）。
+    戦闘の終わりに預かりを使う MOD（`107_` / `147_` / `334_`）と窓口 `defeat` が、この1つで戻す。
+    """
+    party = getattr(app, "party", None) if app is not None else None
+    if not isinstance(party, dict):
+        return [], []
+    escaped = getattr(app, ESCAPED_ATTR, None)
+    back, missing = [], []
+    for member_id, value in members:
+        if member_id in party:
+            continue
+        if value is None or isinstance(value, (str, int)):
+            value = (getattr(app, "player", None) if member_id == PLAYER_ID
+                     else character_of(app, member_id))
+        if value is None:
+            missing.append(member_id)
+            continue
+        party[member_id] = value
+        if isinstance(escaped, dict):
+            escaped.pop(member_id, None)
+        back.append(member_id)
+    if PLAYER_ID in back and next(iter(party)) != PLAYER_ID:
+        ordered = [(PLAYER_ID, party[PLAYER_ID])] + [
+            (key, value) for key, value in party.items() if key != PLAYER_ID]
+        party.clear()
+        party.update(ordered)
+    return back, missing
+
+
+def return_escaped(app):
+    """預かりに残っている者を全部一覧へ戻し、預かりを空にする。`(戻した id, 引けなかった id)`。
+
+    預かりは実行中は `{id: Character}`、セーブから戻ったときは id の並びなので、どちらも受ける。
+    空にできなかったときは例外をそのまま投げる（戻した者は一覧に入ったまま。呼ぶ側が記録する）。
+    """
+    escaped = getattr(app, ESCAPED_ATTR, None) if app is not None else None
+    if not escaped or not isinstance(getattr(app, "party", None), dict):
+        return [], []
+    if isinstance(escaped, dict):
+        held = list(escaped.items())
+    elif isinstance(escaped, (list, tuple)):
+        held = [(member_id, None) for member_id in escaped]
+    else:
+        return [], []
+    result = put_back_party(app, held)
+    escaped.clear()
+    return result
+
+
 # --------------------------------------------------------------------------
 # 画面を触る側（ログと例外処理が要るので ctx を握る）
 # --------------------------------------------------------------------------

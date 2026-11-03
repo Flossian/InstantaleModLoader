@@ -27,6 +27,7 @@ import threading
 import weakref
 
 from . import durations
+from . import items as _items
 from . import loads
 from . import log_exc
 from . import state
@@ -1197,9 +1198,12 @@ def install(ctx, write=None):
 
             ctx.wrap(target, required=False, safe=True)(priced)
         else:
-            def generated(orig, self, *args, _why=why, **kwargs):
+            # 戻り値は入口で違う（`(Item, 鍵)` か None）。品は `items.made_item` で取り出す。
+            def generated(orig, self, *args, _why=why,
+                          _entry=target.rsplit(".", 1)[-1], **kwargs):
                 result = orig(self, *args, **kwargs)
-                _apply_one(result, _why, from_game=True)
+                _apply_one(_items.made_item(_entry, result, args, kwargs), _why,
+                           from_game=True)
                 return result
 
             ctx.wrap(target, required=False, safe=True)(generated)

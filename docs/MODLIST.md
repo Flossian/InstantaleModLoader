@@ -60,7 +60,7 @@
 | [`114_ui_input_focus`](MODS.md#114_ui_input_focus-自由入力のあと入力欄にフォーカスを戻す) | 入力欄のフォーカスを保つ | 自由入力のあと入力欄にフォーカスを戻す | 3 |  |
 | [`115_ui_item_list_fit`](MODS.md#115_ui_item_list_fit-はみ出すアイテム一覧を画面内に収める) | アイテム・スキル一覧を画面に収める | はみ出すアイテム一覧を画面内に収める | 3 |  |
 | [`116_ui_party_expand`](MODS.md#116_ui_party_expand-4人目以降の仲間も表示する) | パーティ欄の4人目以降を表示 | 4人目以降の仲間も表示する | 14 |  |
-| [`117_message_text_integrity`](MODS.md#117_message_text_integrity-長い応答が途中で切れるのを直す) | 長い本文をより多く見せる | 長い応答が途中で切れるのを直す | 1 |  |
+| [`117_message_text_integrity`](MODS.md#117_message_text_integrity-長い本文の表示を末尾に絞り本文が消えるのを防ぐ) | 長い本文の表示を末尾に絞り、本文が消えるのを防ぐ | 長い本文の表示を末尾に絞り、本文が消えるのを防ぐ | 1 |  |
 | [`118_batch_message_render`](MODS.md#118_batch_message_render-本文の出し方逐次一括と既読の色を選ぶ) | 本文の一括表示と既読の灰色化 | 本文の出し方（逐次／一括）と既読の色を選ぶ | 4 |  |
 | [`119_fix_crime_attribution`](MODS.md#119_fix_crime_attribution-他人の犯罪が主人公のものになるのを直す) | 他人の犯罪で手配される件の修正 | 他人の犯罪が主人公のものになるのを直す | - |  |
 | [`120_fix_npc_name_collision`](MODS.md#120_fix_npc_name_collision-npc-の名前が重複するのを直す) | NPC名の重複・類似の防止 | NPC の名前が重複するのを直す | 5 |  |
@@ -74,7 +74,7 @@
 | [`128_item_image_variety`](MODS.md#128_item_image_variety-アイテム画像を似た候補から散らして選び素材に無い武器防具服消耗品の絵を足す) | アイテム画像の拡充 | アイテム画像を似た候補から散らして選び、素材に無い武器・防具・服・消耗品の絵を足す | 65 |  |
 | [`129_balance_item_price`](MODS.md#129_balance_item_price-アイテムの値段を付け直す) | アイテムの値付けの調整 | アイテムの値段を付け直す | 19 |  |
 | [`130_currency_unit`](MODS.md#130_currency_unit-通貨の呼び名と所持金の表示を変える) | 通貨の表記を変更する | 通貨の呼び名と所持金の表示を変える | 4 |  |
-| [`131_sharp_portrait`](MODS.md#131_sharp_portrait-立ち絵の縮小減色を通さず顔の検出をやり直す) | 立ち絵の高画質化と顔認識精度の向上 | 立ち絵の縮小・減色を通さず、顔の検出をやり直す | 2 |  |
+| [`131_sharp_portrait`](MODS.md#131_sharp_portrait-立ち絵の縮小減色を通さず顔の検出を確かにする) | 立ち絵の高画質化と顔認識精度の向上 | 立ち絵の縮小・減色を通さず、顔の検出を確かにする | 3 |  |
 | [`132_npc_variety`](MODS.md#132_npc_variety-npc-の外見性格経歴に種を渡す) | NPC の外見・性格・経歴の多様化 | NPC の外見・性格・経歴に種を渡す | 7 |  |
 | [`133_ui_area_difficulty`](MODS.md#133_ui_area_difficulty-移動先に適正レベル帯を出す) | 移動先の適正レベル帯の表示 | 移動先に適正レベル帯を出す | 9 |  |
 | [`134_balance_item_effects`](MODS.md#134_balance_item_effects-アイテムの効果を分類ごとに作り直す) | アイテム効果の調整 | アイテムの効果を分類ごとに作り直す | 18 |  |
@@ -169,7 +169,7 @@
 | `204_probe_prompt_bloat` | EVENTLOG / DEDUP / サイドカー起動という3つのプロンプト肥大化挙動と、ローカル LLM の頼みごとの頼みと出力のトークン数・窓あふれを測る |
 | `205_probe_player_events` | プレイヤーの行動をトリガーにしたイベントの差し込み場所を特定する |
 | `206_probe_quest_flow` | クエストの受注経路と、選択肢ボタンの登録方法を特定する |
-| `207_probe_battle_bgm` | BGM を鳴らす・止める呼び出しと、鳴っているミキサーの本数を見張る（戦闘BGMの直しが退行していないかの見張り） |
+| `207_probe_battle_bgm` | BGM を鳴らす・止める呼び出しと、鳴っているミキサーの本数（うち曲の本数）を見張る（戦闘BGMの直しが退行していないかの見張り） |
 | `208_probe_item_detail` | アイテム説明欄の opacity の上げ下げを見張り、閉じた後も残る原因を測る（寸法は最初の数品だけ写す） |
 | `209_probe_free_facility` | シーン記述エンジンの中身（ステップ・フラグのスコープ・プログラムの出どころ）を写し取り、MOD から使えるかを測る |
 | `210_probe_character_state` | NPC の死亡の印を特定し、誰がその NPC を参照しているかを数えて、印だけで安全に退場させられるかを測る |
@@ -181,7 +181,7 @@
 | `216_probe_llm_overlap` | LLM リクエストの多重送信をプロセス内で数える（`127_` の `--parallel 1` によるキュー待ちが実プレイでどれだけ起こるか） |
 | `217_probe_area_move` | エリア移動の未実測部分を録る |
 | `218_probe_vacation` | 宿の宿泊の未実測部分を録る |
-| `219_probe_crash_log` | 本体のクラッシュ記録が落ちる呼び出しを見分ける |
+| `219_probe_crash_log` | 本体のクラッシュ記録が壊れる退行を見張る |
 | `220_probe_bounty_hunter` | 手配度に応じて追手を出す MOD（`316_`）を書くための下調べ |
 | `221_probe_item_level` | 品物のレベルを誰が決めているかを録る |
 | `222_probe_battle_mechanics` | 戦闘の数の作られ方を録る |
@@ -226,7 +226,7 @@
 
 | フォルダ | 提供 | 取り込み |
 |---|---|---|
-| [`117_message_text_integrity`](MODS.md#117_message_text_integrity-長い応答が途中で切れるのを直す) | yoshinari/tomotomo-y 様 | そのまま取り込み |
+| [`117_message_text_integrity`](MODS.md#117_message_text_integrity-長い本文の表示を末尾に絞り本文が消えるのを防ぐ) | yoshinari/tomotomo-y 様 | そのまま取り込み |
 | [`118_batch_message_render`](MODS.md#118_batch_message_render-本文の出し方逐次一括と既読の色を選ぶ) | yoshinari/tomotomo-y 様 | 提供者と共同 |
 | [`119_fix_crime_attribution`](MODS.md#119_fix_crime_attribution-他人の犯罪が主人公のものになるのを直す) | yoshinari/tomotomo-y 様 | そのまま取り込み |
 | `223_probe_party_equipment` | MoririnJP 様 | そのまま取り込み |

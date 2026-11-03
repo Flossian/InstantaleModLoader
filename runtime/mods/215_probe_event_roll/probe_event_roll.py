@@ -55,11 +55,19 @@ HP・体力(physical_integrity)・負傷・レベルのどれとも、
 `calculate_attribute` を上限（40件）まで拾いえた。
 あわせて `calculate_attribute` の包みは受け取った引数をそのまま本体へ渡す形にした
 （キーワードで来た引数を位置へ直さない）。
+
+版4: 換算表のための `calculate_attribute` の呼び出しを、他の probe からも見分けられるようにした。
+`snap()` の間は自分の `state["probing"]` に加えて、`sys` の `DRY_THREAD_MARK` に自分のスレッドの id を置く
+（`236_` / `243_` / `244_` と同じ印。立てる前の値を控えて finally で戻す）。
+版3までは `244_probe_ability_reads` がこの呼び出しを能力値の読み取りとして録っていた。
+自分の `calculate_attribute` の包みも、印が自分のスレッドに立っている回（他の probe の試し）を数えない。
 """
 
 import datetime
 import json
 import re
+import sys
+import threading
 
 from instantale_modloader import frames, ui
 
@@ -97,6 +105,15 @@ MARK_RE = re.compile(r"<[^<>]{0,24}?(\d{1,3})\s*%\s*[:：]?\s*([^<>]{0,16})>")
 # 確率は resolve に入る時点で既に決まっているので、
 # 見たいものは窓の中に収まっている。
 CALC_LOG_LIMIT = 40
+
+# 試し打ちの間だけ置くスレッドの印（`236_` / `243_` / `244_` と同じ名前。版4）。
+# 値は試しているスレッドの id。同じ関数を包む他の probe は、自分のスレッドの id の間は記録を控える。
+DRY_THREAD_MARK = "_instantale_probe_dry_run_thread"
+
+
+def in_dry_run():
+    """いまのスレッドで試し打ち（自分の `snap()` か他の probe）の最中か。"""
+    return getattr(sys, DRY_THREAD_MARK, None) == threading.get_ident()
 
 
 def _get(container, name, default=None):
@@ -211,8 +228,6 @@ def snapshot(character):
 
 
 def apply(ctx):
-    import sys
-
     # 未 import でも降りない。
     # `scripts.llm.llm_manager` は最初の LLM リクエストまで
     # import されない（TECH.md §3.4）。
@@ -238,12 +253,25 @@ def apply(ctx):
         窓が開いている間の呼び出しは全部数える作りなので、
         外さないと**自分の計測で自分のログが埋まる**。
         `101_` / `214_` が踏んだのと同じ穴。
+
+        同じ関数を包む他の probe（`244_`）からも見分けられるよう、試し打ちの印も立てる（版4）。
+        入れ子で呼ばれても外側の印を消さないよう、立てる前の値を控えて戻す。
         """
         state["probing"] = True
+        missing = object()
+        before = getattr(sys, DRY_THREAD_MARK, missing)
+        setattr(sys, DRY_THREAD_MARK, threading.get_ident())
         try:
             return snapshot(character)
         finally:
             state["probing"] = False
+            try:
+                if before is missing:
+                    delattr(sys, DRY_THREAD_MARK)
+                else:
+                    setattr(sys, DRY_THREAD_MARK, before)
+            except AttributeError:
+                pass
 
     def player_of(args, kwargs, names):
         """引数のプレイヤーを使い、取れなければ app から拾う。"""
@@ -370,9 +398,11 @@ def apply(ctx):
             # evaluate から resolve までの間だけ数える。
             # この MOD 自身の snapshot() は
             # state["probing"] で外してある（snap() を参照）。
+            # 他の probe の試し打ち（印が自分のスレッド）も数えない（版4）。
             # 残るのはゲームが呼んだぶんだけ。
             if (state["open"] and not state["probing"]
-                    and len(state["calc"]) < CALC_LOG_LIMIT):
+                    and len(state["calc"]) < CALC_LOG_LIMIT
+                    and not in_dry_run()):
                 state["calc"].append({
                     "arg": frames.arg(args, kwargs, "attribute_score", 0),
                     "result": result,

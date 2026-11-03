@@ -125,6 +125,7 @@ SHIPPED_DEFAULTS = {
         "91d670b9ca9f81c0fdd453ba2b1007a1afcca6cb",     # v1.6.0
         "cab6170e4b537e29014cbe171703bf047c2f9b36",     # v1.7.1
         "2f67004e1b1fba4541ab38608e29847f5c8c07e7",     # v1.15.0
+        "cd5d840b44a381d37d7c7322b79f143935ba9a4f",     # v1.20.0
     },
     "npc.default.json": {                               # 120_
         "3986fdec474b1280e5acf34f6727b3706a8ebc71",     # v1.3.1

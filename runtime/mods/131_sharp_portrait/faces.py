@@ -7,7 +7,13 @@
 ゲームの検出は OpenCV のカスケードを既定の感度（1.1 / 3）で掛けているだけで、
 `lbpcascade_animeface.xml` → `haarcascade_frontalface_alt.xml` の順に2回呼ぶ
 （手元の再現で 93% 一致。VERIFICATION.md §3.43）。
-ここにあるのはその再現と、外れた絵を拾い直すための前処理・位置の絞り。
+ここにあるのはその再現と、外れた絵を拾い直すための前処理・位置の絞り、
+それより先に掛ける YuNet（OpenCV の深層学習の顔検出。版19）。
+
+YuNet は opencv_zoo の `face_detection_yunet_2023mar.onnx`（MIT。`models/` に同梱、NOTICE）。
+手元の 695 体で、カスケードが服や鎧を顔として拾う絵・外す絵の大半で顔を当て、
+目の大きいアニメ寄りの顔ではカスケード（lbp）のほうが当たる。
+だから YuNet を先に、外したらカスケードへ落とす（VERIFICATION.md §3.43「YuNet」）。
 """
 
 import os
@@ -27,6 +33,13 @@ FACE_WIDTH = (0.08, 0.60)
 #: ゲームのカスケードの置き場（ゲームのフォルダからの相対）と、試す順。
 CASCADE_DIR = os.path.join("runtime", "models", "face_recognition")
 CASCADES = ("lbpcascade_animeface.xml", "haarcascade_frontalface_alt.xml")
+
+#: YuNet のモデル（MOD のフォルダからの相対）と、ログに出す名前。
+YUNET_MODEL = os.path.join("models", "face_detection_yunet_2023mar.onnx")
+YUNET = "YuNet"
+
+#: YuNet の顔として採る確かさの下限。0.6 未満を見ても拾いは 651 → 661 体で、中身は見ていない。
+YUNET_SCORE = 0.6
 
 
 def short_name(cascade):
@@ -60,6 +73,53 @@ def pick_face(gray, cascade):
     if not fit:
         return None
     return tuple(int(v) for v in min(fit, key=lambda b: b[1]))
+
+
+def read_yunet(path, np):
+    """YuNet のモデルのバイト列。読めなければ None。
+
+    OpenCV はパスに日本語があるとファイルを開けないことがあるので、
+    ファイルは numpy で読み、検出器にはバイト列で渡す（`make_yunet`）。
+    """
+    try:
+        return np.fromfile(path, dtype=np.uint8)
+    except (OSError, ValueError):
+        return None
+
+
+def make_yunet(model, cv2, np):
+    """モデルのバイト列から YuNet の検出器を作る。作れなければ None。
+
+    1回 3ms ほどで作れるので、呼ぶ側はスレッドを跨いで使い回さずに毎回作ってよい。
+    バイト列から作る形はゲームの OpenCV 4.10 にもある（`cv2.pyd` の文書文字列で確認）。
+    """
+    if model is None:
+        return None
+    try:
+        return cv2.FaceDetectorYN.create("onnx", model, np.array([], dtype=np.uint8),
+                                         (320, 320), YUNET_SCORE, 0.3, 50)
+    except Exception:
+        return None
+
+
+def yunet_face(bgr, detector):
+    """YuNet が見つけた顔のうち、上寄りで程よい幅の箱で一番確かなもの `((x, y, w, h), 確かさ)`。
+
+    `bgr` は8ビット3チャネル（OpenCV の並び）。無ければ None。
+    位置の絞りはカスケードと同じ（`FACE_TOP` / `FACE_WIDTH`）。
+    """
+    height, width = bgr.shape[:2]
+    detector.setInputSize((width, height))
+    _count, found = detector.detect(bgr)
+    if found is None:
+        return None
+    fit = [f for f in found
+           if (f[1] + f[3] / 2.0) / height < FACE_TOP
+           and FACE_WIDTH[0] < f[2] / float(width) < FACE_WIDTH[1]]
+    if not fit:
+        return None
+    best = max(fit, key=lambda f: f[14])
+    return tuple(int(v) for v in best[:4]), float(best[14])
 
 
 def crop_box(face, size, crop=FACE_CROP):

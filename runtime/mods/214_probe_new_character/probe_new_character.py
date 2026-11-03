@@ -26,7 +26,7 @@
 | 作成画面はレベルを渡しているのか | `CharacterVM.to_dict()` の中身（属性と `point_use` だけで、レベルの欄は無いはず） |
 | プレイヤーの `Character` は何を受け取って生まれるか | `Character.__init__` の直後の `experience_level`（60 で生まれるのか、0 で生まれて後から上がるのか） |
 | 60 を返しているのは誰か | 開始処理の窓の間だけ `scripts.functions` を包み、引数→戻り値と呼び出し元を記録 |
-| 犯人はゲームか MOD か | 記録した呼び出し元にこちら側のファイルが居るか（`frames.is_ours`）。居なければゲーム側 |
+| 犯人はゲームか MOD か | 記録した呼び出しの起点が MOD の枠か（`mod_caller`。版6）。違えばゲーム側 |
 
 最後の1つがこの計測の主目的。
 ローダは 50 本ほどの MOD を当てているので、「ゲームのバグ」と断じる前に、
@@ -74,31 +74,147 @@
 
 版5: 作成画面の「人生を始める」の対象を `scripts.hud.hud_charamake` に直した。
 main_025 で画面のクラスがこのモジュールへ移り、版4までの `scripts.create_world` の名前では包めていなかった。
+
+版6: 呼び出し元の「MOD か」の判定と、記録の数え方を直した。
+
+- 版5の `[MOD frames: …]` は、スタックのどこかに MOD のファイルが1枚でもあれば陽性だった。
+  ロードや NPC の生成を包んでいる MOD（`orig` をそのまま呼ぶだけの層）が必ず挟まるので、
+  ほぼ全行が陽性で、判定として働いていなかった（30日で 9,301/10,773 行）。
+  版6は内側から辿り、最も内側から続くゲーム側の枠を抜けた直後の1枚が MOD かで決める（`mod_caller`）。
+  ローダ本体・自分・受け取った `orig` を呼んでいる最中の包みの層は飛ばす。
+  印は `[MOD caller: …]` に変えた（旧い行と混ぜて数えないため）
+- MOD の置き場の判定を `frames.is_ours` に寄せた。版5は `runtime/mods` だけを見ていて、`local/` の MOD を見落としていた
+- 他の probe の試し打ち（`sys` の `DRY_THREAD_MARK` が自分のスレッド）の間は記録しない。
+  `243_` の総当たりと `236_` の試しが、窓のログの約半分を占めていた
+- 窓の記録の件数（`MAX_INIT_LINES` など）を `sys` の `COUNTS_MARK` で数える。注入し直しで数え直さない
+- 表の総当たりは1プロセス1回のまま、前回の結果（`out/new_character_tables.txt`）と同じなら1行だけ書く
 """
 
 import datetime
+import io
 import os
 import sys
+import threading
 import time
 
 from instantale_modloader import frames, patch, ui
 
 LOG_BASENAME = "new_character.log"
+# 表の総当たりの前回の結果（版6）。`*.log` ではないので、注入のたびの世代送りに掛からない。
+TABLES_BASENAME = "new_character_tables.txt"
 
 # ローダが自分の被せたものに付ける印（`patch.py` の PATCH_MARK / __wrapper_of__）。
 # 「底まで剥がせたか」の判定に使う。
 # 推論で済ませない（`101_` の教訓）。
 LOADER_MARKS = ("__instantale_patch__", "__wrapper_of__")
 
-# 「MOD のフレームか」を自分で判定するための足場。
-# `frames.is_ours` はローダの置き場との文字列比較なので、
-# 区切り文字の揺れに弱い（オフライン検証で実際に外した）。
-# 犯人がゲームかこちらかを分ける判定でそれに頼りたくないので、
-# 正規化した実パスで比べる。
-# 自分自身とローダ本体は「MOD」に数えない。
-MY_FILE = os.path.normcase(os.path.abspath(__file__))
-MODS_ROOT = os.path.normcase(os.path.dirname(os.path.dirname(MY_FILE)))
-LOADER_MARK = os.path.normcase("instantale_modloader")
+# 「MOD のフレームか」の判定の足場（版6）。
+# MOD の置き場（`runtime/mods` と `local/`）は `frames.is_ours` で見る。
+# そのうち自分自身とローダ本体は「MOD」に数えない。
+# 比べるのは大文字小文字と区切りを均した実パス。
+MY_FILE = os.path.normcase(os.path.abspath(__file__)).lower()
+LOADER_DIR = os.path.join(
+    os.path.normcase(os.path.dirname(os.path.abspath(frames.__file__))).lower(), "")
+# 呼び出し元を辿る枠の上限。
+CALLER_SCAN_DEPTH = 80
+
+# 他の probe が試し打ちをしている間だけ置く印（`236_` / `243_` / `244_` と同じ名前）。
+# 値は試しているスレッドの id。自分のスレッドならゲームの呼び出しではないので記録しない（版6）。
+DRY_THREAD_MARK = "_instantale_probe_dry_run_thread"
+
+# 窓の記録の件数（1プロセスに1組。`sys` に置く。版6）。
+COUNTS_MARK = "_instantale_probe_newchar_counts"
+
+
+def in_dry_run():
+    """いまのスレッドで他の probe が試し打ちをしている最中か。"""
+    return getattr(sys, DRY_THREAD_MARK, None) == threading.get_ident()
+
+
+def process_counts():
+    """窓の記録の件数。注入し直しで MOD が読み直されても数え直さない（版6）。"""
+    found = getattr(sys, COUNTS_MARK, None)
+    if not isinstance(found, dict):
+        found = {}
+        setattr(sys, COUNTS_MARK, found)
+    for key in ("inits", "calls", "level_events"):
+        found.setdefault(key, 0)
+    return found
+
+
+def _norm(filename):
+    try:
+        return os.path.normcase(os.path.abspath(filename)).lower()
+    except Exception:
+        return ""
+
+
+def passes_to_orig(frame, inner):
+    """MOD の枠 `frame` が、受け取った `orig` を呼んでいる最中か（＝通過用の包みの層か）。
+
+    `@ctx.wrap` の層は第1引数の `orig` を呼んで内側へ降りる。
+    1つ内側の枠 `inner` がその `orig` の実行中なら、この枠は包みの層で、呼び出しの起点ではない。
+    包みの本体からゲームの別の関数を呼んでいる最中なら `inner` は `orig` ではないので、起点として数える。
+    """
+    if inner is None:
+        return False
+    code = frame.f_code
+    if code.co_argcount < 1:
+        return False
+    try:
+        orig = frame.f_locals.get(code.co_varnames[0])
+    except Exception:
+        return False
+    if orig is None or not callable(orig):
+        return False
+    original = getattr(orig, "__original__", None)
+    if inner.f_code is getattr(orig, "__code__", None):
+        if original is None:
+            return True
+        # ローダの素の包み（`patch.py` の `wrapper` / `guarded`）は同じ種類どうしでコードを共有するので、
+        # 包んでいる中身（`old`）まで同じかで見分ける。
+        try:
+            return inner.f_locals.get("old") is original
+        except Exception:
+            return False
+    # ゲームの関数は Nuitka で組まれていて、関数とフレームのコードが同じ物とは限らない。
+    # 包みが素の関数を直に呼んでいる形だけ、名前で見る。
+    return (original is None and not frames.is_ours(inner.f_code.co_filename)
+            and getattr(orig, "__name__", None) == inner.f_code.co_name)
+
+
+def mod_caller(start, own_file=MY_FILE):
+    """呼び出しの起点が MOD なら、その枠の説明を返す。ゲーム側なら None（版6）。
+
+    `start` から外へ辿る。
+    自分のファイル・ローダ本体（`patch.py` など）・`orig` を呼んでいる最中の包みの層は飛ばす。
+    最も内側から続くゲーム側の枠を抜けた直後の1枚が MOD の枠なら、その MOD が呼んだとみなす。
+    ゲーム側の枠より先に MOD の枠に当たったとき（MOD が直に呼んだ）も MOD とみなす。
+    抜けた直後の1枚がゲーム側なら、ゲームの呼び出しとみなして止める。
+    """
+    inner = None
+    frame = start
+    in_game = left_game = False
+    depth = 0
+    while frame is not None and depth < CALLER_SCAN_DEPTH:
+        depth += 1
+        code = frame.f_code
+        name = code.co_filename
+        if frames.is_ours(name):
+            path = _norm(name)
+            if (path == own_file or path.startswith(LOADER_DIR)
+                    or passes_to_orig(frame, inner)):
+                if in_game:
+                    left_game = True
+            else:
+                return "{} ({}:{})".format(code.co_name, name, frame.f_lineno)
+        else:
+            if left_game:
+                return None
+            in_game = True
+        inner = frame
+        frame = frame.f_back
+    return None
 
 
 def bare(func):
@@ -190,14 +306,14 @@ def apply(ctx):
         # 閉じる時刻と、開けた対象の名前。
         "window_until": 0.0,
         "window_by": None,
-        "inits": 0,
-        "calls": 0,
-        "level_events": 0,
         # 総当たりの最中は自分の呼び出しを記録しない。
         "probing": False,
     }
+    # 窓の記録の件数は `sys` に置く（版6）。
+    counts = process_counts()
 
     write = ctx.logger(LOG_BASENAME, stamp=False)
+    tables_path = ctx.out_path(TABLES_BASENAME)
 
     def stamp():
         return datetime.datetime.now().isoformat(timespec="milliseconds")
@@ -210,36 +326,21 @@ def apply(ctx):
         state["window_by"] = by
 
     def caller_line():
-        """呼び出し元の連鎖と、そこにこちら側のファイルが居るかどうか。
+        """呼び出し元の連鎖と、呼び出しの起点が MOD かどうか。
 
         `frames.caller` はローダと mod のフレームを飛ばすので、
         連鎖だけでは「MOD が呼んだ」ことが見えない。
-        そこで生のスタックも別に走査して、
-        こちら側のファイル（ローダ自身は除く）が居れば併記する。
+        そこで生のスタックを `mod_caller` で辿り、起点が MOD なら併記する。
         これが「ゲームのバグか、こちらのバグか」を分ける唯一の手掛かりになる。
+        版6で、通過するだけの包みの層を数えない判定にした（モジュールの docstring）。
         """
         chain = frames.caller(depth=5)
-        ours = []
-        index = 1
-        while index < 40:
-            try:
-                frame = sys._getframe(index)
-            except Exception:
-                break
-            index += 1
-            name = frame.f_code.co_filename
-            try:
-                normalized = os.path.normcase(os.path.abspath(name))
-            except Exception:
-                continue
-            if not normalized.startswith(MODS_ROOT):
-                continue
-            if normalized == MY_FILE or LOADER_MARK in normalized:
-                continue
-            ours.append("{} ({}:{})".format(
-                frame.f_code.co_name, name, frame.f_lineno))
-        if ours:
-            return "{}   [MOD frames: {}]".format(chain, " <- ".join(ours[:3]))
+        try:
+            found = mod_caller(sys._getframe(1))
+        except Exception:
+            found = None
+        if found:
+            return "{}   [MOD caller: {}]".format(chain, found)
         return chain
 
     # -- プレイヤーの写し取り ------------------------------------------------
@@ -348,9 +449,9 @@ def apply(ctx):
                 is_player = True
             if not is_player:
                 return result
-            if state["inits"] >= MAX_INIT_LINES:
+            if counts["inits"] >= MAX_INIT_LINES or in_dry_run():
                 return result
-            state["inits"] += 1
+            counts["inits"] += 1
             write("[{}] Character.__init__ PLAYER name={} experience_level={} "
                   "experience_point={} max_hp={} max_physical_integrity={}".format(
                       stamp(),
@@ -382,12 +483,13 @@ def apply(ctx):
             before = frames.attr(self, "experience_level")
             result = orig(self, *args, **kwargs)
             try:
+                # 上限と試し打ちの印を先に見る（版6）。
+                if counts["level_events"] >= MAX_LEVEL_EVENTS or in_dry_run():
+                    return result
                 after = frames.attr(self, "experience_level")
                 if before == after and not window_open():
                     return result
-                if state["level_events"] >= MAX_LEVEL_EVENTS:
-                    return result
-                state["level_events"] += 1
+                counts["level_events"] += 1
                 write("[{}] {} name={} level {} -> {} args={}".format(
                     stamp(), label,
                     frames.repr_value(frames.attr(self, "name")),
@@ -411,11 +513,12 @@ def apply(ctx):
         def watched(orig, *args, **kwargs):
             result = orig(*args, **kwargs)
             try:
-                if state["probing"] or not window_open():
+                # 他の probe の試し打ち（版6）は、自分の総当たり（`probing`）と同じく記録しない。
+                if state["probing"] or not window_open() or in_dry_run():
                     return result
-                if state["calls"] >= MAX_CALL_LINES:
+                if counts["calls"] >= MAX_CALL_LINES:
                     return result
-                state["calls"] += 1
+                counts["calls"] += 1
                 write("[{}] {}({}{}) -> {}".format(
                     stamp(), name, frames.repr_value(args),
                     " " + frames.repr_value(kwargs) if kwargs else "",
@@ -458,18 +561,20 @@ def apply(ctx):
             return
         setattr(sys, TABLES_MARK, True)
         state["probing"] = True
+        # 行は時刻を付けずに貯める。前回と比べるのは時刻を除いた本文（版6）。
+        lines = []
         try:
             for name, low, high in TABLE_TARGETS:
                 func, depth, still_ours = bare(getattr(functions, name, None))
                 if func is None:
-                    write("[{}] table {}: missing".format(stamp(), name))
+                    lines.append("table {}: missing".format(name))
                     continue
                 if still_ours:
                     # 底に着いていない。
                     # この表は自分たちの層を測っているので、
                     # 読み方を間違えないように結果ではなく事実だけ書く（101_ の教訓）。
-                    write("[{}] table {}: still wrapped after {} layer(s); "
-                          "not measuring".format(stamp(), name, depth))
+                    lines.append("table {}: still wrapped after {} layer(s); "
+                                 "not measuring".format(name, depth))
                     continue
                 pairs, stopped = [], None
                 for value in range(low, high + 1):
@@ -479,13 +584,42 @@ def apply(ctx):
                         stopped = "{} raises from {} onward: {}: {}".format(
                             name, value, type(exc).__name__, exc)
                         break
-                write("[{}] table {}({}..{}) unwrapped={}: {}{}".format(
-                    stamp(), name, low, high, depth, "  ".join(pairs),
+                lines.append("table {}({}..{}) unwrapped={}: {}{}".format(
+                    name, low, high, depth, "  ".join(pairs),
                     "   [{}]".format(stopped) if stopped else ""))
         except Exception:
             ctx.log_exc("new character probe: table dump failed")
         finally:
             state["probing"] = False
+        write_tables(lines)
+
+    def write_tables(lines):
+        """表を書く。前回の結果（`TABLES_BASENAME`）と同じなら1行だけ（版6）。
+
+        表は決定的な関数だけなので、ゲームが変わらない限り毎回同じになる。
+        版5までは毎プロセス3行・約3.8KBを書いていた。
+        変わったときだけ全文を書き、控えも差し替える。
+        """
+        if not lines:
+            return
+        text = "\n".join(lines)
+        previous = None
+        try:
+            with io.open(tables_path, encoding="utf-8") as fh:
+                previous = fh.read()
+        except Exception:
+            previous = None
+        if previous == text:
+            write("[{}] tables unchanged since the last run ({} table(s), {} chars; "
+                  "full text in out/{})".format(stamp(), len(lines), len(text),
+                                                TABLES_BASENAME))
+            return
+        now = stamp()
+        write("\n".join("[{}] {}".format(now, line) for line in lines))
+        if previous is not None:
+            write("[{}] tables CHANGED from the last run (out/{} now holds this run)"
+                  .format(now, TABLES_BASENAME))
+        ctx.write_text(tables_path, text)
 
     def start_poll(announce):
         """プレイヤーの値を見張る。作成の後で書き換わるならここに出る。

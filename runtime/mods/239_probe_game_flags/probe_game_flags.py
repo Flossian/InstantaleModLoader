@@ -26,6 +26,12 @@ r"""計測: ゲームの「〜の最中」の旗 7 つ。ゲームは変えな�
     out\game_flags.jsonl    1件＝1行。後から数える用
 
 見張りは1プロセスに1組（`sys` の `STORE`）。注入し直しても積み上がらず、書き手（`sink`）だけ差し替わる。
+
+版2: 同じ値の書き直しの既出の判定を、文字列を組まずに済ませる。
+版1は書き直しのたびに、既出かを見る前に `frames.caller(depth=1)` で呼び出し元の文字列を組んでいた。
+鍵を「旗・新値・最初のゲーム側フレームのコードと行」のタプルにし、既出なら連鎖を組まずに抜ける。
+見張りを置いたときの旗の値（`now` の行）は1プロセスに1回だけ書く。
+版1は注入し直しのたびに出ていた（1プロセス約2.3行。ロードの後の値は `load` の行が別に出す）。
 """
 import datetime
 import sys
@@ -179,6 +185,15 @@ def apply(ctx):
         return "{} ({}:{})".format(frames.owner_of(code) or code.co_name,
                                    filename, frame.f_lineno)
 
+    def first_game_frame():
+        """ローダと MOD のフレームを飛ばした最初のフレーム（`frames.caller(depth=1)` と同じ所）。"""
+        frame, steps = sys._getframe(1), 0
+        while frame is not None and steps < 40:
+            if not frames.is_ours(frame.f_code.co_filename):
+                return frame
+            frame, steps = frame.f_back, steps + 1
+        return None
+
     def sink(app, name, old, new):
         if ctx.superseded():
             return      # 外した・切って注入し直した後の古い書き手（見張りはクラスに残る）
@@ -189,8 +204,11 @@ def apply(ctx):
             changed = old is not new
         if not changed:
             # 書き直しは直近の呼び出し元で数える（外側の連鎖まで比べると同じ場所が何度も出る）。
-            # 判定は連鎖を組む前に、直近の1段だけで行う。
-            key = (name, show(new), frames.caller(depth=1))
+            # 判定は連鎖を組む前に、直近の1段のコードと行のタプルで行う（文字列は書く回だけ組む）。
+            frame = first_game_frame()
+            key = (name, show(new), frame.f_code if frame is not None else None,
+                   frame.f_lineno if frame is not None else None)
+            frame = None
             if key in seen["rewrites"]:
                 return
             seen["rewrites"].add(key)
@@ -248,7 +266,10 @@ def apply(ctx):
                 value = vars(app).get(name, _MISSING)
                 if value is not _MISSING:
                     known[name] = value
-            write("now {}".format(flags_of(app) or "{}"))
+            # 見張りを置いた時の旗。注入し直しのたびには要らないので1プロセスに1回
+            if not store.get("now_written"):
+                store["now_written"] = True
+                write("now {}".format(flags_of(app) or "{}"))
         return len(store["installed"])
 
     install()

@@ -60,6 +60,7 @@ HP を `回復` ぶん戻す、と**読める**。
     デバッグモードでだけ隠れる形だった（`227_` で実例。VERIFICATION.md §3.76）
 - 版3 の時点で `134_` がこの probe より内側で本体の文を差し替えているので、
   `texts` に写るのは差し替える前の本体の文（VERIFICATION.md §3.51）
+- 版4: 自前の `arg_of` をやめ、ローダの `frames.arg` で引数を引く（読む値は同じ）
 """
 
 import datetime
@@ -132,13 +133,6 @@ def item_brief(item, limit=40):
 def caller_brief():
     """ゲーム側の呼び出し元を、ファイル名と行だけで並べる（版3）。"""
     return _CALLER_DIR.sub(r"(\1)", frames.caller())
-
-
-def arg_of(args, kwargs, index, name):
-    """包みが受け取った引数から1つ引く。位置でもキーワードでも同じ値を返す（版3）。"""
-    if name in kwargs:
-        return kwargs[name]
-    return args[index] if len(args) > index else None
 
 
 def light_key(value):
@@ -303,27 +297,30 @@ def apply(ctx):
             ctx.log_exc("item consume probe: cannot record {}".format(label))
         return result
 
-    # 版3: どの包みも受け取った引数をそのまま `orig` へ渡す。記録に要る値は `arg_of` で引く。
+    # 版3: どの包みも受け取った引数をそのまま `orig` へ渡す。
+    # 記録に要る値は `frames.arg` で引く（版4。版3は自前の `arg_of`）。
     @ctx.wrap("__main__:ItemConsumeManager.consume_item", required=False, safe=True)
     def consume_item(orig, self, *args, **kwargs):
-        return watch_call("consume_item", self, arg_of(args, kwargs, 0, "item_instance"),
-                          lambda: {"usable": brief(arg_of(args, kwargs, 1, "usable"))},
+        return watch_call("consume_item", self,
+                          frames.arg(args, kwargs, "item_instance", 0),
+                          lambda: {"usable": brief(frames.arg(args, kwargs, "usable", 1))},
                           lambda: orig(self, *args, **kwargs))
 
     @ctx.wrap("__main__:ItemConsumeManager.execute", required=False, safe=True)
     def consume_execute(orig, self, *args, **kwargs):
-        return watch_call("consume_execute", self, arg_of(args, kwargs, 0, "item_instance"),
-                          lambda: {"usable": brief(arg_of(args, kwargs, 1, "usable"))},
+        return watch_call("consume_execute", self,
+                          frames.arg(args, kwargs, "item_instance", 0),
+                          lambda: {"usable": brief(frames.arg(args, kwargs, "usable", 1))},
                           lambda: orig(self, *args, **kwargs))
 
     @ctx.wrap("__main__:ItemUseManager.use_item", required=False, safe=True)
     def use_item(orig, self, *args, **kwargs):
-        return watch_call("use_item", self, arg_of(args, kwargs, 0, "item_instance"),
+        return watch_call("use_item", self, frames.arg(args, kwargs, "item_instance", 0),
                           dict, lambda: orig(self, *args, **kwargs))
 
     @ctx.wrap("__main__:ItemUseManager.execute", required=False, safe=True)
     def use_execute(orig, self, *args, **kwargs):
-        return watch_call("use_execute", self, arg_of(args, kwargs, 0, "item_instance"),
+        return watch_call("use_execute", self, frames.arg(args, kwargs, "item_instance", 0),
                           dict, lambda: orig(self, *args, **kwargs))
 
     # ------------------------------------------------------------------
@@ -333,7 +330,7 @@ def apply(ctx):
     def add_text(orig, self, *args, **kwargs):
         try:
             if seen["stack"]:
-                context = arg_of(args, kwargs, 0, "context")
+                context = frames.arg(args, kwargs, "context", 0)
                 seen["texts"].append(context if isinstance(context, str)
                                      else frames.repr_value(context))
         except Exception:

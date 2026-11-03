@@ -43,10 +43,14 @@ GAME.md §2.18 の実測には穴が残っている（すべて `徒歩` 側の1
 あわせて全部の包みを、受け取った引数をそのまま本体へ渡す形にした
 （キーワードで来た引数を位置へ直さない。直すと内側の MOD の食い違いが
 デバッグモードのときだけ隠れる。VERIFICATION.md §3.76 の `333_` の件）。
+
+版4: 移動の窓（`AreaMoveManager.execute`）の包みも `safe=True` にした。
+版3までは「本体の例外を窓の片付けの後にそのまま上げたい」として外していたが、
+`safe=True` は本体が投げた例外をそのまま通す（呼び直さない）ので、片付けの後に上がる形は同じ。
+あわせて使っていない `import json` を外した。
 """
 
 import datetime
-import json
 import time
 import weakref
 
@@ -161,12 +165,13 @@ def apply(ctx):
             pass
         return result
 
-    @ctx.wrap("__main__:AreaMoveManager.execute", required=False)
+    @ctx.wrap("__main__:AreaMoveManager.execute", required=False, safe=True)
     def move_execute(orig, self, *args, **kwargs):
         """移動の窓。前後の所持金・エリアと、窓の間の日数・文言をまとめて1行に。
 
-        `safe=True` を付けないのは、本体が投げた例外を窓の片付けの後にそのまま
-        上げたいため。本体を呼ぶ前の控えは try に入れ、失敗しても本体は必ず1回呼ぶ（版2）。
+        本体を呼ぶ前の控えは try に入れ、失敗しても本体は必ず1回呼ぶ（版2）。
+        本体が投げた例外は `finally` で窓を片付けた後にそのまま上がる
+        （`safe=True` は本体の例外を呼び直さずに通す。版4）。
         """
         app = info = choice_text = gold_before = origin = None
         window = {"texts": [], "days": [], "dots": 0, "overflow": 0}

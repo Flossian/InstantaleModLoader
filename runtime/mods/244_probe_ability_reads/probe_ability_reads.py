@@ -26,7 +26,10 @@ r"""計測: ゲームが能力値をどこで読み、派生の値（攻撃力�
                 辞書の中身だけを書き換える経路は拾えないので、`recompute` の前後の差で見る
     convert     `Character.calculate_attribute(attribute_score)` の引数と戻り、そのときの HP・スタミナ・部位の怪我
     charisma    `document_emotion_scores_new` に渡った魅力と、主人公の `ability_scores` / `original_ability_scores` の魅力。
-                2つの持ち方が同じ値のときは見分けがつかない（`distinct: false`）
+                2つの持ち方が同じ値のときは見分けがつかない（`distinct: false`）。
+                ローダの能力値の窓口（`abilities`）は一番外側でこの第2引数に魅力の補正を足すので、
+                補正（`abilities.bonus` の魅力）と、`ability_scores` に補正を足した値（`boosted`）も並べ、
+                渡った値がそれと同じなら `matches` に `ability_scores+bonus` を入れる
     try_power   戦闘の開始で1プロセス1回（相手の名前とレベルごと）。包む前の素の `calculate_battle_effect` に
                 normal の1手を渡し、乱数を同じ状態に戻してから、そのまま／攻撃力（魔法は魔力）だけ2倍／
                 `ability_scores` の筋力（魔法は知力）だけ +10／`original_ability_scores` の同じ値だけ +10 で素点を比べる。
@@ -39,8 +42,9 @@ r"""計測: ゲームが能力値をどこで読み、派生の値（攻撃力�
     out\ability_reads.jsonl   後から数える用
 
 試しで変えた値はインスタンスの `__dict__` へ直に置き、呼んだらすぐ同じ物に戻す（見張りにも掛からない）。
+戻すのは、置いた値がそのまま残っているときだけ（試しの間に別のスレッドが書いた値は消さない）。
 乱数の状態は試しの前に控えて、終わったら戻す（`236_` の `rng_saved` と同じ形）。
-試しの間は `sys` の `DRY_THREAD_MARK` に自分のスレッドの id を置く（`222_` は記録を控える）。
+試しの間は `sys` の `DRY_THREAD_MARK` に自分のスレッドの id を置く（`222_` は記録を控える）。外すときは置く前の値へ戻す。
 見張りは1プロセスに1組（`sys` の `STORE`）。注入し直しても積み上がらず、書き手（`sink`）だけ差し替わる。
 引数は受け取ったまま `orig` へ渡す。state\ もセーブも動かさない。
 """
@@ -49,7 +53,7 @@ import random
 import sys
 import threading
 
-from instantale_modloader import frames, patch, ui
+from instantale_modloader import abilities, frames, patch, ui
 
 LOG_BASENAME = "ability_reads.log"
 RECORD_BASENAME = "ability_reads.jsonl"
@@ -192,8 +196,11 @@ def changes(old, new):
 def snapshot(obj):
     """前後を比べる項目の写し（辞書は浅く写す）。"""
     found = {}
+    holder = getattr(obj, "__dict__", None)
+    if not isinstance(holder, dict):
+        return found
     for name in SNAPSHOT:
-        value = obj.__dict__.get(name, _MISSING) if hasattr(obj, "__dict__") else _MISSING
+        value = holder.get(name, _MISSING)
         if value is _MISSING:
             continue
         found[name] = dict(value) if isinstance(value, dict) else value
@@ -265,7 +272,11 @@ def rng_restore(saved):
 
 
 class Swapped(object):
-    """試しの間だけ、インスタンスの `__dict__` の値を差し替えて、同じ物に戻す。"""
+    """試しの間だけ、インスタンスの `__dict__` の値を差し替えて、同じ物に戻す。
+
+    戻すのは、置いた値（同じ物）がまだ残っているときだけ。試しの間に別のスレッドが同じ属性を
+    書いていたら、その値を消さずに残す（戻すと、その書き込みが無かったことになる）。
+    """
 
     def __init__(self, obj, name, value):
         self.obj, self.name, self.value = obj, name, value
@@ -277,10 +288,13 @@ class Swapped(object):
         return self
 
     def __exit__(self, *exc):
+        holder = self.obj.__dict__
+        if holder.get(self.name, _MISSING) is not self.value:
+            return False        # 別の書き込みが入った。そちらを残す
         if self.old is _MISSING:
-            self.obj.__dict__.pop(self.name, None)
+            holder.pop(self.name, None)
         else:
-            self.obj.__dict__[self.name] = self.old
+            holder[self.name] = self.old
         return False
 
 
@@ -346,7 +360,8 @@ def apply(ctx):
         """`player` / `party:<id>` / `enemy:<鍵>` / `other`。"""
         if obj is frames.attr(app, "player", None):
             return ui.PLAYER_ID
-        ident = obj.__dict__.get("id") if hasattr(obj, "__dict__") else None
+        holder = getattr(obj, "__dict__", None)
+        ident = holder.get("id") if isinstance(holder, dict) else None
         if ident is not None and str(ident) in {str(m) for m in ui.party_member_ids(app)}:
             return "party:" + str(ident)
         enemies = frames.attr(app, "current_enemy_dict", None)
@@ -395,12 +410,12 @@ def apply(ctx):
             return
         who = who_of(app, obj)
         diff = changes(old, new)
+        within, by_mod = inside(), called_from_a_mod()
         emit("set", "{} {}({}) {} inside={} mod={}  {}".format(
-            name, who, frames.short(obj.__dict__.get("name"), 30), diff, inside(),
-            called_from_a_mod(), caller),
+            name, who, frames.short(obj.__dict__.get("name"), 30), diff, within, by_mod, caller),
             attr=name, who=who, name=plain(obj.__dict__.get("name")), change=diff,
-            level=plain(obj.__dict__.get("experience_level")), inside=inside(),
-            by_mod=called_from_a_mod(), caller=caller)
+            level=plain(obj.__dict__.get("experience_level")), inside=within,
+            by_mod=by_mod, caller=caller)
 
     def install():
         """見張りを置く（置いてあれば書き手だけ差し替える）。置けた属性の数を返す。"""
@@ -426,7 +441,8 @@ def apply(ctx):
                     installed.append(name)
                     continue
                 ours = type(previous).__name__ == "AbilityWatch"
-                if not ours and previous is not _MISSING and hasattr(type(previous), "__get__"):
+                if (not ours and previous is not _MISSING
+                        and getattr(type(previous), "__get__", None) is not None):
                     # クラスが自分で持つ property などは上書きしない（値の出どころが変わる）
                     write("WARN {} is a {} on the class; not watched".format(
                         name, type(previous).__name__))
@@ -475,12 +491,13 @@ def apply(ctx):
                 diff = {k: changes(before.get(k), after.get(k)) for k in after
                         if before.get(k) != after.get(k)}
                 who = who_of(app, self)
+                within = inside()
                 emit("recompute", "{} {}({}) changed={} inside={}  {}".format(
                     label, who, frames.short(self.__dict__.get("name"), 30), diff or "-",
-                    inside(), caller),
+                    within, caller),
                     function=label, who=who, name=plain(self.__dict__.get("name")),
                     changed=diff, before={k: plain(v) for k, v in before.items()},
-                    body=body_of(self), inside=inside(), by_mod=called_from_a_mod(),
+                    body=body_of(self), inside=within, by_mod=called_from_a_mod(),
                     caller=caller)
             except Exception:
                 ctx.log_exc("ability reads probe: recording {} failed".format(label))
@@ -504,17 +521,18 @@ def apply(ctx):
             if not allow("convert", raw == result, caller):
                 return result
             who = who_of(app, self)
+            body = body_of(self)
             emit("convert", "{}({}) {} -> {} hp={}/{} pi={}/{} body={}  {}".format(
                 who, frames.short(self.__dict__.get("name"), 30), plain(raw), plain(result),
                 plain(self.__dict__.get("current_hp")), plain(self.__dict__.get("max_hp")),
                 plain(self.__dict__.get("physical_integrity")),
-                plain(self.__dict__.get("max_physical_integrity")), body_of(self), caller),
+                plain(self.__dict__.get("max_physical_integrity")), body, caller),
                 who=who, name=plain(self.__dict__.get("name")), arg=plain(raw),
                 result=plain(result), hp=plain(self.__dict__.get("current_hp")),
                 max_hp=plain(self.__dict__.get("max_hp")),
                 pi=plain(self.__dict__.get("physical_integrity")),
                 max_pi=plain(self.__dict__.get("max_physical_integrity")),
-                body=body_of(self), inside=inside(), by_mod=called_from_a_mod(), caller=caller)
+                body=body, inside=inside(), by_mod=called_from_a_mod(), caller=caller)
         except Exception:
             ctx.log_exc("ability reads probe: recording calculate_attribute failed")
         return result
@@ -534,14 +552,28 @@ def apply(ctx):
             current = scores.get("charisma") if isinstance(scores, dict) else None
             base = original.get("charisma") if isinstance(original, dict) else None
             distinct = current is not None and base is not None and current != base
+            # ローダの窓口が一番外側で足した魅力の補正（足すのは渡った値が素の魅力と同じとき。下限 1）
+            extra = None
+            if player is not None:
+                try:
+                    extra = _number(abilities.bonus(app, player).get("charisma"))
+                except Exception:
+                    extra = None
+            boosted = (max(1, current + extra)
+                       if extra and _number(current) is not None else None)
             caller = frames.caller(depth=CALLER_DEPTH)
-            if allow("charisma", distinct, given == current, given == base, caller):
+            if allow("charisma", distinct, given == current, given == base,
+                     boosted is not None and given == boosted, caller):
                 source = [name for name, value in (("ability_scores", current),
-                                                   ("original_ability_scores", base))
+                                                   ("original_ability_scores", base),
+                                                   ("ability_scores+bonus", boosted))
                           if value is not None and given == value]
-                emit("charisma", "given={} ability_scores={} original={} matches={} distinct={}  {}"
-                     .format(plain(given), plain(current), plain(base), source, distinct, caller),
+                emit("charisma", "given={} ability_scores={} original={} bonus={} boosted={} "
+                     "matches={} distinct={}  {}".format(
+                         plain(given), plain(current), plain(base), plain(extra), plain(boosted),
+                         source, distinct, caller),
                      given=plain(given), ability_scores=plain(current), original=plain(base),
+                     bonus=plain(extra), boosted=plain(boosted),
                      matches=source, distinct=distinct, by_mod=called_from_a_mod(), caller=caller)
         except Exception:
             ctx.log_exc("ability reads probe: recording the charisma failed")
@@ -642,7 +674,7 @@ def apply(ctx):
         fresh = []
         for side, name, person, target in people:
             key = (side, name, plain(frames.attr(person, "experience_level", None)))
-            if key not in tried and hasattr(person, "__dict__"):
+            if key not in tried and isinstance(getattr(person, "__dict__", None), dict):
                 fresh.append((key, side, name, person, target))
         if not fresh:
             return
@@ -651,6 +683,7 @@ def apply(ctx):
         calculate = patch.original_of(getattr(manager_cls, "calculate_battle_effect"))
         before = combatants_state(app, people)
         rng = rng_saved()
+        marked_before = getattr(sys, DRY_THREAD_MARK, None)
         setattr(sys, DRY_THREAD_MARK, threading.get_ident())
         try:
             for key, side, name, person, target in fresh:
@@ -659,7 +692,10 @@ def apply(ctx):
                 try_power(manager, calculate, side, name, person, target, rng)
         finally:
             try:
-                delattr(sys, DRY_THREAD_MARK)
+                if marked_before is None:
+                    delattr(sys, DRY_THREAD_MARK)
+                else:
+                    setattr(sys, DRY_THREAD_MARK, marked_before)
             except AttributeError:
                 pass
             rng_restore(rng)

@@ -136,19 +136,12 @@ def apply(ctx):
         if not moved or app is None:
             return
         party = getattr(app, "party", None)
-        escaped = getattr(app, "escaped_member_in_battle", None)
         if not isinstance(party, dict):
             write("WARN {}: the party is {}; cannot check {}".format(
                 where, type(party).__name__, [member_id for member_id, _v in moved]))
             return
-        back = []
-        for member_id, value in moved:
-            if member_id in party:
-                continue
-            party[member_id] = value
-            if isinstance(escaped, dict):
-                escaped.pop(member_id, None)
-            back.append(member_id)
+        # 戻し方はローダの語彙（`107_` / `334_` / 窓口 `defeat` と同じ1つ）。
+        back, _missing = ui.put_back_party(app, moved)
         if back:
             write("{}: the game did not bring {} back; put back by hand".format(where, back))
         else:

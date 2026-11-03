@@ -83,10 +83,20 @@
 - 包みは受け取った引数をそのまま本体へ渡す（キーワードで来た引数を位置へ直さない）
 - `236_probe_enemy_stats` の試し打ちの間は記録しない（`DRY_RUN_THREAD_MARK`）。
   版2は試し打ちの計算を本物として「手の外の calculate」と `get_base_damage_value` に約1,400行書いていた
+
+版5: 継続効果の行の大半が空（計算 0・変化なし）で、`ACTION_SAMPLES` の半分を食っていた。
+空の行1つごとに全員の属性の写しを2回取っていた。次のように直した。
+
+- 継続効果で、計算も属性の変化も無かった回は書かず、件数にも数えない
+- 継続効果の対象の `status` が空のときは、全員ではなくその1人だけを写す。
+  変化が出た継続効果の行は、どれも対象の1人だけが動いていた（out の記録を数えた）。
+  空の `status` で何かが動いたなら、その1人の差分として行に出る
+- 戦闘開始の名簿の深さ（`brief` の depth=4）は変えていない。技の `effects` の中の
+  `power` がこの深さで届いていて、浅くすると語彙が落ちる
+- 使っていない `import json` を外した
 """
 
 import datetime
-import json
 import sys
 import threading
 
@@ -143,6 +153,9 @@ GRID_WEAPON_ATTACK = (1, 5, 23, 50, 96, 150, 245, 500, 1000, 2000)
 
 ENEMY_SIDE = "enemy"
 ALLY_SIDE = "ally"
+
+# 継続効果の行の `phase`。何も起きなかった回を捨てる判定にも使う（版5）。
+STATUS_PHASE = "継続効果"
 
 
 def process_store():
@@ -275,9 +288,25 @@ def apply(ctx):
                 changed["/".join(who)] = fields
         return changed
 
+    def who_of(app, holder):
+        """名簿の中での `(側, 鍵)`。差分の鍵を全員の写しと揃えるため（版5）。"""
+        for side, key, found in combatants(app):
+            if found is holder:
+                return side, key
+        return "-", frames.short(frames.attr(holder, "name", "?"), 60)
+
+    def snapshot_scope(app, only):
+        """`only` が `(誰, 持ち主)` ならその1人だけ、無ければ全員を写す（版5）。"""
+        if only is not None:
+            return {only[0]: snapshot(only[1])}
+        return snapshot_all(app) if app is not None else {}
+
     # ------------------------------------------------------------ 1手の文脈
-    def open_action(kind, actor, side, battle_action, app):
-        """手を開く。上限に達していれば開かない（全員の写しを取らない。版3）。"""
+    def open_action(kind, actor, side, battle_action, app, only=None):
+        """手を開く。上限に達していれば開かない（全員の写しを取らない。版3）。
+
+        `only` は写す相手を1人に絞るときの `(誰, 持ち主)`（版5。継続効果で `status` が空のとき）。
+        """
         if not room():
             state["action"] = None
             return False
@@ -286,7 +315,8 @@ def apply(ctx):
             "actor": frames.short(actor, 60), "side": frames.short(side, 20),
             "battle_action": brief(battle_action),
             "calc": [], "effect": None,
-            "_before": snapshot_all(app) if app is not None else {},
+            "_only": only,
+            "_before": snapshot_scope(app, only),
         }
         return True
 
@@ -295,10 +325,16 @@ def apply(ctx):
         state["action"] = None
         if action is None or not room():
             return
-        state["rows"] += 1
         before = action.pop("_before")
-        action["changed"] = diff_all(
-            before, snapshot_all(app) if app is not None else {})
+        only = action.pop("_only", None)
+        action["changed"] = diff_all(before, snapshot_scope(app, only))
+        # 版5: 継続効果で何も起きなかった回は書かず、件数にも数えない。
+        if action["phase"] == STATUS_PHASE and not action["calc"] \
+                and not action["changed"] and action["effect"] is None:
+            return
+        if only is not None:
+            action["scope"] = "/".join(only[0])
+        state["rows"] += 1
         record(action)
         write("{}: {} ({}) calc={} changed={}".format(
             action["phase"], action["actor"], action["side"],
@@ -408,7 +444,16 @@ def apply(ctx):
             pass
         return result
 
+    def status_is_empty(character):
+        """継続効果の対象に状態異常が1つも無いか。読めない形なら False（全員を写す側へ倒す）。"""
+        status = (character.get("status") if isinstance(character, dict)
+                  else frames.attr(character, "status", frames.MISSING))
+        if status is None:
+            return True
+        return isinstance(status, (dict, list, tuple)) and len(status) == 0
+
     # 毒などの継続分。1手と同じ形で、キャラクタ1人ぶんの小さな手として録る。
+    # 版5: `status` が空ならその1人だけを写し、何も起きなければ閉じるときに捨てる。
     @ctx.wrap("__main__:BattlePhaseManager.reduce_status_turns_and_log",
               required=False, safe=True)
     def reduce_status_turns_and_log(orig, self, *args, **kwargs):
@@ -418,8 +463,11 @@ def apply(ctx):
             if state["action"] is None and room():
                 app = getattr(self, "app", None) or ui.find_app()
                 character = frames.arg(args, kwargs, "character", STATUS_ARGS)
-                opened = open_action("継続効果", frames.attr(character, "name", "?"),
-                                     "-", None, app)
+                only = None
+                if character is not None and status_is_empty(character):
+                    only = (who_of(app, character), character)
+                opened = open_action(STATUS_PHASE, frames.attr(character, "name", "?"),
+                                     "-", None, app, only=only)
         except Exception:
             ctx.log_exc("battle mechanics: cannot open the status turn")
         try:

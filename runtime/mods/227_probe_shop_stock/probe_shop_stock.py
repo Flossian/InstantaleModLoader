@@ -97,6 +97,24 @@ skill, obtainer, id, ...)` を受け取るので、
     `on_press` にも付ける（承認は `on_touch_down` → `on_press` で動く）
   - `scripts.hud.new_hud` の売買まわりのクラスとメソッドの一覧（1プロセス1回）。`buy_item` を
     持つクラスを特定するため
+- 版5: 包みの約束の抜けと、注入し直しで積もる観測者を直した。
+  - 6本の包み（`ShoppingStartManagerRemake.execute` / `generate_item_from_dict` /
+    `generate_item_from_item_data` / `toggle_twin_inventory_window` / `buy_item` / `sell_item`）に
+    `required=False` を付けた
+  - 押された記録の観測者の控えを `sys` に移した。版4は控えが注入ごとの WeakSet で、
+    注入し直すたびに同じボタンへ観測者が積もり、古い世代の閉包が残っていた。
+    前の世代の観測者は `unbind_uid` で外してから付け直す
+  - 品を落とした後（`change_inventory`）の画面の走査は、売買の窓が開いている間だけにした
+    （`hud.visible_twin_inventory_data` の `TorF` と `situation`。GAME.md §2.13.1.3 の窓の閉じ方の項）。
+    `change_inventory` は装備の付け外しでも走るので、店の外でも Window から深さ40の走査を
+    前後2回していた
+  - 同じ判定を、品を落とした瞬間（`on_touch_up`）と右クリック（`show_popup_menu`）の画面の走査、
+    `change_inventory` の境目（持ち物の写し）にも当てた。窓の外ではどれも判定だけで素通しする。
+    窓の外の行（装備の付け外しの境目、持ち物の窓の右クリック）を当てにしている記録は無い
+    （右クリックの popup の中身は `223_` が録っている）ので、行ごと止めた
+  - 自前の `arg_of` をやめ、ローダの `frames.arg` で引数を引く。一覧の `hasattr` を `frames.attr` に替えた
+  - `223_` と同じ `show_popup_menu`、`221_` と同じ `generate_item_in_shopping` を包んでいるのは
+    残した。見るものが違う（223 は装備欄、221 は段、ここは画面と持ち物の増減）
 """
 
 import datetime
@@ -136,6 +154,14 @@ _CALLER_DIR = re.compile(r"\((?:[^()]*[\\/])?([^\\/()]+:\d+)\)")
 # 売買画面の場面名（`405_` と同じ）。
 TRADE_SITUATION = "shop"
 
+# 売買の窓の表示の状態を持つ HUD の辞書（`336_` と同じ名前。GAME.md §2.13.1.3）。
+# `{'TorF': True, 'situation': 'shop', …}` のとき売買の窓が開いている（版5）。
+TWIN_WINDOW_DATA = "visible_twin_inventory_data"
+
+# 1プロセスで持ち越す控え（版5）。`watched` は観測者を付けたボタン →
+# `(付けた世代, [(出来事, uid)])`。注入し直したら前の世代の観測者を外してから付け直す。
+STORE_ATTR = "_instantale_probe_shop_stock"
+
 # 品揃えの雛形が入っている施設の設定の鍵。
 GOODS_KEYS = ("goods", "stock_tier", "stock_update_date")
 
@@ -149,22 +175,24 @@ def caller_brief():
     return _CALLER_DIR.sub(r"(\1)", frames.caller(CALLER_DEPTH))
 
 
-def arg_of(args, kwargs, index, name):
-    """包みが受け取った引数から1つ引く。位置でもキーワードでも同じ値を返す。
-
-    版3: 引数を名前付きで受けて位置に直して `orig` へ渡していたのをやめ、
-    受け取った形のまま渡すようにした。記録に要る値はここで引く。
-    """
-    if name in kwargs:
-        return kwargs[name]
-    return args[index] if len(args) > index else None
+def process_store():
+    """1プロセスで持ち越す控え。`sys` に置いて注入し直しをまたぐ（版5）。"""
+    found = getattr(sys, STORE_ATTR, None)
+    if not isinstance(found, dict):
+        found = {}
+        setattr(sys, STORE_ATTR, found)
+    if not isinstance(found.get("watched"), weakref.WeakKeyDictionary):
+        found["watched"] = weakref.WeakKeyDictionary()
+    return found
 
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     seen = {"items": 0, "boundaries": 0, "screens": 0, "presses": 0}
     #: 観測者を付けたボタン。ゲームのウィジェットには印を付けない（読み取りだけの約束）。
-    watched = weakref.WeakSet()
+    #: 版5: 控えは `sys` に置き、この注入の世代を `generation` で見分ける。
+    watched = process_store()["watched"]
+    generation = object()
     state = {"in_shop": 0}
 
     # 1件1行の JSON。読む用のログとは別に、後から数えるために残す。
@@ -420,8 +448,9 @@ def apply(ctx):
         return result
 
     # ------------------------------------------------------------ 店の場面
-    # 版3: どの包みも受け取った引数をそのまま `orig` へ渡す。記録に要る値は `arg_of` で引く。
-    @ctx.wrap("__main__:ShoppingStartManagerRemake.execute", safe=True)
+    # 版3: どの包みも受け取った引数をそのまま `orig` へ渡す。
+    # 記録に要る値は `frames.arg` で引く（版5。版4までは自前の `arg_of`）。
+    @ctx.wrap("__main__:ShoppingStartManagerRemake.execute", required=False, safe=True)
     def shopping_execute(orig, self, *args, **kwargs):
         app = app_of(self)
         state["in_shop"] += 1
@@ -447,7 +476,7 @@ def apply(ctx):
     def set_item_from_world_data(orig, self, *args, **kwargs):
         return around(
             lambda: "set_item_from_world_data(tier={!r})".format(
-                arg_of(args, kwargs, 1, "next_tier")),
+                frames.arg(args, kwargs, "next_tier", 1)),
             lambda: app_of(self), lambda: orig(self, *args, **kwargs),
             shop_only=True)
 
@@ -456,17 +485,18 @@ def apply(ctx):
     def generate_item_in_shopping(orig, self, *args, **kwargs):
         return around(
             lambda: "generate_item_in_shopping(tier={!r})".format(
-                arg_of(args, kwargs, 2, "item_stock_tier")),
+                frames.arg(args, kwargs, "item_stock_tier", 2)),
             lambda: app_of(self), lambda: orig(self, *args, **kwargs),
             shop_only=True)
 
     # 生成の3入口は、ロード・敵の生成・クラフトでも呼ばれる。版3 から店の場面の中だけ録る。
-    @ctx.wrap("__main__:InstantaleApp.generate_item_from_dict", safe=True)
+    @ctx.wrap("__main__:InstantaleApp.generate_item_from_dict", required=False, safe=True)
     def generate_item_from_dict(orig, self, *args, **kwargs):
         return around("generate_item_from_dict", self,
                       lambda: orig(self, *args, **kwargs), shop_only=True)
 
-    @ctx.wrap("__main__:InstantaleApp.generate_item_from_item_data", safe=True)
+    @ctx.wrap("__main__:InstantaleApp.generate_item_from_item_data",
+              required=False, safe=True)
     def generate_item_from_item_data(orig, self, *args, **kwargs):
         return around("generate_item_from_item_data", self,
                       lambda: orig(self, *args, **kwargs), shop_only=True)
@@ -477,14 +507,15 @@ def apply(ctx):
         return around("generate_item_from_ready_made_data", self,
                       lambda: orig(self, *args, **kwargs), shop_only=True)
 
-    @ctx.wrap("__main__:InstantaleApp.toggle_twin_inventory_window", safe=True)
+    @ctx.wrap("__main__:InstantaleApp.toggle_twin_inventory_window",
+              required=False, safe=True)
     def twin_window(orig, self, *args, **kwargs):
-        situation = arg_of(args, kwargs, 3, "situation")
+        situation = frames.arg(args, kwargs, "situation", 3)
         try:
             if situation == TRADE_SITUATION:
                 write("売買画面: 左={} 右={} 雛形={}".format(
-                    who(arg_of(args, kwargs, 0, "left_inventory_obtainer")),
-                    who(arg_of(args, kwargs, 1, "right_inventory_obtainer")),
+                    who(frames.arg(args, kwargs, "left_inventory_obtainer", 0)),
+                    who(frames.arg(args, kwargs, "right_inventory_obtainer", 1)),
                     goods_brief(self)))
         except Exception:
             ctx.log_exc("shop stock probe: cannot record the trade window")
@@ -492,18 +523,18 @@ def apply(ctx):
                       lambda: orig(self, *args, **kwargs))
 
     # 版4: お金の口は呼び出し元も出す（承認のボタンから来るのか、落とした瞬間に来るのか）。
-    @ctx.wrap("__main__:InstantaleApp.buy_item", safe=True)
+    @ctx.wrap("__main__:InstantaleApp.buy_item", required=False, safe=True)
     def buy_item(orig, self, *args, **kwargs):
         return around(
             lambda: "buy_item({!r}) 呼び出し元: {}".format(frames.short(
-                name_of(arg_of(args, kwargs, 0, "item_instance")), 24), caller_brief()),
+                name_of(frames.arg(args, kwargs, "item_instance", 0)), 24), caller_brief()),
             self, lambda: orig(self, *args, **kwargs))
 
-    @ctx.wrap("__main__:InstantaleApp.sell_item", safe=True)
+    @ctx.wrap("__main__:InstantaleApp.sell_item", required=False, safe=True)
     def sell_item(orig, self, *args, **kwargs):
         return around(
             lambda: "sell_item({!r}) 呼び出し元: {}".format(frames.short(
-                name_of(arg_of(args, kwargs, 0, "item_instance")), 24), caller_brief()),
+                name_of(frames.arg(args, kwargs, "item_instance", 0)), 24), caller_brief()),
             self, lambda: orig(self, *args, **kwargs))
 
     @ctx.wrap("__main__:InstantaleApp.close_shopping_window_process",
@@ -574,13 +605,21 @@ def apply(ctx):
 
         Kivy は後から付けた観測者を先に呼ぶので、押す前の所持金はゲームの処理より先に読める。
         戻り値は None（押下を止めない）。
+        版5: 控えは `sys` にある。同じ世代が付け済みなら何もしない。前の世代が付けていたら、
+        その観測者を `unbind_uid` で外してから付け直す（注入し直すたびに積もらせない）。
         """
         try:
-            if widget in watched:
-                return
-            watched.add(widget)
+            previous = watched.get(widget)
         except TypeError:
             return
+        if previous is not None and previous[0] is generation:
+            return
+        if previous is not None:
+            for event, uid in previous[1]:
+                try:
+                    widget.unbind_uid(event, uid)
+                except Exception:
+                    ctx.log_exc("shop stock probe: cannot drop an old watcher")
 
         def pressed(event):
             # 外した・注入し直した後の古い観測者は書かない。件数にも上限を置く。
@@ -598,11 +637,18 @@ def apply(ctx):
             except Exception:
                 ctx.log_exc("shop stock probe: cannot record a press")
 
+        uids = []
         for event in ("on_press", "on_release"):
             try:
-                widget.fbind(event, lambda *_a, event=event: pressed(event))
+                uid = widget.fbind(event, lambda *_a, event=event: pressed(event))
+                if uid:
+                    uids.append((event, uid))
             except Exception:
                 ctx.log_exc("shop stock probe: cannot watch a button")
+        try:
+            watched[widget] = (generation, uids)
+        except TypeError:
+            pass
 
     def screen_before():
         """出入りを比べる前の控え。メインスレッドの外では読まない（木が動いている最中に回さない）。"""
@@ -631,14 +677,32 @@ def apply(ctx):
                     watch_press(widget, where)
         schedule(check, SCREEN_AFTER)
 
+    def trade_window_open(app):
+        """売買の窓が開いているか（版5）。HUD の `visible_twin_inventory_data` で見る。"""
+        data = frames.attr(ui.find_hud(app), TWIN_WINDOW_DATA, None)
+        return (isinstance(data, dict) and bool(data.get("TorF"))
+                and data.get("situation") == TRADE_SITUATION)
+
+    def window_is_open():
+        """`trade_window_open` を例外ごと握って答える。読めなければ開いていないと見る。"""
+        try:
+            return trade_window_open(ui.find_app())
+        except Exception:
+            ctx.log_exc("shop stock probe: cannot tell whether the trade window is open")
+            return False
+
     @ctx.wrap("scripts.hud.new_hud:InventoryItem.change_inventory",
               required=False, safe=True)
     def change_inventory(orig, self, *args, **kwargs):
         def label():
             return "change_inventory({!r} -> {})".format(
                 frames.short(name_of(frames.attr(self, "item_instance", None)), 24),
-                who(frames.attr(arg_of(args, kwargs, 0, "new_inventory"),
+                who(frames.attr(frames.arg(args, kwargs, "new_inventory", 0),
                                 "obtainer", None)))
+        # 版5: 売買の窓が開いている間だけ録る（装備の付け外しでも呼ばれるため）。
+        # 窓の外は境目の写しも画面の走査もせずに素通しする。
+        if not window_is_open():
+            return orig(self, *args, **kwargs)
         shown = screen_before()
         try:
             return around(label, ui.find_app, lambda: orig(self, *args, **kwargs))
@@ -680,9 +744,10 @@ def apply(ctx):
         write("一覧 {} の関数: {}".format(HUD_MODULE, functions))
         item_cls = getattr(sys.modules.get("scripts.items"), "Item", None)
         if item_cls is not None:
+            # 版5: `hasattr` ではなく `frames.attr` で引く（`frames.attr` の註）。
+            found = [(key, frames.attr(item_cls, key, None)) for key in ("buy", "sell")]
             write("一覧 Item: {}".format(", ".join(
-                key + signature_of(getattr(item_cls, key)) for key in ("buy", "sell")
-                if hasattr(item_cls, key))))
+                key + signature_of(fn) for key, fn in found if callable(fn))))
 
     @ctx.wrap("scripts.hud.new_hud:InventoryItem.on_touch_up", required=False, safe=True)
     def on_touch_up(orig, self, *args, **kwargs):
@@ -690,8 +755,9 @@ def apply(ctx):
 
         Kivy は指を離すと画面の品すべてに `on_touch_up` を配る。写すのは指の下の品だけ
         （掴んでいる品か、指の位置に重なる品）。
+        版5: 売買の窓が開いている間だけ走査する。
         """
-        touch = args[0] if args else kwargs.get("touch")
+        touch = frames.arg(args, kwargs, "touch", 0)
         mine = False
         try:
             mine = (getattr(touch, "grab_current", None) is self
@@ -699,7 +765,8 @@ def apply(ctx):
         except Exception:
             mine = False
         shown = (screen_before()
-                 if mine and frames.attr(self, "item_instance", None) is not None else None)
+                 if mine and frames.attr(self, "item_instance", None) is not None
+                 and has_room("screens", SCREEN_SAMPLES) and window_is_open() else None)
         result = orig(self, *args, **kwargs)
         if shown is not None:
             try:
@@ -714,7 +781,12 @@ def apply(ctx):
     @ctx.wrap("scripts.hud.new_hud:InventoryItem.show_popup_menu",
               required=False, safe=True)
     def show_popup_menu(orig, self, *args, **kwargs):
-        """右クリック。どちらの側の品か・本体の popup に親が付いたか・中のボタンの文字。"""
+        """右クリック。どちらの側の品か・本体の popup に親が付いたか・中のボタンの文字。
+
+        版5: 売買の窓が開いている間だけ録る（持ち物の窓の popup の中身は `223_` が録る）。
+        """
+        if not window_is_open():
+            return orig(self, *args, **kwargs)
         shown = screen_before()
         result = orig(self, *args, **kwargs)
         try:

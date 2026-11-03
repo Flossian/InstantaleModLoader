@@ -34,6 +34,10 @@ r"""計測: NPC の好感度（`relationship.player.affinity`）がいつ・ど�
     out\affinity.jsonl   後から数える用
 
 読み取りだけ。値も乱数も state\ もセーブも動かさない。引数は受け取ったまま `orig` へ渡す。
+
+版2: `still` を書いた窓の控えと、呼び出し元ごとの `emotion` の回数を `sys` に置いた。
+版1は apply ごとの控えで、注入し直し（同じプロセスで MOD が読み直される）のたびに数え直していたので、
+「窓ごとに最初の1回」「呼び出し元ごとに `CALLER_SAMPLES` 回」が1プロセスで守られていなかった。
 """
 import datetime
 import sys
@@ -45,6 +49,10 @@ from instantale_modloader import frames, ui
 LOG_BASENAME = "affinity.log"
 RECORD_BASENAME = "affinity.jsonl"
 INSTALLED_MARK = "_instantale_probe_affinity_installed"
+#: `still` を書いた窓の名前の集合と、呼び出し元ごとの `emotion` の回数の辞書（版2）。
+#: 注入し直すとモジュール変数は消えるので `sys` に置き、1プロセスで共有する。
+STILL_SEEN_ATTR = "_instantale_probe_affinity_still_seen"
+CALLERS_ATTR = "_instantale_probe_affinity_callers"
 
 #: 前後を比べる窓。`(対象, 名前, 遅れて比べ直すか)`。
 WINDOWS = (
@@ -86,6 +94,15 @@ def snapshot(app):
     return found
 
 
+def process_store(attr, factory):
+    """`sys` に置いた1プロセスの控え。無いか型が違えば作り直す。"""
+    store = getattr(sys, attr, None)
+    if not isinstance(store, factory):
+        store = factory()
+        setattr(sys, attr, store)
+    return store
+
+
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     record = ctx.jsonl(RECORD_BASENAME)
@@ -118,8 +135,8 @@ def apply(ctx):
             app = owner
         return app or ui.find_app()
 
-    #: `still` を書いた窓。
-    still_seen = set()
+    #: `still` を書いた窓（1プロセスで共有）。
+    still_seen = process_store(STILL_SEEN_ATTR, set)
 
     def watch(name, late):
         def wrapper(orig, self, *args, **kwargs):
@@ -168,8 +185,8 @@ def apply(ctx):
         ctx.wrap(target, required=False, safe=True)(watch(name, late))
 
     # ------------------------------------------------------------ 感情の文
-    #: 呼び出し元ごとの回数（呼び出し元を組むのは最初の `CALLER_SAMPLES` 回だけ）。
-    seen_callers = {}
+    #: 呼び出し元ごとの回数（呼び出し元を組むのは最初の `CALLER_SAMPLES` 回だけ。1プロセスで共有）。
+    seen_callers = process_store(CALLERS_ATTR, dict)
 
     @ctx.wrap("scripts.functions:document_emotion_scores_new", required=False, safe=True)
     def emotion(orig, *args, **kwargs):

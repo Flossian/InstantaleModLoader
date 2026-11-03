@@ -116,9 +116,6 @@ SHOP_FLAG = "in_shopping"  # 下ろすために名前を持つ。untrusted-flag-
 # 売買の窓を閉じる処理。窓の外側を押すとゲームが呼ぶ（閉じるボタンは無い）。
 SHOP_CLOSE_TARGET = "__main__:InstantaleApp.close_shopping_window_process"
 
-# `app.party` の主人公の鍵（仲間は id）。
-PLAYER_KEY = "player"
-
 # ロード直後にも残骸を下ろすか。
 CLEAR_ON_LOAD = True
 
@@ -195,42 +192,15 @@ def apply(ctx):
         勝ちの終わり方（`BattleEndInColosseum`）は預かりを戻さない。
         主人公が一覧に居ないまま画面から消え、そのままセーブに焼かれた
         （実機。一覧 `['88']`・預かり `['player']`。GAME.md §2.10）。
-        実行中の預かりは `{id: Character}`、セーブでは id の並びなので、どちらも受ける。
-        主人公は一覧の先頭へ戻す（セーブの並びを崩さない）。
+        戻し方はローダの語彙（`ui.return_escaped`。版9 で `147_` / `334_` / 窓口 `defeat` と1つにした）。
         """
         if app is None:
             return
-        escaped = getattr(app, "escaped_member_in_battle", None)
-        party = getattr(app, "party", None)
-        if not escaped or not isinstance(party, dict):
-            return
-        if isinstance(escaped, dict):
-            held = list(escaped.items())
-        elif isinstance(escaped, (list, tuple)):
-            held = [(member_id, None) for member_id in escaped]
-        else:
-            return
-        back, missing = [], []
-        for member_id, value in held:
-            if member_id in party:
-                continue
-            if value is None or isinstance(value, (str, int)):
-                value = (getattr(app, "player", None) if member_id == PLAYER_KEY
-                         else ui.character_of(app, member_id))
-            if value is None:
-                missing.append(member_id)
-                continue
-            party[member_id] = value
-            back.append(member_id)
-        if PLAYER_KEY in back:
-            ordered = [(PLAYER_KEY, party[PLAYER_KEY])] + [
-                (key, value) for key, value in party.items() if key != PLAYER_KEY]
-            party.clear()
-            party.update(ordered)
         try:
-            escaped.clear()
+            back, missing = ui.return_escaped(app)
         except Exception:
             ctx.log_exc("battle flag: could not clear escaped_member_in_battle")
+            return
         if back:
             write("{}: brought {} back from escaped_member_in_battle (the game left them "
                   "there)".format(where, ", ".join(str(m) for m in back)))

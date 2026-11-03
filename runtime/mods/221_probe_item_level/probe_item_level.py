@@ -43,11 +43,23 @@
 - `generate_item_in_shopping` の戻り値の列を外した。いつも `None`（品は主の持ち物へ入る）
 - 「同じ組は1度だけ」と件数の控えを `sys` に置いて、注入し直しで数え直さないようにした
 - クラフトの依頼は、件数の枠を先に取ってから素材を写す
+
+版4: 主目的の式が録れなくなる穴と、他の probe の試し打ちを本物として書く穴を塞いだ。
+
+- `calculate_modification` の行を、価格表と別の枠（`CRAFT_SAMPLES`）で数える。
+  版3は価格表と同じ `TABLE_SAMPLES` を食い合い、価格表が上限に達したプロセスでは
+  クラフトしても式の行が落ちていた。枠は `sys` の控えに置く
+- 対応表の鍵を、引数を写して `json.dumps` する形から軽い組（`light_key`）に替え、
+  既出の組なら写す前に抜ける。版3は上限に届くまで、重複の呼び出しでも毎回組んでいた
+- 他の probe の試し打ち（`243_probe_value_curves` の一括計測など）の間は記録しない
+  （`DRY_THREAD_MARK`）。版3は 243 が素の関数から呼んだ内側の値段の変換を
+  「値段とレベル」として毎回書いていた
 """
 
 import datetime
 import json
 import sys
+import threading
 
 from instantale_modloader import frames
 
@@ -58,8 +70,16 @@ RECORD_BASENAME = "item_level.jsonl"
 TABLE_SAMPLES = 120
 ITEM_SAMPLES = 200
 
+# クラフトの式（`calculate_modification`）の通り数。価格表とは別の枠（版4）。
+# クラフトは1回で2〜3本しか呼ばないので、設定にするほど動かさない。
+CRAFT_SAMPLES = 120
+
 # 1プロセスで数を持ち越す置き場（注入し直しと遅延の当て直しで数え直さない）。
 STORE_ATTR = "_instantale_probe_item_level"
+
+# 他の probe が試し打ちの間だけ置く、試し打ちをしているスレッドの id（版4）。
+# 名前は `236_` / `243_` / `244_` の `DRY_THREAD_MARK` と同じ。
+DRY_THREAD_MARK = "_instantale_probe_dry_run_thread"
 
 # 土地の難易度を返す関数。
 # `tier` の式を出すための2本だけを残した（版3）。
@@ -115,16 +135,45 @@ def item_brief(item, limit=40):
     }
 
 
+def light_key(value):
+    """対応表の鍵にする軽い形（版4。`226_` の `light_key` と同じ考え）。
+
+    数は型ごと（`1` と `1.0` を同じ組にしない）、文字列と None はそのまま。
+    土地・世界・品物のオブジェクトは、版3の `brief`（`describe_instance`）と同じく
+    型と `id` と `name` で見分ける（型名だけにすると土地や品物の違いが1組に潰れる）。
+    配列と辞書は `brief` と同じく先頭8件まで。
+    """
+    if value is None or isinstance(value, str):
+        return value
+    if isinstance(value, (bool, int, float)):
+        return (type(value).__name__, value)
+    if isinstance(value, (list, tuple)):
+        return ("<seq>",) + tuple(light_key(item) for item in list(value)[:8])
+    if isinstance(value, dict):
+        return ("<dict>",) + tuple((str(key), light_key(value[key]))
+                                   for key in list(value)[:8])
+    return ("<{}>".format(type(value).__name__),
+            light_key(frames.attr(value, "id", None)),
+            light_key(frames.attr(value, "name", None)))
+
+
+def in_dry_run():
+    """他の probe の試し打ちを、このスレッドでしている最中か（版4）。"""
+    return getattr(sys, DRY_THREAD_MARK, None) == threading.get_ident()
+
+
 def process_store():
     """1プロセスで持ち越す控え。`sys` に置いて注入し直しをまたぐ（版3）。
 
-    `table` は書いた引数の組、`items` は写した品物の件数。
+    `table` は書いた価格表の組、`craft` は書いたクラフトの式の組（版4で分けた）、
+    `items` は写した品物の件数。
     """
     found = getattr(sys, STORE_ATTR, None)
     if not isinstance(found, dict):
         found = {}
         setattr(sys, STORE_ATTR, found)
     found.setdefault("table", {})
+    found.setdefault("craft", {})
     found.setdefault("items", 0)
     return found
 
@@ -153,17 +202,25 @@ def apply(ctx):
             return {str(key): brief(value[key]) for key in list(value)[:8]}
         return frames.short(frames.describe_instance(value), 80)
 
-    def table(group, name, args, kwargs, result):
-        """純関数の対応表。同じ引数の組は1度だけ。"""
-        if TABLE_SAMPLES <= 0 or len(seen["table"]) >= TABLE_SAMPLES:
+    def table(group, name, args, kwargs, result, bucket="table", limit=None):
+        """純関数の対応表。同じ引数の組は1度だけ。
+
+        版4: 試し打ちの印と枠を先に見て、鍵は軽い組で作り、既出なら写す前に抜ける。
+        `bucket` は控えの名前（価格表は `table`、クラフトの式は `craft`）。
+        """
+        if in_dry_run():
             return
+        limit = TABLE_SAMPLES if limit is None else limit
+        done = seen[bucket]
+        if limit <= 0 or len(done) >= limit:
+            return
+        key = (name, tuple(light_key(value) for value in args),
+               tuple(sorted((str(k), light_key(v)) for k, v in kwargs.items())))
+        if key in done:
+            return
+        done[key] = True
         shown = [brief(value) for value in args]
         shown_kwargs = {key: brief(value) for key, value in kwargs.items()}
-        key = json.dumps([name, shown, shown_kwargs], ensure_ascii=False,
-                         sort_keys=True, default=str)
-        if key in seen["table"]:
-            return
-        seen["table"][key] = True
         record({"at": now(), "phase": group, "func": name,
                 "args": shown, "kwargs": shown_kwargs,
                 "result": brief(result),
@@ -197,7 +254,8 @@ def apply(ctx):
         watch_pure("品物の数値", name)
 
     def take_item_slot():
-        if ITEM_SAMPLES <= 0 or seen["items"] >= ITEM_SAMPLES:
+        # 版4: 試し打ちの間は枠も取らない。
+        if in_dry_run() or ITEM_SAMPLES <= 0 or seen["items"] >= ITEM_SAMPLES:
             return False
         seen["items"] += 1
         return True
@@ -229,13 +287,14 @@ def apply(ctx):
         名前は `item_price` だが、渡っているのが素材の合計なのか1つぶんなのか、
         戻り値が数なのか辞書なのかが読めていない。
         `318_` がクラフトへ直接手を出さずに済むかは、ここの答えで決まる。
+        版4: 価格表とは別の枠（`CRAFT_SAMPLES`）で数える。
         """
         result = orig(self, *args, **kwargs)
         try:
             table("クラフトの式", "ItemCraftManager.calculate_modification",
                   (frames.arg(args, kwargs, "item_type", MODIFICATION_ARGS),
                    frames.arg(args, kwargs, "item_price", MODIFICATION_ARGS)),
-                  {}, result)
+                  {}, result, bucket="craft", limit=CRAFT_SAMPLES)
         except Exception:
             pass
         return result
@@ -282,5 +341,6 @@ def apply(ctx):
             ctx.log_exc("item level probe: cannot record the crafted item")
         return orig(self, *args, **kwargs)
 
-    ctx.log("item level probe: table<={} item<={}; log goes to out/{} and out/{}"
-            .format(TABLE_SAMPLES, ITEM_SAMPLES, LOG_BASENAME, RECORD_BASENAME))
+    ctx.log("item level probe: table<={} craft<={} item<={}; log goes to out/{} and out/{}"
+            .format(TABLE_SAMPLES, CRAFT_SAMPLES, ITEM_SAMPLES, LOG_BASENAME,
+                    RECORD_BASENAME))

@@ -38,6 +38,10 @@ r"""計測: スタミナ（`physical_integrity`）がいつ・誰に・どれだ
 HP の書き込みは1行ずつは書かない。依頼の最中だけ、人ごとに減った合計と最低値を数える。
 見張りは1プロセスに1組（`sys` の `STORE`）。注入し直しても積み上がらず、書き手（`sink`）だけ差し替わる。
 読み取りだけ。値も乱数も state\ もセーブも動かさない。引数は受け取ったまま `orig` へ渡す。
+
+版3: 書き手（`sink`）で、値が変わったかの判定を同行者の名簿を組む `who()` より先にした。
+版2までは同じ値の書き直しのたびにも名簿を組んでいた（HP の数えも、数でない値を外してから組む）。
+クラスの既存の属性がデスクリプタかの判定を `hasattr` から既定値つきの `getattr` に替えた。
 """
 import datetime
 import sys
@@ -186,11 +190,11 @@ def apply(ctx):
             quest_id = ui.current_quest_id(app)
             if quest_id is None:
                 return
-            person = who(app, obj)
-            if person is None:
-                return
             before, after = _number(old), _number(new)
             if before is None or after is None:
+                return
+            person = who(app, obj)
+            if person is None:
                 return
             with lock:
                 row = damage.setdefault(quest_id, {}).setdefault(
@@ -202,14 +206,15 @@ def apply(ctx):
                 row["min"] = min(row["min"], after)
                 row["writes"] += 1
             return
-        person = who(app, obj)
-        if person is None:
-            return
+        # 変わったかを先に見る（同行者の名簿を組む `who()` は変わった回だけ）
         try:
             changed = old != new
         except Exception:
             changed = old is not new
         if not changed:
+            return
+        person = who(app, obj)
+        if person is None:
             return
         before, after = _number(old), _number(new)
         delta = (after - before) if before is not None and after is not None else None
@@ -246,7 +251,8 @@ def apply(ctx):
             for name in WATCHED:
                 previous = vars(cls).get(name, _MISSING)
                 ours = type(previous).__name__ == "StaminaWatch"
-                if not ours and previous is not _MISSING and hasattr(type(previous), "__get__"):
+                if (not ours and previous is not _MISSING
+                        and getattr(type(previous), "__get__", None) is not None):
                     # クラスが自分で持つ property などは上書きしない（値の出どころが変わる）
                     write("WARN {} is a {} on the class; not watched".format(
                         name, type(previous).__name__))

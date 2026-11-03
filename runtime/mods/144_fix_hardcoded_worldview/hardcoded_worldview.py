@@ -279,9 +279,8 @@ def apply(ctx):
             site, "+".join(done), clip(head, 40), (time.monotonic() - started) * 1000))
         return new_texts
 
-    hooks = wrap_outgoing(
-        ctx, run, label="hardcoded worldview",
-        on_arm=lambda target: write("[ARM] 遅れて仕掛けた: {}".format(target)))
+    # 掛け直しの時点はローダが `modloader.log` に `late-armed on` で残す（こちらの記録へは写さない）。
+    hooks = wrap_outgoing(ctx, run, label="hardcoded worldview")
 
     def strip_hook(target, positive_at, negative_at, kind):
         # 方式によって無い関数がある（sdcppcuda の `generate_upscaled_image_anime` は main_023 から無い）。
@@ -289,7 +288,8 @@ def apply(ctx):
         # GUI がゲームの更新を疑う警告を出していた。読み込まれる前はローダの保留に任せる。
         module_name, _, func = target.partition(":")
         module = sys.modules.get(module_name)
-        if module is not None and getattr(module, func, None) is None and                 not patch.still_loading(module_name):
+        if module is not None and getattr(module, func, None) is None and \
+                not patch.still_loading(module_name):
             return
 
         @ctx.wrap(target, required=False, safe=True)

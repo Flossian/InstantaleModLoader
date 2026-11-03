@@ -10,6 +10,8 @@
              大きい項目（人生ログなど）は写さない
   1手      … 裁きと、その中で呼ばれた `get_instant_damage` の引数と戻りが1つの `act` の行に束なる。
              `calculate` の中で `resolve` が呼ばれても1行
+  resolve  … 単独の `resolve` の行は `actor` / `entries` を持たず、引数の形は1プロセス1回（版5）
+  印       … 試し打ちの印は入れ子でも外側を消さない（版5）
   素通し   … 写しで例外が出ても本体の戻り値は変えない
 """
 import importlib.util
@@ -199,6 +201,54 @@ check("battle_action への書き込みは呼んだ後の写しに出る",
 hero.current_hp = 1832
 check("手の外の計算は録らない",
       math(lambda a, d: a - d, 10, 3) == 7 and len(ctx.rows) == before + 1)
+
+print("resolve の段（版5）")
+# 実機の引数は (self, character_key, character_side, battle_action, effect_to_enemies, *args)。
+resolve = ctx.hooks["__main__:BattlePhaseManager.resolve_battle_effect"]
+
+
+def resolve_real(self, character_key, character_side, battle_action, effect_to_enemies, *rest):
+    return math(lambda a, d: a - d, 900, 400)
+
+
+if getattr(sys, mod.RESOLVE_ARGS_MARK, None):
+    delattr(sys, mod.RESOLVE_ARGS_MARK)
+before = len(ctx.rows)
+got = resolve(resolve_real, object(), "ゴーレム", "enemy", dict(action), {"アーリ": 500})
+new = ctx.rows[before:]
+acts = [r for r in new if r["kind"] == "act"]
+shapes = [r for r in new if r["kind"] == "resolve_args"]
+check("戻りはそのまま（resolve）", got == 500, got)
+check("resolve の act は actor と entries を持たない",
+      len(acts) == 1 and "actor" not in acts[0] and "entries" not in acts[0]
+      and acts[0]["stage"] == "resolve"
+      and acts[0]["calls"] == [{"fn": "get_instant_damage", "args": [900, 400], "result": 500}],
+      acts)
+check("引数の形を名前つきで1行録る",
+      len(shapes) == 1 and shapes[0]["args"]["character_key"]["value"] == "ゴーレム"
+      and shapes[0]["args"]["character_side"]["value"] == "enemy"
+      and "instant_damage" in shapes[0]["args"]["battle_action"]["keys"]
+      and shapes[0]["args"]["effect_to_enemies"]["len"] == 1, shapes)
+before = len(ctx.rows)
+resolve(resolve_real, object(), "ゴーレム", "enemy", dict(action), {})
+check("引数の形は1プロセス1回だけ",
+      not [r for r in ctx.rows[before:] if r["kind"] == "resolve_args"], ctx.rows[before:])
+
+print("印の入れ子（版5）")
+outer = mod.mark_dry_thread()
+app.current_enemy_dict = {"見張り": MarkSeen("見張り", 10, 5)}
+ctx.hooks["__main__:BattleStartManager.start_battle"](lambda self: "ok", manager)
+check("内側の写しが終わっても外側の印は残る",
+      getattr(sys, mod.DRY_THREAD_MARK, None) == threading.get_ident())
+mod.unmark_dry_thread(outer)
+check("外側を戻すと印は消える", not hasattr(sys, mod.DRY_THREAD_MARK))
+setattr(sys, mod.DRY_THREAD_MARK, 12345)
+previous = mod.mark_dry_thread()
+mod.unmark_dry_thread(previous)
+check("別の値が立っていたら、その値に戻す",
+      getattr(sys, mod.DRY_THREAD_MARK, None) == 12345)
+delattr(sys, mod.DRY_THREAD_MARK)
+app.current_enemy_dict = {"ゴーレム": golem}
 
 print("素通し")
 

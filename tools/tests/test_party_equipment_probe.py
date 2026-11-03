@@ -250,19 +250,34 @@ shutil.rmtree(out_dir, ignore_errors=True)
 
 # ---------------------------------------------------------------- Manager の __init__
 print("Manager の観測")
+setattr(sys, MOD.STORE_ATTR, None)       # 前の節の控えを持ち越さない（apply より先に消す）
 ctx, app, out_dir = build()
+# 版6: いつもの形（`app` だけ）は書かない。版5までの行は毎プロセスこの形だった。
 manager = types.SimpleNamespace(app=app)
 ctx.hooks[EQUIP_INIT](lambda self, a: None, manager, app)
+check("いつもの形の __init__ は書かない", ctx.notes == [], ctx.notes)
+
+# 形が変わったら1行書く。item が無い観測でも owner を取り違えない。
+odd = types.SimpleNamespace(app=app, extra=1)
+ctx.hooks[EQUIP_INIT](lambda self, a: None, odd, app)
 line = ctx.notes[0] if ctx.notes else ""
-check("item が無い観測でも1行書く", "ItemEquipManager.__init__:after" in line, ctx.notes)
+check("形が変わった __init__ は1行書く", "ItemEquipManager.__init__:after" in line, ctx.notes)
 check("owner=None を player と写さない", "owner_is_player=False" in line, line)
 check("owner=None を npc と写さない", "owner_is_npc=False" in line, line)
 check("例外を残さない", ctx.errors == [], ctx.errors)
 
-# 版5: `__init__` はクラスごとに注入1回につき1行（333_ が装備のたびに組み直す）。
-ctx.hooks[EQUIP_INIT](lambda self, a: None, manager, app)
-check("__init__ の2回目は書かない",
+ctx.hooks[EQUIP_INIT](lambda self, a: None, odd, app)
+check("同じ形の2回目は書かない",
       sum("ItemEquipManager.__init__" in n for n in ctx.notes) == 1, ctx.notes)
+
+# 注入し直し（同じプロセスで apply し直す）でも、控えは `sys` にあるので書き直さない。
+ctx2 = Ctx(out_dir)
+MOD.apply(ctx2)
+ctx2.hooks[EQUIP_INIT](lambda self, a: None, odd, app)
+check("注入し直しても同じ形は書かない", ctx2.notes == [], ctx2.notes)
+ctx2.hooks[EQUIP_INIT](lambda self, a: None, manager, app)
+check("形が戻ったらまた1行書く",
+      sum("ItemEquipManager.__init__" in n for n in ctx2.notes) == 1, ctx2.notes)
 shutil.rmtree(out_dir, ignore_errors=True)
 
 

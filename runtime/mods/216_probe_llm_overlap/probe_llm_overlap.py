@@ -47,14 +47,22 @@ VERIFICATION.md の版の表の 216 2→3）。
     SLOW   chat <秒> tail=<応答の末尾>              `SLOW_SECONDS` 秒を超えた回だけ
     RAISE  chat <秒> <例外の型>: <文>                 `chat` が投げた回（時間切れなど）
 
-- 見出しは先頭の system の頭 `HEAD_CHARS` 字。どの頼みか（依頼の生成か）を見分ける
+- 見出しは先頭の system の頭 `HEAD_CHARS` 字。どの頼みか（依頼の生成か）を見分ける。
+  system が無い頼みは最初の user の頭で代え、`sys=` の代わりに `user=` と書く（版4）
 - 応答は辞書（Ollama 形の `message.content` / OpenAI 形の `choices[0]`）を見る。
   流し読み（ジェネレータ）は**読まない**（読むとゲームの分を消費する）。型だけ書く
 - 引数も戻り値も触らない。写すのは字数と末尾だけ
+
+版4: RESULT の約1,190件が `sys=` 空だった（system を持たない頼みがある）。
+system が無いときは最初の user の頭を `user=` として書く。どちらも無ければ従来どおり `sys=` 空。
+引数の読み方はローダの `frames.arg` に寄せ、包みを `safe=True` にした
+（本体が投げた例外は、`RAISE` の行を書いたうえでそのまま通る）。
 """
 
 import threading
 import time
+
+from instantale_modloader import frames
 
 #: 応答の末尾を写す回の下限（秒）。成功は 20〜60 秒、失敗は 100 秒以上だった。
 SLOW_SECONDS = 60.0
@@ -73,12 +81,8 @@ TARGETS = (
 
 LOG_BASENAME = "llm_overlap.log"
 
-
-def _arg(args, kwargs, name, index):
-    """`chat(self, model, messages, format, options, stream, timeout, …)` の引数を読む。"""
-    if name in kwargs:
-        return kwargs[name]
-    return args[index] if len(args) > index else None
+#: `chat` の引数の並び。`args[0]` は self（`frames.arg` に名前の並びで渡す。版4）。
+CHAT_ARGS = ("self", "model", "messages", "format", "options", "stream", "timeout")
 
 
 def _one_line(text, limit):
@@ -87,20 +91,30 @@ def _one_line(text, limit):
 
 
 def request_summary(args, kwargs):
-    """頼みの形（見出し・件数・字数・format・options・timeout）。"""
-    messages = _arg(args, kwargs, "messages", 2)
-    fmt = _arg(args, kwargs, "format", 3)
-    options = _arg(args, kwargs, "options", 4)
-    timeout = _arg(args, kwargs, "timeout", 6)
-    head, count, chars = "", 0, 0
+    """頼みの形（見出し・件数・字数・format・options・timeout）。
+
+    見出しは最初の system の頭。system が無ければ最初の user の頭で、
+    どちらから取ったかを `sys=` / `user=` で書き分ける（版4）。
+    """
+    messages = frames.arg(args, kwargs, "messages", CHAT_ARGS)
+    fmt = frames.arg(args, kwargs, "format", CHAT_ARGS)
+    options = frames.arg(args, kwargs, "options", CHAT_ARGS)
+    timeout = frames.arg(args, kwargs, "timeout", CHAT_ARGS)
+    head, user_head, count, chars = "", "", 0, 0
     if isinstance(messages, list):
         count = len(messages)
         for turn in messages:
             content = turn.get("content") if isinstance(turn, dict) else None
             if isinstance(content, str):
                 chars += len(content)
-                if not head and turn.get("role") == "system":
+                role = turn.get("role")
+                if not head and role == "system":
                     head = content.strip()[:HEAD_CHARS]
+                elif not user_head and role == "user":
+                    user_head = content.strip()[:HEAD_CHARS]
+    head_label = "sys"
+    if not head and user_head:
+        head, head_label = user_head, "user"
     if isinstance(fmt, dict):
         fmt_text = "dict({} keys)".format(len(fmt))
     else:
@@ -110,8 +124,9 @@ def request_summary(args, kwargs):
                                        if not isinstance(options[k], (dict, list))) + "}"
     else:
         options_text = repr(options)
-    return "sys={} msgs={}/{} format={} options={} timeout={}".format(
-        _one_line(head, HEAD_CHARS), count, chars, fmt_text, _one_line(options_text, 200), timeout)
+    return "{}={} msgs={}/{} format={} options={} timeout={}".format(
+        head_label, _one_line(head, HEAD_CHARS), count, chars, fmt_text,
+        _one_line(options_text, 200), timeout)
 
 
 def response_parts(result):
@@ -157,7 +172,7 @@ def apply(ctx):
     def make(target):
         short = target.rsplit(".", 1)[-1]
 
-        @ctx.wrap(target, required=False)
+        @ctx.wrap(target, required=False, safe=True)
         def probe(orig, *args, **kwargs):
             # 入れ子の内側（chat の中の _post 等）は数えない。
             if getattr(local, "inside", False):

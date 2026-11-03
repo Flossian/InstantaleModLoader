@@ -34,8 +34,20 @@ app.save_data_dict   saves\\<世界>\\savedata.json      その周回の進み�
 どの段（エリア・施設・NPC）を読んだかは分からない（Nuitka の生きたフレームの `f_locals` は空）。
 
 値・乱数・state\\・セーブは動かさない。型の差し替えは `app` の1つだけで、外すときは元の型へ戻す。
+
+版2: 数える手間を減らし、終わりの直前の数を残す。
+
+- 箇所の鍵を `(種類, フレームのコード, 行)` のタプルにした。版1は `world_dict` を1回引くたびに
+  ファイル名・関数名・行を繋いだ文字列を組んでいた。文字列（連鎖と場面）は初めて見た箇所だけ組む
+- ファイルの読み書きの鍵を、ゲーム側のフレームの `(コード, 行)` の並びにした。
+  版1は1回ごとに最大120段をなめながら1段ずつ名前を整形してから既出かを見ていた。整形は初出だけ
+- 元の型の `world_dict` がデスクリプタかの判定（版1は引くたびに `hasattr`）を、差し替えの型を作るときの1回にした
+- 5秒ごとの見回りと起動直後の1回を1つの関数にまとめた
+- 閉じるときに一覧を書き出す（Kivy の `on_stop` と `atexit`。先に走った方が書き、後の方は書くものが無い）。
+  版1は最後の書き出しから閉じるまでの最大30秒分の数が `world_reads.json` に残らなかった
 """
 
+import atexit
 import sys
 import threading
 import time
@@ -101,20 +113,38 @@ def _chain(frame, depth=CHAIN_DEPTH):
     return out
 
 
-def _game_chain(frame, depth=CHAIN_DEPTH, limit=120):
-    """ローダと MOD のフレームを飛ばして、ゲームの側を `depth` 段そろえる。
+def _game_codes(frame, depth=CHAIN_DEPTH, limit=120):
+    """ローダと MOD のフレームを飛ばして、ゲームの側を `depth` 段そろえた `((コード, 行), ...)`。
 
     包みの層（`patch.py` の `guarded` / `orig`）が MOD の数だけ挟まるので、段数で切ると
     ゲームの呼び出し元まで届かない（実機。保存の連鎖が `save_game` 1段で尽きた）。
+    名前は組まない（既出かを見る鍵にする。名前は `_labels` で初出のときだけ組む）。
     """
     out = []
     while frame is not None and len(out) < depth and limit > 0:
-        label = _frame_label(frame)
-        if not label.startswith("mod:"):
-            out.append(label)
+        code = frame.f_code
+        if not frames.is_ours(code.co_filename):
+            out.append((code, frame.f_lineno))
         frame = frame.f_back
         limit -= 1
-    return out
+    return tuple(out)
+
+
+def _code_label(code, lineno):
+    """`_frame_label` と同じ形の名前を、コードと行から組む（ゲーム側の段だけに使う）。"""
+    name = code.co_filename
+    tail = name.replace("\\", "/").rsplit("/", 2)
+    where = "/".join(tail[-2:]) if len(tail) >= 2 else name
+    return "{} ({}:{})".format(frames.owner_of(code) or code.co_name, where, lineno)
+
+
+def _labels(codes):
+    return [_code_label(code, lineno) for code, lineno in codes]
+
+
+def _game_chain(frame, depth=CHAIN_DEPTH, limit=120):
+    """ローダと MOD のフレームを飛ばして、ゲームの側を `depth` 段そろえた名前の並び。"""
+    return _labels(_game_codes(frame, depth, limit))
 
 
 def _spy_class(base, store):
@@ -124,6 +154,9 @@ def _spy_class(base, store):
         if ATTR in vars(klass):
             inner = vars(klass)[ATTR]
             break
+    # 元の型の `world_dict` がデスクリプタか。型を作るときに1回だけ見る（引くたびには見ない）
+    inner_get = getattr(inner, "__get__", None) if inner is not None else None
+    inner_set = getattr(inner, "__set__", None) if inner is not None else None
 
     def getter(self):
         hooks = store.get("hooks")
@@ -132,8 +165,8 @@ def _spy_class(base, store):
                 hooks["read"](sys._getframe(1))
             except Exception:
                 pass
-        if inner is not None and hasattr(inner, "__get__"):
-            return inner.__get__(self, type(self))
+        if inner_get is not None:
+            return inner_get(self, type(self))
         try:
             return self.__dict__[ATTR]
         except KeyError:
@@ -146,8 +179,8 @@ def _spy_class(base, store):
                 hooks["set"](sys._getframe(1))
             except Exception:
                 pass
-        if inner is not None and hasattr(inner, "__set__"):
-            inner.__set__(self, value)
+        if inner_set is not None:
+            inner_set(self, value)
         else:
             self.__dict__[ATTR] = value
 
@@ -158,6 +191,22 @@ def _spy_class(base, store):
         "_iml_world_reads_spy": True,
     })
     return cls
+
+
+def flush_at_exit(*_args):
+    """閉じるときに一覧を書き出す（Kivy の `on_stop` と `atexit` から）。
+
+    `sys` の控えにある、いちばん新しい世代の `flush` を呼ぶ。数が変わっていなければ書かないので、
+    両方が走っても2回目は何もしない。
+    """
+    store = getattr(sys, STORE, None)
+    flush = store.get("flush") if isinstance(store, dict) else None
+    if flush is None:
+        return
+    try:
+        flush()
+    except Exception:
+        pass
 
 
 def _norm(key):
@@ -294,7 +343,8 @@ def apply(ctx):
         return out
 
     def note(kind, frame):
-        key = "{} {}:{}:{}".format(kind, frame.f_code.co_filename, frame.f_code.co_name, frame.f_lineno)
+        # 鍵は生のコードと行（安い）。名前・連鎖・場面の文字列は初めて見た箇所だけ組む
+        key = (kind, frame.f_code, frame.f_lineno)
         sites = store["sites"]
         entry = sites.get(key)
         if entry is not None:
@@ -306,6 +356,7 @@ def apply(ctx):
         with lock:
             if key in sites:
                 sites[key]["count"] += 1
+                store["dirty"] = True
                 return
             chain = [_frame_label(frame)] + _game_chain(frame.f_back)
             entry = {"kind": kind, "site": chain[0], "count": 1,
@@ -387,10 +438,12 @@ def apply(ctx):
         """暗号化の層でファイルを読んだ・書いたのを、名前と呼び出しの連鎖ごとに数える。"""
         path = frames.arg(args, kwargs, "file_path", 0)
         name = str(path).replace("\\", "/").rsplit("/", 1)[-1]
-        chain = _game_chain(sys._getframe(2))
-        key = "{} {} | {}".format(kind, name, " <- ".join(chain))
+        # 既出かは生のコードと行の並びで引く。段の名前は初めて見た連鎖だけ組む
+        codes = _game_codes(sys._getframe(2))
+        key = (kind, name, codes)
         entry = store["writes"].get(key)
         if entry is None and len(store["writes"]) < MAX_SITES:
+            chain = _labels(codes)
             store["writes"][key] = {"kind": kind, "file": name, "count": 1, "chain": chain,
                                     "first": time.strftime("%Y-%m-%dT%H:%M:%S"),
                                     "thread": threading.current_thread().name}
@@ -456,23 +509,11 @@ def apply(ctx):
     for target in TRACE_TARGETS:
         tracer(target)
 
-    def tick(_dt=None):
-        if ctx.superseded():
-            try:
-                restore()
-            except Exception:
-                ctx.log_exc("probe world reads: cannot restore the app type")
-            return False
-        try:
-            ensure()
-            flush()
-        except Exception:
-            ctx.log_exc("probe world reads: tick failed")
-        return True
-
     state = {"last_flush": 0.0}
 
-    def loop(dt):
+    def step(force_flush):
+        """型が外れていないかを見て、一覧を書き出す。`force_flush` でなければ `FLUSH_SECONDS` おき。
+        用済みの世代なら型を戻して False（Clock から外れる）。"""
         if ctx.superseded():
             try:
                 restore()
@@ -482,17 +523,33 @@ def apply(ctx):
         try:
             ensure()
             now = time.time()
-            if now - state["last_flush"] >= FLUSH_SECONDS:
+            if force_flush:
+                flush()         # 起動直後の1回。30秒おきの刻みは動かさない（版1の tick と同じ）
+            elif now - state["last_flush"] >= FLUSH_SECONDS:
                 state["last_flush"] = now
                 flush()
         except Exception:
             ctx.log_exc("probe world reads: check failed")
         return True
 
+    # 閉じるときの書き出しは、いちばん新しい世代の `flush` で行う（`flush_at_exit`）
+    store["flush"] = flush
+    if not store.get("exit_hooked"):
+        store["exit_hooked"] = True
+        atexit.register(flush_at_exit)
+
+    def bind_on_stop():
+        app = ui.find_app()
+        if app is not None:
+            app.bind(on_stop=flush_at_exit)
+
+    # キーを世代で変えないので、注入し直しても1プロセスに1回だけ結ぶ（TECH.md §3.6）
+    ctx.on_ready(bind_on_stop, key="242_probe_world_reads:on_stop")
+
     try:
         from kivy.clock import Clock
-        Clock.schedule_interval(loop, CHECK_SECONDS)
-        Clock.schedule_once(lambda dt: tick(), 0)
+        Clock.schedule_interval(lambda dt: step(False), CHECK_SECONDS)
+        Clock.schedule_once(lambda dt: step(True), 0)
     except Exception:
         ctx.log_exc("probe world reads: no Clock; recording off")
 

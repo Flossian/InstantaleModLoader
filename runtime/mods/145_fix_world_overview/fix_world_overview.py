@@ -120,18 +120,6 @@ SAVE_FILE = "world_data.json"
 SNIP = 60          # ログに出す断片の長さ
 
 
-def _arg(args, kwargs, name, index):
-    """引数を1つ拾う。キーワードを先に見て、無ければ位置で拾う。
-
-    位置は版で動きうるので、名前で当たるならそちらを採る（GAME.md §2.24 と同じ理由）。
-    """
-    if name in kwargs:
-        return kwargs[name]
-    if len(args) > index:
-        return args[index]
-    return None
-
-
 def _read_overview(response):
     """返ってきた `World` の `overview`。読めなければ `None`。
 
@@ -197,7 +185,7 @@ def apply(ctx):
 
     @ctx.wrap(PLOT_TARGET, safe=True)
     def create_world_overview_from_plot(orig, *args, **kwargs):
-        plot = _arg(args, kwargs, PLOT_ARG, 1)
+        plot = frames.arg(args, kwargs, PLOT_ARG, 1)
         # 前の世界の控えを持ち越さない。差し替えられた場合だけ入れ直す。
         state["forced"] = None
         response = orig(*args, **kwargs)
@@ -257,13 +245,13 @@ def apply(ctx):
         # 差し替えていない／既に1回記録した後は、素通しする。
         if state["forced"] is None:
             return result
-        path = _arg(args, kwargs, PATH_ARG, 0)
+        path = frames.arg(args, kwargs, PATH_ARG, 0)
         if not _is_world_data(path):
             return result
 
         try:
             _record_saved(ctx, write, state, path,
-                          _arg(args, kwargs, DATA_ARG, 1))
+                          frames.arg(args, kwargs, DATA_ARG, 1))
         except Exception:
             ctx.log_exc("world overview: reading the saved world back failed")
         return result

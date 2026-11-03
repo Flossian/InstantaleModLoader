@@ -28,7 +28,9 @@ exe の定数はその後に `reload_twin_inventory`（売買の一覧の描き�
 | 値段の関所 | いま式と段を置いている MOD（`prices.item_price_sources()`） |
 
 値切った品は id で追う（`sys` に置くので、注入し直しや読み直しをまたいでも追える）。
-ロードの後は現物が別になるので、手持ちと店の持ち物から id で引き直す。
+ロードの後は現物が別になるので、手持ちと店の持ち物から id で引き直す（両方を1回なめて id の表を作る）。
+記録の件数（`SAMPLES`）も `sys` に置き、1プロセスで数える。上限に届いたら追跡もやめる。
+値切った品の売買の行だけは別の上限（`WATCHED_SAMPLES`）で、`SAMPLES` の後も書く。
 
 200番台の約束どおり読み取りだけ。引数は受け取った形のまま `orig` へ渡す。
 `safe=True` と握り潰しで、記録に失敗しても本体は必ず1回呼ぶ。
@@ -51,6 +53,11 @@ SAMPLES = 400
 WATCH_ATTR = "_probe_shop_negotiation_watch"
 WATCH_LIMIT = 40
 
+#: 書いた行の数。`{"lines": n, "watched": n}`。1プロセスで数えるので `sys` に置く。
+SEEN_ATTR = "_instantale_probe_shop_negotiation_seen"
+#: 値切った品の売買の行の上限（`SAMPLES` とは別に数える）。
+WATCHED_SAMPLES = 100
+
 #: 値段の鍵（`prices.ITEM_PRICE_KEYS` と同じ。ゲームが持ち主に応じて付け替える）。
 PRICE_KEYS = ("買価", "売価")
 
@@ -69,20 +76,31 @@ def watch_store():
     return found
 
 
+def seen_store():
+    found = getattr(sys, SEEN_ATTR, None)
+    if not (isinstance(found, dict) and isinstance(found.get("lines"), int)
+            and isinstance(found.get("watched"), int)):
+        found = {"lines": 0, "watched": 0}
+        setattr(sys, SEEN_ATTR, found)
+    return found
+
+
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     record = ctx.jsonl(RECORD_BASENAME)
-    seen = {"lines": 0}
+    seen = seen_store()
     state = {"left": None, "depth": 0}
 
-    def take():
-        if seen["lines"] >= SAMPLES:
+    def take(budget):
+        limit = WATCHED_SAMPLES if budget == "watched" else SAMPLES
+        if seen[budget] >= limit:
             return False
-        seen["lines"] += 1
+        seen[budget] += 1
         return True
 
-    def emit(phase, line, **fields):
-        if not take():
+    def emit(phase, line, budget="lines", **fields):
+        """1行書く。`budget` は数える枠（`lines` は `SAMPLES`、`watched` は `WATCHED_SAMPLES`）。"""
+        if not take(budget):
             return
         write("{}: {}".format(phase, line))
         row = {"at": now(), "phase": phase, "line": line}
@@ -176,25 +194,31 @@ def apply(ctx):
             return None
 
     # ------------------------------------------------------------ 値切った品の追跡
-    def find_item(app, item_id):
+    def watched_items(app, wanted):
+        """`{品の id: (側, 品)}`。店と手持ちを1回ずつなめ、追っている id だけ載せる（先に見た側を取る）。"""
+        found = {}
         for side, obtainer in sides(app):
             inventory = inventory_of(obtainer)
             if not isinstance(inventory, dict):
                 continue
-            for item in inventory.values():
-                if str(frames.attr(item, "id", "")) == item_id:
-                    return side, item
-        return None, None
+            for item in list(inventory.values()):
+                item_id = str(frames.attr(item, "id", ""))
+                if item_id in wanted and item_id not in found:
+                    found[item_id] = (side, item)
+        return found
 
     def check(where, app=None):
         """値切った品の額が、前に見た額から動いたら書く。"""
+        if seen["lines"] >= SAMPLES:
+            return      # 書けないので持ち物もなめない
         watch = watch_store()
         if not watch:
             return
         try:
             app = app or ui.find_app()
+            table = watched_items(app, watch)
             for item_id, entry in list(watch.items()):
-                side, item = find_item(app, item_id)
+                side, item = table.get(item_id, (None, None))
                 if item is None:
                     if entry.get("last") != "missing":
                         entry["last"] = "missing"
@@ -252,12 +276,13 @@ def apply(ctx):
                     gold = frames.attr(frames.attr(before["app"], "player", None), "gold", None)
                     app_diff = shallow_diff(before["app_attrs"], shallow(before["app"]))
                     self_diff = shallow_diff(before["self_attrs"], shallow(holder))
+                    gate = gate_sources()
                     emit("値切り", "{}: 額 {} / 消えた品 {} / 所持金 {} -> {} / app {} / "
                          "マネージャ {} / 関所 {}".format(
                              label, changes or "動かず", gone or "-", before["gold"], gold,
-                             app_diff or "-", self_diff or "-", gate_sources()),
+                             app_diff or "-", self_diff or "-", gate),
                          where=label, changes=changes, app_diff=app_diff,
-                         self_diff=self_diff, gate=gate_sources())
+                         self_diff=self_diff, gate=gate)
                 except Exception:
                     ctx.log_exc("shop negotiation probe: cannot record a negotiation")
 
@@ -281,10 +306,11 @@ def apply(ctx):
         try:
             attempt = (result.get("player_attempt") if isinstance(result, dict)
                        else frames.attr(result, "player_attempt", result))
+            shown = frames.repr_value(attempt)
             emit("LLM", "player_input={!r} -> player_attempt {}".format(
                 frames.short(frames.arg(args, kwargs, "player_input", 7), 120),
-                frames.short(frames.repr_value(attempt), 600)),
-                attempt=frames.repr_value(attempt)[:1200])
+                frames.short(shown, 600)),
+                attempt=shown[:1200])
         except Exception:
             ctx.log_exc("shop negotiation probe: cannot record the negotiator result")
         return result
@@ -337,20 +363,27 @@ def apply(ctx):
     def trade(label):
         """売買の1回。品の額と所持金の前後（実際に引かれた額）を出す。"""
         def hook(orig, self, *args, **kwargs):
-            item = frames.arg(args, kwargs, "item_instance", 0)
-            item_id = str(frames.attr(item, "id", ""))
-            watched = item_id in watch_store()
-            player = frames.attr(self, "player", None)
-            gold = frames.attr(player, "gold", None)
-            attributes = dict(frames.attr(item, "attributes", None) or {})
+            item, item_id, watched, player, gold, attributes = None, "", False, None, None, None
+            try:
+                item = frames.arg(args, kwargs, "item_instance", 0)
+                item_id = str(frames.attr(item, "id", ""))
+                watched = item_id in watch_store()
+                player = frames.attr(self, "player", None)
+                gold = frames.attr(player, "gold", None)
+                found = frames.attr(item, "attributes", None)
+                attributes = dict(found) if isinstance(found, dict) else {}
+            except Exception:
+                ctx.log_exc("shop negotiation probe: cannot read before a trade")
             result = orig(self, *args, **kwargs)
             try:
-                if watched or seen["lines"] < SAMPLES:
+                # 値切った品の行は別の枠で数え、`SAMPLES` の後も書く
+                if attributes is not None and (watched or seen["lines"] < SAMPLES):
                     emit("売買", "{} {!r}({}) 額 {} 所持金 {} -> {}{}".format(
                         label, name_of(item), item_id,
                         {k: attributes.get(k) for k in PRICE_KEYS if k in attributes},
                         gold, frames.attr(player, "gold", None),
                         "  （値切った品）" if watched else ""),
+                        budget="watched" if watched else "lines",
                         id=item_id, watched=watched)
                 check(label, self)
             except Exception:

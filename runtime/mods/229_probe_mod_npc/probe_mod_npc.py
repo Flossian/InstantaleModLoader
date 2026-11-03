@@ -50,9 +50,19 @@ r"""MOD が持つ NPC と、正規 NPC への被せがどこまで通るかを�
     229 は旗を読んで記録するだけ
 - 版5: 施設の主への被せを、注入し直し・`OVERRIDE` / `FOLLOW` の切り替え・別のセーブの読み込みでも外すようにした。
   前の相手を `seen["owner"]` だけで覚えていたので、前の世代や前の世界で載せた層が登録簿に残っていた
+- 版6: 見直しで挙がった点を直した。
+  - 保存の後のディスクの読み（`check_disk`）は、上限を読む前に数える（見つからない・読めない回も1回）。
+    前は読めた回しか数えず、フォルダが見つからないと行動のたびに全セーブを復号していた。
+    世界の鍵→フォルダの答えは `sys` の `FOLDERS_MARK` に控え、`saves.world_names()` は
+    1プロセスで知らない鍵が来たときだけ呼ぶ。来訪者を置いていない間は、片付けの確かめに1回だけ読む。
+    `mod:` の数え方を、セーブ全体の `json.dumps` から鍵と文字列を1度なめる形にした（数は同じ）
+  - 会話の一覧の窓（`talk_choice` / `talk_display`）で名簿を写しに差し替えるのは、
+    来訪者を置いていて名簿に居るときだけにした。前は置いていない間も一覧を組むたびに差し替えていた
+  - 一覧に出た相手の読み（`offered_ids`）を1か所にまとめ、`talk_step` では1回だけ組む
+  - `SAVE_LINES` は `ctx.logger(..., cap=N)` に寄せなかった（理由は定数の注記）
 """
 
-import json
+import sys
 import threading
 
 from instantale_modloader import frames, llm, modnpc, saves, state, ui
@@ -108,7 +118,13 @@ AUTO_TALK_DELAY = 45
 
 #: 保存ごとの記録（`save:` の行と `at=save`）を書く、注入1回あたりの保存の回数。
 #: 保存は行動のたびに走る（版4 で上限を置いた）。
+#: `ctx.logger(..., cap=N)` には寄せない（版6で確かめた）。`cap` は「その書き手の行数」で数え、
+#: こちらは「保存の回数」で数える。`at=save` は jsonl の行で、`ctx.jsonl` には `cap` が無いので、
+#: 保存の回数の数えはどのみち要る。
 SAVE_LINES = 20
+
+#: 世界の鍵→セーブのフォルダ名の控え。`sys` に置いて1プロセスで使い回す（版6）。
+FOLDERS_MARK = "_instantale_probe_229_save_folders"
 
 
 def apply(ctx):
@@ -445,13 +461,17 @@ def apply(ctx):
         一覧に出た相手（`ConversationStartManager` の args[0]）と、
         そのとき施設の `characters` に居た id を並べて録る。
         来訪者が名簿に居るのに一覧に出なければ、一覧は名簿から組まれていない。
+
+        版6: 名簿を読みを数える写しに差し替えるのは、来訪者を置いていて（`PRESENT`）
+        名簿に居るときだけ（`spying`）。前は置いていない間も一覧を組むたびに差し替えていた。
+        差し替えない回の `roster_reads` は None。
         """
         app = getattr(self, "app", None) or ui.find_app()
         facility = getattr(getattr(app, "player", None), "location", None)
         roster = getattr(facility, "characters", None)
         listed = [str(k) for k in (roster or [])]
         swapped = None
-        if isinstance(roster, list):
+        if spying(app) and isinstance(roster, list):
             swapped = swap_in(facility, "characters", ReadCountingList)
         try:
             return orig(self, *args, **kwargs)
@@ -460,10 +480,7 @@ def apply(ctx):
                 if swapped:
                     put_back(facility, "characters", *swapped)
                 reads_seen = swapped[1].reads if swapped else None
-                offered = [str(ui.spec_args(entry)[0])
-                           for entry in (getattr(app, "buttons", None) or [])
-                           if ui.spec_cls_name(entry) == "ConversationStartManager"
-                           and ui.spec_args(entry)]
+                offered = offered_ids(app)
                 note("talk_choice", offered=offered,
                      facility_characters=listed,
                      owner=str(getattr(facility, "owner", None)),
@@ -478,7 +495,12 @@ def apply(ctx):
         characters = getattr(getattr(app, "world", None), "characters", None)
         return isinstance(characters, dict) and seen["npc_id"] in characters
 
+    def spying(app):
+        """一覧の窓で名簿を写しに差し替えるか（版6）。来訪者を置いていて、名簿に居るときだけ。"""
+        return bool(PRESENT) and in_roster(app)
+
     def offered_ids(app):
+        """「会話する」の一覧に出ている相手の id。"""
         return [str(ui.spec_args(entry)[0])
                 for entry in (getattr(app, "buttons", None) or [])
                 if ui.spec_cls_name(entry) == "ConversationStartManager"
@@ -494,12 +516,15 @@ def apply(ctx):
                 return orig(self, *args, **kwargs)
             finally:
                 try:
-                    note("talk_step", step=label, offered=offered_ids(app),
+                    # 版6: 一覧と名簿は1回ずつ読む（前は一覧を3回組んでいた）。
+                    offered = offered_ids(app)
+                    after = in_roster(app)
+                    note("talk_step", step=label, offered=offered,
                          visitor_in_roster_before=before,
-                         visitor_in_roster_after=in_roster(app),
-                         visitor_offered=seen["npc_id"] in offered_ids(app))
+                         visitor_in_roster_after=after,
+                         visitor_offered=seen["npc_id"] in offered)
                     write("talk step {}: offered={} visitor in roster {}->{}".format(
-                        label, offered_ids(app), before, in_roster(app)))
+                        label, offered, before, after))
                 except Exception:
                     ctx.log_exc("mod npc: cannot record the talk step")
         return step
@@ -564,7 +589,24 @@ def apply(ctx):
     @ctx.wrap("__main__:DisplayTalkChoice.update_button_display", required=False,
               safe=True)
     def talk_display(orig, self, *args, **kwargs):
+        """一覧が組まれる間に、名簿・素データ・施設の名簿・来訪者の何が読まれるかを録る。
+
+        版6: 差し替えるのは、来訪者を置いていて名簿に居るときだけ（`spying`）。
+        差し替えの書き戻し（`put_back`）は窓の間の書き込みを落とさないための手当てで
+        （VERIFICATION.md §3.75 の 228 / 229 の行）、差し替えない回はそもそも要らない。
+        差し替えない回も一覧に出た相手は録る（`spied=False`、`reads` は空）。
+        """
         app = getattr(self, "app", None) or ui.find_app()
+        if not spying(app):
+            try:
+                return orig(self, *args, **kwargs)
+            finally:
+                try:
+                    offered = offered_ids(app)
+                    note("talk_reads", offered=offered, visitor_offered=seen["npc_id"] in offered,
+                         spied=False, facility_reads=None, reads=[])
+                except Exception:
+                    ctx.log_exc("mod npc: cannot record the talk list")
         world = getattr(app, "world", None)
         save = getattr(app, "save_data_dict", None)
         facility = getattr(getattr(app, "player", None), "location", None)
@@ -603,7 +645,7 @@ def apply(ctx):
                     if not folded or folded[-1] != entry:
                         folded.append(entry)
                 note("talk_reads", offered=offered, visitor_offered=seen["npc_id"] in offered,
-                     facility_reads=facility_reads,
+                     spied=True, facility_reads=facility_reads,
                      reads=["{} {}".format(tag, what) for tag, what in folded[:200]])
                 write("talk list: offered={} facility roster reads={} reads={}".format(
                     offered, "?" if facility_reads is None else facility_reads,
@@ -739,20 +781,26 @@ def apply(ctx):
         return result
 
     def check_disk(app):
-        """書かれたセーブに `mod:` の鍵が残っていないかを数える。"""
-        if seen["disk"] >= DISK_CHECKS:
+        """書かれたセーブに `mod:` の鍵が残っていないかを数える。
+
+        版6: 上限は読む前に数える（フォルダが見つからない・読めない回も1回）。
+        前は読めた回しか数えず、見つからないと保存のたびに全セーブの復号を繰り返していた。
+        来訪者を置いていない間（`PRESENT` が切）は、片付けの後の確かめに1回だけ読む。
+        """
+        if seen["disk"] >= (DISK_CHECKS if PRESENT else 1):
             return
+        seen["disk"] += 1
         key = state.world_key(app)
-        folder = next((name for world, name in saves.world_names()
-                       if world == key), None)
+        folder = save_folder_of(key)
         if folder is None:
             warn("no save", "the save folder of {!r} was not found".format(key))
+            note("disk", world=key, error="no save folder")
             return
         data = saves.read_save(folder)
         if not isinstance(data, dict):
             warn("unreadable", "the save of {!r} could not be read".format(key))
+            note("disk", world=key, error="unreadable")
             return
-        seen["disk"] += 1
         leaked = {}
         for name in ("npcs", "characters"):
             store = data.get(name)
@@ -762,11 +810,12 @@ def apply(ctx):
         # `npcs` と `characters` だけでは足りない。
         # `game_variables` の選択肢（`buttons_backup` の `ConversationStartManager`）・
         # 自由入力・パーティ・敵にも id が載る（実セーブで確認）。
-        # セーブ全体を1つの文字列にして `mod:` を数え、出どころの鍵も並べる。
-        whole = json.dumps(data, ensure_ascii=False, default=str)
-        leaked["anywhere"] = whole.count(modnpc.PREFIX)
+        # セーブ全体の鍵と文字列を1度なめて `mod:` を数え、出どころの鍵も並べる
+        # （版6: 前はセーブ全体を `json.dumps` で1本の文字列にしてから数えていた。数は同じ）。
+        found = set()
+        leaked["anywhere"] = _count_prefix(data, found=found)
         if leaked["anywhere"]:
-            leaked["where"] = sorted(_where_prefix(data))
+            leaked["where"] = sorted(found)
         counts = {name: len(data.get(name) or {}) for name in
                   ("npcs", "characters") if isinstance(data.get(name), dict)}
         note("disk", world=key, counts=counts, leaked=leaked,
@@ -877,25 +926,56 @@ def apply(ctx):
                                   AUTO_TALK, modnpc.LIFT_ROSTER))
 
 
-def _where_prefix(data, path="", found=None):
-    """セーブの中で `mod:` が現れるトップレベルの鍵。**辞書の鍵も見る**（id は鍵で載る）。"""
+def save_folder_of(key):
+    """世界の鍵からセーブのフォルダ名。見つからなければ None。
+
+    版6: `saves.world_names()` は全セーブを復号するので、答えを `sys` の `FOLDERS_MARK` に控え、
+    1プロセスで知らない鍵が来たときだけ引き直す（注入し直しでも引き直さない）。
+    同じ世界名のフォルダが2つあれば、前と同じく `world_names()` の並びで先のほう。
+    見つからなかった鍵も None として控える（同じプロセスでは探し直さない）。
+    """
+    folders = getattr(sys, FOLDERS_MARK, None)
+    if not isinstance(folders, dict):
+        folders = {}
+        setattr(sys, FOLDERS_MARK, folders)
+    if key not in folders:
+        for world, name in saves.world_names():
+            folders.setdefault(world, name)
+        folders.setdefault(key, None)
+    return folders[key]
+
+
+def _top_of(path):
+    """`/鍵/…` の形の道のりから、トップレベルの鍵。"""
+    return path.split("/")[1] if "/" in path else (path or "<root>")
+
+
+def _count_prefix(data, path="", found=None):
+    """セーブの中の `mod:` の数。**辞書の鍵も見る**（id は鍵で載る）。
+
+    現れたトップレベルの鍵を `found` に足す。
+    数はセーブ全体を `json.dumps` した文字列で数えた場合と同じ（版6。鍵と文字列だけを見る）。
+    """
     if found is None:
         found = set()
-
-    def note(where):
-        found.add(where.split("/")[1] if "/" in where else (where or "<root>"))
-
+    count = 0
     if isinstance(data, dict):
         for key, value in data.items():
-            if isinstance(key, str) and modnpc.PREFIX in key:
-                note(path)
-            _where_prefix(value, "{}/{}".format(path, key), found)
+            if isinstance(key, str):
+                hits = key.count(modnpc.PREFIX)
+                if hits:
+                    count += hits
+                    found.add(_top_of(path))
+            count += _count_prefix(value, "{}/{}".format(path, key), found)
     elif isinstance(data, list):
         for index, value in enumerate(data):
-            _where_prefix(value, "{}/{}".format(path, index), found)
-    elif isinstance(data, str) and modnpc.PREFIX in data:
-        note(path)
-    return found
+            count += _count_prefix(value, "{}/{}".format(path, index), found)
+    elif isinstance(data, str):
+        hits = data.count(modnpc.PREFIX)
+        if hits:
+            count += hits
+            found.add(_top_of(path))
+    return count
 
 
 def _flatten(messages):

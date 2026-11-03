@@ -272,12 +272,14 @@ def _make_item(ctx, app, character, spec, write):
             return None
         before = set(inventory)
         try:
-            item = maker(
+            call = (
                 candidate["name"], candidate["description"],
                 candidate["item_type"], candidate["item_sub_type"],
                 candidate["value"], candidate["item_appearance"],
                 candidate["rarity"], character,
             )
+            # 戻りは `(Item, 鍵)`。品だけを取り出す（tuple のまま持ち物へ入れない）。
+            item = items.made_item("generate_item_from_item_data", maker(*call), call, {})
         except Exception:
             ctx.log_exc("npc starting equipment: generate_item_from_item_data failed "
                         "({} / {})".format(candidate["item_type"],

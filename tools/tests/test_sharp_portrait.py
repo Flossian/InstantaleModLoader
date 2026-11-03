@@ -90,6 +90,7 @@ class FakeCtx(object):
     def __init__(self, out_dir):
         self.out_dir = out_dir
         self.game_dir = GAME_DIR
+        self.mod_dir = MOD_DIR
         self.hooks = {}
         self.kwargs = {}
         self.logs = []
@@ -135,6 +136,8 @@ def game_module(module, detect):
 def fresh_mod(**overrides):
     # 既定は「立ち絵を荒くしない」が切（版15）。検査は入れた側で通し、切は明示して確かめる。
     overrides.setdefault("SHARP_PORTRAIT", True)
+    # YuNet（版19）は「YuNet」の節で入れて確かめる。ほかの節はゲームの検出とやり直しだけを見る。
+    overrides.setdefault("FACE_YUNET", False)
     spec = importlib.util.spec_from_file_location(
         "mod_sharp_portrait", MOD, submodule_search_locations=[MOD_DIR])
     module = importlib.util.module_from_spec(spec)
@@ -425,6 +428,134 @@ def main():
           got is None and len(calls) == 1, (got, len(calls)))
     check("縮小・減色はやり直しの設定と独立に残る",
           pixel(Original(), FakeImage(512, 1024, "元絵"), 165, 330)[1].who == "元絵")
+
+    print("YuNet")
+    faces_mod = module.faces
+
+    class FakeDetector(object):
+        def __init__(self, found):
+            self.found = found
+            self.size = None
+
+        def setInputSize(self, size):
+            self.size = size
+
+        def detect(self, image):
+            return (0 if self.found is None else len(self.found)), self.found
+
+    class FakeArray(object):
+        def __init__(self, width, height):
+            self.shape = (height, width, 3)
+
+    def row(x, y, w, h, score):
+        return [x, y, w, h] + [0] * 10 + [score]
+
+    picture = FakeArray(512, 1024)
+    detector = FakeDetector([row(200, 600, 100, 100, 0.99),     # 下寄り（腰や靴）
+                             row(250, 100, 20, 20, 0.95),       # 小さすぎる
+                             row(200, 120, 100, 100, 0.70),
+                             row(210, 110, 96, 96, 0.90)])
+    check("上寄りで程よい幅のうち一番確かな箱", faces_mod.yunet_face(picture, detector) == ((210, 110, 96, 96), 0.9),
+          faces_mod.yunet_face(picture, detector))
+    check("検出器に絵の大きさを渡す", detector.size == (512, 1024), detector.size)
+    check("何も無ければ None", faces_mod.yunet_face(picture, FakeDetector(None)) is None)
+    check("絞りに残らなければ None", faces_mod.yunet_face(picture, FakeDetector([row(200, 700, 100, 100, 0.9)])) is None)
+    check("モデルが無ければ検出器は作らない", faces_mod.make_yunet(None, None, None) is None)
+    check("同梱のモデルが MOD のフォルダに在る", os.path.isfile(os.path.join(MOD_DIR, faces_mod.YUNET_MODEL)))
+    check("モデルの LICENSE を同梱している", os.path.isfile(os.path.join(MOD_DIR, "models", "LICENSE.yunet.txt")))
+
+    # 包みの流れ。cv2 / numpy はゲームの中でしか import しないので、偽物を置いて確かめる。
+    fake_cv2 = types.ModuleType("cv2")
+    fake_cv2.COLOR_RGB2BGR = 4
+    fake_cv2.cvtColor = lambda array, code: array
+    fake_np = types.ModuleType("numpy")
+    fake_np.asarray = lambda image: FakeArray(*image.size)
+
+    class RGBImage(FakeImage):
+        def convert(self, mode):
+            return self
+
+    saved = {name: sys.modules.get(name) for name in ("cv2", "numpy")}
+    # `faces` は読み直しても同じモジュールが使い回されるので、差し替えた関数は最後に戻す。
+    shared_faces = module.faces
+    real_funcs = {name: getattr(shared_faces, name) for name in ("read_yunet", "make_yunet", "yunet_face")}
+    sys.modules["cv2"], sys.modules["numpy"] = fake_cv2, fake_np
+    try:
+        module, ctx, pixel, reduce_ = fresh_mod(FACE_YUNET=True)
+        face = ctx.hooks[module.CREATURE + ":detect_face_coordinates"]
+        faces_mod = module.faces
+        faces_mod.read_yunet = lambda path, np: b"model"
+        found = [((210, 110, 96, 96), 0.9)]
+        faces_mod.make_yunet = lambda model, cv2, np: "detector"
+        faces_mod.yunet_face = lambda bgr, det: found[0]
+        calls = []
+
+        def game(image, *args, **kwargs):
+            calls.append(args)
+            return None
+
+        got = face(game, RGBImage(512, 1024), lbp_full, 0.25, 256)
+        check("YuNet が見つけたら、ゲームの検出を呼ばずにゲームと同じ形の箱を返す",
+              got == faces_mod.crop_box((210, 110, 96, 96), (512, 1024), 256) and not calls, (got, calls))
+        check("記録に YuNet の箱と確かさが出る",
+              any("顔: YuNet が見つけた" in line and "0.90" in line for line in log_lines(module, ctx)),
+              log_lines(module, ctx))
+        got = face(game, RGBImage(512, 1024), "haarcascade_frontalface_alt.xml")
+        check("ゲームの2回目（haar）では YuNet を掛けない", got is None and len(calls) == 1, (got, calls))
+        del calls[:]
+        found[0] = None
+        got = face(game, RGBImage(512, 1024), lbp_full, 0.25, 256)
+        check("YuNet が外したらゲームの検出に任せる", got is None and len(calls) == 1
+              and any("YuNet は見つけられず" in line for line in log_lines(module, ctx)), (got, calls))
+        del calls[:]
+
+        def boom(bgr, det):
+            raise RuntimeError("bad shape")
+
+        faces_mod.yunet_face = boom
+        got = face(lambda image, *a, **k: calls.append(a) or (1, 2, 3, 4), RGBImage(512, 1024), lbp_full)
+        check("YuNet で投げてもゲームの検出へ進み、その答えを返す", got == (1, 2, 3, 4) and len(calls) == 1
+              and any("YuNet で投げた RuntimeError" in line for line in log_lines(module, ctx)), (got, calls))
+
+        module, ctx, pixel, reduce_ = fresh_mod(FACE_YUNET=True)
+        face = ctx.hooks[module.CREATURE + ":detect_face_coordinates"]
+        module.faces.read_yunet = lambda path, np: None
+        del calls[:]
+        face(game, RGBImage(512, 1024), lbp_full)
+        face(game, RGBImage(512, 1024), lbp_full)
+        check("モデルが読めなければゲームの検出だけで探し、読めない旨は1度だけ書く",
+              len(calls) == 2 and sum(1 for line in log_lines(module, ctx) if "モデルが読めない" in line) == 1,
+              (calls, log_lines(module, ctx)))
+
+        module, ctx, pixel, reduce_ = fresh_mod(FACE_YUNET=False)
+        face = ctx.hooks[module.CREATURE + ":detect_face_coordinates"]
+        module.faces.yunet_face = lambda bgr, det: ((210, 110, 96, 96), 0.9)
+        del calls[:]
+        face(game, RGBImage(512, 1024), lbp_full)
+        check("切ればゲームの検出だけ", len(calls) == 1 and not any("YuNet" in line for line in log_lines(module, ctx)))
+    finally:
+        for name, value in saved.items():
+            if value is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = value
+        for name, func in real_funcs.items():
+            setattr(shared_faces, name, func)
+            setattr(module.faces, name, func)
+
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        cv2 = None
+    if cv2 is None or not hasattr(cv2, "FaceDetectorYN"):
+        print("  --   cv2 が無いので、同梱のモデルで検出器を作る検査は飛ばす")
+    else:
+        model = module.faces.read_yunet(os.path.join(MOD_DIR, module.faces.YUNET_MODEL), np)
+        real = module.faces.make_yunet(model, cv2, np)
+        check("同梱のモデルをバイト列から読んで検出器を作れる", real is not None)
+        blank = np.full((1024, 512, 3), 40, dtype=np.uint8)
+        check("何も無い絵では見つけない", real is not None and module.faces.yunet_face(blank, real) is None)
 
     print("敵")
     module, ctx, pixel, reduce_ = fresh_mod()

@@ -15,7 +15,7 @@ r"""持ち物（`Character.inventory`）の読み書き。
 
 import sys
 
-from . import log_exc, state
+from . import frames, log_exc, state
 
 #: セーブの1件が持つ項目（`330_` の保管庫が実機で往復させた12項目）。
 ITEM_FIELDS = ("name", "item_type", "attributes", "description", "value", "rarity",
@@ -38,6 +38,40 @@ def inventory_of(owner):
         return holder
     inner = getattr(holder, "inventory", None)
     return inner if isinstance(inner, dict) else None
+
+
+#: 品を作るゲームの入口と、持ち主・鍵の引数（名前と、`self` を除いた位置）。
+#: 戻り値は入口で違い、`generate_item_from_item_data` は `(Item, 鍵)`、
+#: `generate_item_from_dict` は None（品は渡した鍵で持ち物へ入る）。GAME.md §2.13.1.5。
+MAKERS = {
+    "generate_item_from_item_data": (("obtainer", 7), None),
+    "generate_item_from_dict": (("obtainer", 2), ("item_id", 1)),
+    "generate_item_from_ready_made_data": (("obtainer", 0), None),
+}
+
+
+def _is_item(value):
+    return not isinstance(value, dict) and isinstance(getattr(value, "attributes", None), dict)
+
+
+def made_item(entry, result, args, kwargs):
+    """品を作る入口 `entry`（`MAKERS` の名前）の呼び出しから、作られた品を取り出す。取れなければ None。
+
+    `@ctx.wrap` の中で `orig` の戻り値と、受け取った引数（`self` を除く）をそのまま渡す。
+    """
+    if _is_item(result):
+        return result
+    if isinstance(result, (tuple, list)):
+        for value in result:
+            if _is_item(value):
+                return value
+    owner_arg, key_arg = MAKERS.get(entry, (None, None))
+    if owner_arg is None or key_arg is None:
+        return None
+    inv = inventory_of(frames.arg(args, kwargs, *owner_arg))
+    key = frames.arg(args, kwargs, *key_arg)
+    item = inv.get(str(key)) if inv is not None and key is not None else None
+    return item if _is_item(item) else None
 
 
 #: 控えに入れてよい値か（JSON に落ちるものだけ）。`state` の語彙。

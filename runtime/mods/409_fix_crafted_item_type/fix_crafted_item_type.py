@@ -181,23 +181,27 @@ def apply(ctx):
         return sum(1 for item in list(inventory.values()) if fix_one(item, why))
 
     # ---- 生成の入口（`129_` / `134_` と同じ3本）---------------------------
+    # 戻り値は入口で違う（`(Item, 鍵)` か None）。品は `items.made_item` で取り出す。
     @ctx.wrap("__main__:InstantaleApp.generate_item_from_item_data", safe=True)
     def generated_from_data(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
-        fix_one(result, "generated")
+        fix_one(items.made_item("generate_item_from_item_data", result, args, kwargs),
+                "generated")
         return result
 
     @ctx.wrap("__main__:InstantaleApp.generate_item_from_dict", safe=True)
     def generated_from_dict(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
-        fix_one(result, "generated/dict")
+        fix_one(items.made_item("generate_item_from_dict", result, args, kwargs),
+                "generated/dict")
         return result
 
     @ctx.wrap("__main__:InstantaleApp.generate_item_from_ready_made_data",
               safe=True, required=False)
     def generated_ready_made(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
-        fix_one(result, "generated/ready_made")
+        fix_one(items.made_item("generate_item_from_ready_made_data", result, args, kwargs),
+                "generated/ready_made")
         return result
 
     # ---- クラフトの成果物が持ち物へ置かれる瞬間 ----------------------------

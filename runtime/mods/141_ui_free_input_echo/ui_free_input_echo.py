@@ -23,8 +23,12 @@
 送信をゲームが受け付けなかったとき（空の文・待機中など）は `process_choice` が来ないので、出さない。
 文は `process_choice` に渡った文字列をそのまま使う（ゲームが実際に送った文）。
 
-送り先が会話（`ConversationPhaseManager` / `ConversationInQuestPhase`）のときは足さない。
-ゲームが自分で出すので、足すと2行になる。
+送り先が会話（`ConversationPhaseManager`）・店の値切り（`ShoppingNegotiateManager`）・
+戦闘の「発言する」（`UtteranceInBattleManager`）のときは足さない。
+ゲームが自分で出すので、足すと2行になる（値切りと発言は VERIFICATION.md §3.90）。
+
+依頼の中の会話（`ConversationInQuestPhase`）は、ゲームが主人公の発言を出さない（§3.90）。
+会話の中なので、ふだんの会話でゲームが出す行と同じ「主人公名: 文」で足す。
 
 足す先は本文の待ち行列（`ui.Screen.say` → `app.add_text`）。
 `122_ui_conversation_log` は本文の打ち出しを拾っているので、読み返しにも同じ行が残る。
@@ -39,13 +43,28 @@ MAX_LINES = 300
 #: ゲームが自分で「主人公名: 文」を出す送り先。ここには足さない。
 SELF_ECHO_CLASSES = frozenset((
     "ConversationPhaseManager",
+    "ShoppingNegotiateManager",
+    "UtteranceInBattleManager",
+))
+
+#: 会話の中なのにゲームが発言を出さない送り先。「主人公名: 文」で足す。
+NAMED_CLASSES = frozenset((
     "ConversationInQuestPhase",
 ))
 
-def echo_line(text):
-    """本文に足す1行。空白だけなら None。"""
+
+def echo_line(text, speaker=None):
+    """本文に足す1行。空白だけなら None。`speaker` があれば「名前: 文」。"""
     text = text.strip()
-    return text or None
+    if not text:
+        return None
+    return "{}: {}".format(speaker, text) if speaker else text
+
+
+def player_name(app):
+    player = getattr(app, "player", None)
+    name = getattr(player, "name", None)
+    return name if isinstance(name, str) and name.strip() else None
 
 
 def apply(ctx):
@@ -81,7 +100,8 @@ def apply(ctx):
             try:
                 text = args[0] if args else kwargs.get("choice_text", "")
                 cls_name = type(function).__name__
-                line = echo_line(text) if isinstance(text, str) else None
+                speaker = player_name(self) if cls_name in NAMED_CLASSES else None
+                line = echo_line(text, speaker) if isinstance(text, str) else None
                 if cls_name in SELF_ECHO_CLASSES:
                     write("{}: the game shows it".format(cls_name))
                 elif line is None:

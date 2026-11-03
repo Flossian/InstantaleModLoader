@@ -18,11 +18,13 @@ llm_manager はサマライザ5種とファシリテータ4種を公開してお
 版3: 包みを `safe=True` にし、失敗時の書き出し（`format_locals`）を try に入れた。
 版2までは書き出しそのものが投げると、その例外がゲームの素の例外に取って代わっていた。
 原因は §2.40 で決着しているが、記録は1回の呼び出しにつき1行と軽いので残す。
+
+版4: 使っていない `repr_value` の import を外した（記録は変わらない）。
 """
 
 import sys
 
-from instantale_modloader.frames import format_locals, repr_value
+from instantale_modloader.frames import format_locals
 
 MODULE = "scripts.llm.llm_manager"
 

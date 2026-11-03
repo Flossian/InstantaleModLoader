@@ -7,10 +7,10 @@
     "ja": "計測: 本体のクラッシュ記録"
   },
   "description": {
-    "en": "The game's own make_crash_log dies with AttributeError: module 'datetime' has no attribute 'now', so crash_log.txt is not written and the crash is not sent. Records which calls take that branch, and whether swapping the name would have produced a log. Read-only: the original error is re-raised, so the game is unchanged",
-    "ja": "本体の make_crash_log が AttributeError: module 'datetime' has no attribute 'now' で落ち、crash_log.txt が書かれず送信も走らない。どの呼び出しがその枝を通るのかと、名前を差し替えれば記録が出来たのかを録る。読み取りだけでゲームは変えない。元の例外はそのまま投げ直す"
+    "en": "Watches for a regression: injection once overwrote the game's __main__.datetime, so the game's make_crash_log died with AttributeError: module 'datetime' has no attribute 'now' and crash_log.txt was not written (fixed on our side). Records each crash-log call, what __main__.datetime is at that moment, whether a mod started the call, and the steps after it. If the log fails again, it also records whether swapping the name back would have produced it. Read-only: the original error is re-raised, so the game is unchanged",
+    "ja": "退行の見張り。注入がゲームの __main__.datetime を上書きして、本体の make_crash_log が AttributeError: module 'datetime' has no attribute 'now' で落ち crash_log.txt が書かれなかった（原因はこちら側で、直してある）。記録を組む呼び出しごとに、そのときの __main__.datetime・呼び出しの起点に MOD が居るか・後段の書き込みと送信を録る。また落ちたときは、名前を差し替えれば記録が出来たのかも録る。読み取りだけでゲームは変えない。元の例外はそのまま投げ直す"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "debug": true
 }

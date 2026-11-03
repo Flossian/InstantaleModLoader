@@ -14,6 +14,8 @@
   引数     … 受け取った引数をキーワードのまま orig へ渡す（版3）
   窓       … 生成の入口の境目は店の場面の中だけ。枠の後は持ち物を写さない（版3）
   安全     … 施設も主も引けない場面で例外を出さない
+  画面     … 品を落とした後の画面の走査は売買の窓の中だけ。注入し直しても
+             ボタンの観測者が積もらない（版5）
 """
 import importlib.util
 import io
@@ -210,6 +212,150 @@ def read(ctx, name=LOG_NAME):
         return ""
     with io.open(path, encoding="utf-8") as fh:
         return fh.read()
+
+
+class FakeButtonBehavior(object):
+    """偽の `kivy.uix.behaviors.ButtonBehavior`。観測者の付け外しを数える。"""
+
+    def __init__(self, text):
+        self.text = text
+        self.opacity = 1.0
+        self.children = []
+        self.parent = None
+        self.bound = {}
+        self._next_uid = 0
+
+    def fbind(self, event, callback):
+        self._next_uid += 1
+        self.bound[(event, self._next_uid)] = callback
+        return self._next_uid
+
+    def unbind_uid(self, event, uid):
+        self.bound.pop((event, uid), None)
+
+
+class FakeWindow(object):
+    """偽の `kivy.core.window.Window`。`children` を読まれた回数で走査を数える。"""
+
+    def __init__(self):
+        self.opacity = 1.0
+        self.reads = 0
+        self._children = []
+
+    @property
+    def children(self):
+        self.reads += 1
+        return self._children
+
+
+def screen_and_watchers(module):
+    """版5: 売買の窓の外では画面を走査しない。注入し直しても観測者が積もらない。"""
+    import types
+    window = FakeWindow()
+    fake = {"kivy": types.ModuleType("kivy"),
+            "kivy.core": types.ModuleType("kivy.core"),
+            "kivy.core.window": types.SimpleNamespace(Window=window),
+            "kivy.uix": types.ModuleType("kivy.uix"),
+            "kivy.uix.behaviors": types.SimpleNamespace(
+                ButtonBehavior=FakeButtonBehavior)}
+    saved_modules = {name: sys.modules.get(name) for name in fake}
+    ui = module.ui
+    saved_ui = (ui.find_app, ui.find_hud)
+    try:
+        sys.modules.update(fake)
+        app, owner, player = stage()
+        hud = types.SimpleNamespace(visible_twin_inventory_data={"TorF": False,
+                                                                 "situation": "shop"})
+        ui.find_app = lambda: app
+        ui.find_hud = lambda _app: hud
+        target = "scripts.hud.new_hud:InventoryItem.change_inventory"
+        dragged = types.SimpleNamespace(item_instance=Item("item_3", "水"))
+        button = FakeButtonBehavior("買う")
+
+        def show_button(self, *args, **kwargs):
+            window._children[:] = [button]
+            return None
+
+        ctx = fresh(module)
+        ctx.hooks[target](show_button, dragged, player.inventory)
+        check("版5: 売買の窓の外では画面を走査しない", window.reads == 0, window.reads)
+
+        window._children[:] = []
+        hud.visible_twin_inventory_data["TorF"] = True
+        ctx.hooks[target](show_button, dragged, player.inventory)
+        check("版5: 売買の窓の中では画面を走査する", window.reads > 0, window.reads)
+        check("版5: 出たボタンに観測者を2つ付ける", len(button.bound) == 2, button.bound)
+
+        window._children[:] = []
+        ctx.hooks[target](show_button, dragged, player.inventory)
+        check("版5: 同じ世代は付け直さない", len(button.bound) == 2, button.bound)
+        first = set(button.bound)
+
+        ctx = fresh(module)                 # 注入し直し（同じプロセスで apply し直す）
+        window._children[:] = []
+        ctx.hooks[target](show_button, dragged, player.inventory)
+        check("版5: 注入し直しても観測者は2つのまま", len(button.bound) == 2, button.bound)
+        check("版5: 前の世代の観測者は外れている", not (first & set(button.bound)),
+              (first, set(button.bound)))
+
+        hud.visible_twin_inventory_data["situation"] = "transfer"
+        before_reads = window.reads
+        ctx.hooks[target](show_button, dragged, player.inventory)
+        check("版5: 店でない二つ並びの窓では走査しない", window.reads == before_reads,
+              (before_reads, window.reads))
+        check("版5: 例外を出していない", not ctx.errors, ctx.errors)
+
+        # ---- 落とした瞬間・右クリック・change_inventory の境目も窓の中だけ ----
+        touch_up = "scripts.hud.new_hud:InventoryItem.on_touch_up"
+        popup = "scripts.hud.new_hud:InventoryItem.show_popup_menu"
+        water = Item("item_4", "水", obtainer=player)
+        dropped = types.SimpleNamespace(item_instance=water,
+                                        collide_point=lambda *_p: True,
+                                        popup_menu=None)
+        touch = types.SimpleNamespace(grab_current=None, pos=(0, 0))
+
+        def move_to_owner(self, *args, **kwargs):
+            player.inventory.pop("item_4", None)
+            owner.inventory["item_4"] = water
+            return "移した"
+
+        for state_name, opened in (("外", False), ("中", True)):
+            ctx = fresh(module)
+            hud.visible_twin_inventory_data.update({"TorF": opened, "situation": "shop"})
+            player.inventory["item_4"] = water
+            owner.inventory.pop("item_4", None)
+            window._children[:] = []
+            before_reads = window.reads
+            got = ctx.hooks[touch_up](lambda self, *a, **k: "落ちた", dropped, touch)
+            touch_reads = window.reads - before_reads
+            before_reads = window.reads
+            ctx.hooks[popup](lambda self, *a, **k: "出た", dropped, (0, 0))
+            popup_reads = window.reads - before_reads
+            moved = ctx.hooks[target](move_to_owner, dragged, owner)
+            log = read(ctx)
+            check("版5: 窓の{}でも本体の戻り値はそのまま".format(state_name),
+                  got == "落ちた" and moved == "移した", (got, moved))
+            if opened:
+                check("版5: 窓の中では落とした瞬間に走査する", touch_reads > 0, touch_reads)
+                check("版5: 窓の中では右クリックで走査する", popup_reads > 0, popup_reads)
+                check("版5: 窓の中では右クリックの行を書く", "右クリック(" in log, log)
+                check("版5: 窓の中では change_inventory の境目を書く",
+                      "境目 change_inventory" in log, log)
+            else:
+                check("版5: 窓の外では落とした瞬間に走査しない", touch_reads == 0, touch_reads)
+                check("版5: 窓の外では右クリックで走査しない", popup_reads == 0, popup_reads)
+                check("版5: 窓の外では右クリックの行を書かない", "右クリック(" not in log, log)
+                check("版5: 窓の外では change_inventory の境目を書かない",
+                      "境目 change_inventory" not in log, log)
+            check("版5: 窓の{}でも例外を出していない".format(state_name),
+                  not ctx.errors, ctx.errors)
+    finally:
+        ui.find_app, ui.find_hud = saved_ui
+        for name, value in saved_modules.items():
+            if value is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = value
 
 
 def main():
@@ -417,6 +563,8 @@ def main():
     check("版4: 店主の所持金の前後", "店主の所持金 50 -> 350" in log_gold, log_gold)
     check("版4: 呼び出し元を出す", "呼び出し元:" in log_gold, log_gold)
     check("版4: 例外を出していない", not ctx_gold.errors, ctx_gold.errors)
+
+    screen_and_watchers(module)
 
     # 設定を既定へ戻してから終える。
     fresh(module, ITEM_SAMPLES=0)

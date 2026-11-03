@@ -7,10 +7,10 @@
     "ja": "立ち絵の高画質化と顔認識精度の向上"
   },
   "description": {
-    "en": "Before saving a generated picture the game shrinks it to a third of its size, doubles it back and cuts the colours down; the face is then cropped out of that. Skips both steps, so the background-removed drawing (512x1024) becomes the standing portrait as it is, and the face is re-cropped from it at 256x256. The 2x stretch the game applies in between is undone too. When the game fails to find the face, retries the detection on a preprocessed copy. Enemies, monsters and backgrounds are left alone",
-    "ja": "ゲームは生成した絵を保存する前に3分の1へ縮め、2倍に伸ばし直して減色している。顔画像もその絵から切り出している。その2つの工程を通さず、背景を抜いた絵（512x1024）をそのまま立ち絵にし、顔もそこから 256x256 で切り直す。ゲームが途中で2倍に伸ばすぶんも戻す。顔の検出が外れた回は、前処理した絵で検出をやり直す。敵・モンスターと背景は触らない"
+    "en": "Before saving a generated picture the game shrinks it to a third of its size, doubles it back and cuts the colours down; the face is then cropped out of that. Skips both steps, so the background-removed drawing (512x1024) becomes the standing portrait as it is, and the face is re-cropped from it at 256x256. The 2x stretch the game applies in between is undone too. Faces are looked for first with YuNet (OpenCV's neural face detector, bundled), which finds most of the faces the game misses or mistakes for clothing; when it misses, the game's own detection runs, then a retry on a preprocessed copy. Enemies, monsters and backgrounds are left alone",
+    "ja": "ゲームは生成した絵を保存する前に3分の1へ縮め、2倍に伸ばし直して減色している。顔画像もその絵から切り出している。その2つの工程を通さず、背景を抜いた絵（512x1024）をそのまま立ち絵にし、顔もそこから 256x256 で切り直す。ゲームが途中で2倍に伸ばすぶんも戻す。顔はまず YuNet（OpenCV の深層学習の顔検出。同梱）で探す。ゲームが外す顔や服を顔として切る絵の大半で顔を当てる。外したらゲームの検出、それも外れたら前処理した絵で検出をやり直す。敵・モンスターと背景は触らない"
   },
-  "version": "18",
+  "version": "19",
   "author": "R01/Flossian",
   "tool": {
     "entry": "tool.py",
@@ -36,6 +36,18 @@
         "en": "Skips the shrink and colour-reduction steps so the background-removed 512x1024 drawing becomes the standing portrait, and the face is re-cropped from it at 256x256. Off = the game's own 330x660 pixel-art look. The two steps cannot be toggled separately; skipping only one does not restore any detail"
       }
     },
+    "FACE_YUNET": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "顔の検出に YuNet を使う",
+        "en": "Find faces with YuNet first"
+      },
+      "note": {
+        "ja": "ゲームの検出より先に YuNet で顔を探す。見つからなければゲームの検出に任せる。切るとゲームの検出だけになる（版18 までと同じ）。立ち絵の設定と関係なく効く",
+        "en": "Looks for the face with YuNet before the game's own detection, and leaves it to the game when YuNet finds none. Off = the game's detection only (as before version 19). Works regardless of the portrait setting"
+      }
+    },
     "FACE_RETRY": {
       "type": "bool",
       "default": true,
@@ -44,8 +56,8 @@
         "en": "Retry face detection"
       },
       "note": {
-        "ja": "ゲームが顔を見つけられなかった回だけ、前処理した絵で検出をやり直す。検出は縮小の前の絵に対して走るので、立ち絵の設定と関係なく効く。外れた顔の大半は拾えるが、顔でないところを顔として切り出すこともある",
-        "en": "Only when the game fails to find a face, retries the detection on a preprocessed copy. Detection runs on the pre-shrink drawing, so this works regardless of the portrait setting. It recovers most of the misses, but sometimes crops something that is not a face"
+        "ja": "YuNet もゲームも顔を見つけられなかった回だけ、前処理した絵で検出をやり直す。検出は縮小の前の絵に対して走るので、立ち絵の設定と関係なく効く。外れた顔の大半は拾えるが、顔でないところを顔として切り出すこともある",
+        "en": "Only when neither YuNet nor the game finds a face, retries the detection on a preprocessed copy. Detection runs on the pre-shrink drawing, so this works regardless of the portrait setting. It recovers most of the misses, but sometimes crops something that is not a face"
       }
     }
   }

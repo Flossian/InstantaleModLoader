@@ -33,8 +33,17 @@ r"""計測: 施設での訓練。ゲームは変えない。
   * 包みは受け取った引数をそのまま `orig` へ渡す形にした（キーワードを位置に直さない）
   * `__init__` の引数をゲームの Manager の属性（`_probe_training`）に控えていたのを、
     この probe の弱参照の表に移した
+
+版4（見直し）:
+  * 訓練の窓の外の `elapse_days` の行は、呼び出し元ごとに最初の `OUTSIDE_PER_CALLER` 回だけ書く。
+    合わせて `OUTSIDE_TOTAL` 行で打ち切り、そこからは呼び出し元も組まない。
+    数えは `sys` の `OUTSIDE_MARK`（注入し直しても数え直さない）。
+    版3では訓練と無関係な日数送り（宿泊・移動）がこの行になり、30日の遊びで log の半分近くを占めていた
+  * `buttons_brief` は `218_` / `233_` / `238_` と同じ写しのまま残した。
+    共有の置き場はローダしか無く、この版ではローダを触らないため
 """
 import datetime
+import sys
 import time
 import weakref
 
@@ -60,6 +69,41 @@ INNER = (("TrainingPhaseManager", "method"),
          ("TrainingPhaseManager", "learn_new_skill"),
          ("TrainingStartManager", "training_start"),
          ("TrainingStartManager", "generate_images"))
+
+#: 訓練の窓の外の `elapse_days` を書く回数。呼び出し元ごと（版4）。
+OUTSIDE_PER_CALLER = 3
+#: 同じく、呼び出し元をまたいだ合計の上限。超えたら呼び出し元も組まない（版4）。
+OUTSIDE_TOTAL = 30
+#: 窓の外の `elapse_days` の数え（`{"total": 書いた行数, "callers": {呼び出し元: 回数}}`）。
+#: 1プロセスで数えるので `sys` に置く（版4）。
+OUTSIDE_MARK = "_instantale_probe_231_outside_days"
+
+
+def direct_caller():
+    """すぐ上のゲーム側のフレーム（ファイル・行・関数）。ローダと MOD のフレームは飛ばす。
+
+    `frames.caller()` は段ごとに持ち主のクラスを探すので重い。数えの鍵にはこちらを使う（版4）。
+    """
+    index = 1
+    while index < 40:
+        try:
+            frame = sys._getframe(index)
+        except ValueError:
+            break
+        index += 1
+        code = frame.f_code
+        if not frames.is_ours(code.co_filename):
+            return "{}:{}:{}".format(code.co_filename, frame.f_lineno, code.co_name)
+    return "?"
+
+
+def outside_counts():
+    """窓の外の `elapse_days` の数え（1プロセスに1つ）。"""
+    found = getattr(sys, OUTSIDE_MARK, None)
+    if not isinstance(found, dict):
+        found = {"total": 0, "callers": {}}
+        setattr(sys, OUTSIDE_MARK, found)
+    return found
 
 
 def apply(ctx):
@@ -281,11 +325,33 @@ def apply(ctx):
                 state["windows"][-1]["days"].append(days)
                 write("elapse_days({!r}) in {}".format(days, state["windows"][-1]["cls"]))
             else:
-                write("elapse_days({!r}) outside any training window, from {}".format(
-                    days, frames.caller()))
+                note_outside(days)
         except Exception:
             pass
         return orig(self, *args, **kwargs)
+
+    def note_outside(days):
+        """窓の外の日数送り。呼び出し元ごとに最初の数回だけ書く（版4）。
+
+        合計の上限は呼び出し元を見る前に見る（上限を越えた後は何も組まない）。
+        呼び出し元ごとの数えは、すぐ上のゲーム側のフレーム（`direct_caller`）で分ける。
+        `frames.caller()` は書く行のためだけに組む。
+        """
+        counts = outside_counts()
+        if counts["total"] >= OUTSIDE_TOTAL:
+            return
+        key = direct_caller()
+        seen = counts["callers"].get(key, 0)
+        counts["callers"][key] = seen + 1
+        if seen >= OUTSIDE_PER_CALLER:
+            return
+        counts["total"] += 1
+        last = seen + 1 == OUTSIDE_PER_CALLER
+        write("elapse_days({!r}) outside any training window, from {}{}".format(
+            days, frames.caller(), " (the last line from this caller)" if last else ""))
+        if counts["total"] >= OUTSIDE_TOTAL:
+            write("elapse_days outside the training windows: {} line(s) written; "
+                  "no more in this process".format(counts["total"]))
 
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False, safe=True)
     def add_text(orig, self, *args, **kwargs):

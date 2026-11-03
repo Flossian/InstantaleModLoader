@@ -21,8 +21,16 @@ r"""計測: 逮捕・裁判・服役・釈放。ゲームは変えない。
 
     out\prison.log      読む用
     out\prison.jsonl    1窓＝1行。後から数える用
+
+版2: 開いている窓の並びと、マネージャごとの `__init__` の引数の控えを `sys` に置いた。
+版1は apply ごとの控えで、注入し直し（同じプロセスで MOD が読み直される）の瞬間に開いていた窓は、
+古い世代の `execute` の包みだけが握り、新しい世代の `elapse_days`・`save_game`・`add_text` の包みからは
+見えなかった（窓の間の日数送り・保存・文言を落とし、`init_args` も None になった）。
+共有したので、古い世代の包みが閉じる窓も新しい世代の包みが書き込む窓も同じ並びの同じ物になる。
+窓を閉じるときは同じ物（`is`）を外す。版1の `list.remove` は中身の等しい別の窓を先に外しえた。
 """
 import datetime
+import sys
 import threading
 import time
 import weakref
@@ -62,13 +70,36 @@ INNER = (("TrialStartManager", "trial_start"),
 #: 持ち物・装備の候補の属性名（どれがあるかは決め打ちしない）。
 CARRY_ATTRS = ("inventory", "items", "equipments", "equipment")
 
+#: 開いている窓の並びと `__init__` の引数の控え（版2）。注入し直しで消えないよう `sys` に置く。
+STORE_ATTR = "_instantale_probe_prison_store"
+
+
+def process_store():
+    """`{"windows": [...], "inits": WeakKeyDictionary, "inits_by_id": {...}}`。プロセスに1つ。"""
+    store = getattr(sys, STORE_ATTR, None)
+    if not (isinstance(store, dict) and isinstance(store.get("windows"), list)
+            and isinstance(store.get("inits"), weakref.WeakKeyDictionary)
+            and isinstance(store.get("inits_by_id"), dict)):
+        store = {"windows": [], "inits": weakref.WeakKeyDictionary(), "inits_by_id": {}}
+        setattr(sys, STORE_ATTR, store)
+    return store
+
+
+def close_window(windows, window):
+    """`window` そのもの（`is`）を並びから外す。中身の等しい別の窓は外さない。"""
+    for index in range(len(windows) - 1, -1, -1):
+        if windows[index] is window:
+            del windows[index]
+            return True
+    return False
+
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     record = ctx.jsonl(RECORD_BASENAME)
-    state = {"windows": []}
-    inits = weakref.WeakKeyDictionary()
-    inits_by_id = {}
+    state = process_store()
+    inits = state["inits"]
+    inits_by_id = state["inits_by_id"]
 
     def remember_init(manager, init_args):
         try:
@@ -172,8 +203,8 @@ def apply(ctx):
                 return orig(self, *args, **kwargs)
             finally:
                 try:
-                    state["windows"].remove(window)
-                except ValueError:
+                    close_window(state["windows"], window)
+                except Exception:
                     pass
                 try:
                     after = snapshot(app)

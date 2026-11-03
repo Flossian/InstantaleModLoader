@@ -56,6 +56,16 @@ id6≈62 / id7≈43 / id8≈70）なので、決め方はゲームのコード�
 版9: 「クエストを探す」（`DisplayQuestChoice.generate_random_quest`）の間も窓を開け、
 乱数・関数・前後の街の状態を同じ形で写す。探した依頼の難易度の引き方を見るため
 （`922_town_quest_difficulty` がゲームの引く所で差し替えられるか）。
+
+版10: 窓の中の記録の無駄と、包みの約束の抜けを直した。
+
+- 乱数の呼び出し元から `tempfile.py` を外す（`RANDOM_IGNORE`）。乱数の行の大半が
+  一時ファイルの名前を作る `_mkstemp_inner` の `Random.choices` で、難易度とは関係が無かった
+- 「関数」の行は、同じ関数と同じ引数の組を窓ごとに1回だけ書き、窓ごとの上限
+  （`FUNCTION_SAMPLES`）を置く。書かなかった回は窓を閉じる行に数だけ出す。
+  呼び出し元は1回だけ組む（版9は行と読む用のログで2回組んでいた）
+- `AreaMoveManager.execute` と `DisplayQuestChoice.generate_random_quest` の包みに `safe=True`
+- 包む乱数の名前を絞るときに `hasattr` を使わない（`getattr` の既定値で見る）
 """
 
 import datetime
@@ -75,6 +85,9 @@ RECORD_BASENAME = "area_quest_difficulty.jsonl"
 # 到着の移動の間に写す `random.*` の呼び出しの上限。0 で録らない。
 # MOD 自身の抽選と `random` の内側は数えない（版3）。
 RANDOM_SAMPLES = 1000
+
+# 窓1つで書く「関数」の行の上限（版10）。同じ関数と引数の組は窓ごとに1回だけ書く。
+FUNCTION_SAMPLES = 300
 
 # 頼み文の関数。難易度は引数で受け取るので、**組み立てたのは呼び出し元**。
 PROMPT_TARGETS = (
@@ -132,18 +145,42 @@ RANDOM_NAMES = ("betavariate", "binomialvariate", "choice", "choices", "expovari
 # ゲームは Python 3.10 で動く（`python310.dll`）ので、3.12 で足された `binomialvariate` は無い。
 # 版4は絞らずに並べていたので、対象の無いフック2件が status.json の `patches.unresolved` に
 # 残り続け、一覧が「ゲームが更新された可能性があります」と警告していた。
+# 版10: 有無は `hasattr` ではなく `getattr` の既定値で見る（`frames.attr` の註）。
 RANDOM_TARGETS = tuple("random:{}".format(name) for name in RANDOM_NAMES
-                       if hasattr(random, name)) \
+                       if getattr(random, name, None) is not None) \
     + tuple("random:Random.{}".format(name) for name in RANDOM_NAMES
-            if name != "random" and hasattr(random.Random, name)) \
+            if name != "random" and getattr(random.Random, name, None) is not None) \
     + ("random:Random.seed", "random:Random.__init__")
 # numpy が読まれていれば（画像生成で使う）そちらの乱数も。無ければ黙って降りる。
 NUMPY_TARGETS = tuple("numpy.random:{}".format(name) for name in (
     "randint", "uniform", "choice", "random", "rand", "randn", "normal", "random_sample",
     "random_integers", "shuffle", "permutation"))
 
-# 乱数の呼び出し元として数えないもの（画像生成の種と、`random` 自身の内側）。
-RANDOM_IGNORE = ("stable_diffusion", "random.py")
+# 乱数の呼び出し元として数えないもの（画像生成の種と、`random` 自身の内側と、
+# 一時ファイルの名前を作る `tempfile` の `_mkstemp_inner`。版10）。
+RANDOM_IGNORE = ("stable_diffusion", "random.py", "tempfile.py")
+
+
+def light_key(value):
+    """「関数」の行を窓ごとに1回にするための軽い鍵（版10。`226_` の `light_key` と同じ考え）。
+
+    数は型ごと、文字列と None はそのまま。オブジェクトは `brief`（`describe_instance`）と
+    同じく型と `id` と `name` で見分ける。配列と辞書は `brief` と同じく先頭12件まで。
+    """
+    if value is None or isinstance(value, str):
+        return value
+    if isinstance(value, (bool, int, float)):
+        return (type(value).__name__, value)
+    if isinstance(value, (list, tuple)):
+        return ("<seq>",) + tuple(light_key(item) for item in list(value)[:12])
+    if isinstance(value, dict):
+        return ("<dict>",) + tuple((str(key), light_key(value[key]))
+                                   for key in list(value)[:12])
+    if isinstance(value, range):
+        return ("<range>", value.start, value.stop, value.step)
+    return ("<{}>".format(type(value).__name__),
+            light_key(frames.attr(value, "id", None)),
+            light_key(frames.attr(value, "name", None)))
 
 
 def called_from_a_mod():
@@ -329,16 +366,25 @@ def apply(ctx):
         @ctx.wrap(target, required=False, safe=True)
         def pure(orig, *args, **kwargs):
             result = orig(*args, **kwargs)
-            if state["window"] is None or getattr(quiet, "depth", 0) > 0:
+            window = state["window"]
+            if window is None or getattr(quiet, "depth", 0) > 0:
                 return result
             try:
+                # 版10: 同じ関数と引数の組は窓ごとに1回。上限も先に見る（呼び出し元を組む前）。
+                key = (name, tuple(light_key(a) for a in args),
+                       tuple(sorted((str(k), light_key(v)) for k, v in kwargs.items())))
+                done = window["functions"]
+                if key in done or len(done) >= FUNCTION_SAMPLES:
+                    window["function_skipped"] += 1
+                    return result
+                done.add(key)
+                caller = frames.caller(depth=4)
                 log_row({"at": now(), "phase": "関数", "func": name,
                          "args": [brief(a) for a in args],
                          "kwargs": {k: brief(v) for k, v in kwargs.items()},
-                         "result": brief(result), "caller": frames.caller(depth=4)},
+                         "result": brief(result), "caller": caller},
                         "関数: {}({}) -> {!r} caller={}".format(
-                            name, args_line(args, kwargs), brief(result),
-                            frames.caller(depth=3)))
+                            name, args_line(args, kwargs), brief(result), caller))
             except Exception:
                 pass
             return result
@@ -418,13 +464,18 @@ def apply(ctx):
             pass
         return result
 
-    @ctx.wrap("__main__:AreaMoveManager.execute", required=False)
+    def new_window(target_id):
+        """窓1つの控え。`functions` は書いた（関数・引数）の組、`function_skipped` は書かなかった回（版10）。"""
+        return {"target_id": target_id, "random": [], "functions": set(),
+                "function_skipped": 0}
+
+    @ctx.wrap("__main__:AreaMoveManager.execute", required=False, safe=True)
     def move_execute(orig, self, *args, **kwargs):
         """移動の窓。到着先の街が作られるならこの中。前後の街の状態と、間の乱数・関数を写す。"""
         app = frames.attr(self, "app", None) or ui.find_app()
         info = init_of(self) or {}
         target_id = info.get("target_id")
-        window = {"target_id": target_id, "random": []}
+        window = new_window(target_id)
         try:
             before = area_brief(app, target_id) if target_id else None
             write("=" * 78)
@@ -444,16 +495,20 @@ def apply(ctx):
                 row = {"at": now(), "phase": "移動", "target": target_id,
                        "mode": info.get("mode"), "before": before,
                        "after": area_brief(app, target_id) if target_id else None,
-                       "random_calls": len(window["random"])}
+                       "random_calls": len(window["random"]),
+                       "function_rows": len(window["functions"]),
+                       "function_skipped": window["function_skipped"]}
                 row.update(context(app))
-                log_row(row, "移動: 到着 {} after={} random_calls={}".format(
-                    target_id, json.dumps(row["after"], ensure_ascii=False, default=str),
-                    len(window["random"])))
+                log_row(row, "移動: 到着 {} after={} random_calls={} functions={} (+{} 重複・上限)"
+                        .format(target_id,
+                                json.dumps(row["after"], ensure_ascii=False, default=str),
+                                len(window["random"]), row["function_rows"],
+                                row["function_skipped"]))
             except Exception:
                 ctx.log_exc("area quest difficulty probe: cannot close the move window")
 
     # ------------------------------------------------------------ 依頼を探す窓（版9）
-    @ctx.wrap("__main__:DisplayQuestChoice.generate_random_quest", required=False)
+    @ctx.wrap("__main__:DisplayQuestChoice.generate_random_quest", required=False, safe=True)
     def search_window(orig, self, *args, **kwargs):
         """「クエストを探す」の窓。新しい依頼の難易度をどの乱数で引くかを写す。
 
@@ -462,7 +517,7 @@ def apply(ctx):
         """
         app = frames.attr(self, "app", None) or ui.find_app()
         area_id = None
-        window = {"target_id": None, "random": []}
+        window = new_window(None)
         before = None
         try:
             area_id = ui.area_id_of(ui.current_area(app))
@@ -483,11 +538,15 @@ def apply(ctx):
                 row = {"at": now(), "phase": "探す", "target": area_id,
                        "before": before,
                        "after": area_brief(app, area_id) if area_id else None,
-                       "random_calls": len(window["random"])}
+                       "random_calls": len(window["random"]),
+                       "function_rows": len(window["functions"]),
+                       "function_skipped": window["function_skipped"]}
                 row.update(context(app))
-                log_row(row, "探す: 終了 {} after={} random_calls={}".format(
-                    area_id, json.dumps(row["after"], ensure_ascii=False, default=str),
-                    len(window["random"])))
+                log_row(row, "探す: 終了 {} after={} random_calls={} functions={} (+{} 重複・上限)"
+                        .format(area_id,
+                                json.dumps(row["after"], ensure_ascii=False, default=str),
+                                len(window["random"]), row["function_rows"],
+                                row["function_skipped"]))
             except Exception:
                 ctx.log_exc("area quest difficulty probe: cannot close the search window")
 

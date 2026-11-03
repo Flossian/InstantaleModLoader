@@ -39,6 +39,22 @@ Nuitka でコンパイルされていてもフレームは通常どおり積ま�
 呼び出し元は1プロセスあたり最初の数件だけにした。
 標本の数えも1プロセスあたりにした。
 包みは `safe=True` にし、受け取った引数をそのまま `orig` へ渡す。
+
+版4: `mixer` の行が数えていたのは鳴っているチャンネルの全部で、効果音も入っていた。
+戦闘の斬撃や画面の操作の音が鳴った瞬間に取ると、曲が1本でも `2/8` と出る。
+チャンネルごとに鳴っている音（`Channel(i).get_sound()`）を読み、何の音かを書き添える。
+見分けは GAME.md §2.11 に従う。曲は再生のたびに `Sound(パス)` で作られて `app.music` に入り、
+効果音は起動時に読む `SoundManager.sounds`（15種）か、`play_sound_from_src` がその場で作る音。
+
+    app.music     … 走っている app の `app.music` と同じ音（いま鳴らしている曲）
+    target.music  … `play_music_from_src` / `stop_music` に渡された相手の `.music`（app でないとき）
+    sounds[名前]  … `SoundManager.sounds` の音
+    other         … どれでもない音。長さ（`get_length()`）を添える
+
+曲の本数（`music=N`）は、`app.music` と `target.music` と、長さが `SONG_MIN_SECONDS` 以上の `other` の和。
+長い `other` は誰の控えにも無い曲で、版2の頃の「止められなくなった曲」がこれに当たる。
+行の頭（`n/8 channel(s) busy: [...]`）は版3と同じ形のまま、後ろに足した。
+読むのは `get_busy` / `get_sound` / `get_length` だけで、音には触らない。
 """
 
 import os
@@ -68,6 +84,11 @@ MAX_CALLER_SAMPLES = 10
 # 曲が切り替わった瞬間にどれが立っていたかを見る。
 BATTLE_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
                 "in_conversation", "in_free_input", "in_action_in_conversation")
+
+# 誰の控えにも無い音を曲と数える長さ（秒。版4）。
+# 画面の操作の効果音（`ui/...wav`）は数秒で、土地の曲はループの1周が数十秒から数分ある。
+# 境目の音が出たときに読み直せるよう、`other` には長さを必ず添える。
+SONG_MIN_SECONDS = 30.0
 
 # スナップショットの印と標本の数え。
 # 注入し直すと MOD のモジュールごと読み直されるので、モジュール変数では消える。`sys` に置く。
@@ -125,20 +146,66 @@ def apply(ctx):
         except Exception:
             return "<unknown>"
 
-    def channels():
+    def channels(target=None):
         """今いくつのチャンネルが鳴っているか ＝ 曲が重なっていないかの真実。
 
         `app.music` は最後に鳴らした曲しか指さないので、
         迷子になった曲はそこからは見えない。
         pygame に直接聞けば全部数えられる。
+
+        版4: 鳴っているチャンネルごとに何の音かを添え、曲の本数（`music=N`）を別に出す
+        （docstring の版4）。`target` は曲を鳴らす・止める口に渡された相手。
         """
         try:
             import pygame
             total = pygame.mixer.get_num_channels()
             busy = [i for i in range(total) if pygame.mixer.Channel(i).get_busy()]
-            return "{}/{} channel(s) busy: {}".format(len(busy), total, busy)
         except Exception as exc:
             return "<mixer unavailable: {}>".format(type(exc).__name__)
+        head = "{}/{} channel(s) busy: {}".format(len(busy), total, busy)
+        try:
+            known = known_sounds(target)
+            kinds, music = [], 0
+            for index in busy:
+                kind, is_music = channel_kind(pygame.mixer.Channel(index).get_sound(), known)
+                kinds.append("{}={}".format(index, kind))
+                music += 1 if is_music else 0
+            return "{}  music={} ({})".format(head, music, ", ".join(kinds) or "-")
+        except Exception as exc:
+            return "{}  music=? <{}>".format(head, type(exc).__name__)
+
+    def known_sounds(target=None):
+        """名前の分かる音を `{id(音): 名前}` で集める（版4）。読むだけ。"""
+        known = {}
+        app = find_app()
+        manager = getattr(app, "sound_manager", None) if app is not None else None
+        preloaded = getattr(manager, "sounds", None)
+        if isinstance(preloaded, dict):
+            for name, sound in preloaded.items():
+                if sound is not None:
+                    known[id(sound)] = "sounds[{}]".format(name)
+        # 曲の控えを後に入れる（同じ音なら曲の名前を勝たせる）。
+        if target is not None and target is not app:
+            music = getattr(target, "music", None)
+            if music is not None:
+                known[id(music)] = "target.music"
+        music = getattr(app, "music", None) if app is not None else None
+        if music is not None:
+            known[id(music)] = "app.music"
+        return known
+
+    def channel_kind(sound, known):
+        """チャンネルで鳴っている音の名前と、曲として数えるか（版4）。"""
+        if sound is None:
+            return "<no sound>", False
+        name = known.get(id(sound))
+        if name is not None:
+            return name, name.endswith(".music")
+        try:
+            length = float(sound.get_length())
+        except Exception:
+            return "other ?s", False
+        return "other {:.1f}s".format(length), length >= SONG_MIN_SECONDS
 
     def sound_state(sound):
         try:
@@ -253,7 +320,7 @@ def apply(ctx):
 
         def after():
             write("    .music after  = {}".format(sound_state(getattr(app, "music", None))))
-            write("    mixer  = {}".format(channels()))
+            write("    mixer  = {}".format(channels(app)))
         note(after)
         return result
 
@@ -270,7 +337,7 @@ def apply(ctx):
             write("    caller = {}".format(callers("stop_music")))
         note(before)
         result = orig(self, *args, **kwargs)
-        note(lambda: write("    mixer after stop = {}".format(channels())))
+        note(lambda: write("    mixer after stop = {}".format(channels(app))))
         return result
 
     # 版3: 戦闘の開始と終了の経路（`start_battle_with_in_conversation` /

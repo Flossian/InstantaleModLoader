@@ -41,11 +41,24 @@ VERIFICATION.md §3.36 #4（`311_` と `317_` を併せたプロンプト長）�
     TOKENS prompt=<頼み> cached=<使い回し> predicted=<出力> total=<頼み+出力> done=<止まった理由> truncated=<窓に合わせて切ったか> schema=<型の名前>
     RAISE  chat <例外の型>: <文>                  `chat` が投げた回（窓あふれなら EXCEED を付ける）
     KEYS   chat result keys=[…]                  戻り値の鍵（1プロセス1回。数の在りかを確かめる用）
+
+版5: サイドカーの起動を `sidecar_process:popen_sidecar` で録る。
+`LlamaCppSidecar.__init__` / `start` の包みは、8月から10月末までの llama-server の起動190回
+（`127_` の `llm_speed.log` の `[LAUNCH]`）のうち2回しか録れていなかった。
+`llama_cpp_runtime_completion` はローカル LLM を初めて使うときに読み込まれ、その流れの中で
+`start` まで進むので、遅れて掛かる包みが間に合わない（`127_` の docstring「どこに仕掛けるか」）。
+`sidecar_process` は常に載っているので、起動のたびに1行残る。
+argv の中身で llama-server だけを選ぶ（背景除去のサイドカーも同じ関数を通る）。
+`204_` は `127_` より外側なので、見えるのは `127_` が書き換える前の argv（書き換えた後は `127_` の `[REWRITE]`）。
+多重起動を見るため、そのプロセスで先に起こした llama-server がまだ生きているかを数える。
+
+    SIDECAR launch #<n> pid=<pid> ctx-size=<…> parallel=<…> port=<…> alive_before=<先に起こして生きている本数>
 """
 
 import hashlib
 import os
 import sys
+import weakref
 
 from instantale_modloader import frames
 
@@ -53,8 +66,13 @@ from instantale_modloader import frames
 HEADER_MARK = "_instantale_probe_prompt_bloat_header"
 # 戻り値の鍵を「このプロセスで書いた」印。
 KEYS_MARK = "_instantale_probe_prompt_bloat_keys"
+# このプロセスで起こした llama-server（`Popen` への弱い参照）の控え（版5）。
+LAUNCHES_ATTR = "_instantale_probe_prompt_bloat_launches"
 
 CHAT_TARGET = "llama_cpp_runtime_completion:LlamaCppClient.chat"
+# サイドカーはすべてここを通る（`127_` と同じ口）。
+POPEN_TARGET = "sidecar_process:popen_sidecar"
+LLAMA_MARK = "llama-server"
 # 頼みのトークン数の在りか。上から順に見る。
 # 使い回し（cache_prompt）の分を含む総数でないと窓との距離にならない。
 # llama-server の `timings.prompt_n` は新しく処理した分だけなので、`cache_n` を足す。
@@ -121,6 +139,54 @@ def schema_label(fmt):
     defs = fmt.get("$defs")
     names = list(defs)[:3] if isinstance(defs, dict) else []
     return "{}[{}]".format(fmt.get("title") or "?", ",".join(str(n) for n in names))
+
+
+def launch_argv(args, kwargs):
+    """`popen_sidecar` に渡った argv。第1位置引数かキーワード `args` で来る。"""
+    if "args" in kwargs:
+        return kwargs.get("args")
+    return args[0] if args else None
+
+
+def is_llama_server(argv):
+    """argv が llama-server の起動か。実行ファイルの位置は決め打ちしない。"""
+    if not isinstance(argv, (list, tuple)):
+        return False
+    return any(LLAMA_MARK in str(item).lower() for item in argv)
+
+
+def flag_value(argv, *names):
+    """`--flag 値` と `--flag=値` のどちらでも読む。無ければ None。
+
+    llama-server は同じ旗が2回出ると後勝ちなので、最後に出た値を返す。
+    """
+    items = [str(item) for item in argv]
+    found = None
+    for index, item in enumerate(items):
+        for name in names:
+            if item == name and index + 1 < len(items):
+                found = items[index + 1]
+            elif item.startswith(name + "="):
+                found = item.split("=", 1)[1]
+    return found
+
+
+def _launches():
+    launches = getattr(sys, LAUNCHES_ATTR, None)
+    if not isinstance(launches, list):
+        launches = []
+        setattr(sys, LAUNCHES_ATTR, launches)
+    return launches
+
+
+def _alive(ref):
+    proc = ref()
+    if proc is None:
+        return False
+    try:
+        return proc.poll() is None
+    except Exception:
+        return False
 
 
 def apply(ctx):
@@ -268,6 +334,47 @@ def apply(ctx):
         return result
 
     # ------------------------------------------------------------ SIDECAR
+    # 版5: 起動のたびに録るのは `popen_sidecar`。下の `LlamaCppSidecar` の2本は、
+    # 遅れて掛かったときだけ録れる（モデル名と build が読めるので残す）。
+    @ctx.wrap(POPEN_TARGET, required=False, safe=True)
+    def popen_sidecar(orig, *args, **kwargs):
+        try:
+            argv = launch_argv(args, kwargs)
+            llama = is_llama_server(argv)
+        except Exception:
+            llama = False
+        if not llama:
+            return orig(*args, **kwargs)
+        try:
+            launches = _launches()
+            alive_before = sum(1 for ref in launches if _alive(ref))
+        except Exception:
+            launches, alive_before = None, None
+        try:
+            proc = orig(*args, **kwargs)
+        except Exception as exc:
+            try:
+                write("!! popen_sidecar(llama-server) raised {}: {}".format(type(exc).__name__, exc))
+            except Exception:
+                pass
+            raise
+        try:
+            if launches is not None:
+                try:
+                    launches.append(weakref.ref(proc))
+                except TypeError:
+                    pass
+            write("SIDECAR launch #{} pid={} ctx-size={} parallel={} port={} alive_before={}".format(
+                len(launches) if launches is not None else "?",
+                getattr(proc, "pid", None),
+                flag_value(argv, "--ctx-size", "-c"),
+                flag_value(argv, "--parallel", "-np"),
+                flag_value(argv, "--port"),
+                alive_before))
+        except Exception:
+            pass
+        return proc
+
     # 版3: 記録は try に入れた。
     # 版2は `repr` などが投げると、その例外でサイドカーの起動ごと止まる形だった。
     @ctx.wrap("llama_cpp_runtime_completion:LlamaCppSidecar.__init__",

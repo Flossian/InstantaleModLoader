@@ -537,9 +537,8 @@ def apply(ctx):
                 write("    {}: {}".format(label, line))
         return new_texts
 
-    hooks = wrap_outgoing(
-        ctx, run, label="npc variety",
-        on_arm=lambda target: write("[ARM] 遅れて仕掛けた: {}".format(target)))
+    # 掛け直しの時点はローダが `modloader.log` に `late-armed on` で残す（こちらの記録へは写さない）。
+    hooks = wrap_outgoing(ctx, run, label="npc variety")
 
     # 注入した時点で、作ったデータで正しさを確かめておく。
     # 実経路はゲームが NPC を作るまで通らない（`111_` と同じ方針）。

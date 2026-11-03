@@ -3,14 +3,14 @@
   "api": 1,
   "kind": "fix",
   "name": {
-    "en": "Show more of long messages",
-    "ja": "長い本文をより多く見せる"
+    "en": "Keep long messages from going blank",
+    "ja": "長い本文の表示を末尾に絞り、本文が消えるのを防ぐ"
   },
   "description": {
-    "en": "The game truncates long replies before they fill the label; this keeps the latest 1,000 characters visible while leaving stored text unchanged",
-    "ja": "ゲーム本体は長い応答をラベルに載せ切る前に切ってしまう。表示ラベルだけを末尾1,000文字まで広げ、保持している本文は変えない"
+    "en": "The text the game keeps grows to hundreds of thousands of characters, and a label that long draws nothing at all. This shows only the latest 1,000 characters on screen and leaves the stored text unchanged",
+    "ja": "ゲームが溜める本文は数十万文字になり、表示ラベルは長すぎると何も描かれなくなる。画面には末尾1,000文字だけを載せ、保持している本文は変えない"
   },
-  "version": "1",
+  "version": "2",
   "author": "yoshinari/tomotomo-y",
   "before": [
     "112_ui_text_spacing"
@@ -26,8 +26,8 @@
         "en": "Latest characters kept visible"
       },
       "note": {
-        "ja": "ゲーム本体が切る長い本文を、表示ラベルではこの文字数まで末尾から見せる。それより前は省略表示になる",
-        "en": "Long replies truncated by the game are shown from the end up to this many characters. Older text is replaced by a truncation notice"
+        "ja": "画面に載せる本文を末尾からこの文字数に絞る。それより前は省略表示になる。上げすぎると本文が丸ごと消えることがある",
+        "en": "The text on screen is cut to this many characters from the end. Older text is replaced by a truncation notice. Set it too high and the text can disappear entirely"
       }
     }
   }

@@ -42,6 +42,19 @@ MOD が出している「…」の区間は、その MOD のログの `busy on` 
 `display_button_load` が自分を予約し直す）でなければ、その時点で載っていた本数と呼び出しの段
 （ローダと MOD のフレームも飛ばさない）を `dots_start` として1行書く。
 
+版5（見直し）:
+  * 見張りの `screen` の行は、前の写しから変わった項目だけを書く（`full=False`。書かない項目は前のまま）。
+    注入ごとの最初の1行だけ全項目（`full=True`）。版4では1項目でも変わると全項目（平均約 460B）を
+    2ファイルへ書いていて、`screen` の行の半分近くは `adding`（`is_adding_text`）だけが変わった行だった
+  * 「polling the screen」「polling stopped」「watching who starts the dots」は1プロセス1回
+    （`sys` の `SAID_MARK`）。注入のたびに出ていた
+  * `Clock.schedule_once` の包みをローダの `ctx.wrap`（`kivy.clock:Clock.schedule_once`）へ移した。
+    版4はインスタンスの属性を直に差し替えていて、ローダの包みの一覧と drift から見えなかった。
+    `Clock` は `kivy.context` の代理（`ProxyContext`）で、属性の読み書きは中の実体へ素通しになるので、
+    ローダの `resolve` / `set_attr` で同じ所（実体の属性）へ載る。
+    包みの世代はローダが入れ替えるので、版4の「1プロセスに1枚で中身だけ差し替える」入れ物は要らなくなった。
+    版4の入れ物が残っているプロセスでは、その内側に載る（古い入れ物は新しい世代では何も書かない）
+
     out\busy_display.log     読む用
     out\busy_display.jsonl   1件＝1行。後から数える用
 """
@@ -72,8 +85,15 @@ DOT_CHARS = ".。…・ 　"
 #: 点送りの始め手の記録に並べる段数（版4）。
 START_DEPTH = 10
 
-#: `Clock.schedule_once` の包みを置く印（版4）。1プロセスに1枚で、世代が変わったら中身だけ差し替える。
-SCHEDULE_HOLDER = "_iml_234_schedule_holder"
+#: 包む `Clock.schedule_once`（版5でローダの `ctx.wrap` へ移した）。
+#: 版4の入れ物の印 `_iml_234_schedule_holder` は使わない。
+SCHEDULE_TARGET = "kivy.clock:Clock.schedule_once"
+
+#: 1プロセス1回だけ書く行の控え（版5）。中身は書いた行の鍵の集合。
+SAID_MARK = "_iml_234_said_once"
+
+#: この probe のファイル。点送りの始め手を探すとき、先頭のこのファイルの段を飛ばす（版5）。
+THIS_FILE = os.path.normcase(os.path.abspath(__file__))
 
 
 def is_dots(text):
@@ -81,9 +101,24 @@ def is_dots(text):
     return isinstance(text, str) and bool(text.strip()) and not text.strip(DOT_CHARS)
 
 
-def call_stack(start, depth=START_DEPTH):
-    """`start` 段上から、呼び出しの段を (ファイル名, 関数名, 行) で並べる。どのフレームも飛ばさない。"""
-    chain, index = [], start
+def is_wrapper_frame(filename):
+    """この probe 自身か、ローダの包みの層（`patch.py`）の段か（版5）。"""
+    try:
+        path = os.path.normcase(os.path.abspath(filename))
+    except Exception:
+        return False
+    return path == THIS_FILE or (frames.is_ours(filename)
+                                 and os.path.basename(path) == "patch.py")
+
+
+def call_stack(depth=START_DEPTH):
+    """`Clock.schedule_once` を呼んだ手から上の段を (ファイル名, 関数名, 行) で並べる。
+
+    先頭に続くこの probe と包みの層（`patch.py`）の段だけを飛ばし、そこから先はどのフレームも飛ばさない
+    （ローダや MOD が点送りを始めた手も、その段のまま見える）。
+    版5: 包みをローダの `ctx.wrap` に移したので、段の数を決め打ちせずにファイル名で飛ばす。
+    """
+    chain, index, leading = [], 1, True
     while len(chain) < depth:
         try:
             frame = sys._getframe(index)
@@ -91,8 +126,23 @@ def call_stack(start, depth=START_DEPTH):
             break
         index += 1
         code = frame.f_code
+        if leading and is_wrapper_frame(code.co_filename):
+            continue
+        leading = False
         chain.append((code.co_filename, code.co_name, frame.f_lineno))
     return chain
+
+
+def say_once(key):
+    """`key` の行をこのプロセスでまだ書いていなければ True（版5）。注入し直しでも数え直さない。"""
+    said = getattr(sys, SAID_MARK, None)
+    if not isinstance(said, set):
+        said = set()
+        setattr(sys, SAID_MARK, said)
+    if key in said:
+        return False
+    said.add(key)
+    return True
 
 
 def is_continuation(chain):
@@ -262,7 +312,10 @@ def apply(ctx):
 
         def poll(_dt):
             if ctx.superseded():
-                write("polling stopped (a newer injection took over)")
+                # 版5: 1プロセス1回（注入のたびに前の世代が1行ずつ書いていた）。
+                if say_once("polling stopped"):
+                    write("polling stopped (a newer injection took over; "
+                          "said once per process)")
                 return False
             try:
                 run = dots["run"]
@@ -271,62 +324,66 @@ def apply(ctx):
                 app = App.get_running_app()
                 if app is None:
                     return True
-                shot = snapshot(app)
-                if shot != last["snapshot"]:
-                    since = (None if last["at"] is None
-                             else round(time.monotonic() - last["at"], 3))
-                    last["snapshot"] = shot
-                    last["at"] = time.monotonic()
-                    event("screen", since=since, **shot)
+                watch_screen(snapshot(app))
             except Exception:
                 ctx.log_exc("busy display probe: polling failed")
             return True
 
         Clock.schedule_interval(poll, POLL_SECONDS)
-        write("polling the screen every {}s (gen {})".format(POLL_SECONDS, ctx.generation))
-        hook_schedule(Clock)
+        if say_once("polling"):
+            write("polling the screen every {}s (gen {}; said once per process)".format(
+                POLL_SECONDS, ctx.generation))
+
+    def watch_screen(shot):
+        """見張りの写しを前と比べ、変わった項目だけを `screen` の行にする（版5）。
+
+        注入ごとの最初の1行だけ全項目（`full=True`）。2行目からは変わった項目だけ（`full=False`）で、
+        書かない項目は前の行から変わっていない。
+        """
+        previous = last["snapshot"]
+        if shot == previous:
+            return
+        since = (None if last["at"] is None
+                 else round(time.monotonic() - last["at"], 3))
+        last["snapshot"] = shot
+        last["at"] = time.monotonic()
+        if previous is None:
+            event("screen", since=since, full=True, **shot)
+        else:
+            changed = dict((key, value) for key, value in shot.items()
+                           if key not in previous or previous[key] != value)
+            event("screen", since=since, full=False, **changed)
 
     # ------------------------------------------------------------ 点送りの始め手（版4）
-    def note_schedule(clock, callback, args):
-        # 0 call_stack / 1 ここ / 2 note / 3 schedule_once の包み / 4 予約した手
-        chain = call_stack(4)
+    def note_schedule(callback, args, kwargs):
+        """`display_button_load` の予約。点送りの続きでなければ、始め手として1行書く。
+
+        `args` は `Clock.schedule_once` に渡ったまま（先頭が callback、次が timeout）。
+        """
+        chain = call_stack()
         if is_continuation(chain):
             return
         app = getattr(callback, "__self__", None)
-        event("dots_start", pending=pending_loads(clock),
+        clock = getattr(sys.modules.get("kivy.clock"), "Clock", None)
+        event("dots_start", pending=pending_loads(clock) if clock is not None else None,
               enabled=getattr(app, "is_button_enabled", None),
-              timeout=args[0] if args else None, stack=format_stack(chain))
+              timeout=args[1] if len(args) > 1 else kwargs.get("timeout"),
+              stack=format_stack(chain))
 
-    def hook_schedule(clock):
-        """`Clock.schedule_once` を包む。包みはプロセスに1枚で、書く先だけ世代ごとに差し替える。"""
-        holder = getattr(clock, SCHEDULE_HOLDER, None)
-        if holder is None:
-            original = clock.schedule_once
-            holder = {"note": None}
-
-            def schedule_once(callback, *args, **kwargs):
-                note = holder["note"]
-                if note is not None and getattr(callback, "__name__", "") == "display_button_load":
-                    try:
-                        note(clock, callback, args)
-                    except Exception:
-                        pass
-                return original(callback, *args, **kwargs)
-
+    # 版5: インスタンスの属性の直の差し替えから、ローダの包みへ移した（docstring の版5）。
+    # `alias_scan=False`: 包む相手はインスタンスの束縛メソッドで、別名がモジュールに写っていることは無い。
+    @ctx.wrap(SCHEDULE_TARGET, required=False, safe=True, alias_scan=False)
+    def schedule_once(orig, *args, **kwargs):
+        callback = args[0] if args else kwargs.get("callback")
+        if getattr(callback, "__name__", "") == "display_button_load":
             try:
-                clock.schedule_once = schedule_once
-                setattr(clock, SCHEDULE_HOLDER, holder)
+                note_schedule(callback, args, kwargs)
             except Exception:
-                ctx.log_exc("busy display probe: cannot wrap Clock.schedule_once")
-                return
+                pass
+        return orig(*args, **kwargs)
 
-        def note(clock, callback, args):
-            if ctx.superseded():
-                return
-            note_schedule(clock, callback, args)
-
-        holder["note"] = note
-        write("watching who starts the dots (Clock.schedule_once)")
+    if say_once("watching"):
+        write("watching who starts the dots ({}; said once per process)".format(SCHEDULE_TARGET))
 
     ctx.on_ready(start_poll, key="234_probe_busy_display:poll:{}".format(ctx.generation))
 

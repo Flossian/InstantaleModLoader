@@ -60,6 +60,15 @@
   版2は上限の後も本体を呼ぶ前に毎回全属性を舐めていて、その部分は例外を握っていなかった。
   何も変わらなかった回は1行にした
 - セーブ辞書の全文と `generate_npc` の記録に、プロセス単位の上限を付けた
+
+版4: 見張りの約束を揃え、セーブ辞書の記録を縮めた。
+
+- 包みをすべて `safe=True` にした
+- 死亡判定の記録数を `sys` に置いた（`DEATHS_MARK`）。
+  版3は apply ごとの器に持っていて、注入し直すたびに上限 `MAX_DEATH_EVENTS` が0から数え直しになっていた
+- `generate_character` の辞書は、全文（字下げつき JSON。1件 4KB あまり）を1プロセスで最初の1件だけにした。
+  2件目からは名前と、1件目との項目の差（増えた・欠けた鍵）だけを1行で書く。
+  項目の一覧が問いの答えで（GAME.md §2.22）、値は人ごとに違うだけなので、全文を4件並べても増える情報が無かった
 """
 
 import datetime
@@ -82,6 +91,10 @@ SAMPLE_MARK = "_instantale_probe_charstate_sample"
 # セーブ辞書と `generate_npc` の記録数（版3。プロセス単位で数える）。
 SAVES_MARK = "_instantale_probe_charstate_saves"
 NPCS_MARK = "_instantale_probe_charstate_npcs"
+# 死亡判定の記録数（版4。プロセス単位で数える）。
+DEATHS_MARK = "_instantale_probe_charstate_deaths"
+# 全文で書いた1件目のセーブ辞書の鍵（版4。2件目からはこれとの差だけを書く）。
+SAVE_KEYS_MARK = "_instantale_probe_charstate_save_keys"
 
 # 死亡の印が入っていそうな項目。
 # ここに無くても構わない。
@@ -120,9 +133,10 @@ MAX_INLINE_DICT = 8
 # 名前が変わっても census は動く（`interesting_keys` が拾い直す）。
 DEAD_FLAG = "is_dead"
 
-# セーブ辞書のダンプ件数。
+# セーブ辞書の記録件数。
 # 数体ぶんあれば項目の一覧は分かる。
 # 版3でプロセス単位にした（版2は注入のたびに4体ぶん書いていた）。
+# 版4で全文は1件目だけにし、2件目からは1件目との鍵の差を1行で書く。
 MAX_SAVE_DUMPS = 4
 
 # `generate_npc` を写す件数（プロセス単位）。
@@ -135,9 +149,10 @@ ROW_ATTRS = ("state", "category", "job")
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME, stamp=False)
-    # 上限つきの器。
-    # 数えた人数・セーブ辞書の件数は `sys` に置く（版3。上の COUNT_MARK / SAVES_MARK）。
-    state = {"deaths": 0, "quiet_keys_written": False}
+    # 数えた人数・セーブ辞書の件数（版3）と死亡判定の記録数（版4）は `sys` に置く
+    # （上の COUNT_MARK / SAVES_MARK / DEATHS_MARK）。
+    # 見張った項目の一覧は注入ごとに1回出す（その注入で何を見ているかの控え）。
+    state = {"quiet_keys_written": False}
 
     def stamp():
         return datetime.datetime.now().isoformat(timespec="milliseconds")
@@ -201,12 +216,12 @@ def apply(ctx):
     # ------------------------------------------------------------------
     # 死亡の瞬間に何が変わるか
     # ------------------------------------------------------------------
-    @ctx.wrap("__main__:BattlePhaseManager.check_character_death", required=False)
+    @ctx.wrap("__main__:BattlePhaseManager.check_character_death", required=False, safe=True)
     def check_death(orig, self, *args, **kwargs):
         # 上限を先に見る（版3。版2は上限の後も本体の前で毎回全属性を舐めていた）。
         # 写し取りは try の中に置く。失敗しても本体はそのまま1回呼ぶ。
         character, keys, before = None, [], {}
-        if state["deaths"] < MAX_DEATH_EVENTS:
+        if getattr(sys, DEATHS_MARK, 0) < MAX_DEATH_EVENTS:
             try:
                 # 署名は決め打ちしない（リコンでは (self, index, character)）。
                 for candidate in list(args) + list(kwargs.values()):
@@ -223,7 +238,7 @@ def apply(ctx):
         if character is None:
             return result
         try:
-            state["deaths"] += 1
+            setattr(sys, DEATHS_MARK, getattr(sys, DEATHS_MARK, 0) + 1)
             changes = diff(before, snapshot(character, keys))
             if changes:
                 write("\n[{}] check_character_death -> {}".format(
@@ -249,7 +264,7 @@ def apply(ctx):
     # ------------------------------------------------------------------
     # セーブに残る形（`character_value` は保存された辞書そのもの）
     # ------------------------------------------------------------------
-    @ctx.wrap("__main__:World.generate_character", required=False)
+    @ctx.wrap("__main__:World.generate_character", required=False, safe=True)
     def generate_character(orig, self, *args, **kwargs):
         # 件数はプロセス単位（版3。版2は注入のたびに鍵の一覧と4体ぶんの全文を書いていた）。
         # 上限の後は何も見ずに素通しにする。
@@ -264,19 +279,32 @@ def apply(ctx):
                     break
             if isinstance(value, dict):
                 setattr(sys, SAVES_MARK, saves + 1)
-                if saves == 0:
+                keys = sorted(str(key) for key in value)
+                first = getattr(sys, SAVE_KEYS_MARK, None)
+                if not isinstance(first, list):
+                    # 1件目だけ全文（版4）。鍵はこの後の差の基準に控える。
+                    setattr(sys, SAVE_KEYS_MARK, keys)
                     write("\n" + "=" * 72)
                     write("[{}] character save keys ({}):".format(
                         stamp(), len(value)))
-                    write("    " + ", ".join(sorted(str(key) for key in value)))
+                    write("    " + ", ".join(keys))
                     # 名前に死亡の気配があるものを名指しする。
                     hits = [key for key in value
                             if any(hint in str(key).lower()
                                    for hint in STATE_HINTS)]
                     write("    state-ish keys: {}".format(hits or "<none>"))
-                write("\n[{}] generate_character({})".format(
-                    stamp(), frames.repr_value(args[0] if args else None)))
-                write(as_json(value))
+                    write("\n[{}] generate_character({})".format(
+                        stamp(), frames.repr_value(args[0] if args else None)))
+                    write(as_json(value))
+                else:
+                    # 2件目からは1件目との鍵の差だけを1行で（版4）。
+                    added = [key for key in keys if key not in first]
+                    missing = [key for key in first if key not in keys]
+                    write("[{}] generate_character({}) name={} keys={} {}".format(
+                        stamp(), frames.repr_value(args[0] if args else None),
+                        frames.repr_value(value.get("name")), len(keys),
+                        "same as the first dump" if not (added or missing) else
+                        "vs the first dump: +{} -{}".format(added, missing)))
         except Exception:
             ctx.log_exc("character state probe: save dump failed")
         return orig(self, *args, **kwargs)
@@ -284,7 +312,7 @@ def apply(ctx):
     # ------------------------------------------------------------------
     # NPC を作って施設へ置く側（上流）
     # ------------------------------------------------------------------
-    @ctx.wrap("save_area_json:generate_npc", required=False)
+    @ctx.wrap("save_area_json:generate_npc", required=False, safe=True)
     def generate_npc(orig, *args, **kwargs):
         """MOD が NPC を作るときに真似る相手。
 
@@ -492,7 +520,7 @@ def apply(ctx):
     # 世界が載るのはタイトルで「つづきから」を押した後。
     # `on_ready` の時点ではまだ無いことがあるので、**プレイヤーが何か押すたびに試す**。
     # 印が立った後は数を1つ比べるだけなので、押下の経路を重くしない。
-    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
+    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False, safe=True)
     def retry_census(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
         try:

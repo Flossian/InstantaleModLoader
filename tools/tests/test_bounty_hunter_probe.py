@@ -16,6 +16,9 @@
   枠       … 位置・大きさ・濃さが動いたときだけ1行。子の数だけの変化では書かない。
              上限の後とメインスレッド以外では枠を読まない（版3）
   持ち越し … 強さの表と件数は注入し直しをまたいで効く。呼び出し元は最初の N 件だけ（版3）
+  版4      … 強さの表は素の値で書き、他の probe の試し打ちの間は録らない。
+             枠は動かない呼び出しも読んだ回数に数え、その上限でも読む前に抜ける。
+             HUD は同じ受け手なら探し直さない
   壊れても … 記録が失敗しても本体は呼ばれ、戻り値は変わらない
   経路     … 対象が全部登録される
 """
@@ -476,6 +479,49 @@ def main():
     check("メインスレッド以外では枠を読まない（版3）",
           not reads and len(calls) == 1, (reads, calls))
 
+    print("枠を読む回数（版4）")
+    app3 = App({"0": -5})
+    module, ctx = fresh_mod(app3)
+    hud3 = app3.hud
+    finds = []
+    geometry_reads = []
+    real_find_hud = module.ui.find_hud
+    module.ui.find_hud = lambda app: finds.append(app) or real_find_hud(app)
+    real_geometry = module.panel_geometry
+    module.panel_geometry = lambda hud: geometry_reads.append(hud) or real_geometry(hud)
+    for _ in range(3):
+        orig, calls = counting("戻り値")
+        ctx.hooks[panel_target](orig, hud3)
+    sys_store = getattr(sys, module.STORE_ATTR)
+    check("動かない呼び出しも読んだ回数に数える",
+          sys_store["screen"]["panel_reads"] == 3
+          and sys_store["screen"]["panels"] == 0, sys_store["screen"])
+    check("同じ受け手なら HUD を探し直さない（3回で1回だけ探す）",
+          len(finds) == 1 and len(geometry_reads) == 6, (finds, len(geometry_reads)))
+    orig, calls = counting("戻り値")
+    ctx.hooks["__main__:InstantaleApp.display_button_load"](orig, app3)
+    check("控えた HUD の app が受け手でも探し直さない",
+          len(finds) == 1 and len(calls) == 1, finds)
+    other = App({"0": -5})
+    orig, calls = counting("戻り値")
+    ctx.hooks[panel_target](orig, other.hud)
+    check("受け手が違えば探し直す", len(finds) == 2, finds)
+    sys_store["screen"]["panel_reads"] = (
+        module.SCREEN_SAMPLES * module.PANEL_READS_PER_SAMPLE)
+    before_reads = len(geometry_reads)
+
+    def collapse3(*args, **kwargs):
+        hud3.top_info_layout_battle.opacity = 0
+        return "戻り値"
+
+    returned = ctx.hooks[panel_target](collapse3, hud3)
+    check("読んだ回数の上限の後は、枠が動く呼び出しでも読まずに素通しする",
+          returned == "戻り値" and len(geometry_reads) == before_reads
+          and not [r for r in read_records() if r["phase"] == "枠が動いた"],
+          (len(geometry_reads), before_reads))
+    module.ui.find_hud = real_find_hud
+    module.panel_geometry = real_geometry
+
     print("強さの表")
     module, ctx = fresh_mod(app)
     target = "scripts.functions:get_enemy_exp_lvl"
@@ -486,15 +532,39 @@ def main():
     ctx.hooks[target](orig, 3, 5)
     rows = [row for row in read_records() if row["phase"] == "strength"]
     check("同じ引数の組は1度しか書かない", len(rows) == 2, rows)
-    check("引数と戻り値が対で残る",
-          rows[0]["args"][0]["value"] == 2 and rows[0]["result"]["value"] == 12,
-          rows[0])
+    check("引数と戻り値が素の値の対で残る（版4。{type, value} に包まない）",
+          rows[0]["args"] == [2, 5] and rows[0]["result"] == 12
+          and rows[0]["kwargs"] == {}, rows[0])
+    orig, calls = counting([3, "四"])
+    ctx.hooks[target](orig, 4, level=7)
+    rows = [row for row in read_records() if row["phase"] == "strength"]
+    check("キーワードと並びの戻り値も素の値で残る",
+          rows[-1]["args"] == [4] and rows[-1]["kwargs"] == {"level": 7}
+          and rows[-1]["result"] == [3, "四"], rows[-1])
+    import threading
+    setattr(sys, "_instantale_probe_dry_run_thread", threading.get_ident())
+    try:
+        orig, calls = counting(30)
+        ctx.hooks[target](orig, 9, 9)
+    finally:
+        delattr(sys, "_instantale_probe_dry_run_thread")
+    rows = [row for row in read_records() if row["phase"] == "strength"]
+    check("他の probe の試し打ちの間は録らない（版4。本体は呼ばれる）",
+          not [r for r in rows if r["args"] == [9, 9]] and len(calls) == 1
+          and (target.rpartition(":")[2], (9, 9), ())
+          not in getattr(sys, module.STORE_ATTR)["strength"], rows)
+    orig, _ = counting(30)
+    ctx.hooks[target](orig, 9, 9)
+    rows = [row for row in read_records() if row["phase"] == "strength"]
+    check("試し打ちが終われば同じ組を録る",
+          [r for r in rows if r["args"] == [9, 9]], rows)
+    written = len(rows)
     module, ctx = reapply(app)
     orig, _ = counting(12)
     ctx.hooks[target](orig, 2, 5)
     rows = [row for row in read_records() if row["phase"] == "strength"]
     check("注入し直しても同じ組は書き直さない（版3。控えは sys にある）",
-          len(rows) == 2, rows)
+          len(rows) == written, rows)
     module, ctx = fresh_mod(app)
     module.SCALING_SAMPLES = 0
     orig, calls = counting(12)

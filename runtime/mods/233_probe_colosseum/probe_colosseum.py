@@ -82,6 +82,12 @@ r"""計測: 闘技場の試合（相手の強さと報酬）。ゲームは変�
   * 窓が閉じ損ねると（試合の途中でロードしたとき）、次の申し込みまで開いたままで、
     闘技場の外の戦闘の手も窓に積まれていた。ロードと新規開始
     （`InstantaleApp.load_game_new` / `start_game`）の前で窓を閉じる
+
+## 版5（見直し）
+
+  * `GameOverManager.__init__` の包みだけ闘技場の判定が無く、依頼や衛兵の戦闘で負けたときも
+    呼び出し元と主人公の写しを組んで1行書いていた。版4の続きの方針に揃え、
+    窓が開いているか `in_colosseum_battle` が立っているとき（`in_arena`）だけ録る
 """
 
 import datetime
@@ -823,18 +829,20 @@ def apply(ctx):
             app = args[0] if args else kwargs.get("app")
             target = app or ui.find_app()
             match = state["match"]
-            if match is not None:
-                match["game_over"] = True
-            caller = frames.caller()
-            write("GameOverManager(): flags={} player={} from {}".format(
-                flags_of(target), player_brief(target), caller))
-            record({"at": now(), "phase": "game_over", "flags": flags_of(target),
-                    "player": player_brief(target), "arena": arena_here(target),
-                    "caller": caller, "enemy_type": state["enemy_type"],
-                    "match": (match or {}).get("seq"),
-                    "steps": (match or {}).get("steps")})
-            if match is not None:
-                close_match(target, "game over")
+            # 版5: 闘技場の外のゲームオーバーは録らない（判定を呼び出し元の組み立てより先に）。
+            if in_arena(target):
+                if match is not None:
+                    match["game_over"] = True
+                caller = frames.caller()
+                write("GameOverManager(): flags={} player={} from {}".format(
+                    flags_of(target), player_brief(target), caller))
+                record({"at": now(), "phase": "game_over", "flags": flags_of(target),
+                        "player": player_brief(target), "arena": arena_here(target),
+                        "caller": caller, "enemy_type": state["enemy_type"],
+                        "match": (match or {}).get("seq"),
+                        "steps": (match or {}).get("steps")})
+                if match is not None:
+                    close_match(target, "game over")
         except Exception:
             ctx.log_exc("colosseum probe: cannot record the game over")
         return orig(self, *args, **kwargs)

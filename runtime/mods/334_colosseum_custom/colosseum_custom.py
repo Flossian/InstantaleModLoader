@@ -761,14 +761,12 @@ def apply(ctx):
         fallen = state.get("fallen") or {}
         if not fallen:
             return
-        party = getattr(app, "party", None)
-        escaped = getattr(app, "escaped_member_in_battle", None)
+        # 戻し方はローダの語彙（`107_` / `147_` / 窓口 `defeat` と同じ1つ）。
+        back, _missing = ui.put_back_party(
+            app, [(member_id, kept["value"]) for member_id, kept in fallen.items()])
         for member_id, kept in list(fallen.items()):
             value = kept["value"]
-            if isinstance(party, dict) and member_id not in party:
-                party[member_id] = value
-                if isinstance(escaped, dict):
-                    escaped.pop(member_id, None)
+            if member_id in back:
                 write("WARN fallen: {}: the game did not bring {} back; put back by hand".format(
                     where, member_id))
             else:

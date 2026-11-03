@@ -24,8 +24,8 @@
         "en": "Records to write"
       },
       "note": {
-        "ja": "1プロセスあたり。値切りの境目・LLM の戻り・値切った品の額の変化・売買を合わせて数える",
-        "en": "Per process, counting negotiations, negotiator results, price changes of haggled items and trades together"
+        "ja": "1プロセスあたり。値切りの境目・LLM の戻り・値切った品の額の変化・売買を合わせて数える。値切った品の売買は別に100件まで書く",
+        "en": "Per process, counting negotiations, negotiator results, price changes of haggled items and trades together. Trades of haggled items are counted apart, up to 100"
       }
     }
   }

@@ -1147,6 +1147,10 @@ check_battle_end / enemy_delete_animation / convert_llm_output_to_instruction_di
   1手の前後で敵の状態を比べる MOD は、この抜けた敵を別に拾わないと取りこぼす
   （`308_` がとどめの一撃を取りこぼした原因）
 
+`resolve_battle_effect` の署名は `(self, character_key, character_side, battle_action, effect_to_enemies, *args)`（recon）。
+第1引数は `battle_action` の dict ではなく `character_key`。
+`236_probe_enemy_stats` 版5 は、引数の型と主な属性を `kind: resolve_args` の1行で1プロセス1回だけ書く。
+
 > 入れ子の順序（`calculate` → `resolve` → `process`）は署名から読んだだけで実測していない。
 > `308_` はこの順序に寄りかからない形（1手の外側で HP の差を測る）にしてある。
 
@@ -1467,6 +1471,9 @@ NPC（敵・仲間）の魔法   2 × magic_power × k
 この段に入らないと分かった倍率の2通りを外した（1人12通り → 10通り）。
 試し打ちの間は `sys._instantale_probe_dry_run_thread` にそのスレッドの id を置き、
 `222_probe_battle_mechanics` はその間の計算を記録しない。
+印は立てる前の値を控えて戻す（入れ子でも外側の印を消さない。236 版5）。
+同じ印を `243_probe_value_curves` の一括計測と `215_probe_event_roll` の換算・`244_probe_ability_reads` の試しも立て、
+`214_` / `215_` / `220_` / `221_` / `222_` / `244_` は印の立っている自分のスレッドの呼び出しを記録しない（11-03。VERIFICATION.md §3.122）。
 
 ##### 記録に残らないもの
 
@@ -1540,6 +1547,12 @@ apply_music_volume(app)         main_023 で追加
 曲は再生のたびに `Sound(パス)` で作られるので、
 `SoundManager.sounds`（起動時に読む15種）と `play_sound*` の分を除外集合にすれば、
 残ったループ音は曲と言える。
+`207_probe_battle_bgm` 版4 は `mixer` の行で、鳴っているチャンネルごとに音の名前を添える。
+`app.music` と同じ音は `app.music`、鳴らす口・止める口に渡された相手の曲は `target.music`、
+`SoundManager.sounds` の音は `sounds[名前]`、どれでもない音は `other 長さs`。
+曲の本数 `music=N` は `app.music`・`target.music`・30秒以上の `other` を数える（行の例 `2/8 channel(s) busy: [0, 3]  music=1 (0=app.music, 3=sounds[斬撃])`）。
+11-03 の依頼の戦闘では、効果音は `sounds[名前]` ではなく `other 3.1s` で出た（`342_attack_animations` は `SoundManager.sounds` の外の音のファイルを鳴らす）。
+曲は `other 104.2s`〜`179.8s` で、30秒の境目で分かれた。
 
 止められなくなった曲は、止めずに `app.music` へ入れ直すと音が途切れず、
 しかも以後ゲーム自身の `stop_music` が効くようになる。
@@ -2142,6 +2155,20 @@ LLM へ渡る品の額は、そのときの `attributes` の額（店の品は�
 - 手持ちの品の `売価` に書いた額は、次に売買の窓を開いたときにゲームが付け直す（`set_shop_price_for_player`）。売る側の値切りは、その窓を閉じるまで
 - 売買の確認の表示と動く額はその額どおり。持ち主が変わると、ゲームが新しい持ち主の鍵で額を付け直す（`buy_item` / `sell_item` の中。値段の地点は通らない）
 
+##### 2.13.1.5 品を作る入口の戻りは品ではない（実測。VERIFICATION.md §3.121）
+
+2026-11-03 にテストワールドで入口を直に呼んで測った（作った品は抜いて戻した）:
+
+| 入口 | 戻り | 品の行き先 |
+| --- | --- | --- |
+| `generate_item_from_item_data(item_name, description, item_type, item_sub_type, value, item_appearance, rarity, obtainer)` | `(Item, 鍵)`（例 `(<Item>, 'item_91307')`）。`410_` の記録でも422回すべて tuple | `obtainer` の持ち物（同じ鍵） |
+| `generate_item_from_dict(item_dict, item_id, obtainer)` | None | `obtainer` の持ち物（渡した `item_id`） |
+| `generate_item_from_ready_made_data(obtainer, item_data, *args)` | 測っていない | |
+
+- `generate_item_from_item_data` で作った品は、主人公へ作っても店の主へ作っても `買価` / `売価` を持たない。額はゲームが値段の地点（`set_shop_price_for_*` / `normalize_shop_inventory_prices`）で付ける
+- `generate_item_from_dict` で作った品は、渡した辞書の額をそのまま持つ（読み込みで組み直す品はセーブの額）
+- 戻りをそのまま品として読むと、何もしないで抜ける。取り出し方は TECH.md §5.7 の `items.made_item`
+
 ##### 店の主は `job` が施設の種類と一致している
 
 実セーブで、主の居る施設67件を全部突き合わせた結果:
@@ -2238,7 +2265,11 @@ gold に直すのは `get_item_base_price` と `get_randomized_item_price`。
 - 渡る難易度は 70 を越える（85 まで観測）。スキーマの「1〜70」は LLM に見せる目盛りの説明で、ゲームの関数が切る値ではない。
   値段の関数の定義域は 0..76（§3 の `get_npc_employ_price` の走査）で、`318_` の難易度の上限の既定もこれに合わせてある。
   `get_weapon_spec` は 85 でも値を返した
-- 防具の `防御力` が同じ関数から作られるかは測っていない
+- 防具の `防御力` も同じ関数から作られる。11-03 の鍛冶屋の品揃えで、`243_` 版3の `link` に
+  `body_armor value=86 防御力 359 ← get_weapon_spec(86)=359`、`headgear value=83 防御力 341 ← get_weapon_spec(83)=341` と出た
+  （武器も同じ時に `long_weapon value=85 攻撃力 363 ← get_weapon_spec(85)=363`。`923_beyond_76` を入れた状態なので 76 を超えた分は 923 が延ばした値）
+- 品を作る入口 `generate_item_from_item_data` の戻り値は `(Item, str)` の tuple、`generate_item_from_dict` は None（`243_` の `link_result`）。
+  入口の戻り値を品として読む包みは空振りする。品は入口の間の `Item.__init__` で拾う（`410_` / `243_` 版3）
 
 ##### 値段は `attributes` に書かれている
 
@@ -2614,11 +2645,29 @@ process_choice(VacationEndManager,   '宿泊を終える')
 
 - 部屋は4つ。`犬小屋(0G)`＝`'kennel'` / `簡易寝台(10G)`＝`'bunk'` /
   `個室(100G)`＝`'private_room'` / `高級個室(1000G)`＝`'luxury_suite'`。
-- `宿泊する(Nヵ月)` の月数はプレイヤーの年齢の変動式（若いと3ヵ月、最長6ヵ月）。
+- `宿泊する(Nヵ月)` の月数はプレイヤーの年齢の変動式（若いと3ヵ月）。
   N は滞在の上限で、1回の長さではない。
   部屋選びが渡す `VacationStartManager` の第1引数は常に 1（実機5回とも `init_args=['1', ...]`）。
   MOD が N を渡すと N ヵ月分の暦と宿代が一度に動く（`331_` が踏んだ）。
-  実測は 20代=3・31歳=4 の2点だけで、年齢ごとの境目は未実測
+  年齢ごとの月数は `218_probe_vacation` の `display_vacation_choice` 160件（08-18〜11-01）で次の9点。
+  6ヵ月は上限ではない（49歳で7）。9点すべてに合う式の候補は `max(3, 年齢 // 7)` で、
+  27〜30・35〜41・43〜48・50歳以上は測っていない。
+
+  | 年齢 | 月数（`period_months`） | 件数 |
+  | --- | --- | --- |
+  | 20 | 3 | 1 |
+  | 22 | 3 | 20 |
+  | 23 | 3 | 7 |
+  | 25 | 3 | 50 |
+  | 26 | 3 | 2 |
+  | 31 | 4 | 68 |
+  | 34 | 4 | 9 |
+  | 42 | 6 | 1 |
+  | 49 | 7 | 2 |
+
+  `315_vacation_custom` の年齢の足し分は混ざっていない。
+  `DisplayVacationChoice.__init__` の包みは 315 → 218 の順（218 が外側）で、218 は 315 が `period_months` を差し替える前の引数を見る
+  （同じ時刻の `vacation_custom.log` に `stay: period_months 7 -> 1` がある）
 - 日数と宿代は `VacationStartManager.execute` の中で1回ずつ動く。
   宿泊の開始時点で全期間ぶんが一度に進むので、途中の活動を何回挟んでも暦は動かない
 - 1泊＝活動1回。`out/vacation.jsonl` の宿泊 54 回すべてが

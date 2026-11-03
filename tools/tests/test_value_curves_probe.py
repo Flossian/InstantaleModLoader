@@ -19,6 +19,7 @@ import io
 import json
 import os
 import random
+import shutil
 import sys
 import types
 
@@ -28,6 +29,7 @@ MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
+import instantale_modloader as ml       # noqa: E402
 from instantale_modloader import gates  # noqa: E402
 
 
@@ -117,6 +119,11 @@ class App(object):
         self.player = types.SimpleNamespace(inventory={"item_0": self.sword})
 
 
+OUT_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "out", "test", "value_curves"))
+shutil.rmtree(OUT_DIR, ignore_errors=True)
+os.makedirs(OUT_DIR, exist_ok=True)
+
+
 class Ctx(object):
     def __init__(self):
         self.hooks, self.rows, self.lines, self.errors = {}, [], [], []
@@ -128,7 +135,13 @@ class Ctx(object):
         return self.rows.append
 
     def out_path(self, *parts):
-        return os.path.join("out", *parts)
+        return os.path.join(OUT_DIR, *parts)
+
+    def read_json(self, path, default=None):
+        return ml.read_json(path, default, report=self.log_exc)
+
+    def write_json(self, path, data, *, indent=1):
+        return ml.write_json(path, data, indent=indent, report=self.log_exc)
 
     def log(self, msg, level="INFO"):
         self.lines.append(msg)
@@ -234,12 +247,102 @@ check("戻りは変えない", isinstance(made, Item) and made.value == 24)
 spec_hook(get_weapon_spec, 10)
 check("入口の外の呼び出しは束ねない", len(rows("link")) == len(links))
 
+print("出どころ（戻りが品でない入口）")
+init_hook = ctx.hooks["scripts.items:Item.__init__"]
+
+
+def build(item_type, value, attributes):
+    """ゲームの `Item(...)` の代わり。`Item.__init__` の包みを通して組む。"""
+    item = Item.__new__(Item)
+    init_hook(Item.__init__, item, item_type, value, attributes)
+    item.name = "鉄の剣"
+    return item
+
+
+def make_tuple(self, data):
+    stat = spec_hook(get_weapon_spec, data["value"])
+    return (build("weapon", data["value"], {"item_detail": "small_weapon", "攻撃力": stat}), True)
+
+
+before_links = len(rows("link"))
+result = entry(make_tuple, app, {"value": 40})
+tuple_links = rows("link")[before_links:]
+check("戻りは変えない（tuple）", isinstance(result, tuple) and result[1] is True)
+check("窓の間に組まれた品が link の行に出る",
+      len(tuple_links) == 1 and tuple_links[0]["item_type"] == "weapon"
+      and tuple_links[0]["value"] == 40 and tuple_links[0]["stats"]["攻撃力"] == tuple_links[0]["spec_calls"][0][2],
+      tuple_links)
+check("同じ品を2度数えない（組まれた品と戻りの中の品）",
+      tuple_links and len(tuple_links[0]["items"]) == 1, tuple_links)
+shapes = [r for r in rows("link_result") if r["entry"] == "generate_item_from_item_data"]
+check("戻りの形は入口ごとに1回", len(shapes) == 1, shapes)
+from_dict = ctx.hooks["__main__:InstantaleApp.generate_item_from_dict"]
+before_links = len(rows("link"))
+from_dict(lambda self, data: None, app, {})
+check("品が取れない回は link を書かず数えない",
+      len(rows("link")) == before_links
+      and mod.counts()["link"].get("generate_item_from_dict", 0) == 0, mod.counts()["link"])
+from_dict(lambda self, data: (build("material", 3, {"item_detail": "ore"}), None, 7), app, {})
+shapes = [r for r in rows("link_result") if r["entry"] == "generate_item_from_dict"]
+check("戻りの形は要素ごとの型名と品の名前",
+      len(shapes) == 1 and shapes[0]["result"]["type"] == "NoneType", shapes)
+check("2回目の入口では戻りの形を書かない",
+      len([r for r in rows("link_result") if r["entry"] == "generate_item_from_dict"]) == 1)
+check("組まれた品は入口ごとに数える",
+      mod.counts()["link"].get("generate_item_from_dict") == 1 and rows("link")[-1]["item_type"] == "material",
+      mod.counts()["link"])
+mod.LINK_SAMPLES = 1
+before_links = len(rows("link"))
+from_dict(lambda self, data: build("material", 4, {"item_detail": "ore"}), app, {})
+check("上限は入口ごと（上限の後は書かない）", len(rows("link")) == before_links)
+ready = ctx.hooks["__main__:InstantaleApp.generate_item_from_ready_made_data"]
+ready(lambda self, data: build("weapon", 5, {"item_detail": "small_weapon"}), app, {})
+check("別の入口はまだ書ける", len(rows("link")) == before_links + 1
+      and rows("link")[-1]["entry"] == "generate_item_from_ready_made_data", rows("link")[-1:])
+mod.LINK_SAMPLES = 60
+
 print("切り")
 clamp = ctx.hooks["scripts.functions:clamp_quest_difficulty_value"]
 for _arg in (50, 83, 83):
     clamp(clamp_quest_difficulty_value, _arg)
 cut = rows("clamp")
 check("切った回だけ、組ごとに1回", len(cut) == 1 and cut[0]["arg"] == 83 and cut[0]["result"] == 76, cut)
+mod.CLAMP_SAMPLES = 1
+clamp(clamp_quest_difficulty_value, 90)
+check("上限の後は書かない", len(rows("clamp")) == 1, rows("clamp"))
+mod.CLAMP_SAMPLES = 40
+
+print("指紋（次のプロセス）")
+check("全表と指紋の控えを書く", os.path.isfile(os.path.join(OUT_DIR, mod.CURVES_BASENAME)))
+
+
+def sweep_again():
+    """1プロセス1回の印を外し、別のプロセスとして流し直す。"""
+    if hasattr(sys, mod.SWEPT_MARK):
+        delattr(sys, mod.SWEPT_MARK)
+    fresh = Ctx()
+    mod.apply(fresh)
+    fresh.hooks["__main__:InstantaleApp.load_game_new"](lambda *a, **k: None, app)
+    return fresh
+
+
+gates.reset_all()
+second = sweep_again()
+curves2 = [r for r in second.rows if r.get("kind") == "curve"]
+same2 = [r for r in second.rows if r.get("kind") == "curve_same"]
+check("前回と同じなら全表を出さない（乱数を引く関数も）", not curves2, [r["fn"] for r in curves2])
+check("同じ曲線は1行にまとめる", len(same2) == 1 and "get_weapon_spec" in same2[0]["fns"], same2)
+functions.get_quest_reward = lambda quest_difficulty: min(quest_difficulty, 90) * 300
+setattr(sys, mod.DRY_THREAD_MARK, 12345)              # 別の試しが置いた印
+gates.reset_all()
+third = sweep_again()
+curves3 = [r for r in third.rows if r.get("kind") == "curve"]
+check("変わった曲線だけ全表を出す", [r["fn"] for r in curves3] == ["get_quest_reward"], [r["fn"] for r in curves3])
+check("前の値を添える", curves3 and curves3[0]["previous"]["plateau_from"] == 76
+      and curves3[0]["plateau_from"] == 90, curves3 and curves3[0].get("previous"))
+check("試し打ちの印は置く前の値へ戻す", getattr(sys, mod.DRY_THREAD_MARK, None) == 12345)
+delattr(sys, mod.DRY_THREAD_MARK)
+check("例外を出していない（2回目以降）", not second.errors and not third.errors, (second.errors, third.errors))
 
 print()
 print("FAILED: {}".format(failures) if failures else "all ok")

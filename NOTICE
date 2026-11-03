@@ -96,6 +96,15 @@ MIT で配っているが、著作権表示（LICENSE の Copyright 行）は提
 （all-MiniLM-L6-v2、Apache License 2.0）で、作者が書いた説明文から計算したもの。モデルの重みは含めない。
 
 --------------------------------------------------------------------------
+第三者のもの
+--------------------------------------------------------------------------
+
+**131_sharp_portrait の models/face_detection_yunet_2023mar.onnx は、本プロジェクトの著作物ではない。**
+OpenCV の顔検出モデル YuNet（opencv_zoo、https://github.com/opencv/opencv_zoo）で、
+著作権は Shiqi Yu にあり、MIT License で配られている。
+同じフォルダの LICENSE.yunet.txt がその原文（著作権表示を含む）で、モデルと一緒に配る。
+
+--------------------------------------------------------------------------
 MIT が及ばないもの
 --------------------------------------------------------------------------
 
@@ -218,6 +227,14 @@ AI-GENERATED IMAGES
   were computed from the author's captions with the sentence-embedding model
   bundled with the game (all-MiniLM-L6-v2, Apache License 2.0); the model
   weights are not included.
+
+THIRD-PARTY FILES
+  models/face_detection_yunet_2023mar.onnx in 131_sharp_portrait is not this
+  project's work. It is YuNet, OpenCV's face detection model from opencv_zoo
+  (https://github.com/opencv/opencv_zoo), Copyright (c) 2020 Shiqi Yu,
+  distributed under the MIT License. Its license text, including the
+  copyright notice, is LICENSE.yunet.txt in the same folder and ships with
+  the model.
 
 NOT COVERED
   Instantale itself, its executables, its assets (images, audio, text), and

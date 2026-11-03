@@ -78,11 +78,26 @@
   副作用が無いことを確かめる手段が無く（ソースは読めない）、
   答え（5つとも `__main__.X` に解決する）は GAME.md に記録済み
 - 本体を呼ぶ前の記録を try に入れた
+
+版4: 見張りの約束を揃え、指紋の照合を軽くした。
+
+- 包みをすべて `safe=True` にした
+- ステップ・プログラム・フラグの数えを `sys` に置いた（`COUNTS_MARK`）。
+  版3は apply ごとの器に持っていて、注入し直すたびに上限が0から数え直しになっていた
+- 定数のダンプの指紋は、ログの横の小さな控え（`FINGERPRINT_BASENAME`）で照らす。
+  版3は照らすたびにログを丸ごと読んでいた（10MB を超える）。
+  控えには指紋と、ログの中でその印が始まる位置を書き、照らすときはその位置の数十バイトだけを読む。
+  ログが1世代送られる（注入のたび。`tools/logrotate.py`）と、その位置に印は無いので全文を書き直す（版3と同じ扱い）。
+  控えが無い・読めないときは、版3と同じくログを1回だけ丸ごと探し、見つかればその位置を控えに書く（全文は書かない）
+- 世界の調査の再試行（`on_button_press` の包み）は、ローダの `loads.on` には寄せなかった。
+  `loads` はロードと新規開始の直後に1回来るだけで、起動直後の注入のやり直しとロードが重なると来ないことがある
+  （`317_` が実機で踏んだ。VERIFICATION.md §3.36）。いまの包みは、そうなっても次に押した時に拾える
 """
 
 import datetime
 import hashlib
 import json
+import os
 import sys
 
 from instantale_modloader import frames, ui
@@ -99,6 +114,13 @@ GEN_MODULE = "scripts.llm.llm_manager_free_facility"
 # §3.6 と同じ理由）。
 DUMP_MARK = "_instantale_probe_ff_dumped"
 SURVEY_MARK = "_instantale_probe_ff_surveyed"
+# 上限つきの数え（版4。apply ごとの器に持つと注入し直しで0に戻る）。
+COUNTS_MARK = "_instantale_probe_ff_counts"
+
+# 定数のダンプの指紋の控え（版4）。`out\` の直下に置く。
+# 中身は `{"fingerprint": 指紋, "offset": ログの中で印の行が始まるバイト位置}`。
+# `.json` なので `tools/logrotate.py` の世代送り（`*.log` と `*.jsonl`）には掛からない。
+FINGERPRINT_BASENAME = "free_facility.fingerprint.json"
 
 # 全文を出す定数。
 # **`scripts.free_facility` ではなく生成側（`llm_manager_free_facility`）に置かれている。**
@@ -153,15 +175,57 @@ PROGRAM_ID_PREFIX = "free_"
 MAX_FREE_DUMPS = 3
 
 
+def _counts() -> dict:
+    """上限つきの数え。プロセスに1つ（版4）。
+
+    `flags` だけは集合（同じ鍵を二度数えないため。`MAX_FLAG_SAMPLES` は種類数の上限）。
+    """
+    counts = getattr(sys, COUNTS_MARK, None)
+    if not isinstance(counts, dict):
+        counts = {}
+        setattr(sys, COUNTS_MARK, counts)
+    counts.setdefault("steps", 0)          # MAX_STEP_EVENTS
+    counts.setdefault("programs", 0)       # MAX_PROGRAM_DUMPS
+    counts.setdefault("flags", set())      # MAX_FLAG_SAMPLES（種類）
+    return counts
+
+
+def _size_of(path) -> int:
+    """ファイルの大きさ（バイト）。無ければ 0。"""
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return 0
+
+
+def _find_marker(path, marker, start) -> int:
+    """`start` バイト目から後ろで `marker` の行が始まる位置。見つからなければ -1（版4）。"""
+    needle = marker.encode("ascii")
+    try:
+        with open(path, "rb") as handle:
+            handle.seek(start)
+            found = handle.read().find(needle)
+    except Exception:
+        return -1
+    return start + found if found >= 0 else -1
+
+
+def _marker_at(path, marker, offset) -> bool:
+    """`offset` バイト目から `marker` が始まっているか（版4）。読むのは印の長さだけ。"""
+    if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+        return False
+    needle = marker.encode("ascii")
+    try:
+        with open(path, "rb") as handle:
+            handle.seek(offset)
+            return handle.read(len(needle)) == needle
+    except Exception:
+        return False
+
+
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME, stamp=False)
-    # 上限つきの器。
-    # `flags` だけは集合（同じ鍵を二度数えないため。`MAX_FLAG_SAMPLES` は種類数の上限）。
-    state = {
-        "steps": 0,        # MAX_STEP_EVENTS
-        "programs": 0,     # MAX_PROGRAM_DUMPS
-        "flags": set(),    # MAX_FLAG_SAMPLES（種類）
-    }
+    state = _counts()
 
     def stamp():
         return datetime.datetime.now().isoformat(timespec="milliseconds")
@@ -222,7 +286,7 @@ def apply(ctx):
     # フックの登録を先に済ませる（未 import なら保留され、現れた時点で当て直る）
     # ------------------------------------------------------------------
 
-    @ctx.wrap(MODULE + ":FreeFacilityManager.__init__", required=False)
+    @ctx.wrap(MODULE + ":FreeFacilityManager.__init__", required=False, safe=True)
     def manager_init(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
         try:
@@ -236,7 +300,7 @@ def apply(ctx):
             ctx.log_exc("free facility probe: manager init record failed")
         return result
 
-    @ctx.wrap(MODULE + ":FreeFacilityManager._lookup_program", required=False)
+    @ctx.wrap(MODULE + ":FreeFacilityManager._lookup_program", required=False, safe=True)
     def lookup_program(orig, self, *args, **kwargs):
         program = orig(self, *args, **kwargs)
         try:
@@ -256,7 +320,7 @@ def apply(ctx):
             ctx.log_exc("free facility probe: program dump failed")
         return program
 
-    @ctx.wrap(MODULE + ":FreeFacilityManager._flag_store", required=False)
+    @ctx.wrap(MODULE + ":FreeFacilityManager._flag_store", required=False, safe=True)
     def flag_store(orig, self, *args, **kwargs):
         store = orig(self, *args, **kwargs)
         try:
@@ -292,7 +356,7 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("free facility probe: step record failed")
 
-    @ctx.wrap(MODULE + ":FreeFacilityManager._do_elapse", required=False)
+    @ctx.wrap(MODULE + ":FreeFacilityManager._do_elapse", required=False, safe=True)
     def do_elapse(orig, self, *args, **kwargs):
         # `307_` は日数送りが `elapse_days` を通らないビルドを踏んでいる。
         # ここで実際に呼ばれるかどうかを見る（宣言ではなく実測）。
@@ -300,30 +364,30 @@ def apply(ctx):
                    lambda: frames.repr_value(first_arg(args, kwargs, "step")))
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap(MODULE + ":FreeFacilityManager._effect_item_add", required=False)
+    @ctx.wrap(MODULE + ":FreeFacilityManager._effect_item_add", required=False, safe=True)
     def effect_item_add(orig, self, *args, **kwargs):
         step_event("_effect_item_add", lambda: frames.repr_value(args))
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap(MODULE + ":FreeFacilityManager._effect_exp_add", required=False)
+    @ctx.wrap(MODULE + ":FreeFacilityManager._effect_exp_add", required=False, safe=True)
     def effect_exp_add(orig, self, *args, **kwargs):
         step_event("_effect_exp_add", lambda: frames.repr_value(args))
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap(MODULE + ":FreeFacilityManager._do_llm", required=False)
+    @ctx.wrap(MODULE + ":FreeFacilityManager._do_llm", required=False, safe=True)
     def do_llm(orig, self, *args, **kwargs):
         # LLM ステップの出力モード（fields / choice / text）が実際にどう使われるか。
         # 「AI に描写させ、進行はスクリプトが持つ」形の実例になる。
         step_event("_do_llm", lambda: frames.repr_value(args[1:2] or args))
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap(MODULE + ":FreeFacilityManager.execute", required=False)
+    @ctx.wrap(MODULE + ":FreeFacilityManager.execute", required=False, safe=True)
     def execute(orig, self, *args, **kwargs):
         step_event("execute", lambda: "choice_text=" + frames.repr_value(
             first_arg(args, kwargs, "choice_text")))
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap(GEN_MODULE + ":generate_program", required=False)
+    @ctx.wrap(GEN_MODULE + ":generate_program", required=False, safe=True)
     def generate_program(orig, *args, **kwargs):
         try:
             write("\n[{}] generate_program(args={} kwargs={})".format(
@@ -374,26 +438,58 @@ def apply(ctx):
         fingerprint = hashlib.sha1(
             text.encode("utf-8", "replace")).hexdigest()[:16]
         marker = "# fingerprint={}".format(fingerprint)
-        if logged_before(marker):
+        log_path = ctx.out_path(LOG_BASENAME)
+        if logged_before(log_path, fingerprint, marker):
             write("\n[{}] free facility engine dump unchanged ({}; "
                   "the full dump is earlier in this log)".format(
                       stamp(), marker[2:]))
             return
+        start = _size_of(log_path)
         write("\n".join(["", "#" * 72,
                          "# {}  free facility engine dump".format(stamp()),
                          marker, "#" * 72, text]))
+        # 書いた後に、書き足した部分から印の位置を探して控える（版4）。
+        # 書けなかったときは見つからないので控えない（次の起動でもう一度書く）。
+        offset = _find_marker(log_path, marker, start)
+        if offset >= 0:
+            remember(fingerprint, offset)
 
-    def logged_before(marker):
-        """同じ指紋のダンプがこのログに既に在るか（版3）。
+    def logged_before(log_path, fingerprint, marker):
+        """同じ指紋のダンプがこのログに既に在るか（版3。版4で控えを使うようにした）。
 
-        ログを1世代送った後は無いので、全文をもう一度書くことになる（それが正しい）。
+        控えがあれば、控えた位置に印があるかだけを見る（ログ全体は読まない）。
+        指紋が違う・位置に印が無い（ログが1世代送られた）なら「無い」として全文を書く。
+        控えが無い・読めないときは版3と同じくログを丸ごと探し、見つかれば位置を控える。
         読めなければ「無い」として全文を書く。
         """
-        try:
-            with open(ctx.out_path(LOG_BASENAME), "rb") as handle:
-                return marker.encode("ascii") in handle.read()
-        except Exception:
+        memo = recall()
+        if memo is not None:
+            if memo.get("fingerprint") != fingerprint:
+                return False
+            return _marker_at(log_path, marker, memo.get("offset"))
+        offset = _find_marker(log_path, marker, 0)
+        if offset < 0:
             return False
+        remember(fingerprint, offset)
+        return True
+
+    def recall():
+        """指紋の控えを読む（版4）。無い・読めない・形が違えば None。"""
+        try:
+            with open(ctx.out_path(FINGERPRINT_BASENAME), encoding="utf-8") as handle:
+                memo = json.load(handle)
+        except Exception:
+            return None
+        return memo if isinstance(memo, dict) else None
+
+    def remember(fingerprint, offset):
+        """指紋の控えを書く（版4）。書けなくても計測は続ける（次の起動で探し直す）。"""
+        try:
+            with open(ctx.out_path(FINGERPRINT_BASENAME), "w", encoding="utf-8",
+                      newline="") as handle:
+                json.dump({"fingerprint": fingerprint, "offset": offset}, handle)
+        except Exception:
+            ctx.log_exc("free facility probe: cannot write the fingerprint memo")
 
     def dump_generator(write):
         """生成側の定数を `write` へ出す（版3で書き出し先を引数にした。指紋を取るため）。"""
@@ -541,7 +637,7 @@ def apply(ctx):
     # 世界が載るのはタイトルで「つづきから」を押した後。
     # `on_ready` の時点ではまだ無いことがあるので、**プレイヤーが何か押すたびに試す**。
     # 印が立った後は辞書引き1回で降りるだけなので、押下の経路を重くしない。
-    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False)
+    @ctx.wrap("__main__:InstantaleApp.on_button_press", required=False, safe=True)
     def retry_survey(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
         if not getattr(sys, SURVEY_MARK, False):

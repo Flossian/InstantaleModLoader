@@ -130,7 +130,10 @@ def lawfulness():
 
 
 class Steps(object):
-    """手順を順に走らせる。各手順は関数で、戻り値が数なら次までの秒、"wait" なら手が空くまで待つ。"""
+    """手順を順に走らせる。各手順は関数で、戻り値が数なら次までの秒、"wait" なら手が空くまで待つ。
+
+    "again" なら 0.5 秒後に同じ手順をもう一度走らせる（画面の状態を待つ手順。打ち切りは手順の側で持つ）。
+    """
 
     def __init__(self, say, steps, timeout=900):
         self.say, self.steps, self.started = say, list(steps), time.time()
@@ -163,6 +166,9 @@ class Steps(object):
             return
         if result == "wait":
             Clock.schedule_once(self._wait, 1.0)
+        elif result == "again":
+            self.steps.insert(0, step)
+            Clock.schedule_once(self._next, 0.5)
         else:
             Clock.schedule_once(self._next, float(result or 0.5))
 

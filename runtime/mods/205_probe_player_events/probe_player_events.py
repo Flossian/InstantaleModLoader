@@ -31,13 +31,26 @@
 移動ごとの書き出し・本文・選択の行には1プロセスあたりの上限を設け、
 上限を越えたら何も組み立てずに素通しにする。
 包みはすべて `safe=True` にし、受け取った引数をそのまま `orig` へ渡す（キーワードを位置に直さない）。
+
+版4: 記録の書き方と、LLM の送り口の見張りを直した。
+戻り値が `str` / `dict` などの組み込み型のとき、属性の書き出しが `<vars() unavailable>` を毎回書いていた
+（ゲームの `send_request_with_no_structure` は `str` を返す。GAME.md §2.12）。
+組み込み型は属性を開かず、値の行だけにした（戻り値の行は直前の `-> [型]` で足りるので書かない）。
+起動時の写しと、移動・情景描写・送り口の記録は、行を貯めて1回で書く（`210_` の版3と同じ手）。
+版3は1行ごとにファイルを開いていて、写し1回で約150回開いていた。
+`ctx.logger` は複数行を1回で書けるが、時刻は先頭の行にだけ付く。
+送り口は llama.cpp のプロバイダ（`request_llm_inference_llama_cpp_completion`）だけを包んでいて、クラウドの日は0件だった。
+どのプロバイダでも通る `llm_manager:send_request_with_no_structure`（プロバイダの関数を from-import した別名。GAME.md §2.12）も包む。
+この別名は後から生え、クラウドでは「開始する」のたびに作り直されるので、ローダの `llm.watch_aliases` で当てる。
+ローカルでは同じ関数の別名どうしなので2枚重なることがあり、外側の1枚だけが書く（スレッドごとの入れ子の印）。
+記録の行には、どちらの包みが書いたかを `via` で添える。
 """
 
 import os
 import sys
 import threading
 
-from instantale_modloader import frames, ui
+from instantale_modloader import frames, llm, ui
 
 from instantale_modloader.frames import repr_value
 
@@ -70,6 +83,18 @@ COUNTS_ATTR = "_instantale_probe_player_events_counts"
 # 確認が済んだら False に戻すこと。
 # ゲーム側スレッドを止めないよう別スレッドで走る。
 RUN_LLM_SHAPE_PROBE = False
+
+# LLM の送り口（版4で2つにした）。
+# 1つ目は llama.cpp のプロバイダの関数で、ローカルの日だけ読み込まれる（クラウドの日はローダが保留を降ろす）。
+# 2つ目はプロバイダを問わず通る別名で、後から生える（GAME.md §2.12）。
+LOCAL_SEND_TARGET = ("scripts.llm.request_llm_inference_llama_cpp_completion:"
+                     "send_request_with_no_structure")
+MANAGER_SEND_TARGET = "scripts.llm.llm_manager:send_request_with_no_structure"
+
+
+def _is_builtin(obj) -> bool:
+    """`str` / `dict` / `list` などの組み込み型か（版4）。属性を開いても何も無い。"""
+    return type(obj).__module__ == "builtins"
 
 
 def _guarded(ctx, fn):
@@ -105,23 +130,36 @@ def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
 
     # ----------------------------------------------------------------- 補助
-    def dump_obj(obj, label, indent="  ", full=False):
-        """インスタンスの属性を書き出す。full=False なら INTERESTING のみ中身を出す。"""
+    def dump_obj(lines, obj, label, indent="  ", full=False):
+        """インスタンスの属性を `lines` に足す。full=False なら INTERESTING のみ中身を出す。
+
+        版4: 書き出しは呼ぶ側がまとめて1回で行う（行の並びを受け取って足すだけ）。
+        組み込み型は属性を開かず、値を1行にする（`<vars() unavailable>` は書かない）。
+        """
         if obj is None:
-            write("{}{}: None".format(indent, label))
+            lines.append("{}{}: None".format(indent, label))
             return
-        write("{}{}: {}".format(indent, label, type(obj).__name__))
+        if _is_builtin(obj):
+            lines.append("{}{}: {} = {}".format(
+                indent, label, type(obj).__name__, repr_value(obj)))
+            return
+        lines.append("{}{}: {}".format(indent, label, type(obj).__name__))
         try:
             items = sorted(vars(obj).items())
         except Exception:
-            write("{}  <vars() unavailable>".format(indent))
+            lines.append("{}  <vars() unavailable>".format(indent))
             return
         names = [n for n, _ in items]
-        write("{}  attrs({}): {}".format(indent, len(names), ", ".join(names)))
+        lines.append("{}  attrs({}): {}".format(indent, len(names), ", ".join(names)))
         for name, value in items:
             if not full and not any(k in name.lower() for k in INTERESTING):
                 continue
-            write("{}    {:<28} = {}".format(indent, name, repr_value(value)))
+            lines.append("{}    {:<28} = {}".format(indent, name, repr_value(value)))
+
+    def flush(lines):
+        """貯めた行を1回で書く（版4）。空なら書かない。"""
+        if lines:
+            write("\n".join(lines))
 
     find_app = ui.find_app     # 走っている app の探し方はローダの語彙
 
@@ -144,9 +182,19 @@ def apply(ctx):
             return
         setattr(sys, SNAPSHOT_MARK, True)
 
-        write("=" * 78)
-        write("snapshot (pid {})".format(os.getpid()))
-        dump_obj(app, "app")
+        # 版4: 行を貯めて最後に1回で書く。途中で落ちても、そこまでの行は書く。
+        lines = []
+        try:
+            snapshot_lines(lines, app, player)
+        finally:
+            flush(lines)
+
+    def snapshot_lines(lines, app, player):
+        """`snapshot` の中身。行を `lines` に足すだけで、書かない（版4）。"""
+        emit = lines.append
+        emit("=" * 78)
+        emit("snapshot (pid {})".format(os.getpid()))
+        dump_obj(lines, app, "app")
 
         # app が抱えている主要オブジェクトを、
         # 名前で当てずっぽうに掘らず「型が
@@ -160,7 +208,7 @@ def apply(ctx):
                 cls = getattr(mod, name, None) if mod is not None else None
                 if isinstance(cls, type):
                     types_of_interest[name] = cls
-        write("  resolved classes: {}".format(sorted(types_of_interest)))
+        emit("  resolved classes: {}".format(sorted(types_of_interest)))
 
         try:
             items = sorted(vars(app).items())
@@ -169,7 +217,7 @@ def apply(ctx):
         for attr, value in items:
             for tname, cls in types_of_interest.items():
                 if isinstance(value, cls):
-                    dump_obj(value, "app.{} [{}]".format(attr, tname),
+                    dump_obj(lines, value, "app.{} [{}]".format(attr, tname),
                              indent="    ", full=True)
                     break
 
@@ -180,7 +228,7 @@ def apply(ctx):
         # イベントが読む情報は全てここから取れるので、実物の属性名を確認する。
         for attr in ("location", "current_node", "current_area"):
             obj = getattr(player, attr, None)
-            dump_obj(obj, "app.player.{}".format(attr), indent="    ", full=True)
+            dump_obj(lines, obj, "app.player.{}".format(attr), indent="    ", full=True)
 
         # Node の下の施設一覧（辞書）から、施設オブジェクトの形を1つ見る。
         node = getattr(player, "current_node", None)
@@ -190,10 +238,10 @@ def apply(ctx):
                 if isinstance(fvalue, dict) and fvalue:
                     sample = next(iter(fvalue.values()))
                     if isinstance(sample, facility_cls):
-                        write("    node.{} holds {} Facility object(s)".format(
+                        emit("    node.{} holds {} Facility object(s)".format(
                             fattr, len(fvalue)))
                         for fid, fac in list(fvalue.items())[:20]:
-                            write("      {:<4} {:<22} type={!r} owner={!r}".format(
+                            emit("      {:<4} {:<22} type={!r} owner={!r}".format(
                                 fid,
                                 repr_value(getattr(fac, "name", None))[:22],
                                 getattr(fac, "facility_type", "<none>"),
@@ -204,11 +252,11 @@ def apply(ctx):
         world = getattr(app, "world", None)
         location = getattr(player, "location", None)
         owner = getattr(location, "owner", None)
-        write("    current facility owner = {!r}".format(owner))
+        emit("    current facility owner = {!r}".format(owner))
         roster = getattr(world, "characters", None) if world is not None else None
         if isinstance(roster, dict) and owner is not None:
             npc = roster.get(owner if isinstance(owner, str) else str(owner))
-            dump_obj(npc, "owner character", indent="    ")
+            dump_obj(lines, npc, "owner character", indent="    ")
 
     # 版3: メインスレッドで取る。`apply()` は注入したスレッドの上で走っている。
     ui.scheduler(ctx, "events probe snapshot")(snapshot)
@@ -226,16 +274,18 @@ def apply(ctx):
         except Exception as exc:
             write("llm shape probe: raised {}: {}".format(type(exc).__name__, exc))
             return
-        write("llm shape probe -> [{}] {}".format(type(result).__name__, repr_value(result)))
-        dump_obj(result, "  probe response", indent="  ", full=True)
+        lines = ["llm shape probe -> [{}] {}".format(type(result).__name__, repr_value(result))]
+        if not _is_builtin(result):
+            dump_obj(lines, result, "  probe response", indent="  ", full=True)
         # dict でもオブジェクトでもない場合に備えて、代表的な取り出し方を全部試す。
         for how, getter in (("result.text", lambda r: r.text),
                             ("result['text']", lambda r: r["text"]),
                             ("str(result)", str)):
             try:
-                write("    {:<16} = {}".format(how, repr_value(getter(result))))
+                lines.append("    {:<16} = {}".format(how, repr_value(getter(result))))
             except Exception as exc:
-                write("    {:<16} !! {}: {}".format(how, type(exc).__name__, exc))
+                lines.append("    {:<16} !! {}: {}".format(how, type(exc).__name__, exc))
+        flush(lines)
 
     if RUN_LLM_SHAPE_PROBE:
         # **`on_ready` に預ける**（TECH.md §3.6）。
@@ -269,18 +319,20 @@ def apply(ctx):
         # 版3: 上限を先に見る。越えたら vars の走査も書き出しもしない。
         if not _take("move_phase", MAX_MOVE_DUMPS):
             return result
+        lines = []
         try:
-            write("MovePhaseManager.move_phase -> {}".format(repr_value(result)))
-            dump_obj(self, "  move manager", indent="  ", full=True)
+            lines.append("MovePhaseManager.move_phase -> {}".format(repr_value(result)))
+            dump_obj(lines, self, "  move manager", indent="  ", full=True)
             app = getattr(self, "app", None) or find_app()
             if app is not None:
                 for attr, value in sorted(vars(app).items()):
                     if any(k in attr.lower() for k in
                            ("current_facility", "current_node", "current_area",
                             "player_facility", "location")):
-                        write("    app.{:<28} = {}".format(attr, repr_value(value)))
+                        lines.append("    app.{:<28} = {}".format(attr, repr_value(value)))
         except Exception:
             ctx.log_exc("events probe: post-move dump failed")
+        flush(lines)
         return result
 
     # ------------------------------------------------ 行動のたびに走る中枢
@@ -321,50 +373,85 @@ def apply(ctx):
         # 版3: 移動ごとの書き出しと同じ枠で数える。越えたら何も組み立てない。
         dump = _take("narrator", MAX_MOVE_DUMPS)
         if dump:
+            # 本体の前の行は本体の前に書く（本体が返らなくても前の姿は残る）。
+            lines = []
             try:
                 current_action = frames.arg(args, kwargs, "current_action", 1)
                 current_area = frames.arg(args, kwargs, "current_area", 3)
                 current_location = frames.arg(args, kwargs, "current_location", 4)
-                write("-" * 78)
-                write("narrator(current_action={})".format(repr_value(current_action)))
-                write("  current_area     [{}] = {}".format(
+                lines.append("-" * 78)
+                lines.append("narrator(current_action={})".format(repr_value(current_action)))
+                lines.append("  current_area     [{}] = {}".format(
                     type(current_area).__name__, repr_value(current_area)))
-                write("  current_location [{}] = {}".format(
+                lines.append("  current_location [{}] = {}".format(
                     type(current_location).__name__, repr_value(current_location)))
                 # current_location がオブジェクトなら、そこから施設情報が取れる。
                 if not isinstance(current_location, (str, bytes, int, float, type(None))):
-                    dump_obj(current_location, "current_location", indent="  ", full=True)
+                    dump_obj(lines, current_location, "current_location",
+                             indent="  ", full=True)
             except Exception:
                 pass
+            flush(lines)
         result = orig(*args, **kwargs)
         if dump:
+            lines = []
             try:
-                write("  -> [{}] {}".format(type(result).__name__, repr_value(result)))
-                dump_obj(result, "narrator result", indent="  ", full=True)
+                lines.append("  -> [{}] {}".format(type(result).__name__, repr_value(result)))
+                # 組み込み型は上の行で足りる（版4）。
+                if not _is_builtin(result):
+                    dump_obj(lines, result, "narrator result", indent="  ", full=True)
             except Exception:
                 pass
+            flush(lines)
         return result
 
     # -------------------------------------------- 自前で呼ぶときの戻り値の形
-    @ctx.wrap("scripts.llm.request_llm_inference_llama_cpp_completion:"
-              "send_request_with_no_structure", required=False, safe=True)
-    def send_no_structure(orig, *args, **kwargs):
-        result = orig(*args, **kwargs)
+    # 版4: llama.cpp のプロバイダの関数に加えて、どのプロバイダでも通る別名も包む（docstring の版4）。
+    # 2枚が重なった呼び出しでは外側の1枚だけが書く。印はスレッドごと。
+    sending = threading.local()
+
+    def record_send(site, args, kwargs, call):
+        """送り口の包みの中身。`call()` が本体（ほかの層を含む）を呼ぶ。"""
+        if getattr(sending, "depth", 0):
+            return call()
+        sending.depth = 1
+        try:
+            result = call()
+        finally:
+            sending.depth = 0
         # マネージャごとに数回だけ記録する（版3で1プロセスあたりにした）。
         # 会話のたびに全文を残すと読めなくなる。
         try:
             manager_name = frames.arg(args, kwargs, "manager_name", 0)
             if _take("llm:{}".format(manager_name), MAX_LLM_SAMPLES):
                 message = frames.arg(args, kwargs, "message", 1)
-                write("send_request_with_no_structure({!r}) message={}".format(
-                    manager_name, repr_value(message)))
+                lines = ["send_request_with_no_structure({!r}) via {} message={}".format(
+                    manager_name, site, repr_value(message))]
                 if isinstance(message, (list, tuple)) and message:
-                    write("  message[0] = {}".format(repr_value(message[0])))
-                write("  -> [{}] {}".format(type(result).__name__, repr_value(result)))
-                dump_obj(result, "  response", indent="  ", full=True)
+                    lines.append("  message[0] = {}".format(repr_value(message[0])))
+                lines.append("  -> [{}] {}".format(type(result).__name__, repr_value(result)))
+                # 組み込み型（ふだんは `str`）は上の行で足りる（版4）。
+                if not _is_builtin(result):
+                    dump_obj(lines, result, "  response", indent="  ", full=True)
+                flush(lines)
         except Exception:
             pass
         return result
+
+    @ctx.wrap(LOCAL_SEND_TARGET, required=False, safe=True)
+    def send_no_structure(orig, *args, **kwargs):
+        return record_send("llama_cpp", args, kwargs, lambda: orig(*args, **kwargs))
+
+    def hook_manager_send(target):
+        @ctx.wrap(target, required=False, safe=True)
+        def send_no_structure_any(orig, *args, **kwargs):
+            return record_send("llm_manager", args, kwargs, lambda: orig(*args, **kwargs))
+        return send_no_structure_any
+
+    # 当て方はこちらが持ち、見張り（後から生える別名・作り直しの後の当て直し）はローダの語彙に任せる
+    # （`213_` と同じ形。TECH.md §5.3）。
+    llm.watch_aliases(ctx, (MANAGER_SEND_TARGET,), hook_manager_send,
+                      label="events probe")
 
     # ------------------------------------------------------ テキスト表示経路
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False, safe=True)

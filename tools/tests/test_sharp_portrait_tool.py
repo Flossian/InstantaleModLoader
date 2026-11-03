@@ -99,14 +99,14 @@ try:
     os.environ["IML_ROOT"] = tmp
     os.makedirs(os.path.join(tmp, "settings"), exist_ok=True)
     # 設定の読み書きは共有の土台（`tools/modtool.py`）。道具はそれを借りる。
-    check("既定は mod.json の宣言から", tool.SETTING_DEFAULTS == {"SHARP_PORTRAIT": False, "FACE_RETRY": True},
+    check("既定は mod.json の宣言から", tool.SETTING_DEFAULTS == {"SHARP_PORTRAIT": False, "FACE_YUNET": True, "FACE_RETRY": True},
           tool.SETTING_DEFAULTS)
     check("読めなければ既定",
           tool.modtool.load_settings(tmp, tool.MOD_DIR) == tool.SETTING_DEFAULTS)
     check("保存できる",
-          tool.modtool.save_settings(tmp, tool.MOD_DIR, {"SHARP_PORTRAIT": True, "FACE_RETRY": True}))
+          tool.modtool.save_settings(tmp, tool.MOD_DIR, {"SHARP_PORTRAIT": True, "FACE_YUNET": True, "FACE_RETRY": True}))
     check("既定と違う値だけ残り、読み返せる",
-          tool.modtool.load_settings(tmp, tool.MOD_DIR) == {"SHARP_PORTRAIT": True, "FACE_RETRY": True})
+          tool.modtool.load_settings(tmp, tool.MOD_DIR) == {"SHARP_PORTRAIT": True, "FACE_YUNET": True, "FACE_RETRY": True})
 
     print("切り直し")
     cv2, np = tool.load_cv2()
@@ -151,6 +151,15 @@ try:
             check("立ち絵から切ると立ち絵の比に合う（{}）".format(want), tool.png_size(npc.path(tool.FACE))[0] in (want, want + 1), tool.png_size(npc.path(tool.FACE)))
             check("元に戻せる", tool.restore_face(npc) and tool.png_size(npc.path(tool.FACE)) == before and not os.path.isfile(npc.path(tool.FACE_BACKUP)))
             check("控えが無ければ戻さない", tool.restore_face(npc) is False)
+        # YuNet（版19）。np を渡すと同梱のモデルも読み、検出は YuNet を先に掛ける。
+        with_yunet = tool.load_cascades(cv2, GAME_DIR, np)
+        check("np を渡すと YuNet のモデルも読む", faces.YUNET in with_yunet and faces.YUNET not in cascades)
+        hit = tool.detect_npc(cv2, np, with_yunet, npc)
+        if hit is None or hit[1] != faces.YUNET:
+            print("  --   借りた絵では YuNet が顔を見なかった（{}）ので、YuNet の切り直しは飛ばす".format(hit))
+        else:
+            text, wrote = tool.apply_face(cv2, np, with_yunet, npc, tool.SOURCE_NO_BG, dry_run=True)
+            check("YuNet で見えたことを結果の文に出す", "YuNet" in text and not wrote, text)
 finally:
     os.environ.pop("IML_INSTANTALE_DATA", None)
     os.environ.pop("IML_ROOT", None)

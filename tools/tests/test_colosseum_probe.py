@@ -420,6 +420,12 @@ before = len(records())
 ctx.hooks["__main__:BattleEndManager.end_phase"](Escape.end_phase, Escape(app))
 check("窓が無ければ素通り", len(records()) == before, records()[-1:])
 
+print("闘技場の外のゲームオーバーは録らない（版5）")
+before = len(records())
+ctx.hooks["__main__:GameOverManager.__init__"](
+    lambda self, app_: None, Manager(app), app)
+check("闘技場の外のゲームオーバーは書かない", len(records()) == before, records()[before:])
+
 print("負けてゲームオーバー")
 app.player.gold = 700
 ctx.hooks["__main__:ColosseumMatchStart.execute"](

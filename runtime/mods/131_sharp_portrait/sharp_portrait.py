@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""立ち絵を荒くする工程を通さず、顔の検出が外れた回はやり直す。
+"""立ち絵を荒くする工程を通さず、顔は YuNet で先に探し、外れた回はやり直す。
 
 ゲームは Stable Diffusion で描いた絵を、保存する前に**わざと荒くしている**
 （経路と寸法は GAME.md §2.30）:
@@ -50,6 +50,21 @@
 `coordinates` の一辺を 256 に戻せば検出した絵の座標系で、立ち絵はその絵と同じ寸法。
 ゲームの側は触らず（戻り値もそのまま）、ファイルだけ差し替える。
 `SHARP_PORTRAIT` が切のときは立ち絵が 330x660 で、ゲームの縮め方がそのまま合うので触らない。
+
+## 先に YuNet で探す（`FACE_YUNET`。版19）
+
+ゲームの1回目の検出（anime）の前に、YuNet（OpenCV の深層学習の顔検出。`faces.py`）で探す。
+見つかれば、その箱から `faces.crop_box` でゲームの戻り値と同じ形を作って返し、ゲームの検出は呼ばない。
+外したらゲームの検出（anime → haar）、それも外したら下のやり直しへ落とす。
+
+手元の 695 体で（VERIFICATION.md §3.43「YuNet」）、カスケードの再現と YuNet の箱が食い違った 67 体は
+保存された顔の約 19 体が服・鎧・飾りで、YuNet の箱はほぼ顔だった。
+YuNet は 651 体を拾い、外した 44 体は目の大きいアニメ寄りの顔が中心で、そちらはカスケードが拾う。
+1枚 30〜55ms。見つかればカスケードの2回は走らない。
+
+モデルは同梱の `models/face_detection_yunet_2023mar.onnx`（MIT、NOTICE）。
+パスに日本語があると OpenCV がファイルを開けないことがあるので、numpy で読んでバイト列で渡す。
+読めない・作れない・投げたときは、ゲームの検出だけで探す（版18 と同じ動き）。
 
 ## 顔の検出をやり直す（`FACE_RETRY`）
 
@@ -115,6 +130,9 @@ SHARP_PORTRAIT = False
 # 顔の検出が外れた回に、前処理した絵でやり直すか。
 FACE_RETRY = True
 
+# ゲームの検出より先に YuNet で顔を探すか（版19）。外したらゲームの検出とやり直しへ落とす。
+FACE_YUNET = True
+
 #: この MOD の記録。
 LOG_BASENAME = "sharp_portrait.log"
 
@@ -146,6 +164,9 @@ def apply(ctx):
     note = ctx.logger(LOG_BASENAME)
     # `ctx` の値は `apply()` の間だけ。カスケードの置き場は今のうちに控える。
     cascade_dir = os.path.join(ctx.game_dir, faces.CASCADE_DIR)
+    yunet_path = os.path.join(ctx.mod_dir, faces.YUNET_MODEL)
+    # YuNet のモデルのバイト列（1度読んだら使い回す）。読めなかったら `False` で、以後は試さない。
+    yunet_model = []
     cascades = {}
     seen_args = []          # ゲームの呼び方を1度だけ記録するための印
     backend = config_backend()
@@ -223,21 +244,58 @@ def apply(ctx):
             return None
         return patch.unwrap(current)[0]
 
+    def yunet_crop(image, rest):
+        """YuNet で顔を探し、ゲームの戻り値と同じ形 `(左, 上, 右, 下)` で返す。無ければ None。"""
+        import cv2
+        import numpy as np
+        if not yunet_model:
+            model = faces.read_yunet(yunet_path, np)
+            yunet_model.append(model if model is not None else False)
+            if model is None:
+                note("顔: YuNet のモデルが読めない（{}）。ゲームの検出だけで探す".format(yunet_path))
+        model = yunet_model[0]
+        if model is False:
+            return None
+        detector = faces.make_yunet(model, cv2, np)
+        if detector is None:
+            note("顔: YuNet の検出器が作れない。ゲームの検出に任せる")
+            return None
+        bgr = cv2.cvtColor(np.asarray(image.convert("RGB")), cv2.COLOR_RGB2BGR)
+        hit = faces.yunet_face(bgr, detector)
+        if hit is None:
+            note("顔: YuNet は見つけられず、ゲームの検出に任せる")
+            return None
+        box, score = hit
+        found = faces.crop_box(box, image.size, int(rest.get("crop_size") or faces.FACE_CROP))
+        note("顔: YuNet が見つけた {}（箱 {}、確かさ {:.2f}）".format(found, box, score))
+        return found
+
     @hook("detect_face_coordinates", required=False, safe=True, alias_scan=False)
     def detect_face_coordinates(orig, image, *args, **kwargs):
-        found = orig(image, *args, **kwargs)
         if enemy():
-            return found
+            return orig(image, *args, **kwargs)
+        rest = dict(zip(ARG_NAMES, args))
+        rest.update(kwargs)
+        given = str(rest.get("cascade_path") or faces.CASCADES[0])
+        first = os.path.basename(given) == faces.CASCADES[0]
+        if FACE_YUNET and first:
+            # ゲームの1回目（anime）の前に YuNet で探す。見つけて返せばゲームの2回目は来ない。
+            # 探りで投げてもゲームの検出へ進む（`safe=True` に頼らない。まだ `orig` を呼んでいない）。
+            try:
+                found = yunet_crop(image, rest)
+            except Exception as exc:
+                note("顔: YuNet で投げた {}: {}。ゲームの検出に任せる".format(type(exc).__name__, exc))
+                found = None
+            if found is not None:
+                return found
+        found = orig(image, *args, **kwargs)
         if found is not None:
             note("顔: ゲームが見つけた {}".format(found))
             return found
         if not FACE_RETRY:
             note("顔: ゲームは見つけられず、やり直しは切")
             return None
-        rest = dict(zip(ARG_NAMES, args))
-        rest.update(kwargs)
-        given = str(rest.get("cascade_path") or faces.CASCADES[0])
-        if os.path.basename(given) == faces.CASCADES[0]:
+        if first:
             # ゲームは1回目（anime）が None なら2回目（haar）を素の絵で呼ぶ（GAME.md §2.30）。
             # ここで拾って返すと2回目が来ず、素の haar で取れた顔を前処理の拾いで置き換える。
             # やり直しはゲームの試行が全部外れた後に限る。

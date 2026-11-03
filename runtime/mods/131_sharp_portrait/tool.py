@@ -14,7 +14,8 @@ MOD 本体は**これから作られる絵**にしか効かない。
 既に居る NPC の顔（`face_image.png`）は、ゲームが見つけられずに全身の縮小になったまま。
 この画面はそれを手元の全世界から数え、検出をやり直して切り直す。
 
-  * 検出はゲームの再現（anime → haar、1.1/3）を素の絵で試し、外れたら前処理
+  * 検出は MOD 本体と同じく YuNet（同梱の `models/`）を先に掛け、外れたらゲームの再現
+    （anime → haar、1.1/3）を素の絵で試し、それも外れたら前処理
     （均一化 / CLAHE / ガンマ / ぼかし）で拾い直す。中身は `faces.py`（MOD 本体と共通）
   * 切り出し元は立ち絵（`reduced_color_image.png`）か、背景を抜いた元絵
     （`no_bg_image.png`。立ち絵が荒くても顔だけ高画質にできる）
@@ -185,8 +186,12 @@ def write_png(cv2, path, image):
     blob.tofile(path)
 
 
-def load_cascades(cv2, game_dir):
-    """ゲームのカスケードを読む。`{ファイル名: CascadeClassifier}`。読めないものは入らない。"""
+def load_cascades(cv2, game_dir, np=None):
+    """ゲームのカスケードと YuNet を読む。`{ファイル名: CascadeClassifier}` と、
+    `faces.YUNET` に YuNet のモデルのバイト列（`np` を渡したときだけ）。読めないものは入らない。
+
+    YuNet は MOD のフォルダに同梱（`faces.YUNET_MODEL`）。検出器は1体ごとに作る（`detect_npc`）。
+    """
     found = {}
     for name in faces.CASCADES:
         path = os.path.join(game_dir, faces.CASCADE_DIR, name)
@@ -194,6 +199,10 @@ def load_cascades(cv2, game_dir):
             cascade = cv2.CascadeClassifier(path)
             if not cascade.empty():
                 found[name] = cascade
+    if np is not None:
+        model = faces.read_yunet(os.path.join(MOD_DIR, faces.YUNET_MODEL), np)
+        if model is not None:
+            found[faces.YUNET] = model
     return found
 
 
@@ -251,10 +260,18 @@ def summarize(npcs):
 
 # ----------------------------------------------------------------- 検出と切り直し
 def detect_npc(cv2, np, cascades, npc):
-    """`generated_image.png` に検出を掛ける。`(前処理, カスケード名, 顔の箱, 絵の寸法)` か None。"""
+    """`generated_image.png` に検出を掛ける。`(前処理, カスケード名, 顔の箱, 絵の寸法)` か None。
+
+    MOD 本体と同じ順で、YuNet（`cascades` に在れば）を先に、外したらカスケードで探す。
+    """
     image = read_image(cv2, np, npc.path(GENERATED), cv2.IMREAD_COLOR)
     if image is None:
         return None
+    detector = faces.make_yunet(cascades.get(faces.YUNET), cv2, np)
+    if detector is not None:
+        hit = faces.yunet_face(image, detector)
+        if hit is not None:
+            return None, faces.YUNET, hit[0], (image.shape[1], image.shape[0])
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     hit = faces.detect(gray, cascades, cv2, np)
     if hit is None:
@@ -342,7 +359,7 @@ def build_window(root_dir, game_dir, base=""):
     modtool.setup_theme(root, root_dir)
 
     cv2, np = load_cv2()
-    cascades = load_cascades(cv2, game_dir) if cv2 else {}
+    cascades = load_cascades(cv2, game_dir, np) if cv2 else {}
     npcs = scan(base)
     results = {}                       # Npc.folder -> 結果の文
     jobs = queue.Queue()

@@ -30,6 +30,15 @@
   版2は開閉のたびに、何もしない予約を1本ずつ積んでいた
 - 載せる値の在り処（player の値・エリアの表・world の生の辞書探し）はプロセスに1回にした。
   版2は注入のたびに最初のダンプへ付けていて（1回 19KB 前後）、中身は毎回同じだった
+
+版4: 上限をプロセス単位にし、包みの約束を揃えた。
+
+- 書き出した回数を `sys` に置いた（`DUMPS_MARK`）。
+  版3は apply ごとの器に持っていて、注入し直すたびに `MAX_DUMPS` の6件を書き直していた。
+  ステータス欄の親の写し（`dump #1` だけに付く）も、プロセスで最初の1件にだけ付く
+- 包み2本に `required=False` を足した（モジュールが無い回は保留に積んで待つのは同じ）
+- 次のフレームの写し（Clock の予約）を例外で囲った。
+  版3は素の `dump` を Clock に渡していて、そこで投げるとゲームごと落ちる形だった（TECH.md §5.1.2）
 """
 
 import datetime
@@ -41,6 +50,8 @@ LOG_BASENAME = "character_sheet.log"
 
 # 値の在り処を書いたか（版3。`sys` に置いて1プロセスに1回。TECH.md §3.6）。
 VALUES_MARK = "_instantale_probe_charsheet_values"
+# 書き出した回数（版4。`sys` に置いて1プロセスで `MAX_DUMPS` まで）。
+DUMPS_MARK = "_instantale_probe_charsheet_dumps"
 
 # 何回ぶん書き出すか。
 # 開閉のたびに1件出るので、開く→閉じるを数回で足りる。
@@ -70,9 +81,12 @@ def apply(ctx):
     # モジュールがまだ読み込まれていなくても降りない。`ctx.wrap` が保留に積み、現れたら当て直す
     # （TECH.md §3.4）。自分で降りると保留に載らず、ほかに保留が無い構成ではその起動で一度も当たらない。
 
-    state = {"dumps": 0}
-
     write = ctx.logger(LOG_BASENAME, stamp=False)
+
+    def dumps_done():
+        """このプロセスで書き出した回数（版4）。"""
+        count = getattr(sys, DUMPS_MARK, 0)
+        return count if isinstance(count, int) else MAX_DUMPS
 
     def props(widget, names):
         out = []
@@ -258,21 +272,22 @@ def apply(ctx):
         return lines
 
     def dump(tag, hud):
-        if state["dumps"] >= MAX_DUMPS:
+        number = dumps_done() + 1
+        if number > MAX_DUMPS:
             return
-        state["dumps"] += 1
+        setattr(sys, DUMPS_MARK, number)
         app = ui.find_app()
         lines = ["", "=" * 78,
                  "[{}] {}  dump #{}".format(
                      datetime.datetime.now().isoformat(timespec="milliseconds"),
-                     tag, state["dumps"])]
+                     tag, number)]
         try:
             from kivy.core.window import Window
             lines.append("  window: {}x{}".format(Window.width, Window.height))
         except Exception:
             pass
 
-        if hud is not None and state["dumps"] == 1:
+        if hud is not None and number == 1:
             # 画面下のステータス欄（Atk/Def の箱）。
             # 人物欄の左端をここに揃えるので、置き方を一緒に写す。
             # 箱の枠線は Label ではなく親のどれかに描かれているはずなので、
@@ -305,11 +320,18 @@ def apply(ctx):
             lines += player_values(app)
         write("\n".join(lines))
 
+    def settled_dump(hud):
+        """次のフレームの写し。Clock から呼ぶので例外はここで握る（版4）。"""
+        try:
+            dump("settled (1 frame later)", hud)
+        except Exception:
+            ctx.log_exc("character sheet probe: settled dump failed")
+
     @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.toggle_character_sheet_visibility",
-              safe=True)
+              required=False, safe=True)
     def toggle_visibility(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
-        if state["dumps"] >= MAX_DUMPS:
+        if dumps_done() >= MAX_DUMPS:
             # 上限の後は予約も積まない（版3）。
             return result
         try:
@@ -317,16 +339,16 @@ def apply(ctx):
             # 落ち着いた寸法が要るので、次のフレームでもう1回写す。
             dump("toggle_character_sheet_visibility", self)
             from kivy.clock import Clock
-            Clock.schedule_once(
-                lambda _dt: dump("settled (1 frame later)", self), 0)
+            Clock.schedule_once(lambda _dt: settled_dump(self), 0)
         except Exception:
             ctx.log_exc("character sheet probe: dump failed")
         return result
 
-    @ctx.wrap("__main__:InstantaleApp.toggle_character_sheet_window", safe=True)
+    @ctx.wrap("__main__:InstantaleApp.toggle_character_sheet_window",
+              required=False, safe=True)
     def toggle_window(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
-        if state["dumps"] >= MAX_DUMPS:
+        if dumps_done() >= MAX_DUMPS:
             # 上限の後は HUD も探さない（版3）。
             return result
         try:

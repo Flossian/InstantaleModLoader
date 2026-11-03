@@ -387,10 +387,9 @@ def apply(ctx):
 
     # プロンプトを書き換える口はローダが持っている。
     # ローカルの3点もクラウドの別名も、別名が後から生えたときの掛け直しもそちらの担当。
-    # `on_arm` はその掛け直しが起きた時点を残すため（起動ログには間に合わない）。
-    hooks = wrap_outgoing(
-        ctx, rewrite, label="crime attribution fix",
-        on_arm=lambda target: write("late-armed on {}".format(target)))
+    # 掛け直しの時点はローダが `modloader.log` に `late-armed on` で残す。
+    # 版4まではこちらの記録にも写していたが、起動ごとに6行で記録の8割を占めたので版5で外した。
+    hooks = wrap_outgoing(ctx, rewrite, label="crime attribution fix")
 
     def wrap_facilitator(name):
         """`name` の戻り値を後から直す包みを1つ掛ける。

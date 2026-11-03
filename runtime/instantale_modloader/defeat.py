@@ -154,10 +154,8 @@ def _ensure_player_back(app):
     if removed is None:
         _write("WARN defeat: the player is not in the party and cannot be put back")
         return
-    party[PLAYER_KEY] = removed
-    escaped = getattr(app, "escaped_member_in_battle", None)
-    if isinstance(escaped, dict):
-        escaped.pop(PLAYER_KEY, None)
+    # 戻し方は `ui.put_back_party`（`107_` / `147_` / `334_` と同じ1つ。主人公は一覧の先頭へ）。
+    ui.put_back_party(app, [(PLAYER_KEY, removed)])
     _write("WARN defeat: the game did not bring the player back; put back by hand")
 
 

@@ -42,6 +42,20 @@ MOD からゲームの戦闘を起こした前例が無かったので、その�
 - 手配度は、手配されている土地だけを写す（版2は全土地の辞書を毎回写していた）
 - 1か月で一度も来なかった包み（`generate_character_from_enemy_data` /
   `start_battle_with_in_conversation` / 自由入力の出口のうち `end_process` 以外の3つ）を外した
+
+版4: 強さの表と枠の読み方を直した。
+
+- 強さの表の `.jsonl` は、引数と戻り値を素の値で書く。
+  版3は int も `{"type", "value"}` の形に包んでいて、行が数倍に膨らんでいた。
+  JSON にできない値はローダの `ctx.jsonl` が文字列に落とす。
+  同じ組を1プロセス1回にする控えは版3から `sys` にある（`STORE_ATTR` の `strength`）
+- 強さの表は、他の probe の試し打ち（`sys` の `DRY_THREAD_MARK` が自分のスレッド）の間は録らない。
+  `243_` の総当たりが、ゲームの呼び出しに混ざって控えの枠を食う
+- `generate_enemy_instance_from_quest_dict` で `shape(enemy_dict)` を2回作っていたのを1回にした
+- 枠の前後を読む段（`PANEL_TARGETS`）の上限が、枠が動いた回しか数えていなかった。
+  動かない呼び出し（待機中に約0.3秒ごとの `display_button_load` など）でも、毎回 HUD を探して4枠を前後2回読んでいた。
+  読んだ回数も数え（`PANEL_READS_PER_SAMPLE` × `SCREEN_SAMPLES` まで）、上限に達したら読む前に抜ける。
+  HUD は前回見つけたものを控え、同じ受け手（app か HUD）の呼び出しでは探し直さない
 """
 
 import datetime
@@ -65,6 +79,14 @@ CALLER_SAMPLES = 20
 
 # 1プロセスで数を持ち越す置き場（注入し直しと遅延の当て直しで数え直さない）。
 STORE_ATTR = "_instantale_probe_bounty_hunter"
+
+# 枠の前後を読む回数の上限は、書く件数（`SCREEN_SAMPLES`）のこの倍（版4）。
+# 動かない呼び出しも読んだ回として数える。待機中の `display_button_load` は約0.3秒ごとに来る。
+PANEL_READS_PER_SAMPLE = 10
+
+# 他の probe が試し打ちをしている間だけ置く印（`236_` / `243_` / `244_` と同じ名前。版4）。
+# 値は試しているスレッドの id。自分のスレッドならゲームの呼び出しではないので録らない。
+DRY_THREAD_MARK = "_instantale_probe_dry_run_thread"
 
 # 敵の強さを決めていそうな関数。引数と戻り値の対応表を作るために見張る。
 # 見つからなくても降りる（版で名前が変わりうる）。
@@ -215,7 +237,7 @@ def process_store():
     | --- | --- |
     | `strength` | 強さの表で書いた引数の組 → 戻り値 |
     | `callers` | 段の名前 → 呼び出し元を組んだ回数 |
-    | `screen` | 合図の件数・枠の件数・直前の自由入力の出口 |
+    | `screen` | 合図の件数・枠を書いた件数・枠を読んだ回数（版4）・直前の自由入力の出口 |
     | `battle_by` | 直前の戦闘を誰が起こしたか |
     """
     found = getattr(sys, STORE_ATTR, None)
@@ -224,10 +246,31 @@ def process_store():
         setattr(sys, STORE_ATTR, found)
     found.setdefault("strength", {})
     found.setdefault("callers", {})
-    found.setdefault("screen", {"seen": 0, "exit_at": None, "exit_name": None,
-                                "panels": 0})
+    found.setdefault("screen", {})
+    # 版3の置き場を同じプロセスで引き継いだときも、足した鍵が揃うように1つずつ埋める。
+    for key, value in (("seen", 0), ("exit_at", None), ("exit_name", None),
+                       ("panels", 0), ("panel_reads", 0)):
+        found["screen"].setdefault(key, value)
     found.setdefault("battle_by", None)
     return found
+
+
+def in_dry_run():
+    """いまのスレッドで他の probe が試し打ちをしている最中か（版4）。"""
+    return getattr(sys, DRY_THREAD_MARK, None) == threading.get_ident()
+
+
+def plain(value):
+    """強さの表の `.jsonl` に書く素の値（版4）。
+
+    数・文字列・真偽・None はそのまま。並びは中身を同じ規則で。
+    それ以外はローダの `ctx.jsonl` が `str()` に落とす。
+    """
+    if isinstance(value, (list, tuple)):
+        return [plain(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): plain(item) for key, item in value.items()}
+    return value
 
 
 # -------------------------------------------------------------- 手配度の要約
@@ -394,13 +437,16 @@ def apply(ctx):
         result = orig(self, *args, **kwargs)
         try:
             enemy_dict = frames.arg(args, kwargs, "enemy_dict", QUEST_DICT_ARGS)
+            # 形と要約は1回だけ作り、記録と読む用の行の両方に使う（版4）。
+            enemy_shape = shape(enemy_dict)
+            brief = character_brief(result)
             record({"at": now(), "phase": "generate_enemy_instance_from_quest_dict",
-                    "enemy_dict": shape(enemy_dict),
+                    "enemy_dict": enemy_shape,
                     "extra_args": [shape(value, 1) for value in args[1:]],
-                    "result": character_brief(result),
+                    "result": brief,
                     "caller": caller_for("generate_enemy_instance_from_quest_dict")})
             write("generate_enemy_instance_from_quest_dict: {} -> {}".format(
-                shape(enemy_dict), character_brief(result)))
+                enemy_shape, brief))
         except Exception:
             ctx.log_exc(
                 "bounty probe: cannot record generate_enemy_instance_from_quest_dict")
@@ -464,19 +510,20 @@ def apply(ctx):
         def strength(orig, *args, **kwargs):
             result = orig(*args, **kwargs)
             try:
-                if SCALING_SAMPLES > 0:
+                # 上限と試し打ちの印を先に見る（版4）。
+                seen = store["strength"]
+                if (SCALING_SAMPLES > 0 and len(seen) < SCALING_SAMPLES
+                        and not in_dry_run()):
                     # 控えは `sys` にあるので、注入し直しても同じ組は書き直さない（版3）。
-                    seen = store["strength"]
-                    if len(seen) < SCALING_SAMPLES:
-                        key = (name, args, tuple(sorted(kwargs.items())))
-                        if key not in seen:
-                            seen[key] = result
-                            record({"at": now(), "phase": "strength", "func": name,
-                                    "args": [shape(value, 0) for value in args],
-                                    "kwargs": {name_: shape(value, 0)
-                                               for name_, value in kwargs.items()},
-                                    "result": shape(result, 1)})
-                            write("{}{} -> {!r}".format(name, args, result))
+                    key = (name, args, tuple(sorted(kwargs.items())))
+                    if key not in seen:
+                        seen[key] = result
+                        # 素の値で書く（版4。版3は int も {"type", "value"} に包んでいた）。
+                        record({"at": now(), "phase": "strength", "func": name,
+                                "args": plain(list(args)),
+                                "kwargs": plain(dict(kwargs)),
+                                "result": plain(result)})
+                        write("{}{} -> {!r}".format(name, args, result))
             except Exception:
                 # 記録に失敗しても戻り値は素通しする（戦闘の計算を止めない）。
                 pass
@@ -579,6 +626,26 @@ def apply(ctx):
     for target in SCREEN_TARGETS:
         watch_screen(target)
 
+    # 枠の前後を読む段が使う HUD の控え（版4）。
+    # 受け手が前回と同じ app、または控えた HUD そのものなら探し直さない。
+    # HUD が作り直されたときは、HUD の段（`update_button_texts` など）の受け手が変わるので、そこで探し直す。
+    panel_cache = {"app": None, "hud": None}
+
+    def hud_for(receiver):
+        """`(app, hud)`。前回と同じ受け手なら控えを返し、違えば探して控え直す。"""
+        hud = panel_cache["hud"]
+        if hud is not None and (receiver is hud or receiver is panel_cache["app"]):
+            return panel_cache["app"], hud
+        app = ui.find_app()
+        hud = ui.find_hud(app)
+        panel_cache["app"], panel_cache["hud"] = app, hud
+        return app, hud
+
+    def panel_reads_left():
+        """枠を読んでよいか。書いた件数と読んだ回数の両方の上限を見る（版4）。"""
+        return (screen_state["panels"] < SCREEN_SAMPLES
+                and screen_state["panel_reads"] < SCREEN_SAMPLES * PANEL_READS_PER_SAMPLE)
+
     def watch_panel(target):
         func_name = target.split(":")[-1]
 
@@ -588,13 +655,15 @@ def apply(ctx):
 
             件数の上限とメインスレッドかを**先に**見る（版3）。
             上限の後とメインスレッド以外では枠を読まずに素通しする。
+            版4から、動かなかった呼び出しも読んだ回数（`panel_reads`）として数え、
+            その上限でも読む前に抜ける。HUD は `hud_for` の控えを使う。
             """
             app = hud = before = None
             try:
-                if (screen_state["panels"] < SCREEN_SAMPLES
+                if (panel_reads_left()
                         and threading.current_thread() is threading.main_thread()):
-                    app = ui.find_app()
-                    hud = ui.find_hud(app)
+                    screen_state["panel_reads"] += 1
+                    app, hud = hud_for(self)
                     before = panel_geometry(hud)
             except Exception:
                 before = None

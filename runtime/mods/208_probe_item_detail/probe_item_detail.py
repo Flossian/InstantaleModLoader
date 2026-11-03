@@ -41,6 +41,16 @@
 見張りの件数・書き出した品の控えは `sys` に置き、1プロセスで数える
 （件数の上限は1プロセス 1000。1か月の実測で1プロセス平均約50件）。
 包みは `safe=True` にし、受け取った引数をそのまま `orig` へ渡す。
+
+版5: 注入し直した直後の上げ下げを取りこぼしていた。
+opacity の見張りは `ctx.superseded()` で降りていたので、注入し直してから次に `update_content` が走って
+今の世代の見張りに掛け替わるまでの間（所持品にまだ触れていない間）、どの見張りも書かなかった。
+§3.11 の症状は所持品を閉じた後に出るので、ちょうどその間に当たりうる。
+降りる条件を「控え（箱ごとの見張り）に入っている関数が自分ではない」に替えた。
+掛け替えでは前の見張りを `unbind` してから控えを書き換えるので、1つの箱に2本が同時に書くことは無い。
+注入し直した後にこの MOD が当たらなかった（切られた）ときは、前の世代の見張りも書かない
+（いちばん新しく当たった世代の ctx を `sys` の器に控えて見分ける）。
+包みに `required=False` を足した（モジュールが無い回は保留に積んで待つのは同じ）。
 """
 
 import datetime
@@ -94,6 +104,8 @@ def apply(ctx):
     # （TECH.md §3.4）。自分で降りると保留に載らず、ほかに保留が無い構成ではその起動で一度も当たらない。
 
     state = _state()
+    # いちばん新しく当たった世代（版5。前の世代の見張りが、切られたのか掛け替え待ちなのかを見分ける）。
+    state["applied"] = ctx
 
     write = ctx.logger(LOG_BASENAME, stamp=False)
 
@@ -193,7 +205,7 @@ def apply(ctx):
         lines += ancestry(box)
         write("\n".join(lines))
 
-    @ctx.wrap("scripts.hud.new_hud:ItemDetailBox.update_content", safe=True)
+    @ctx.wrap("scripts.hud.new_hud:ItemDetailBox.update_content", required=False, safe=True)
     def update_content(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
         try:
@@ -230,7 +242,14 @@ def apply(ctx):
             return
 
         def on_opacity(instance, value):
-            if ctx.superseded():
+            # 降りるのは、この箱の見張りが別の関数に掛け替わったときだけ（版5）。
+            # 版4は `ctx.superseded()` で降りていて、注入し直してから掛け替えまでの間を取り逃した。
+            current = watched.get(key)
+            if current is None or current[1] is not on_opacity:
+                return
+            # 注入し直した後にこの MOD がもう一度当たっていなければ（切られた）、書かない。
+            # 当たっていれば `state["applied"]` は新しい世代の ctx を指している。
+            if state.get("applied") is ctx and ctx.superseded():
                 return
             # 版3: 数えは1プロセスで共有する（版2は注入ごとの閉包に持っていた）。
             if state["opacity"] >= MAX_OPACITY_EVENTS:

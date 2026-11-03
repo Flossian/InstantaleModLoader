@@ -291,6 +291,35 @@ ctx.hooks["__main__:InstantaleApp.load_game_new"](lambda self: None, app)
 check("戦闘の画面に戻ったロードでは預かりに触らない（戦闘の続きで逃げる途中）",
       app.escaped_member_in_battle == {"player": hero} and app.party == {})
 
+print("ローダの語彙 ui.put_back_party（107 / 147 / 334 / 窓口 defeat が使う）")
+from instantale_modloader import ui                    # noqa: E402
+
+app = App()
+app.player = hero
+app.world = World({"88": benny})
+app.party = {"88": benny}
+app.escaped_member_in_battle = {"player": hero, "77": object()}
+back, missing = ui.put_back_party(app, [("player", hero), ("88", benny), ("99", None)])
+check("居ない者だけ戻し、一覧に居る者は数えない", back == ["player"], back)
+check("引けない id は戻さずに返す", missing == ["99"], missing)
+check("戻した主人公は一覧の先頭", list(app.party) == ["player", "88"], list(app.party))
+check("戻した者だけ預かりから外す", list(app.escaped_member_in_battle) == ["77"],
+      app.escaped_member_in_battle)
+
+app = App()
+app.player = hero
+app.world = World({"88": benny})
+app.party = {"player": hero}
+app.escaped_member_in_battle = {}
+back, _missing = ui.put_back_party(app, [("88", "88")])
+check("実体が id のままなら world.characters から引く",
+      back == ["88"] and app.party.get("88") is benny, app.party)
+check("仲間だけ戻したときは並びを動かさない", list(app.party) == ["player", "88"], list(app.party))
+
+app = App()
+app.party = None
+check("一覧が読めなければ何もしない", ui.put_back_party(app, [("player", hero)]) == ([], []))
+
 print("注入した時点")
 app = App(battle=1, colosseum=1)       # 敵が居ない＝残骸
 module, ctx, _manifest = fresh(app)

@@ -127,15 +127,21 @@ def apply(ctx):
         with save_lookup.redirected(app, "{}: {}".format(site, why), write):
             return orig(*args, **kwargs)
 
-    @ctx.wrap(SHOP_TARGET, required=False, safe=True)
-    def shopping_start_method_1(orig, self, *args, **kwargs):
-        app = _get(self, "app") or ui.find_app()
-        why = None
-        try:
-            why = place_missing(app)
-        except Exception:
-            ctx.log_exc("save only entities: cannot check the shop")
-        return run(orig, (self,) + args, kwargs, app, why, "shopping")
+    def place_hook(target, site, what):
+        # いる施設で決まる場面（売買・闘技場）。闘技場は試合の仕込みと相手の生成の2か所を包む。
+        @ctx.wrap(target, required=False, safe=True)
+        def hook(orig, self, *args, **kwargs):
+            app = _get(self, "app") or ui.find_app()
+            why = None
+            try:
+                why = place_missing(app)
+            except Exception:
+                ctx.log_exc("save only entities: cannot check the " + what)
+            return run(orig, (self,) + args, kwargs, app, why, site)
+
+    place_hook(SHOP_TARGET, "shopping", "shop")
+    place_hook(COLOSSEUM_TARGET, "colosseum", "arena")
+    place_hook(COLOSSEUM_METHOD_TARGET, "colosseum", "arena")
 
     @ctx.wrap(NPC_DETAIL_TARGET, required=False, safe=True)
     def generate_npc_detail(orig, self, *args, **kwargs):
@@ -146,26 +152,6 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("save only entities: cannot check the npc")
         return run(orig, (self,) + args, kwargs, self, why, "npc_detail")
-
-    @ctx.wrap(COLOSSEUM_TARGET, required=False, safe=True)
-    def generate_enemy_data(orig, self, *args, **kwargs):
-        app = _get(self, "app") or ui.find_app()
-        why = None
-        try:
-            why = place_missing(app)
-        except Exception:
-            ctx.log_exc("save only entities: cannot check the arena")
-        return run(orig, (self,) + args, kwargs, app, why, "colosseum")
-
-    @ctx.wrap(COLOSSEUM_METHOD_TARGET, required=False, safe=True)
-    def colosseum_method(orig, self, *args, **kwargs):
-        app = _get(self, "app") or ui.find_app()
-        why = None
-        try:
-            why = place_missing(app)
-        except Exception:
-            ctx.log_exc("save only entities: cannot check the arena")
-        return run(orig, (self,) + args, kwargs, app, why, "colosseum")
 
     ctx.log("save only entities: shopping / npc detail / colosseum fall back to the save side "
             "when the target is not in world_dict; log goes to out/{}".format(LOG_BASENAME))

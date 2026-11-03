@@ -80,6 +80,13 @@
 
 版7: 包み3本が引数を名前で受けて位置で渡し直していたのをやめ、受け取った形のまま本体へ渡す。
 `probe installed` の行は、積み順が前回と変わったときだけ書く（版6までは注入のたびに出ていた）。
+
+版8: 計測の器（要約の数え・遅い回の数 `slow`・最後に見た `text_speed`・本文のラベル）を `sys` に置いた（`STATE_MARK`）。
+版7は apply ごとの器に持っていたので、注入し直すたびに次の3つが起きていた。
+遅い回の上限 `MAX_SLOW` が0から数え直しになる。
+最後に見た `text_speed` が None に戻り、設定を変えていないのに `text_speed None -> …` の行が出る。
+途中まで数えた要約が締められずに消える。
+`update_display_text` の包みに `required=False` を足した（モジュールが無い回は保留に積んで待つのは同じ）。
 """
 
 import sys
@@ -120,6 +127,8 @@ MAX_SLOW = 40
 DETAIL_MARK = "_instantale_probe_textspeed_detail"
 DEFAULTS_MARK = "_instantale_probe_textspeed_defaults"
 INSTALLED_MARK = "_instantale_probe_textspeed_installed"
+# 計測の器（版8。apply ごとの器に持つと注入し直しで消える）。
+STATE_MARK = "_instantale_probe_textspeed_state"
 
 # 要約のカウンタ。flush() が 0 に戻す。
 COUNTERS = ("ticks", "gap_sum", "gap_max", "dt_sum", "dt_max",
@@ -127,12 +136,9 @@ COUNTERS = ("ticks", "gap_sum", "gap_max", "dt_sum", "dt_max",
             "render_n", "render_sum", "render_max", "burst")
 
 
-def apply(ctx):
-    write = ctx.logger(LOG_BASENAME)
-
-    # 計測の途中経過。
-    # 要約系のカウンタ（COUNTERS）は flush() が 0 に戻す。
-    state = {
+def _initial_state() -> dict:
+    """計測の器の初めの姿。要約系のカウンタ（COUNTERS）は flush() が 0 に戻す。"""
+    return {
         "speed": None,        # 最後に見た app.text_speed
         "prev": None,         # 直前のティックの時刻
         "ticks": 0, "gap_sum": 0.0, "gap_max": 0.0,
@@ -146,6 +152,27 @@ def apply(ctx):
         "slow": 0,            # 遅い塗り直しを何回書いたか（MAX_SLOW まで）
         "label": None,        # 計測対象の本文ラベル
     }
+
+
+def _state() -> dict:
+    """計測の器。プロセスに1つ（版8）。
+
+    後の版で項目が増えても、足りない項目だけを初めの値で埋める（注入し直しで前の版の器を引き継ぐため）。
+    """
+    state = getattr(sys, STATE_MARK, None)
+    if not isinstance(state, dict):
+        state = {}
+        setattr(sys, STATE_MARK, state)
+    for key, value in _initial_state().items():
+        state.setdefault(key, value)
+    return state
+
+
+def apply(ctx):
+    write = ctx.logger(LOG_BASENAME)
+
+    # 計測の途中経過（版8でプロセスに1つにした）。
+    state = _state()
 
     def speed_text():
         speed = state["speed"]
@@ -298,7 +325,8 @@ def apply(ctx):
         return result
 
     # -- 1文字ぶんの塗り直し（ゲーム＋内側の MOD 全部） -----------------------
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_display_text", safe=True)
+    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_display_text",
+              required=False, safe=True)
     def update_display_text(orig, self, *args, **kwargs):
         # テクスチャの計測対象を覚える（属性を1回読むだけ）。
         label = frames.attr(self, "text_display")

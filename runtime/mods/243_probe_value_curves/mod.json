@@ -7,10 +7,10 @@
     "ja": "計測: 難易度と品の価値から作る数の 76 より上の振る舞い"
   },
   "description": {
-    "en": "Once per process, after a save is loaded, calls the unwrapped scripts.functions conversions (quest reward, talent points, labor reward, training experience, item price tiers, weapon and healing specs, NPC numbers, enemy level and attributes per tier, skill usefulness, the clamps) for every value from 0 to the sweep limit, several times for the random ones, and records the curves, where each one stops changing and the first error; the price-to-level inverses for every forward output; and the base and randomized gold price of a copy of one inventory item per item type with only its value and stat swapped. The random state is saved before and restored after. While playing it also records which spec functions run inside the three item creation entry points (does armor defense come from get_weapon_spec, are stats rebuilt on load) and every call where a clamp actually cut a value, with the caller. Groundwork for a mod that makes difficulty and item value above 76 count for rewards and item strength. Read-only",
-    "ja": "セーブを読み込んだ後に1プロセス1回、scripts.functions の変換（依頼の報酬・才能点・働いた報酬・訓練の経験・品の値段の段・武器と回復の数値・NPC の数・段ごとの敵のレベルと能力値・スキルの有用性・切り）を包む前の素の関数で 0 から上限までの全部の値について呼び（乱数を引くものは複数回）、曲線と、値が最後に変わった所と、最初の例外を録る。値段→段階の逆引きには正引きの戻りを全部渡す。主人公の持ち物から種類ごとに1品を写し、価値と能力値だけを差し替えて、素の値段と揺らした値段を録る。乱数の状態は前に控えて後で戻す。遊んでいる間は、品を作る3つの入口の中でどの数値の関数が呼ばれたか（防具の防御力が get_weapon_spec から来るか、読み込みで能力値を作り直すか）と、切りが実際に値を切った回を呼び出し元つきで録る。76 を超えた難易度と品の価値を報酬と品の強さにも効かせる MOD の下調べ。読み取りだけでゲームは変えない"
+    "en": "Once per process, after a save is loaded, calls the unwrapped scripts.functions conversions (quest reward, talent points, labor reward, training experience, item price tiers, weapon and healing specs, NPC numbers, enemy level and attributes per tier, skill usefulness, the clamps) for every value from 0 to the sweep limit, several times for the random ones, and records the curves, where each one stops changing and the first error (the random ones run on a fixed seed per curve; a curve identical to the last run is folded into one line, with the full tables kept in value_curves.curves.json); the price-to-level inverses for every forward output; and the base and randomized gold price of a copy of one inventory item per item type with only its value and stat swapped. The random state is saved before and restored after. While playing it also records which spec functions run inside the three item creation entry points and the items built there (does armor defense come from get_weapon_spec, are stats rebuilt on load) and every call where a clamp actually cut a value, with the caller. Groundwork for a mod that makes difficulty and item value above 76 count for rewards and item strength. Read-only",
+    "ja": "セーブを読み込んだ後に1プロセス1回、scripts.functions の変換（依頼の報酬・才能点・働いた報酬・訓練の経験・品の値段の段・武器と回復の数値・NPC の数・段ごとの敵のレベルと能力値・スキルの有用性・切り）を包む前の素の関数で 0 から上限までの全部の値について呼び（乱数を引くものは複数回）、曲線と、値が最後に変わった所と、最初の例外を録る（乱数を引くものは曲線ごとに決まった種で回し、前回と同じ曲線は1行にまとめて全表は value_curves.curves.json に残す）。値段→段階の逆引きには正引きの戻りを全部渡す。主人公の持ち物から種類ごとに1品を写し、価値と能力値だけを差し替えて、素の値段と揺らした値段を録る。乱数の状態は前に控えて後で戻す。遊んでいる間は、品を作る3つの入口の中でどの数値の関数が呼ばれ、どんな品が組まれたか（防具の防御力が get_weapon_spec から来るか、読み込みで能力値を作り直すか）と、切りが実際に値を切った回を呼び出し元つきで録る。76 を超えた難易度と品の価値を報酬と品の強さにも効かせる MOD の下調べ。読み取りだけでゲームは変えない"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "debug": true,
   "shares": ["_instantale_probe_dry_run_thread"],
@@ -65,8 +65,8 @@
         "en": "Item creations to record"
       },
       "note": {
-        "ja": "1プロセスあたり。0 で録らない",
-        "en": "Per process. 0 = do not record"
+        "ja": "1プロセスあたり・入口ごと。品が取れた回だけ数える。0 で録らない",
+        "en": "Per process and per entry point, counting only calls that built an item. 0 = do not record"
       }
     },
     "CLAMP_SAMPLES": {

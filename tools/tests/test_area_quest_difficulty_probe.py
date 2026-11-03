@@ -165,6 +165,41 @@ check("経路の前後の状態に難易度が写る",
       any(r.get("phase") == "経路" and r["after"]["difficulties"] == [10, 20, 30]
           for r in rows))
 
+print("版10: 同じ関数と引数の組は窓ごとに1回")
+
+
+def orig_execute_repeat(self, *args, **kwargs):
+    for _ in range(5):
+        wrapped_difficulties(area, app.world)
+    wrapped_difficulties(Area("4"), app.world)
+
+
+before_count = len(pure_rows)
+execute_hook(orig_execute_repeat, manager)
+with io.open(os.path.join(ctx.out_dir, MOD.RECORD_BASENAME), encoding="utf-8") as fh:
+    rows = [json.loads(line) for line in fh if line.strip()]
+pure_rows = [r for r in rows if r.get("phase") == "関数"]
+last_move = [r for r in rows if r.get("phase") == "移動"][-1]
+check("同じ組の5回は1行、別の土地は別の行（2行増える）",
+      len(pure_rows) - before_count == 2, len(pure_rows) - before_count)
+check("閉じる行に書いた数と書かなかった数が出る",
+      last_move.get("function_rows") == 2 and last_move.get("function_skipped") == 4,
+      (last_move.get("function_rows"), last_move.get("function_skipped")))
+execute_hook(orig_execute_repeat, manager)
+with io.open(os.path.join(ctx.out_dir, MOD.RECORD_BASENAME), encoding="utf-8") as fh:
+    rows = [json.loads(line) for line in fh if line.strip()]
+check("次の窓では数え直す（また2行）",
+      len([r for r in rows if r.get("phase") == "関数"]) - before_count == 4)
+check("呼び出し元は行と読む用のログで同じもの",
+      all(isinstance(r.get("caller"), str) for r in rows if r.get("phase") == "関数"))
+
+print("版10: 一時ファイルの名前の乱数は数えない")
+check("tempfile.py が RANDOM_IGNORE にある", "tempfile.py" in MOD.RANDOM_IGNORE,
+      MOD.RANDOM_IGNORE)
+check("包む乱数の一覧が組めている（getattr の既定値で絞る）",
+      "random:randint" in MOD.RANDOM_TARGETS
+      and "random:Random.choices" in MOD.RANDOM_TARGETS, MOD.RANDOM_TARGETS[:4])
+
 if failures:
     print("\n{} failure(s)".format(len(failures)))
     sys.exit(1)

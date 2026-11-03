@@ -183,8 +183,10 @@ class FakeSaves(object):
     def __init__(self, npcs, characters):
         self.data = {"npcs": npcs, "characters": characters}
         self.read = 0
+        self.scans = 0
 
     def world_names(self):
+        self.scans += 1
         return [("測定用の世界", "folder")]
 
     def read_save(self, folder, base=""):
@@ -216,6 +218,9 @@ def fresh(generation, npcs=None, characters=None):
     sys.modules["scripts.characters"] = types.SimpleNamespace(
         Character=lambda **kw: _build(**kw))
     module = load_mod()
+    # 版6: フォルダの控えは 1 プロセスに 1 つ（`sys`）。検査ごとに偽のセーブを替えるので消す。
+    if getattr(sys, module.FOLDERS_MARK, None) is not None:
+        delattr(sys, module.FOLDERS_MARK)
     # 来訪者の既定は切（版4）。この検査は来訪者を置く経路を通すので入れる。
     module.PRESENT = True
     saves = FakeSaves(npcs if npcs is not None else {"7": {}},
@@ -537,6 +542,77 @@ def main():
     again_ctx.hooks[refresh_target][0](lambda self, *a, **kw: None, app)
     check("世界が変わった後の到着で今の主に載せ直す",
           modnpc._layer_of(again.OWNER, "8") is not None, modnpc.entries(again.OWNER))
+
+    print("ディスクの読み: 上限は読む前に数え、フォルダは1プロセスで1回だけ探す（版6）")
+
+    def save_once(the_ctx, the_app):
+        hooks = the_ctx.hooks[modnpc.SAVE_TARGET]
+        hooks[1](lambda self, *a, **kw: hooks[0](
+            lambda s, *aa, **kk: s.save_game(), self), the_app)
+
+    module, ctx, app, saves = fresh("gen7")
+    ctx.hooks[refresh_target][0](lambda self, *a, **kw: None, app)
+    for _ in range(3):
+        save_once(ctx, app)
+    check("全セーブの復号（world_names）は1回だけ", saves.scans == 1, saves.scans)
+    check("読み直しは保存ごと", saves.read == 3, saves.read)
+
+    module, ctx, app, saves = fresh("gen8")
+    module.state = types.SimpleNamespace(world_key=lambda app: "知らない世界")
+    module.DISK_CHECKS = 2
+    ctx.hooks[refresh_target][0](lambda self, *a, **kw: None, app)
+    before = len(at(records(), "disk"))
+    for _ in range(4):
+        save_once(ctx, app)
+    missing = at(records(), "disk")[before:]
+    check("見つからない回も上限に数える", len(missing) == 2
+          and all(row.get("error") == "no save folder" for row in missing), missing)
+    check("見つからない鍵も1回探したら探し直さない", saves.scans == 1, saves.scans)
+    check("見つからなければ読まない", saves.read == 0, saves.read)
+
+    again, again_ctx = reinject(app, "gen8b")
+    save_once(again_ctx, app)
+    check("注入し直してもフォルダは探し直さない（控えは sys）",
+          again.saves.scans == 0 and again.saves.read == 1,
+          (again.saves.scans, again.saves.read))
+
+    print("来訪者を置いていない間は名簿を差し替えない（版6）")
+    idle, idle_ctx = reinject(app, "gen9", PRESENT=False)
+    seen_types = []
+
+    def display_plain(self, *a, **kw):
+        seen_types.append((type(app.world.characters), type(app.save_data_dict["npcs"]),
+                           type(app.facility.characters)))
+        return "shown"
+
+    check("一覧の包みは本体の戻り値を通す（置いていない間）",
+          idle_ctx.hooks["__main__:DisplayTalkChoice.update_button_display"][0](
+              display_plain, types.SimpleNamespace(app=app)) == "shown")
+    check("一覧の窓の間も名簿は素の型", seen_types == [(dict, dict, list)], seen_types)
+    idle_ctx.hooks[module.TALK_TARGET][0](display_plain, types.SimpleNamespace(app=app))
+    check("会話の一覧の窓の間も施設の名簿は素の型",
+          seen_types[-1:] == [(dict, dict, list)], seen_types)
+    rows = at(records(), "talk_reads")
+    check("置いていない間も一覧に出た相手は録る（spied=False）",
+          rows and rows[-1]["spied"] is False and rows[-1]["reads"] == [], rows[-1:])
+    listed = at(records(), "talk_choice")
+    check("置いていない間の talk_choice は読みの数を持たない",
+          listed and listed[-1]["roster_reads"] is None, listed[-1:])
+    for _ in range(3):
+        save_once(idle_ctx, app)
+    check("置いていない間はディスクを1回だけ読む", idle.saves.read == 1, idle.saves.read)
+    check("例外は出ていない（版6）", idle_ctx.errors == [] and again_ctx.errors == [],
+          (idle_ctx.errors, again_ctx.errors))
+
+    print("mod: の数え方は json.dumps で数えた場合と同じ（版6）")
+    sample = {"npcs": {"mod:a:b": {"name": "mod:a:b"}, "7": {}},
+              "game_variables": {"buttons_backup": [{"args": ["mod:a:b", 3]}]},
+              "plain": "nothing", "mod:x:y": 1}
+    found = set()
+    count = module._count_prefix(sample, found=found)
+    check("数が同じ", count == json.dumps(sample, ensure_ascii=False).count(modnpc.PREFIX),
+          count)
+    check("出どころの鍵", found == {"npcs", "game_variables", "<root>"}, found)
 
     sys.modules.pop("scripts.llm.llm_manager", None)
     modnpc.purge()

@@ -44,7 +44,16 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、402 の state は
   - 行数の枠（`LOG_CAP`）を使い切った後は、行を組む前・popup の予約の前に降りる
     （前は装備欄を文字にしてから、ロガーの枠で捨てていた）
   - マネージャの `__init__` はクラスごとに注入1回につき1行にした
+- 版6: それでもマネージャの `__init__` の行が毎プロセス2行ずつ出て、ログの 9 割を占めていた
+  （中身はいつも `keys=['app']` で装備欄は空）。次のように直した。
+  - `__init__` の行は、マネージャの属性の鍵の形が前の形と違うときだけ書く。
+    前の形は `sys` に控えて注入し直しをまたぐ。プロセスの最初の「前の形」は、
+    版5までの行で毎回同じだった `('app',)`（`KNOWN_INIT_SHAPE`）にしてある。
+    `sys` の控えだけではプロセスごとに1回は書くので、起動のたびに2行が残っていた
+  - 自前の `arg_of` をやめ、ローダの `frames.arg` で引数を引く
 """
+
+import sys
 
 from instantale_modloader import frames, ui
 
@@ -53,12 +62,30 @@ LOG_BASENAME = "party_equipment_probe.log"
 LOG_CAP = 500
 SEEN_CAP = 300
 
+# 1プロセスで持ち越す控え（版6）。`init_shapes` はクラスごとの、前に見た鍵の形。
+STORE_ATTR = "_instantale_probe_party_equipment"
 
-def arg_of(args, kwargs, index, name):
-    """包みが受け取った引数から1つ引く。位置でもキーワードでも同じ値を返す（版5）。"""
-    if name in kwargs:
-        return kwargs[name]
-    return args[index] if len(args) > index else None
+# マネージャの `__init__` の後の鍵の形として、版5までの行で毎回写っていたもの（版6）。
+# プロセスの最初はこれを「前の形」にする。違う形が来たら1行書く。
+KNOWN_INIT_SHAPE = ("app",)
+
+
+def process_store():
+    """1プロセスで持ち越す控え。`sys` に置いて注入し直しをまたぐ（版6）。"""
+    found = getattr(sys, STORE_ATTR, None)
+    if not isinstance(found, dict):
+        found = {}
+        setattr(sys, STORE_ATTR, found)
+    found.setdefault("init_shapes", {})
+    return found
+
+
+def shape_of(manager):
+    """マネージャの属性の鍵の形。読めなければ型名だけ。"""
+    try:
+        return tuple(sorted(str(key) for key in vars(manager)))
+    except Exception:
+        return ("<{}>".format(type(manager).__name__),)
 
 
 def apply(ctx):
@@ -66,7 +93,7 @@ def apply(ctx):
     schedule = ui.scheduler(ctx, "party equipment probe")
     state = {"npc_id": None}
     seen = set()
-    inited = set()
+    store = process_store()
     written = [0]
 
     def probe(text):
@@ -115,12 +142,13 @@ def apply(ctx):
             for slot, ref in equipments.items()) + "}"
 
     # ------------------------------------------------------------ 会話相手
-    # 版5: どの包みも受け取った引数をそのまま `orig` へ渡す。記録に要る値は `arg_of` で引く。
+    # 版5: どの包みも受け取った引数をそのまま `orig` へ渡す。
+    # 記録に要る値は `frames.arg` で引く（版6。版5は自前の `arg_of`）。
 
     @ctx.wrap("__main__:ConversationStartManager.__init__", required=False, safe=True)
     def conversation_start(orig, self, *args, **kwargs):
         try:
-            character_id = arg_of(args, kwargs, 1, "character_id")
+            character_id = frames.arg(args, kwargs, "character_id", 1)
             state["npc_id"] = str(character_id) if character_id is not None else None
         except Exception:
             ctx.log_exc("party equipment probe: cannot read the conversation partner")
@@ -248,20 +276,26 @@ def apply(ctx):
             ctx.log_exc("party equipment probe: manager observation failed")
 
     def probe_init(stage, manager):
-        """`__init__` はクラスごとに注入1回につき1行だけ。
+        """`__init__` は、クラスごとの鍵の形が前に書いた形と違うときだけ1行書く。
 
         版5: `333_` が装備のたびにマネージャを組み直すので、`__init__` の行が
         ログの 3 割近くを占めていた。ロード時に作られることは確かめ済み（GAME.md §2.13.3）。
+        版6: 注入1回につき1行でも、毎プロセス同じ形の行がログの 9 割になっていたので、
+        前の形を `sys` に控えて比べる。最初の前の形は `KNOWN_INIT_SHAPE`。
         """
-        if stage in inited:
+        if not has_room():
             return
-        inited.add(stage)
+        shape = shape_of(manager)
+        shapes = store["init_shapes"]
+        if shapes.get(stage, KNOWN_INIT_SHAPE) == shape:
+            return
+        shapes[stage] = shape
         probe_manager(stage, manager, None)
 
     def watch_manager(cls_name, method):
         @ctx.wrap("__main__:{}.{}".format(cls_name, method), required=False, safe=True)
         def around(orig, self, *args, **kwargs):
-            item = arg_of(args, kwargs, 0, "item_instance")
+            item = frames.arg(args, kwargs, "item_instance", 0)
             label = "{}.{}".format(cls_name, method)
             probe_manager(label + ":before", self, item)
             result = orig(self, *args, **kwargs)

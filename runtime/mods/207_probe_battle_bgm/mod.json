@@ -7,10 +7,10 @@
     "ja": "計測: 戦闘BGMの切り替え"
   },
   "description": {
-    "en": "Watches BGM play/stop calls and the number of busy mixer channels (regression watch for the battle BGM fix)",
-    "ja": "BGM を鳴らす・止める呼び出しと、鳴っているミキサーの本数を見張る（戦闘BGMの直しが退行していないかの見張り）"
+    "en": "Watches BGM play/stop calls and the busy mixer channels, telling songs from sound effects (regression watch for the battle BGM fix)",
+    "ja": "BGM を鳴らす・止める呼び出しと、鳴っているミキサーの本数（うち曲の本数）を見張る（戦闘BGMの直しが退行していないかの見張り）"
   },
-  "version": "3",
+  "version": "4",
   "author": "R01/Flossian",
   "debug": true,
   "after": [
