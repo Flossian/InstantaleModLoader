@@ -1009,6 +1009,19 @@ def install_fake_llm_manager():
                  *args, **kwargs):
             return "返答"
         setattr(module, target.split(":", 1)[1], site)
+
+    # 依頼を終えたと言われたときの決まりを足す2本は、実物の引数の名前を持たせる（recon の signatures.json）。
+    def facilitator(messages, character_life_log, player, character_instance, worldview=None, world_story=None,
+                    area_residency=None, area_achievements=None, response_list=None, negotiate=None,
+                    response_prompt_instruction=None, **kwargs):
+        return "返答"
+
+    def after_retrieval(messages, character_life_log, player, character_instance, worldview=None, world_story=None,
+                        area_residency=None, area_achievements=None, response_list=None,
+                        response_prompt_instruction=None, **kwargs):
+        return "返答"
+    module.conversation_facilitator = facilitator
+    module.conversation_facilitator_after_retrieval = after_retrieval
     sys.modules[name] = module
 
 
@@ -1671,6 +1684,183 @@ try:
 finally:
     mod.TELL_TOWN_QUESTS = True
 reset_windows()
+
+print("=== 依頼から戻った後の会話 ===")
+
+END_TARGET = "__main__:QuestEndManager.execute"
+FINISH_TARGET = "__main__:ConversationEndManager.finish_conversation"
+QUIET = "切り出す必要は無い"
+
+
+def returning(party=()):
+    """62 と話した後で依頼に出る前の状態を作る。控えは空から始める。"""
+    mod_obj, ctx_obj, app_obj = setup(own_quest=False, in_conversation=False, party=party)
+    clear_clients(ctx_obj)
+    store = getattr(sys, mod_obj.RETURNS_STORE_ATTR)
+    key = store.playthrough(app_obj)
+    path = store.path(key)
+    if os.path.isfile(path):
+        os.remove(path)
+    store._buckets.clear()
+    app_obj.world.days_elapsed = 100
+    app_obj.world.characters["62"].current_log = ["<会話>依頼の前に話した。"]
+    app_obj.world.characters["63"].current_log = []
+    return mod_obj, ctx_obj, app_obj
+
+
+def end_quest(ctx_obj, app_obj, quest_id=None):
+    """依頼を終える。受けた形のまま元の処理へ渡るかも見る。"""
+    app_obj.current_quest_data = app_obj.world.quests.get(str(quest_id)) if quest_id is not None else None
+    seen = []
+    holder = type("Manager", (), {})()
+    holder.app = app_obj
+    ctx_obj.hooks[END_TARGET](lambda self, *a, **k: seen.append((self, a, k)), holder, "帰還する")
+    check("元の処理へ1回渡る", seen == [(holder, ("帰還する",), {})], seen)
+    app_obj.current_quest_data = None
+
+
+def finish_talk(ctx_obj, app_obj, npc_id):
+    holder = type("Manager", (), {})()
+    holder.app = app_obj
+    app_obj.in_conversation = str(npc_id)
+    ctx_obj.hooks[FINISH_TARGET](lambda self, *a, **k: None, holder)
+    app_obj.in_conversation = False
+
+
+def body_of(ctx_obj, app_obj, npc_id):
+    return profile_seen(talk_once(ctx_obj, app_obj, app_obj.world.characters[str(npc_id)]))
+
+
+def opening_of(ctx_obj, app_obj, npc_id):
+    """第一声のリクエストの `messages` の最後の文。"""
+    seen = []
+    given = [{"role": "user", "content": "<行動: 話しかける>"}]
+
+    def orig(messages, *args, **kwargs):
+        seen.append(messages)
+        return "返答"
+    ctx_obj.hooks[CONV_TARGETS[3]](orig, given, [], app_obj.player, app_obj.world.characters[str(npc_id)])
+    check("渡された messages そのものは書き換えない", given[0]["content"] == "<行動: 話しかける>", given)
+    return seen[0][-1]["content"]
+
+
+def rule_of(ctx_obj, app_obj, npc_id, target=CONV_TARGETS[0]):
+    """返事のリクエストの `response_prompt_instruction`。"""
+    seen = []
+    at = 10 if target == CONV_TARGETS[0] else 9
+
+    def orig(*args, **kwargs):
+        seen.append(kwargs["response_prompt_instruction"] if "response_prompt_instruction" in kwargs else args[at])
+        return "返答"
+    args = [[], [], app_obj.player, app_obj.world.characters[str(npc_id)]] + [None] * (at - 4) + ["元の決まり"]
+    ctx_obj.hooks[target](orig, *args)
+    return seen[0]
+
+
+# -- 出発前に話していた相手だけに伝わる。依頼の題は書かない。
+mod, ctx, app = returning()
+add_quest(app, "70", "別の街の用事", "completed")
+app.world.quests["70"].neighboring_settlement_id = "8"
+try:
+    check("依頼の前は何も足さない", mod.ABSENCE_HEADING not in body_of(ctx, app, "62"))
+    end_quest(ctx, app, "70")
+    body = body_of(ctx, app, "62")
+    check("出発前に話していた相手に離れていたことを伝える", mod.ABSENCE_HEADING in body, body)
+    check("さっきの続きにしないと言う", "たった今の続きとして扱わない" in body, body)
+    check("主人公の名前が入る", "テストプレイヤーは" in body, body)
+    check("無関係な依頼の題は渡らない", "別の街の用事" not in body, body)
+    check("話していない相手には足さない", mod.ABSENCE_HEADING not in body_of(ctx, app, "63"))
+    opening = opening_of(ctx, app, "62")
+    check("第一声に戻ってきた状況を足す", opening.startswith("<行動: 話しかける>") and "今戻ってきた" in opening, opening)
+    check("第一声にも依頼の題は渡らない", "別の街の用事" not in opening, opening)
+    check("話していない相手の第一声はそのまま", opening_of(ctx, app, "63") == "<行動: 話しかける>")
+    app.world.characters["64"] = Character(id="64", name="初対面の人", profile="旅人。")
+    check("初対面の相手には足さない", mod.ABSENCE_HEADING not in body_of(ctx, app, "64"))
+
+    # -- 会話の間は何度回っても伝わり、話し終えたら消える。別の相手の分は残る。
+    app.world.characters["65"] = Character(id="65", name="もう一人", profile="町人。", current_log=["話した。"])
+    end_quest(ctx, app, "70")
+    check("会話の2回目のリクエストにも伝わる", mod.ABSENCE_HEADING in body_of(ctx, app, "62"))
+    finish_talk(ctx, app, "62")
+    check("話し終えたら消える", mod.ABSENCE_HEADING not in body_of(ctx, app, "62"))
+    check("別の相手の分は残る", mod.ABSENCE_HEADING in body_of(ctx, app, "65"))
+
+    # -- 日付が変われば前の会話は人生ログへ移るので、足さない。
+    app.world.days_elapsed = 101
+    check("日付が変われば足さない", mod.ABSENCE_HEADING not in body_of(ctx, app, "65"))
+    app.world.days_elapsed = 100
+
+    # -- 起動し直しても残る。
+    store = getattr(sys, mod.RETURNS_STORE_ATTR)
+    store._buckets.clear()
+    check("控えはファイルから読み直せる", mod.ABSENCE_HEADING in body_of(ctx, app, "65"))
+    check("エラーなし", not ctx.errors, ctx.errors)
+
+    # -- 同行している仲間には足さない。
+    mod, ctx, app = returning(party=("62",))
+    end_quest(ctx, app)
+    check("同行した仲間には足さない", mod.ABSENCE_HEADING not in body_of(ctx, app, "62"))
+
+    # -- 切れば足さない。
+    mod, ctx, app = returning()
+    mod.TELL_QUEST_ABSENCE = False
+    end_quest(ctx, app)
+    check("設定を切れば足さない", mod.ABSENCE_HEADING not in body_of(ctx, app, "62"))
+
+    # -- 依頼人: 戻って最初の会話だけ「自分から切り出す必要は無い」を外す。
+    mod, ctx, app = returning()
+    add_quest(app, "71", "水門の点検", "completed")
+    add_quest(app, "72", "昔の用事", "completed")
+    add_quest(app, "73", "人の依頼", "completed")
+    seed_client(ctx, app, "71", "62", "テストNPC D")
+    seed_client(ctx, app, "72", "62", "テストNPC D")
+    seed_client(ctx, app, "73", "63", "テストNPC E")
+    part = client_part(body_of(ctx, app, "62"))
+    check("依頼の前は切り出さなくてよいまま", QUIET in part, part)
+    check("報酬と手続きのことを伝える", "報酬の受け取りまで済んで" in part and "手続きは要らない" in part, part)
+    check("終えたと言われたら受ける", "テストプレイヤーが終えたと言えば" in part, part)
+    end_quest(ctx, app, "71")
+    part = client_part(body_of(ctx, app, "62"))
+    check("戻って最初の会話では外す", "水門の点検" in part and QUIET not in part, part)
+    opening = opening_of(ctx, app, "62")
+    check("依頼人の第一声には依頼の題と結末を足す", "依頼「水門の点検」を片付け" in opening and "今戻ってきた" not in opening, opening)
+    rule = rule_of(ctx, app, "62")
+    check("返事の決まりを足す", rule.startswith("元の決まり") and "手続きを求めず" in rule, rule)
+    rule = rule_of(ctx, app, "62", target=CONV_TARGETS[1])
+    check("_after_retrieval にも足す", "早かったとは言わない" in rule, rule)
+    other = client_part(body_of(ctx, app, "63"))
+    check("別の依頼人はそのまま", "人の依頼" in other and QUIET in other, other)
+    finish_talk(ctx, app, "62")
+    part = client_part(body_of(ctx, app, "62"))
+    check("話し終えたら元に戻る", "水門の点検" in part and QUIET in part, part)
+    check("話し終えたら第一声もそのまま", opening_of(ctx, app, "62") == "<行動: 話しかける>")
+    check("返事の決まりは残す（片付いた依頼を知らせている間）", "手続きを求めず" in rule_of(ctx, app, "62"))
+    check("依頼人の控えは残る", "水門の点検" in part)
+
+    # -- 放棄など、片付いていない依頼では外さない。
+    mod, ctx, app = returning()
+    add_quest(app, "74", "昔の用事", "completed")
+    add_quest(app, "75", "諦めた用事", "incomplete")
+    seed_client(ctx, app, "74", "62", "テストNPC D")
+    seed_client(ctx, app, "75", "62", "テストNPC D")
+    end_quest(ctx, app, "75")
+    part = client_part(body_of(ctx, app, "62"))
+    check("片付いていない依頼では外さない", QUIET in part, part)
+
+    # -- 噂: 相手は増やさず、手続きが要らないことを足す。切り出さなくてよいは残す。
+    mod, ctx, app = returning()
+    add_quest(app, "76", "街の用事", "completed")
+    end_quest(ctx, app, "76")
+    body = body_of(ctx, app, "63")
+    check("噂に手続きのことが入る", "街の用事" in body and "手続きは要らない" in body, body)
+    check("噂では切り出さなくてよいのまま", QUIET in body, body)
+    check("噂の相手に離れていたとは言わない", mod.ABSENCE_HEADING not in body, body)
+    check("噂の相手にも返事の決まりを足す", "手続きを求めず" in rule_of(ctx, app, "63"))
+    check("噂の相手の第一声はそのまま", opening_of(ctx, app, "63") == "<行動: 話しかける>")
+    app.world.quests["76"].neighboring_settlement_id = "8"
+    check("知らせていない相手には決まりを足さない", rule_of(ctx, app, "63") == "元の決まり", rule_of(ctx, app, "63"))
+finally:
+    clear_clients(ctx)
 
 print()
 if failures:

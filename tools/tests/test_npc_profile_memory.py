@@ -825,6 +825,56 @@ def test_recorded_facts_are_shown_to_the_extractor():
     return run
 
 
+class FakeQuest(object):
+    def __init__(self, qid, title, status):
+        self.id = qid
+        self.quest_title = title
+        self.config = {"status": status}
+
+
+def _with_quests(run, rows):
+    run.app.world.quests = {qid: FakeQuest(qid, title, status) for qid, title, status in rows}
+    return run
+
+
+def test_extractor_is_told_the_finished_quests():
+    """記録係に片付いた依頼を渡す。未完了は渡さず、新しいものから数える"""
+    run = _with_quests(Run(answers=FOUND), [
+        (str(n), "依頼{}".format(n), "completed") for n in range(2, 12)] + [("90", "途中の依頼", "incomplete")])
+    run.turn()
+    prompt = Llm.last_prompt(MOD.MANAGER_EXTRACT)
+    check(MOD.FINISHED_QUESTS_HEADING in prompt, "片付いた依頼の欄が無い: {}".format(prompt[:300]))
+    check("依頼11" in prompt and "依頼7" in prompt, "新しい依頼が載っていない")
+    check("依頼6" not in prompt, "件数の上限を超えている")
+    check("途中の依頼" not in prompt, "未完了の依頼が載っている")
+    check("書き足さない" in prompt, "一覧を書き足させない指示が無い")
+    check(prompt.index(MOD.FINISHED_QUESTS_HEADING) < prompt.index("【新しい会話】"), "新しい会話より後にある")
+    return run
+
+
+def test_no_finished_quests_means_no_block():
+    """片付いた依頼が無ければ欄を出さない。素の世界で文を増やさない"""
+    run = _with_quests(Run(answers=FOUND), [("1", "途中の依頼", "incomplete")])
+    run.turn()
+    prompt = Llm.last_prompt(MOD.MANAGER_EXTRACT)
+    check(MOD.FINISHED_QUESTS_HEADING not in prompt, "片付いた依頼が無いのに欄が出た")
+    return run
+
+
+def test_extractor_does_not_record_report_procedures():
+    """依頼の報告や手続きのその場の話を事実にしない指示がある。ほかの決まりを書かせない指示にはしない"""
+    run = Run(answers=FOUND)
+    run.turn()
+    prompt = Llm.last_prompt(MOD.MANAGER_EXTRACT)
+    check("依頼の報告の仕方、報酬の受け取り方、依頼の後の手続き" in prompt, "報告の手続きの指示が無い")
+    check("継続的な性格、価値観、嗜好、経歴、関係" in prompt, "ふだんの記録の指示が消えた")
+    # 【決まり】に置くだけでは事実に残った（実機）。効いたのは項目の説明と最後の指示。
+    check("依頼の後の手続きの話は入れない" in prompt, "事実の項目の説明に指示が無い")
+    last = prompt.rsplit("<行動:", 1)[-1]
+    check("人物像にも事実にも入れない" in last, "最後の指示に無い: {}".format(last))
+    return run
+
+
 def test_no_facts_means_no_block():
     """事実がまだ無いなら見出しごと出さない（空欄を見せない）"""
     run = Run(answers=FOUND, seed_record={"name": "傭兵ガロ",
@@ -1559,7 +1609,10 @@ def test_turn_survives_a_failing_extraction():
 
 
 def main():
-    for test in (test_turn_updates_profile,
+    for test in (test_extractor_is_told_the_finished_quests,
+                 test_no_finished_quests_means_no_block,
+                 test_extractor_does_not_record_report_procedures,
+                 test_turn_updates_profile,
                  test_extraction_runs_after_the_reply,
                  test_extraction_does_not_block_the_game_thread,
                  test_queued_extractions_are_serialized,

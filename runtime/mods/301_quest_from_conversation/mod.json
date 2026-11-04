@@ -133,6 +133,18 @@
         "en": "Townsfolk hear of quests finished in their town as rumors. Underworld jobs are rumored without naming who did them"
       }
     },
+    "TELL_QUEST_ABSENCE": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "依頼に出る前に話した相手に、離れていたことを伝える",
+        "en": "Tell people you spoke to before a quest that you were away"
+      },
+      "note": {
+        "ja": "依頼の間は日付が進まないので、出発前の会話がたった今の続きになり「さっきの件は」と言われる。その日に話していた相手にだけ、しばらく離れていたことを伝える。依頼の中身は伝えない。切るとゲームのまま",
+        "en": "The date does not advance during a quest, so people treat your talk before leaving as if it had just happened. Only those you spoke to that day are told you were away, not what you did. Off keeps the game's behavior"
+      }
+    },
     "MAX_TOWN_TOLD": {
       "type": "int",
       "default": 3,

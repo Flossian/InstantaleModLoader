@@ -100,6 +100,13 @@ mod を import はしない。
 この版のゲームではその欄が大きさ 0 で画面に出ず（GAME.md §2.6）、8月から一度も呼ばれていなかった。
 `random_quest_generator` と `ConversationStartManager.__init__` の包みは、引数を受けた形のまま `orig` へ渡す
 （名前で受けて位置に直すと、内側の MOD が受ける形が素と変わる。TECH.md の規則の表）。
+同じ版で、依頼から戻った後の会話を直した（VERIFICATION.md §3.115）。
+依頼の間は暦が進まないので、出発前の会話が「たった今の続き」になっていた。
+出発前に話していた相手にだけ、離れていたことを伝える（題は書かない）。
+完了と噂の文に、報酬まで済んでいて手続きは要らないことを足した。
+依頼人と戻って最初に話すときは「自分から切り出す必要は無い」を付けない。
+プロフィールの文だけでは第一声と返事に効かなかったので、第一声は `messages`、
+返事の決まりは `response_prompt_instruction` にも足す（`modnpc` の `prompt` の口）。
 """
 
 import os
@@ -109,7 +116,7 @@ import time
 
 from instantale_modloader import (arrivals, board, choices, confinement, frames, modnpc, quest_claims,
                                   quest_clients, ui)
-from instantale_modloader.state import (PLAYTHROUGH_SEP, UNKNOWN_WORLD, other_playthroughs,
+from instantale_modloader.state import (PLAYTHROUGH_SEP, UNKNOWN_WORLD, WorldStore, other_playthroughs,
                                         playthrough_key, world_filename, world_key)
 
 LOG_BASENAME = "quest_offer.log"
@@ -282,9 +289,12 @@ COMPLETED_HEADING = "【この人物が出した依頼のうち、既に片付�
 COMPLETED_ITEM = "・{title}"
 COMPLETED_BODY = (
     "これらはいずれも完了済みで、{player}は頼まれた事柄を果たし終えている。"
+    "報酬の受け取りまで済んでいて、追加の報告や手続きは要らない。"
+    "{player}が終えたと言えば、そのとおりに受ける。"
     "過去のやり取りの記憶にこれと食い違う内容があっても、"
-    "片付いているという事実の方を正しいものとして話す。"
-    "ただし、この話題を自分から切り出す必要は無い。")
+    "片付いているという事実の方を正しいものとして話す。")
+# 戻って最初の会話では付けない。頼んだ本人が結末に触れないのは不自然なので（VERIFICATION.md §3.115）。
+COMPLETED_QUIET = "ただし、この話題を自分から切り出す必要は無い。"
 
 # ------------------------------------ 街で片付けた依頼を住人との会話に伝える
 # ゲームが作る依頼の依頼人は実在の人物と結びついていない（GAME.md §2.9）。
@@ -302,7 +312,48 @@ TOWN_HEADING = "【この街で{player}が片付けたと噂になっている�
 TOWN_ITEM = "・{title}：{summary}"
 TOWN_BODY = (
     "この人物はこれらを街の噂として聞いている。依頼人本人ではないので、頼んだ側として話さない。"
+    "報酬の受け取りまで済んでいて、追加の報告や手続きは要らない。"
+    "{player}が終えたと言えば、そのとおりに受ける。"
     "ただし、この話題を自分から切り出す必要は無い。")
+
+# ------------------------------------ 依頼の前の会話を、たった今の続きにしない
+# 依頼の間は暦が進まないので、出発前の会話が相手の「今日の現在ログ」に残ったまま戻ってくる（GAME.md §2.25）。
+# 相手は「さっきの件は…」と続きのつもりで話す。
+# 依頼が終わった時点で現在ログに会話が残っている相手にだけ、離れていたことを伝える。
+# 何をしていたかは書かない。無関係な相手に依頼の中身を教えないため（VERIFICATION.md §3.115）。
+TELL_QUEST_ABSENCE = True
+
+ABSENCE_HEADING = "【これまでの会話の後の出来事】"
+ABSENCE_BODY = (
+    "{player}は、この人物と最後に話した後、しばらくこの場を離れて用を済ませ、戻ってきた。"
+    "これまでの会話は離れる前のもので、日付が同じでも、たった今の続きとして扱わない。"
+    "何をしていたかは、ここに書かれていること以外は知らない。")
+
+# プロフィールの文だけでは第一声が前の会話の続きになる（実機。VERIFICATION.md §3.115）。
+# 第一声は `conversation_starter` の `messages`（`<行動: 話しかける>` の1行）に状況として足す。
+OPENING_RETURNED = (
+    "<状況: {player}はあなたと最後に話した後、しばらくこの場を離れて用を済ませ、今戻ってきた。"
+    "前の話はたった今のことではない。「さっき」「また来たのか」とは言わず、戻ってきた相手への第一声を述べよ>")
+OPENING_REPORTED = (
+    "<状況: {player}はあなたの依頼「{title}」を片付け、報酬も受け取って戻ってきた。"
+    "依頼人として、片付いたことを踏まえた第一声を述べよ。早かったとは言わない>")
+
+# 返事の決まりは `response_prompt_instruction`（プロンプトの【返答の要素】）に足す。
+# プロフィールに「手続きは要らない」と書いても「受付で手続きをしておく」と返した（実機）。
+# 足すのは、片付いた依頼を知らせている相手だけ。伏せた噂の相手には足さない。
+REPORT_SITES = frozenset(("conversation_facilitator", "conversation_facilitator_after_retrieval"))
+REPORT_RULE = (
+    "  - {player}が依頼を終えたと伝えてきた場合: casual_responseとして返答を記述。"
+    "プロフィールに片付いたと書かれている依頼なら、既に片付いていて、"
+    "報酬も依頼を終えた時点で{player}の手元に渡っている。"
+    "報告や報酬の手続きを求めず、受付などの別の窓口へ回さず、報酬の話も持ち出さない。"
+    "日付が同じでも相応の時間をかけて片付けたものとして扱い、早かったとは言わない。")
+
+#: 依頼の終わりの控え（`state/quest_returns/<世界×主人公>.json`）。ゲームのセーブには書かない。
+RETURNS_DIRNAME = "quest_returns"
+RETURNS_STORE_ATTR = "__instantale_quest_returns_store__"
+#: 「戻って最初の会話」を待っている依頼の上限。依頼人に会わないまま増え続けないように。
+MAX_FRESH_QUESTS = 20
 
 # 掲示板に出さない依頼（`336_` の裏の仕事・処刑場からの脱出。ローダの窓口 `board`）は、誰の仕業かを伏せる。
 SECRET_HEADING = "【この街で最近あったらしい出来事（誰の仕業かは知られていない）】"
@@ -1386,16 +1437,91 @@ def apply(ctx):
             line = line[:start] + line[line.index("】", start) + 1:]
         return frames.short(line.strip(), TOWN_SUMMARY_CHARS)
 
+    # ------------------------------------ 依頼の終わりの控え
+    # 置き場は `sys`（`apply()` は1プロセスで何度も走る。`WorldStore` の決まり。TECH.md §3.5）。
+    returns = getattr(sys, RETURNS_STORE_ATTR, None)
+    if returns is None:
+        returns = WorldStore(ctx, RETURNS_DIRNAME, write=write)
+        setattr(sys, RETURNS_STORE_ATTR, returns)
+    returns.rebind(ctx, write)
+
+    def remember_quest_end(app):
+        """依頼が終わる時点で、出発前の会話が現在ログに残っている相手と、終わった依頼を控える。
+
+        `day` が変われば現在ログは人生ログへ移る（GAME.md §2.25）ので、`waiting` はその日だけ使う。
+        `fresh` は依頼人と話すまで残す。
+        """
+        characters = getattr(getattr(app, "world", None), "characters", None)
+        waiting = sorted((str(key) for key, character in list(characters.items())
+                          if getattr(character, "current_log", None)), key=ui.id_sort_key) \
+            if isinstance(characters, dict) else []
+        quest_id = ui.current_quest_id(app)
+        key = returns.playthrough(app)
+        with returns.lock:
+            bucket = returns.load(key)
+            fresh = list(bucket.get("fresh") or [])
+            if quest_id is not None and str(quest_id) not in fresh:
+                fresh.append(str(quest_id))
+            bucket.update(day=ui.game_day(app), waiting=waiting, fresh=fresh[-MAX_FRESH_QUESTS:])
+            returns.save(key)
+        write("quest end: quest {!r}, {} character(s) spoke before leaving".format(quest_id, len(waiting)))
+
+    def spoke_before_leaving(app, npc_id):
+        """今日の依頼に出る前に話したきりの相手か。一緒に行った仲間は外す。"""
+        if not TELL_QUEST_ABSENCE or not npc_id:
+            return False
+        bucket = returns.load(returns.playthrough(app))
+        if bucket.get("day") != ui.game_day(app) or str(npc_id) not in (bucket.get("waiting") or ()):
+            return False
+        try:
+            return str(npc_id) not in party_ids(app)
+        except Exception:
+            # 同行者に「離れていた」と言わない側に倒す。
+            ctx.log_exc("quest offer: cannot read the party roster")
+            return False
+
+    def awaits_first_report(app, npc_id, npc_name):
+        """この相手が依頼人で、片付いたばかりの依頼があれば、その題（戻って最初の会話か）。無ければ None。"""
+        others = other_clients(app)
+        for quest_id in returns.load(returns.playthrough(app)).get("fresh") or ():
+            quest = quest_of(app, quest_id)
+            config = quest_value(quest, "config", None) if quest is not None else None
+            if isinstance(config, dict) and config.get("status") == "completed" \
+                    and quest_belongs_to(app, quest_id, npc_id, npc_name, others):
+                return frames.short(quest_value(quest, "quest_title", "依頼"), 60)
+        return None
+
+    def forget_return_for(app, npc_id):
+        """話し終えたら、この相手の分を控えから外す。次からはふつうの会話。"""
+        if not npc_id:
+            return
+        npc_name = ui.character_name(app, npc_id, fallback="")
+        others = other_clients(app)
+        key = returns.playthrough(app)
+        with returns.lock:
+            bucket = returns.load(key)
+            waiting = [row for row in bucket.get("waiting") or () if row != str(npc_id)]
+            fresh = [quest_id for quest_id in bucket.get("fresh") or ()
+                     if not quest_belongs_to(app, quest_id, npc_id, npc_name, others)]
+            if waiting != (bucket.get("waiting") or []) or fresh != (bucket.get("fresh") or []):
+                bucket.update(waiting=waiting, fresh=fresh)
+                returns.save(key)
+
     def completed_block(app, npc_id, npc_name):
         """プロフィール欄に足す本文。言うことが無ければ空文字。"""
         player = player_name_of(app)
         parts = []
+        if spoke_before_leaving(app, npc_id):
+            parts.append("{}\n{}".format(ABSENCE_HEADING, ABSENCE_BODY.format(player=player)))
         titles = completed_quests_of(app, npc_id, npc_name)
         if titles:
+            body = COMPLETED_BODY.format(player=player)
+            if awaits_first_report(app, npc_id, npc_name) is None:
+                body += COMPLETED_QUIET
             parts.append("{}\n{}\n{}".format(
                 COMPLETED_HEADING,
                 "\n".join(COMPLETED_ITEM.format(title=title) for title in titles),
-                COMPLETED_BODY.format(player=player)))
+                body))
         # 同行している相手は噂で聞く側ではない（その場に居たことがある）。
         if not is_party_member(app, npc_id):
             public, secret = town_quests_of(app, npc_id, npc_name)
@@ -1421,7 +1547,7 @@ def apply(ctx):
         素通りするときも黙っては降りない。
         理由が残らないと、注入が効いていないことに気付けない。
         """
-        if not TELL_COMPLETED_QUESTS and not TELL_TOWN_QUESTS:
+        if not TELL_COMPLETED_QUESTS and not TELL_TOWN_QUESTS and not TELL_QUEST_ABSENCE:
             return None
         label = info.get("site")
         npc = info.get("character")
@@ -1448,6 +1574,49 @@ def apply(ctx):
         note_inject("{}: {!r} ({}) +{} chars into profile".format(
             label, npc_name, npc_id, len(addition)))
         return addition
+
+    def opening_situation(app, npc_id, npc_name):
+        """第一声に足す状況。足すことが無ければ None。依頼の題は依頼人にだけ渡す。"""
+        player = player_name_of(app)
+        title = awaits_first_report(app, npc_id, npc_name) if TELL_COMPLETED_QUESTS else None
+        if title is not None:
+            return OPENING_REPORTED.format(player=player, title=title)
+        if spoke_before_leaving(app, npc_id):
+            return OPENING_RETURNED.format(player=player)
+        return None
+
+    def knows_finished_quests(app, npc_id, npc_name):
+        """この相手に片付いた依頼を知らせているか（依頼人の節か、表の噂の節）。"""
+        if completed_quests_of(app, npc_id, npc_name):
+            return True
+        return not is_party_member(app, npc_id) and bool(town_quests_of(app, npc_id, npc_name)[0])
+
+    def quest_prompt(info):
+        """第一声の状況と、依頼を終えたと言われたときの決まりを足す（ローダの `modnpc` の `prompt`）。
+
+        `messages` と `response_prompt_instruction` は引数の写しなので、ゲームの会話履歴には残らない。
+        """
+        site, args = info.get("site"), info.get("args")
+        app = info.get("app") or find_app()
+        if app is None or not isinstance(args, dict):
+            return
+        npc_id = str(info.get("npc_id") or "")
+        npc_name = ui.character_name(app, npc_id, fallback="") if npc_id else ""
+        if site == "conversation_starter":
+            messages = args.get("messages")
+            if isinstance(messages, list) and messages and isinstance(messages[-1], dict) \
+                    and isinstance(messages[-1].get("content"), str):
+                situation = opening_situation(app, npc_id, npc_name)
+                if situation:
+                    last = dict(messages[-1], content=messages[-1]["content"] + "\n" + situation)
+                    args["messages"] = messages[:-1] + [last]
+                    note_inject("opening: {!r} ({}) {}".format(npc_name, npc_id, situation[:40]))
+        elif site in REPORT_SITES:
+            text = args.get("response_prompt_instruction")
+            if isinstance(text, str) and knows_finished_quests(app, npc_id, npc_name):
+                args["response_prompt_instruction"] = (
+                    text.rstrip() + "\n" + REPORT_RULE.format(player=player_name_of(app)))
+                note_inject("{}: report rule for {!r} ({})".format(site, npc_name, npc_id))
 
     # ================================================================ フック
     def offer_slot(buttons):
@@ -1625,9 +1794,22 @@ def apply(ctx):
             app = getattr(self, "app", None)
             if app is not None:
                 remember_talk(app)
+                partner = getattr(app, "in_conversation", None)
+                forget_return_for(app, partner if isinstance(partner, str) and partner else state["npc_id"])
         except Exception:
             ctx.log_exc("quest offer: cannot remember the talk")
         state["npc_id"] = None
+        return orig(self, *args, **kwargs)
+
+    @ctx.wrap("__main__:QuestEndManager.execute", required=False, safe=True)
+    def quest_end(orig, self, *args, **kwargs):
+        """依頼の終わり。依頼のデータはこの中で片付くので、元の処理より前に控える。"""
+        try:
+            app = getattr(self, "app", None) or find_app()
+            if app is not None:
+                remember_quest_end(app)
+        except Exception:
+            ctx.log_exc("quest offer: cannot remember the end of the quest")
         return orig(self, *args, **kwargs)
 
     def before_move(call):
@@ -1719,7 +1901,7 @@ def apply(ctx):
     # 足すのはローダの `modnpc` の notes（自分で包まない）。足す順は前に自分で包んでいたときの
     # 重なりと同じ（`NOTES_PRIORITY`）。
     modnpc.install(ctx, write=write)
-    modnpc.register(owner, modnpc.ANY, notes=quest_notes, priority=NOTES_PRIORITY, write=write)
+    modnpc.register(owner, modnpc.ANY, notes=quest_notes, prompt=quest_prompt, priority=NOTES_PRIORITY, write=write)
 
     ctx.log("quest from conversation: sites={} list={} generation={} "
             "completed_note={} log={}".format(

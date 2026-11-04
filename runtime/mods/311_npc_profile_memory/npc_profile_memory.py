@@ -118,6 +118,8 @@ mod どうしは同じ場所を読むことで繋がる。
 
 版8: 会話の1ターンのフック2本は、引数を受け取った形のまま元の関数へ渡す
 （名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
+同じ版で、依頼の報告の手続きをその場で作った発言が、変わらない決まりとして残らないようにした（VERIFICATION.md §3.115）。
+記録係に片付いた依頼を渡し、依頼の報告と報酬の手続きの話を事実にしないよう指示する。
 """
 
 import datetime
@@ -125,7 +127,7 @@ import os
 import sys
 import threading
 
-from instantale_modloader import frames, jobs, llm, modnpc, ui
+from instantale_modloader import board, frames, jobs, llm, modnpc, quest_claims, ui
 from instantale_modloader.state import WorldStore, world_key
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
@@ -134,6 +136,16 @@ CONVERSATION_TURNS = 8     # 抽出に載せる直近のやり取りの数
 INJECT_CHARS = 1200        # 抽出LLMへの目標長（要約で収める。保存・注入では切らない）
 RECORD_PLAYER_MEMORY = True   # 「その人物から見たプレイヤー」を別欄で覚えるか
 FACT_LOG_LIMIT = 200       # 判明した事実の追記専用ログの上限件数（0 で記録しない）
+
+# 記録係に渡す、片付いた依頼の件数。新しいものから数える。
+# 依頼が片付いた後も NPC が報告の手続きを求めると、その発言が「決まり」として残った（実機）。
+# 判断の材料で、NPC に教えるものではない。伏せた依頼（ローダの窓口 `board`）は入れない。
+FINISHED_QUESTS_TOLD = 5
+FINISHED_QUESTS_HEADING = "【片付いている依頼（記録の判断にだけ使う）】"
+FINISHED_QUESTS_BODY = (
+    "{player}はこれらを片付け、報酬も受け取っている。"
+    "これらの報告や手続きがまだ残っているように記録しない。"
+    "この一覧を人物像や記録に書き足さない。")
 TELL_ELAPSED_DAYS = True   # 前に話してからのゲーム内日数を会話に伝えるか
 
 #: 会話の相手の `profile` に控えを足す順（ローダの `modnpc` の notes。小さいほど先）。
@@ -829,6 +841,26 @@ def apply(ctx):
                                          frames.short(turn.get("content"), 300)))
         return "\n".join(lines)[-CONVERSATION_CHARS:]
 
+    def finished_quests(app):
+        """主人公が片付けた依頼の題。新しいものから `FINISHED_QUESTS_TOLD` 件。読めなければ空。"""
+        if FINISHED_QUESTS_TOLD <= 0:
+            return []
+        try:
+            hidden = board.kept_off(app)
+            others = {row["quest"] for row in quest_claims.claims(app, quest_claims.DONE)}
+            done = []
+            for quest_id in ui.quest_ids(app):
+                quest = ui.quest_of(app, quest_id)
+                config = ui.quest_value(quest, "config", None) if quest is not None else None
+                if isinstance(config, dict) and config.get("status") == "completed" \
+                        and str(quest_id) not in hidden and str(quest_id) not in others:
+                    done.append((quest_id, frames.short(ui.quest_value(quest, "quest_title", "依頼"), 60)))
+            done.sort(key=lambda pair: ui.id_sort_key(pair[0]))
+            return [title for _qid, title in done[-FINISHED_QUESTS_TOLD:]]
+        except Exception:
+            ctx.log_exc("npc profile: cannot read the finished quests")
+            return []
+
     def snapshot_of(app, npc_id):
         """ワーカーへ渡す不変データ。ゲームオブジェクトは持ち出さない。"""
         npc = character_of(app, npc_id)
@@ -850,6 +882,7 @@ def apply(ctx):
             return None
         return {
             "world": world_key(app),
+            "finished_quests": finished_quests(app),
             "npc_id": str(npc_id),
             "npc_name": name_of(app, npc_id),
             "player_name": player_name_of(app),
@@ -895,7 +928,8 @@ def apply(ctx):
                 '"{}": 更新後の、{}から見た{}についての記録の全文（{}文字以内）'
                 .format(KEY_ABOUT_PLAYER, npc_name, player_name, about_chars))
         fields.append('"{}": この会話で新しく判明した事実だけの配列。'
-                      '{}に有るものは入れない。無ければ []'.format(
+                      '{}に有るものは入れない。依頼の報告の仕方、報酬の受け取り方、依頼の後の手続きの話は入れない。'
+                      '無ければ []'.format(
                           KEY_NEW_FACTS, FACTS_HEADING))
         instruction = (
             "あなたは人物の記録係だ。現在の記録と新しい会話を統合し、"
@@ -907,6 +941,8 @@ def apply(ctx):
             "- 出来事の経過や会話のあらすじ（誰が何を言った・どうしたの時系列）を"
             "書いてはならない。会話そのものの記録はゲームが別に残している。"
             "書くのは会話から分かった、この先も変わらずに残ることだけ\n"
+            "- 依頼の報告の仕方、報酬の受け取り方、依頼の後の手続きについてこの人物がその場で"
+            "求めたことや案内したことは、変わらない決まりや事実として書かない\n"
             "- 記録に加えるものが何も無ければ {changed} を \"false\" にし、"
             "他の項目には現在の記録をそのまま写す\n"
             "- 固定の分類は使わず、継続的な性格、価値観、嗜好、経歴、関係、"
@@ -945,10 +981,16 @@ def apply(ctx):
         if gap:
             blocks.append("【前回の会話からの経過】\n前回の会話は{}。".format(
                 elapsed_span(gap)))
+        finished = snapshot.get("finished_quests")
+        if finished:
+            blocks.append("{}\n{}\n{}".format(
+                FINISHED_QUESTS_HEADING, "\n".join("- " + title for title in finished),
+                FINISHED_QUESTS_BODY.format(player=player_name)))
         blocks.append("【新しい会話】\n{}".format(snapshot["transcript"]))
         return [
             {"role": "user", "content": instruction + "\n\n" + "\n\n".join(blocks)},
-            {"role": "user", "content": "<行動: 記録を更新する>"},
+            {"role": "user", "content": "<行動: 記録を更新する。依頼の報告の仕方、報酬の受け取り方、"
+                                        "依頼の後の手続きの話は、人物像にも事実にも入れない>"},
         ]
 
     def extract(snapshot):
