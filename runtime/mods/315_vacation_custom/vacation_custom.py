@@ -10,7 +10,7 @@
 そのままなら挙動は何も変わらない。
 変えた項目だけが効く。
 
-変更点は4つ。
+変更点は7つ。
 
 | 何を変えるか | どこで変えるか |
 |---|---|
@@ -18,6 +18,9 @@
 | 宿泊期間（月単位） | `DisplayVacationChoice.__init__` に渡る `period_months` を差し替える |
 | 宿泊期間（週単位） | `period_months` は 1 にして、宿泊の窓の間だけローダの日数送りの関所へ「残りは何日か」を出す |
 | LLM の描写の月数 | 窓の間だけ、出ていく本文の `数ヵ月の宿泊` を実際の期間へ（`llm.wrap_outgoing`） |
+| 宿の主への指示文 | `conversation_facilitator` と `_after_retrieval` の `response_prompt_instruction` の一文を、今の期間・部屋の名前・宿代へ |
+| 宿の主の記録 | `VacationStartManager.execute` の間に主の `life_log` へ増えた記録の期間・部屋の名前・日付の範囲を実際の値へ |
+| 主人公の活動の記録 | 宿泊の各段の間に主人公の `life_log` へ増えた `生活の記憶` の日付の範囲を、週単位の日数へ |
 
 ボタンに出す期間・料金は設定値そのもので、ゲームに渡す値も同じ設定値。
 年齢の加算まで含めて`compute_stay` の1か所から出すので食い違わない。
@@ -62,6 +65,10 @@
 版9: 宿泊のフック（`DisplayVacationChoice.__init__`・`VacationStartManager.__init__`・`execute`・各段の `execute`・`add_text`）は、
 引数を受け取った形のまま元の関数へ渡す（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 月数と文言の差し替えは来た側（位置かキーワード）に合わせる。
+同じ版で、宿の主に渡る2つの文を今の設定に揃えた（GAME.md §2.17、VERIFICATION.md §3.28）。
+会話の指示文（`response_prompt_instruction`）の期間・部屋の名前・宿代と、宿泊のたびに主の `life_log` へ入る記録。
+それまでは1週間の設定でも主が「三ヵ月単位の宿だよ」と言い、記録には「1ヵ月間」と残っていた。
+主人公の活動の記録（文に期間は無い）も、週単位なら日付の範囲を実際の日数へ縮める。
 """
 
 import os
@@ -124,9 +131,10 @@ STAY_BUTTON = "宿泊する({length})"
 # 月単位のときはゲームが正しい月数を言うので触らない。
 STAY_TEXT = "{length}泊まることにした。"
 
-# 週単位のとき、LLM へ出ていく本文の中の月数も実際の期間に直すか。
-# ゲームは「このエリアで数ヵ月の宿泊をし」と月数を文に焼き込んでいるので（実測）、
-# これを切ると**描写だけが「数ヶ月にわたる滞在」と言い続ける**。
+# AI に渡る文の宿泊の話を、実際の期間・部屋の名前・宿代に揃えるか。
+# ゲームは「このエリアで数ヵ月の宿泊をし」（週単位の描写）、宿の主への指示文、
+# 主の記録に素の値を焼き込んでいるので（実測）、
+# これを切ると**描写と宿の主だけが素の期間と値段を言い続ける**。
 LLM_STAY_WORDING = True
 
 # ---------------------------------------------------------------- コード側の設定
@@ -193,6 +201,28 @@ PROMPT_MONTHS_RE = re.compile(
 # まだ全部を読めていない（`out/events.log` は長い行を途中で切る）。
 # だから**当たらなかった側を実機から拾う**ための口を置く。
 PROMPT_MISS_MARKS = ("の宿泊", "の滞在")
+
+# 宿の主との会話の LLM と、その `response_prompt_instruction` の引数の位置（recon の signatures.json）。
+KEEPER_TALK_TARGETS = (("scripts.llm.llm_manager:conversation_facilitator", 10),
+                       ("scripts.llm.llm_manager:conversation_facilitator_after_retrieval", 9))
+
+# 宿の主への指示文の一文（exe の定数。GAME.md §2.17）。
+# 金額の後ろは見ない。`130_` が `scripts.languages:tr` の段で `10G` を `10円` へ直していることがあるため。
+INN_TERMS_RE = re.compile(
+    r"(\d+)ヵ月単位の宿泊が可能であり、前払いで簡易寝台.*?、個室.*?、高級個室.*?が必要な事")
+INN_TERMS = ("{length}単位の宿泊が可能であり、前払いで{simple}{simple_price}G、"
+             "{private}{private_price}G、{luxury}{luxury_price}Gが必要な事")
+INN_TERMS_MARK = "宿泊をしたいと伝えられた場合"
+INN_KENNEL_TEXT = "犬小屋なら宿泊無料であることも"
+INN_KENNEL_FREE = "{name}なら宿泊無料であることも"
+INN_KENNEL_PAID = "{name}なら{price}Gで泊まれることも"
+
+# 宿泊のたびに宿の主の `life_log` へ入る記録（exe の定数と `out/npc_memory.log` の実物）。
+# `〈生活の記憶〉<主人公>を高級個室に1ヵ月間宿泊させた。\n`
+KEEPER_MEMORY_RE = re.compile(
+    r"(〈生活の記憶〉.*?を)(犬小屋|簡易寝台|個室|高級個室)に(\d+ヵ月間)宿泊させた")
+# 主人公の活動の記録の印（`〈生活の記憶〉…しばらく休暇をとり`、`<生活の記憶>…自己鍛錬に費やした`）。
+KEEPER_MEMORY_MARK = "生活の記憶"
 
 # 週単位の日数の予算を数える宿泊のマネージャ（すべて targets.txt の実在クラス）。
 # `VacationStartManager` は自前の窓（宿代）で数えるのでここには入れない。
@@ -440,11 +470,99 @@ def apply(ctx):
             pass
         return result
 
+    # ------------------------------------------------ 宿の主の記録
+    def keeper_memory_mark(app):
+        """宿の主と、宿泊の前の記録の件数を控える。主が読めなければ None。"""
+        if not LLM_STAY_WORDING:
+            return None
+        try:
+            location = getattr(getattr(app, "player", None), "location", None)
+            keeper = ui.character_of(app, getattr(location, "owner", None))
+            logs = getattr(keeper, "life_log", None)
+            if not isinstance(logs, list):
+                return None
+            return {"keeper": keeper, "size": len(logs)}
+        except Exception:
+            ctx.log_exc("vacation custom: cannot read the keeper's memory")
+            return None
+
+    def correct_memory_range(entry, days, today):
+        """週単位の記録の日付の範囲を実際の日数へ縮める。
+
+        ゲームは宿泊を終えた日を `day_end`、その月数×30日前を `day_start` に書く（GAME.md §2.17）。
+        """
+        start, end = entry.get("day_start"), entry.get("day_end")
+        if not isinstance(start, int) or not isinstance(end, int) or end - start <= days:
+            return                          # 実際の日数に収まる記録（1日の出来事など）はそのまま
+        if end == today:
+            entry["day_start"] = end - days
+        else:
+            write("WARN memory: the range {}-{} does not end today ({}); kept as is".format(
+                start, end, today))
+
+    def correct_keeper_memory(app, mark):
+        """宿泊の間に主の記録へ増えた1行を、実際の期間・部屋の名前・日付の範囲へ直す。
+
+        増えた分だけを見るので、前からある記録には触らない。
+        """
+        if mark is None:
+            return
+        try:
+            block = state["block"]
+            logs = getattr(mark["keeper"], "life_log", None)
+            added = logs[mark["size"]:] if isinstance(logs, list) else []
+            names = {name: slot for slot, name in GAME_NAMES.items()}
+
+            def reword(match):
+                length = block["length"] if block is not None else match.group(3)
+                return "{}{}に{}宿泊させた".format(
+                    match.group(1), room_conf(names[match.group(2)])["name"], length)
+
+            for entry in added:
+                content = entry.get("content") if isinstance(entry, dict) else None
+                if not isinstance(content, str) or KEEPER_MEMORY_RE.search(content) is None:
+                    continue
+                replaced = KEEPER_MEMORY_RE.sub(reword, content)
+                if block is not None:
+                    correct_memory_range(entry, int(block["days"]), ui.game_day(app))
+                if replaced != content:
+                    entry["content"] = replaced
+                write("memory: {!r} {}-{}".format(
+                    replaced.strip(), entry.get("day_start"), entry.get("day_end")))
+                return
+            write("memory: no new stay record on the keeper ({} added)".format(len(added)))
+        except Exception:
+            ctx.log_exc("vacation custom: cannot correct the keeper's memory")
+
+    # ------------------------------------------------ 主人公の活動の記録
+    def player_memory_mark(app):
+        """週単位の宿泊の活動の前に、主人公の記録の件数を控える。対象でなければ None。"""
+        if not LLM_STAY_WORDING or state["block"] is None:
+            return None
+        logs = getattr(getattr(app, "player", None), "life_log", None)
+        return len(logs) if isinstance(logs, list) else None
+
+    def correct_player_memory(app, size):
+        """活動の間に主人公の記録へ増えた `生活の記憶` の範囲を実際の日数へ縮める。文に期間は無い。"""
+        block = state["block"]
+        if size is None or block is None:
+            return
+        try:
+            logs = getattr(getattr(app, "player", None), "life_log", None)
+            for entry in logs[size:] if isinstance(logs, list) else ():
+                if isinstance(entry, dict) and KEEPER_MEMORY_MARK in str(entry.get("content")):
+                    correct_memory_range(entry, int(block["days"]), ui.game_day(app))
+                    write("memory: player {!r} {}-{}".format(
+                        str(entry.get("content")).strip(), entry.get("day_start"), entry.get("day_end")))
+        except Exception:
+            ctx.log_exc("vacation custom: cannot correct the player's memory")
+
     @ctx.wrap("__main__:VacationStartManager.execute", required=False)
     def start_execute(orig, self, *args, **kwargs):
         """宿泊の開始の間だけ窓を開け、週単位の予算を積み直す（宿代は関所が持つ）。
 
         連泊（`まだ宿泊する`）も同じ窓を通るので、週単位の予算も積み直る。
+        抜けるときに、ゲームが宿の主へ書いた記録を実際の値へ直す。
         """
         app = getattr(self, "app", None) or ui.find_app()
         info = getattr(self, "_mod_vacation_custom", None) or {}
@@ -460,6 +578,7 @@ def apply(ctx):
             if stay is not None and stay["days"] is not None \
                     and months == stay["months"]:
                 state["block"] = {"left": int(stay["days"]), "spent": 0,
+                                  "days": int(stay["days"]),
                                   "length": stay["length"],
                                   # この宿泊が始まった時刻（ローダの関所が
                                   # 「先に始まった事情が決める」で使う）。
@@ -471,22 +590,27 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("vacation custom: cannot open the day budget")
             state["block"] = None
+        memory = keeper_memory_mark(app)
         state["depth"] += 1
         try:
             return orig(self, *args, **kwargs)
         finally:
             state["depth"] -= 1
+            correct_keeper_memory(app, memory)
 
     # ------------------------------------------------ 週単位の予算が効く窓
     def install_stay_window(cls_name):
         @ctx.wrap("__main__:{}.execute".format(cls_name), required=False)
         def stay_window(orig, self, *args, **kwargs):
             """宿泊の各段の間だけ窓を開ける。日数の予算はこの窓の中だけ。"""
+            app = getattr(self, "app", None) or ui.find_app()
+            memory = player_memory_mark(app)
             state["depth"] += 1
             try:
                 return orig(self, *args, **kwargs)
             finally:
                 state["depth"] -= 1
+                correct_player_memory(app, memory)
                 if cls_name == "VacationEndManager":
                     block = state["block"]
                     state["block"] = None
@@ -589,6 +713,60 @@ def apply(ctx):
         # 窓の外・月単位では `rewrite_outgoing` が即 None を返すので、
         # 他の推論の邪魔はしない。
         llm.wrap_outgoing(ctx, rewrite_outgoing, label="vacation custom")
+
+    # ================================================ 宿の主への指示文
+    def room_words(app, slot, quality):
+        """部屋の名前と、いま引かれる額（`338_` の段まで込み）。"""
+        conf = room_conf(slot)
+        price = prices.inn_room(app, quality, write=write)
+        return conf["name"], conf["price"] if price is None else price
+
+    def reword_inn_terms(app, text):
+        """指示文の期間・部屋の名前・宿代を今の値にする。宿の主の文でなければそのまま返す。
+
+        素の設定なら同じ文ができるので、何も変わらない。
+        """
+        if not isinstance(text, str) or INN_TERMS_MARK not in text:
+            return text
+        match = INN_TERMS_RE.search(text)
+        if match is None:
+            if not state.get("terms_missed"):
+                state["terms_missed"] = True
+                write("WARN keeper: the inn terms did not match: ...{}...".format(
+                    text[text.find(INN_TERMS_MARK):][:120]))
+            return text
+        stay = stay_for(app)
+        simple, simple_price = room_words(app, "simple", "bunk")
+        private, private_price = room_words(app, "private", "private_room")
+        luxury, luxury_price = room_words(app, "luxury", "luxury_suite")
+        terms = fmt(INN_TERMS, length=stay["length"] if stay else "{}ヵ月".format(match.group(1)),
+                    simple=simple, simple_price=simple_price,
+                    private=private, private_price=private_price,
+                    luxury=luxury, luxury_price=luxury_price)
+        kennel, kennel_price = room_words(app, "kennel", "kennel")
+        kennel_text = (fmt(INN_KENNEL_PAID, name=kennel, price=kennel_price) if kennel_price
+                       else fmt(INN_KENNEL_FREE, name=kennel))
+        return (text[:match.start()] + terms + text[match.end():]).replace(INN_KENNEL_TEXT, kennel_text)
+
+    def install_keeper_talk(target, text_at):
+        @ctx.wrap(target, required=False, safe=True)
+        def keeper_talk(orig, *args, **kwargs):
+            """指示文の差し替えは来た側（位置かキーワード）に合わせる。"""
+            try:
+                text = frames.arg(args, kwargs, "response_prompt_instruction", text_at)
+                new = reword_inn_terms(ui.find_app(), text)
+                if new != text:
+                    args, kwargs, _ = frames.replace_arg(
+                        args, kwargs, "response_prompt_instruction", text_at, new)
+                    write("keeper: the inn terms were reworded for {}".format(target.rsplit(":", 1)[1]))
+            except Exception:
+                ctx.log_exc("vacation custom: cannot reword the inn terms")
+            return orig(*args, **kwargs)
+        return keeper_talk
+
+    if LLM_STAY_WORDING:
+        for target, text_at in KEEPER_TALK_TARGETS:
+            install_keeper_talk(target, text_at)
 
     # ------------------------------------------------------------ 自己検証
     # 実経路は宿に泊まるまで通らない。

@@ -191,12 +191,12 @@
       "type": "bool",
       "default": true,
       "label": {
-        "ja": "週単位のときAIの描写も揃える",
-        "en": "Fix the AI narration for week stays"
+        "ja": "AIに渡す文も設定に揃える",
+        "en": "Match the text sent to the AI to these settings"
       },
       "note": {
-        "ja": "ONだと、週単位の宿泊のあいだAIに渡す文の「数ヵ月の宿泊」を実際の期間に直す。切ると描写だけが「数ヶ月にわたる滞在」と言い続ける（ゲームが月数を文に焼き込んでいるため）。月単位の宿泊では何もしない",
-        "en": "While a week-length stay is running, rewrites 数ヵ月の宿泊 in the text sent to the AI so the narration matches. Off keeps the game's wording, which says 'several months' even for a two-week stay. Month stays are untouched"
+        "ja": "ONだと、週単位の描写の「数ヵ月の宿泊」、宿の主が話す期間・部屋の名前・宿代、宿の主の宿泊の記憶を今の設定に揃える。切ると描写と宿の主だけが素の期間と値段を言い続ける（ゲームが文に焼き込んでいるため）",
+        "en": "Makes the week-stay narration, the period, room names and prices the innkeeper mentions, and the innkeeper's memory of your stays follow these settings. Off keeps the game's wording, so they keep stating the game's own period and prices. Japanese game text only"
       }
     }
   }
