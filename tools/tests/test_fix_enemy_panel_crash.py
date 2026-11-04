@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""戦闘の欄が畳まれている間の敵の欄の更新（`instantale_modloader.defeat`）。
+"""戦闘の欄が畳まれている間の敵の欄の更新（`148_fix_enemy_panel_crash`）。
 
 ゲームの更新は欄の高さで割るので、高さ 0 のまま走ると 0 除算で落ちる（GAME.md §2.10）。
 途中で止めると敵の絵の一覧が欠けるので、高さを与えて最後まで走らせ、欄が戻ったら描き直す。
 """
+import importlib.util
 import os
 import sys
-import time
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -14,7 +14,9 @@ RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
-from instantale_modloader import defeat, ui  # noqa: E402
+from instantale_modloader import ui  # noqa: E402
+
+MOD_FILE = os.path.join(RUNTIME_DIR, "mods", "148_fix_enemy_panel_crash", "fix_enemy_panel_crash.py")
 
 failures = []
 
@@ -39,13 +41,19 @@ class FakeClock(object):
 
 
 class FakeCtx(object):
-    generation = "test"
-
     def __init__(self):
         self.hooks = {}
+        self.old = False
+        self.errors = []
+
+    def logger(self, _name):
+        return lambda _text: None
+
+    def log_exc(self, text):
+        self.errors.append(text)
 
     def superseded(self):
-        return False
+        return self.old
 
     def wrap(self, target, **_options):
         def decorate(fn):
@@ -63,10 +71,12 @@ sys.modules["kivy.clock"] = kivy_clock
 app = types.SimpleNamespace(current_enemy_dict={"敵": object()})
 ui.find_app = lambda: app
 
-defeat.reset()
+spec = importlib.util.spec_from_file_location("fix_enemy_panel_crash", MOD_FILE)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
 ctx = FakeCtx()
-defeat.install(ctx)
-display = ctx.hooks[defeat.ENEMY_DISPLAY_TARGET]
+mod.apply(ctx)
+display = ctx.hooks[mod.TARGET]
 
 panel = types.SimpleNamespace(height=456.3)
 hud = types.SimpleNamespace(top_info_layout_battle=panel)
@@ -117,19 +127,24 @@ clock.step()
 check("見張りは描き直さずに終わる", len(calls) == 1 and not clock.ticks, (calls, clock.ticks))
 app.current_enemy_dict = saved
 
-print("切り上げの扱い（敵の一覧が空）")
+print("敵が居ないとき（切り上げの直後）")
 app.current_enemy_dict = {}
 raised = False
 try:
     display(game_update, hud, hud, {})
 except ZeroDivisionError:
     raised = True
-check("切り上げていなければ 0 除算は素通し", raised)
-panel.height = 0
-defeat._state()["surrendered_at"] = time.monotonic()
-check("切り上げの直後は握る", display(game_update, hud, hud, {}) is None)
+check("触らず 0 除算はそのまま通す（defeat が握る）", raised and panel.height == 0, panel.height)
 app.current_enemy_dict = saved
-defeat.reset()
+
+print("新しい注入が来たとき")
+calls.clear()
+display(game_update, hud, hud, {"敵": 5})
+ctx.old = True
+panel.height = 456.3
+clock.step()
+check("古い見張りは描き直さずに降りる", len(calls) == 1 and not clock.ticks, (calls, clock.ticks))
+check("例外が出ていない", not ctx.errors, ctx.errors)
 
 if failures:
     print("{} failed: {}".format(len(failures), failures))

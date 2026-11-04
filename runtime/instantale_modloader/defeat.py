@@ -23,11 +23,6 @@
 切り上げた戦闘の残りの手（`handle_battle_situation` / `reduce_status_turns_and_log`）は飛ばす
 （一覧から消えた敵を引いて `KeyError` でワーカースレッドが死んだ）。
 切り上げた直後の敵の欄の更新の 0 除算（`new_hud.py:2307`）は、10 秒の間だけ握る（戦闘の欄が畳まれた後に走った）。
-
-戦闘の途中でも、ゲームが戦闘の欄を畳んでいる間に敵の欄の更新が走ると、同じ 0 除算でゲームごと落ちる
-（点送りの最中に鞄を開いたとき。GAME.md §2.10）。更新は途中で止めたり飛ばしたりしない。
-敵の名前の一覧が欠け、次の手が `resolve_opponents` の `KeyError` で止まるため。
-その間だけ欄に高さを与えて最後まで走らせ、欄が戻ったら本当の高さで描き直す。
 倒れた仲間は扱わない（一覧へ戻すかは MOD が決める。`334_` の `hand_over_fallen`）。
 逃走の終わり方なので、ゲームは衛兵戦と同じくその土地の手配度を 10 下げる（GAME.md §2.20。戻すかは MOD が決める）。
 
@@ -51,12 +46,6 @@ CHECK_TARGET = "__main__:BattlePhaseManager.check_battle_end"
 REMOVE_TARGET = "__main__:InstantaleApp.remove_party_member"
 ENEMY_DISPLAY_TARGET = "scripts.hud.new_hud:InstanTaleHUD.update_enemy_display"
 SURRENDER_GUARD_SECONDS = 10
-#: 戦闘の欄（敵の欄の更新が高さで割る相手）。
-BATTLE_PANEL_ATTR = "top_info_layout_battle"
-#: 畳まれている間の更新に与える高さ。欄が戻ったときに描き直すので、0 でなければ足りる。
-FOLDED_PANEL_HEIGHT = 456.3
-#: 畳まれた欄が戻ったかを見る間隔（秒）。
-PANEL_POLL_SECONDS = 0.25
 
 _STATE_ATTR = "_instantale_defeat"
 _GATE_ATTR = "_instantale_defeat_gate"
@@ -204,56 +193,6 @@ def _surrender(app, owner, answer):
     return True
 
 
-def _folded_panel(hud):
-    """戦闘の途中で畳まれている戦闘の欄。畳まれていない・敵が居ないなら None。
-
-    敵の一覧が空なら戦闘は終わっている（切り上げた直後もここ）。下の 0 除算の扱いへ回す。
-    """
-    panel = getattr(hud, BATTLE_PANEL_ATTR, None)
-    height = getattr(panel, "height", None)
-    if not isinstance(height, (int, float)) or height > 0:
-        return None
-    return panel if _enemies_left() else None
-
-
-def _enemies_left():
-    return bool(getattr(ui.find_app(), "current_enemy_dict", None))
-
-
-def _redraw_when_unfolded(ctx, panel, orig, args, kwargs):
-    """欄が戻ったら、最後の更新をもう一度走らせる。見張りは1本だけで、走らせる更新は最後のものに置き換える。"""
-    state = _state()
-    watching = state.get("panel_redraw") is not None
-    state["panel_redraw"] = (orig, args, kwargs)
-    if watching:
-        return
-    try:
-        from kivy.clock import Clock
-    except Exception:
-        state["panel_redraw"] = None
-        return
-
-    def tick(_dt):
-        pending = state.get("panel_redraw")
-        if pending is None:
-            return False
-        if not _alive(ctx) or not _enemies_left():
-            state["panel_redraw"] = None
-            return False
-        if panel.height <= 0:
-            return True
-        state["panel_redraw"] = None
-        try:
-            pending[0](*pending[1], **pending[2])
-            _write("defeat: redrew the enemy panel after it unfolded")
-        except Exception:
-            log_exc("defeat: cannot redraw the enemy panel")
-        return False
-
-    _write("defeat: the enemy panel updated while folded; keeping the update whole")
-    Clock.schedule_interval(tick, PANEL_POLL_SECONDS)
-
-
 def gate():
     return getattr(sys, _GATE_ATTR, None)
 
@@ -327,16 +266,6 @@ def install(ctx):
         return target
 
     def enemy_display(orig, *args, **kwargs):
-        panel = _folded_panel(args[0] if args else None)
-        if panel is not None:
-            height = panel.height
-            panel.height = FOLDED_PANEL_HEIGHT
-            try:
-                result = orig(*args, **kwargs)
-            finally:
-                panel.height = height
-            _redraw_when_unfolded(ctx, panel, orig, args, kwargs)
-            return result
         try:
             return orig(*args, **kwargs)
         except ZeroDivisionError:
