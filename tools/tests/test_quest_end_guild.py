@@ -155,6 +155,7 @@ class InstantaleApp:
         self.player = player
         self.texts = []
         self.moved = []
+        self.move_shapes = []
         self.removed = []
         self.saves = 0
         # 実装の分からない部分を切り替えるつまみ（本番では観測して決まる）。
@@ -179,8 +180,13 @@ class InstantaleApp:
             return facility
         raise RuntimeError("the game cannot decide where to put them")
 
-    def move_npc_to_facility(self, character_id, character_instance, target_facility,
-                             target_node=None, register_facility=True):
+    def move_npc_to_facility(self, *args, **kwargs):
+        # 包みが渡した形（位置の数・キーワードの名前）を控える（`303_` 版3は受けた形のまま渡す）。
+        self.move_shapes.append((len(args), sorted(kwargs)))
+        return self._move_npc_to_facility(*args, **kwargs)
+
+    def _move_npc_to_facility(self, character_id, character_instance, target_facility,
+                              target_node=None, register_facility=True):
         # タプルのまま渡されたら本物と同じように壊れる（実機の再現）。
         if isinstance(target_facility, (tuple, list)):
             raise AttributeError("'tuple' object has no attribute 'characters'")
@@ -225,6 +231,11 @@ class QuestEndManager:
             # 聞かずに自分で決めるビルド。
             # 差し替えの第2層だけが頼りになる。
             facility, node = app.leave_facility
+        if getattr(app, "keyword_move", False):
+            # 置き直しをキーワードで呼び、ノードを省くビルド。
+            app.move_npc_to_facility(character_id=member_id, character_instance=character,
+                                     target_facility=facility)
+            return
         app.move_npc_to_facility(member_id, character, facility, node)
 
     def execute(self, choice_text):
@@ -514,6 +525,18 @@ app, ctx, clock, mod, areas = setup()
 QuestEndManager(app).method_1("71")
 check("差し替えは1回だけ", len(app.moved) == 1, app.moved)
 check("register_facility の既定は変わらない", app.moved[0]["register_facility"] is True)
+
+app, ctx, clock, mod, areas = setup()
+app.game_asks_leave_facility = False
+app.keyword_move = True
+QuestEndManager(app).method_1("71")
+check("キーワードで呼ばれても置き先が差し替わる",
+      [m["facility"] for m in app.moved] == [guild_of(areas, "9")[0]], names_of(app.moved))
+check("  → 省かれたノードもいまの町のものが入る",
+      bool(app.moved) and app.moved[0]["node"] is guild_of(areas, "9")[1])
+check("  → 受けた形のまま渡す（位置に直さない。ノードはキーワードで足す）",
+      app.move_shapes == [(0, ["character_id", "character_instance", "target_facility", "target_node"])],
+      app.move_shapes)
 
 app, ctx, clock, mod, areas = setup()
 QuestEndManager(app).method_1("71")

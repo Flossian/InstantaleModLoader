@@ -23,7 +23,6 @@ import io
 import json
 import os
 import sys
-import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))

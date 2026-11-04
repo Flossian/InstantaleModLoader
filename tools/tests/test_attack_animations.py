@@ -21,7 +21,6 @@ import shutil
 import struct
 import sys
 import tempfile
-import types
 import typing
 import weakref
 

@@ -35,6 +35,9 @@ r"""Stable Diffusion の解像度・サンプラー・モデル・プロンプ�
 同じ出口で、今の絵を下絵にした描き直し（img2img）と、2つのモデルで続けて描く
 （txt2img→img2img）も行う。今の絵は入口で読んで印と一緒に控え、出口で寸法を合わせて渡す。
 決め方と下絵の形は `img2img.py`。
+
+版28: `img2img.py` の `hasattr` を既定値付きの `getattr` に替えた（TECH.md §6）。設定の窓のフックの第1引数を
+`self` と書くようにした（受けていたのは HUD そのもので、働きは変わらない）。使っていない import を外した（`iniimport.py`）。
 """
 import inspect
 import os
@@ -1374,11 +1377,12 @@ def apply(ctx):
     regen_ui = {"buttons": [], "kept": [], "bound": None}
 
     @ctx.wrap(SETTING_WINDOW_TARGET, required=False, safe=True)
-    def setting_window(orig, hud, *args, **kwargs):
-        result = orig(hud, *args, **kwargs)
+    def setting_window(orig, self, *args, **kwargs):
+        # `self` は HUD（`InstanTaleHUD.toggle_setting_window_visibility(self, *args)`）。
+        result = orig(self, *args, **kwargs)
         # ここで投げると safe の包みがゲームの関数をもう一度呼ぶので、自分で受け止める。
         try:
-            arrange_regen_buttons(hud)
+            arrange_regen_buttons(self)
         except Exception:
             ctx.log_exc("image quality: arranging the regenerate buttons failed")
         return result

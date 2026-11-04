@@ -76,7 +76,6 @@ Windows 上に存在し得ない**（不正文字を含むディレクトリを�
 """
 
 import os
-import sys
 
 from instantale_modloader import frames, loads, ui
 

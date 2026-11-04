@@ -851,7 +851,7 @@ print("=== 311_ が覚えた人物像 ===")
 GEN_TARGET = "scripts.llm.llm_manager_world_generate:random_quest_generator"
 
 
-def press_generate(ctx_obj, app_obj):
+def press_generate(ctx_obj, app_obj, keyword=False, shapes=None):
     """「この話から依頼を作る」を押し、生成側へ渡った `area_description` を返す。
 
     **本物と同じ入れ子にする。**
@@ -859,20 +859,27 @@ def press_generate(ctx_obj, app_obj):
     `generate_random_quest()` の内側で走るので、
     その外から呼んでも遅い ― 生成が終わった時点で mod は印を使い切って
     `None` に戻している。
+    `keyword=True` ならゲームがキーワードで呼んだ形にし、`shapes` に `orig` が受けた形を控える。
     """
     seen = {}
     board_cls = sys.modules["__main__"].DisplayQuestChoice
     original = board_cls.generate_random_quest
 
-    def orig(world_overview, settlement_name, settlement_overview,
-             settlement_structure_description, area_description, quest_difficulty,
-             *args, **kwargs):
-        seen["area"] = area_description
+    def orig(*args, **kwargs):
+        if shapes is not None:
+            shapes.append((len(args), sorted(kwargs)))
+        seen["area"] = kwargs["area_description"] if "area_description" in kwargs else args[4]
         return {"quest_title": "こぼれ話の依頼", "client_name": "テストNPC D"}
 
     def generate_random_quest(self):
-        ctx_obj.hooks[GEN_TARGET](orig, "世界の概要", "テストの町A", "町の概要",
-                                  "町の構造", "エリアの説明", 41)
+        if keyword:
+            ctx_obj.hooks[GEN_TARGET](orig, world_overview="世界の概要", settlement_name="テストの町A",
+                                      settlement_overview="町の概要",
+                                      settlement_structure_description="町の構造",
+                                      area_description="エリアの説明", quest_difficulty=41)
+        else:
+            ctx_obj.hooks[GEN_TARGET](orig, "世界の概要", "テストの町A", "町の概要",
+                                      "町の構造", "エリアの説明", 41)
         return original(self)
 
     board_cls.generate_random_quest = generate_random_quest
@@ -920,6 +927,17 @@ area = press_generate(ctx, app)
 check("311_ が無ければ会話の記録だけを添える", "会話の記録" in area, area[-300:])
 check("311_ が無くても人物像の節は足さない",
       "過去の会話から分かっていること" not in area, area[-300:])
+
+# ゲームがキーワードで呼んでも、受けた形のまま `area_description` だけを差し替える（版8）。
+mod_kw, ctx_kw, app_kw = setup(history=history)
+shapes = []
+area_kw = press_generate(ctx_kw, app_kw, keyword=True, shapes=shapes)
+check("キーワードで呼ばれても会話の記録を添える",
+      area_kw.startswith("エリアの説明") and "会話の記録" in area_kw, area_kw[-300:])
+check("  → 受けた形のまま渡す（位置に直さない）",
+      shapes == [(0, ["area_description", "quest_difficulty", "settlement_name",
+                      "settlement_overview", "settlement_structure_description",
+                      "world_overview"])], shapes)
 with io.open(os.path.join(ctx.state_dir, mod.CLIENTS_BASENAME), encoding="utf-8") as fh:
     made = json.load(fh).get(ml.state.playthrough_key(app)) or {}
 check("作った依頼の依頼人は周回の鍵（世界×主人公）の下に控える",

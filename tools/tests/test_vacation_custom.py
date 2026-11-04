@@ -177,7 +177,11 @@ class VacationStartManager:
             # ― ここが既に差し引き後の正しい値であること）。
             self.app.gold_after_payment = self.app.player.gold
         self.app.stays.append((self.months, self.quality, choice_text))
-        self.app.add_text("{}ヵ月泊まることにした。".format(self.months))
+        if getattr(self.app, "keyword_text", False):
+            # キーワード引数で出すビルド（315 版9 は受け取った形のまま文言を差し替える）。
+            self.app.add_text(context="{}ヵ月泊まることにした。".format(self.months))
+        else:
+            self.app.add_text("{}ヵ月泊まることにした。".format(self.months))
         self.app.change_background_image_to_inn_room(self.quality)
         if type(self).elapses:
             self.app.elapse_days(int(str(self.months)) * 30)
@@ -498,7 +502,8 @@ def setup(configure=None, age=25):
     main.current_app = app
     app.open_inn_menu()
     CLOCK.settle()
-    globals()["REST_CLS"] = rest_cls
+    global REST_CLS
+    REST_CLS = rest_cls
     return module, ctx, app, choice_cls, start_cls
 
 
@@ -664,6 +669,9 @@ check("文言も 6ヵ月", "6ヵ月泊まることにした。" in app.texts, ap
 check("日数送りも 6ヵ月ぶん（180日）", app.elapsed == [180], app.elapsed)
 check("宿代はゲームのまま 100", app.player.gold == 4900, app.player.gold)
 check("エラーなし", not ctx.errors, ctx.errors)
+keyword_choice = choice_cls(app=app, period_months=GAME_MONTHS)
+check("キーワード引数で作られても月数を 6 に差し替える",
+      keyword_choice.period_months == 6, keyword_choice.period_months)
 
 print("[期間] 1ヵ月・40代（+2ヵ月）＝ゲームの3ヵ月と同じになり、何も動かない")
 
@@ -716,6 +724,13 @@ check("文言は実際の期間（1週間泊まることにした。）",
 check("ゲームの 1ヵ月 の文言は出ない",
       not any("1ヵ月泊まる" in t for t in app.texts), app.texts)
 check("日数送りが 7日 に切り詰まる", app.elapsed == [7], app.elapsed)
+module_kw, ctx_kw, app_kw, _choice_kw, _start_kw = setup(configure=week1)
+app_kw.keyword_text = True
+press(app_kw, "宿泊する(1週間)")
+press(app_kw, "個室(100G)")
+check("キーワード引数の文言も実際の期間に直す",
+      "1週間泊まることにした。" in app_kw.texts
+      and not any("1ヵ月泊まる" in t for t in app_kw.texts), app_kw.texts)
 check("暦も7日だけ進む", app.day == 7, app.day)
 check("宿代は1回ぶん（100G）", app.player.gold == 4900, app.player.gold)
 press(app, "宿泊を終える")

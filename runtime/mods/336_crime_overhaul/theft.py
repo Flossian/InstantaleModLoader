@@ -534,9 +534,10 @@ def install(env):
         return None
 
     @ctx.wrap("scripts.hud.new_hud:InventoryItem.show_popup_menu", required=False, safe=True)
-    def show_popup_menu(orig, self, pos, *args, **kwargs):
+    def show_popup_menu(orig, self, *args, **kwargs):
         """品の右クリック。ゲームの popup はそのまま。店の品なら自前のボタンを足す（`402_` と同じ口）。"""
-        result = orig(self, pos, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
+        pos = frames.arg(args, kwargs, "pos", 0)
         try:
             app = ui.find_app()
             if app is not None:

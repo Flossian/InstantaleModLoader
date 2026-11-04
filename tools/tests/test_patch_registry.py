@@ -310,7 +310,7 @@ def main():
     R.begin_mod("200_beta.py")
     try:
         @ctx.patch("fakegame:targt_a")      # typo
-        def _typo(x):
+        def _typo_patch(x):
             return x
         check(False, "打ち間違えた patch が通ってしまった")
     except LookupError:
@@ -1241,7 +1241,7 @@ def main():
 
     @P.wrap("fakegame:risky", safe=True)
     def after_orig(orig, x):
-        result = orig(x)
+        orig(x)
         raise RuntimeError("壊れた（orig を呼んだ後）")
 
     calls.clear()

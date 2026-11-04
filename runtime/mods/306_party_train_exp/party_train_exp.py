@@ -99,6 +99,9 @@
 仲間の経験値は `world.characters` の上なので、ゲームが次に保存した時点で一緒に残る。
 訓練は月日が進む処理（＝ゲーム自身が保存する場面）なので、
 こちらから `save_game()` を呼んで割り込むことはしない。
+
+版2: `gain_exp` と `add_text` のフックは、引数を受け取った形のまま元の関数へ渡す
+（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 """
 
 import threading
@@ -372,14 +375,15 @@ def apply(ctx):
 
     # ================================================================ フック
     @ctx.wrap("scripts.characters:Character.gain_exp", required=False)
-    def gain_exp(orig, self, exp=0, *args, **kwargs):
+    def gain_exp(orig, self, *args, **kwargs):
         """プレイヤーが訓練で経験値を得たら、同じぶんを同行者にも入れる。
 
         元の処理を先に通す（プレイヤーの支給はゲームの仕事のまま）。
         写すのはその後で、こちらが失敗してもプレイヤー側の結果は返る。
         """
-        result = orig(self, exp, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         try:
+            exp = frames.arg(args, kwargs, "exp", 0, 0)
             if getattr(local, "mirroring", False):
                 return result          # こちらが仲間に入れている最中
             if not isinstance(exp, (int, float)) or isinstance(exp, bool) or exp <= 0:
@@ -406,12 +410,12 @@ def apply(ctx):
         return result
 
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False)
-    def add_text(orig, self, context=None, *args, **kwargs):
+    def add_text(orig, self, *args, **kwargs):
         """ゲームが1行出したら、溜めてある仲間の話をその後ろに流す。
 
         溜まっているときしか何もしないので、普段の描画には触らない。
         """
-        result = orig(self, context, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         try:
             if getattr(local, "pending", None) and not getattr(local, "flushing", False):
                 flush(self, "after the game's own line")

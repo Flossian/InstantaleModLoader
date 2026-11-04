@@ -449,6 +449,11 @@ check("名前も入っている",
       any("テスト仲間C" in text for text in app.texts), app.texts)
 check("差し替えは1文だけ",
       sum(1 for text in app.texts if "パーティに残り" in text) == 1, app.texts)
+# ゲームがキーワード引数で出しても、受け取った形のまま文だけを差し替える（版3）。
+before = len(app.texts)
+app.add_text(context="テスト仲間Cはパーティから離脱した。")
+check("キーワード引数の文も差し替える",
+      app.texts[before:] and "パーティに残り" in app.texts[-1], app.texts[before:])
 
 app, ctx, clock, mod, areas = setup()
 mod.REPLACE_LEAVE_TEXT = False

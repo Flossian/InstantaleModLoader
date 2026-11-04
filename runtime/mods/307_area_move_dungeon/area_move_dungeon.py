@@ -100,19 +100,29 @@
 `STAMINA_MIN_PERCENT` を下回っていたら押された時点で断る。
 クエストの生成にも世界のデータにも一切触らない。
 読めなかったときは通す（値が読めないことを理由に遊びを止めない。WARN は残す）。
+
+## 版7
+
+`QuestStartManager.__init__`・`add_text`・`AreaMoveManager.__init__`・`random_quest_generator` のフックは、
+引数を受け取った形のまま元の関数へ渡す（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
+生成のプロンプトへの差し込みは、来た側（位置かキーワード）に合わせて `area_description` と `quest_difficulty` を差し替える。
 """
 
 import os
 import random
 import time
 
-from instantale_modloader import choices, durations, ui
+from instantale_modloader import choices, durations, frames, ui
 
 from . import world
 from .journey import Journey
 
 
 LOG_BASENAME = "road_travel.log"
+
+# `random_quest_generator` の引数の並び（recon の signatures.json）。
+QUEST_GENERATOR_ARGS = ("world_overview", "settlement_name", "settlement_overview",
+                        "settlement_structure_description", "area_description", "quest_difficulty")
 
 # 進行中の道中の控え。
 # セーブには書かない。
@@ -765,7 +775,7 @@ def apply(ctx):
     choices.provide(ctx, screen, refresh=refresh_choice_buttons, offer=offer, labels=OUR_LABELS)
 
     @ctx.wrap("__main__:QuestStartManager.__init__", required=False)
-    def quest_start(orig, self, app, quest_type, quest_id, *args, **kwargs):
+    def quest_start(orig, self, *args, **kwargs):
         """道中のクエストが実際に始まったら控えを本決まりにする。
 
         受注しなかった（「やめる」を押した）道は、
@@ -776,6 +786,10 @@ def apply(ctx):
         `observe_quest` が `app.current_quest_data` を見て後から埋める。
         """
         try:
+            # (app, quest_type, quest_id)。受け取った形のまま元の関数へ渡す。
+            app = frames.arg(args, kwargs, "app", 0)
+            quest_type = frames.arg(args, kwargs, "quest_type", 1)
+            quest_id = frames.arg(args, kwargs, "quest_id", 2)
             journey.sync()
             record = road_of(app, "offered", "armed")
             if record is not None:
@@ -793,7 +807,7 @@ def apply(ctx):
                     drop_road(app, "another quest started ({})".format(quest_id))
         except Exception:
             ctx.log_exc("road travel: cannot arm the road")
-        return orig(self, app, quest_type, quest_id, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:QuestEndManager.execute", required=False)
     def quest_end(orig, self, *args, **kwargs):
@@ -863,7 +877,7 @@ def apply(ctx):
         return result
 
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False)
-    def add_text(orig, self, context, *args, **kwargs):
+    def add_text(orig, self, *args, **kwargs):
         """到着の移動中だけ、ゲームの「徒歩で目指す。長旅だ...」を伏せる。
 
         危険な道は道中をクエストとして踏破しているので、
@@ -876,6 +890,7 @@ def apply(ctx):
         """
         try:
             record = journey.record
+            context = frames.arg(args, kwargs, "context", 0)
             if HIDE_TRAVEL_TEXT and isinstance(context, str) \
                     and isinstance(record, dict) \
                     and record.get("stage") == "moving" \
@@ -884,7 +899,7 @@ def apply(ctx):
                 return None
         except Exception:
             ctx.log_exc("road travel: cannot filter the travel text")
-        return orig(self, context, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     # `elapse_days` はこちらでは包まない。包むのはローダの関所1枚だけで
     # （TECH.md §3.3.3）、ここは「この道は何日か」を答える側に回る。
@@ -940,47 +955,51 @@ def apply(ctx):
     durations.install(ctx, write)
 
     @ctx.wrap("__main__:AreaMoveManager.__init__", required=False)
-    def area_move(orig, self, app, target_area_id, mode, *args, **kwargs):
+    def area_move(orig, self, *args, **kwargs):
         """自分が起こしたのでない移動が始まったら、待っている道は捨てる。
 
         普通に徒歩・馬車で移動してしまったなら、その道はもう関係が無い。
         """
         try:
+            # (app, target_area_id, mode)。受け取った形のまま元の関数へ渡す。
+            app = frames.arg(args, kwargs, "app", 0)
+            mode = frames.arg(args, kwargs, "mode", 2)
             journey.sync()
             if not state["departing"] and road_of(app) is not None:
                 drop_road(app, "the player travelled by other means "
                           "(mode={!r})".format(mode))
         except Exception:
             ctx.log_exc("road travel: cannot clear the road")
-        return orig(self, app, target_area_id, mode, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     # ---------------------------------------- 生成プロンプトに道中の性質を差し込む
     @ctx.wrap("scripts.llm.llm_manager_world_generate:random_quest_generator",
               required=False)
-    def random_quest_generator(orig, world_overview, settlement_name,
-                               settlement_overview, settlement_structure_description,
-                               area_description, quest_difficulty, *args, **kwargs):
+    def random_quest_generator(orig, *args, **kwargs):
         """`area_description` に道中の性質を、`quest_difficulty` に選んだ値を渡す。
 
         印は1回で使い切るので、掲示板から普通に作られた依頼は素通しする。
+        引数は受け取った形（位置かキーワード）のまま渡し、2つだけを差し替える（TECH.md の規則の表）。
         """
         mark = state["inject"]
         state["inject"] = None
         if mark is None or time.monotonic() - state["inject_at"] > INJECT_TTL:
             if mark is not None:
                 write("inject: stale marker, left untouched")
-            return orig(world_overview, settlement_name, settlement_overview,
-                        settlement_structure_description, area_description,
-                        quest_difficulty, *args, **kwargs)
+            return orig(*args, **kwargs)
 
+        area_description = frames.arg(args, kwargs, "area_description", QUEST_GENERATOR_ARGS)
+        quest_difficulty = frames.arg(args, kwargs, "quest_difficulty", QUEST_GENERATOR_ARGS)
         merged = (area_description or "") + road_brief(
             mark["origin"], mark["target"], mark["difficulty"])
         write("inject: area_description {} -> {} chars; difficulty {!r} -> {}".format(
             len(area_description or ""), len(merged), quest_difficulty,
             mark["difficulty"]))
-        result = orig(world_overview, settlement_name, settlement_overview,
-                      settlement_structure_description, merged,
-                      mark["difficulty"], *args, **kwargs)
+        args, kwargs, _ = frames.replace_arg(args, kwargs, "area_description",
+                                             QUEST_GENERATOR_ARGS, merged)
+        args, kwargs, _ = frames.replace_arg(args, kwargs, "quest_difficulty",
+                                             QUEST_GENERATOR_ARGS, mark["difficulty"])
+        result = orig(*args, **kwargs)
         if isinstance(result, dict):
             write("inject: generated {!r}".format(result.get("quest_title")))
         return result

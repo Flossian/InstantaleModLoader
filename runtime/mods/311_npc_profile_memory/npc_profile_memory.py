@@ -115,6 +115,9 @@ mod どうしは同じ場所を読むことで繋がる。
 鍵の並びを `RECORD_KEYS` で固定しているのはこのため。
 読む側はファイルが無ければ何も足さない。
 この mod を切っていても、まだ一度も会話していなくても成立する。
+
+版8: 会話の1ターンのフック2本は、引数を受け取った形のまま元の関数へ渡す
+（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 """
 
 import datetime
@@ -451,7 +454,6 @@ def apply(ctx):
         }
         setattr(sys, STATE_STORE_ATTR, store)
     state = store["state"]
-    log_lock = store["log_lock"]
 
     write = ctx.logger(LOG_BASENAME)
     owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "311_npc_profile_memory"
@@ -1021,9 +1023,9 @@ def apply(ctx):
     # ============================================================ フック
     @ctx.wrap("__main__:ConversationPhaseManager.conversation_continued",
               required=False)
-    def conversation_continued(orig, self, choice_text, *args, **kwargs):
+    def conversation_continued(orig, self, *args, **kwargs):
         """1ターンが終わったところ。ターンの結果には手を触れない。"""
-        result = orig(self, choice_text, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         try:
             schedule_extract(getattr(self, "app", None))
         except Exception:
@@ -1032,9 +1034,9 @@ def apply(ctx):
 
     @ctx.wrap("__main__:ConversationInQuestPhase.conversation_continued",
               required=False)
-    def conversation_in_quest_continued(orig, self, choice_text, *args, **kwargs):
+    def conversation_in_quest_continued(orig, self, *args, **kwargs):
         """クエスト中の会話も同じ扱い（相手は同じ NPC）。"""
-        result = orig(self, choice_text, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         try:
             schedule_extract(getattr(self, "app", None))
         except Exception:

@@ -28,7 +28,6 @@ id 0〜8 の範囲は世界の形と関係なく id で決まり、id 9 以降�
 遊び方の説明は DOC.md、検証の経過は VERIFICATION.md §3.117。
 """
 
-import random
 import threading
 
 from instantale_modloader import quest_bands, ui

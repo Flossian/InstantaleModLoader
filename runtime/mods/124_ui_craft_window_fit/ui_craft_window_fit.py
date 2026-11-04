@@ -194,8 +194,6 @@ def apply(ctx):
         parent = frames.attr(widget, "parent")
         return None if parent in (None, frames.MISSING) else parent
 
-    children_of = ui.children_of
-
     def geom(widget):
         """局所座標（`x`/`y`）と窓座標（`wx`/`wy`）の両方。読めなければ None。
 

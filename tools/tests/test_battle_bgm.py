@@ -257,6 +257,19 @@ try:
           result == "played" and played[-1].endswith("/state/musics/battle/1. Echoes of Valhalla.mp3"),
           played[-1:])
 
+    # ゲームがキーワード引数で呼んでも、受け取った形のまま曲だけを差し替える（版4）
+    seen_kw = []
+
+    def orig_kw(self, *a, **kw):
+        seen_kw.append((a, dict(kw)))
+        return "played"
+
+    hook(orig_kw, None, app=app, music_src=src)
+    check("hook: keyword call also picks the normal-only track (shape kept)",
+          seen_kw and seen_kw[0][0] == () and sorted(seen_kw[0][1]) == ["app", "music_src"]
+          and seen_kw[0][1]["music_src"].endswith("/state/musics/battle/1. Echoes of Valhalla.mp3"),
+          seen_kw)
+
     # エリア曲は素通し
     hook(orig, None, app, "Assets/sounds/musics/town/calm/x.mp3")
     check("hook: area track untouched", played[-1] == "Assets/sounds/musics/town/calm/x.mp3")

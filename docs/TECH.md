@@ -283,6 +283,8 @@ MOD が持つ永続データはそもそも `out/` に来ない（`state/`。§3
 ```powershell
 # 1. 静的検査（構文だけでなくデコレータと引数の整合も見る）
 python -m compileall -q runtime tools
+# 使っていない import・変数と未定義名。0件を保つ（§2.5）。tools/drive はゲームの中で exec するので外す
+python -m pyflakes runtime tools | Where-Object { $_ -notmatch '^tools[\\/]drive[\\/]' }
 python tools/check_mods.py
 python tools/build_mods.py --check   # docs/MODS.md が DOC.md とずれていないか（§2.7）
 python tools/list_mods.py --check    # docs/MODLIST.md が mod.json とずれていないか
@@ -369,13 +371,18 @@ Windows で動かすのは、このプロジェクトが Windows 専用だから
 | ジョブ | Python | 見るもの |
 |---|---|---|
 | `game-python` | 3.10 | `compileall runtime` と `vermin --target=3.10- runtime`。ゲームの中に入るコードが本物の 3.10 で通るか、3.11 以降の機能を使っていないか（検査を 3.10 で流す代わりの安い手。版による振る舞いの違いは拾わない） |
-| `checks` | 3.13 | `compileall` / `check_mods.py --strict` / 生成物の照合（`build_mods.py --check` / `list_mods.py --check` / `build_verification.py --check`）/ `tools/tests/test_*.py` 全件 |
+| `checks` | 3.13 | `compileall` / `pyflakes` / `check_mods.py --strict` / 生成物の照合（`build_mods.py --check` / `list_mods.py --check` / `build_verification.py --check`）/ `tools/tests/test_*.py` 全件 |
 | `packaging` | 3.13 | `make_dist.bat` が通ること、3本の zip に `LICENSE` / `NOTICE` が入っていて手元版（`*.default.*` の `.default` を抜いた名前）が入っていないこと、展開した full で配った tools が全部 import でき `check_mods.py --strict` が通ること |
 
 - 除外一覧は置いていない。1本でも落ちたら CI が失敗する
   （「既知の失敗」の枠を作ると、そこに積まれたものが直ったかどうか誰も見なくなる）
 - **落ちた本は出力をそのまま吐く**（折り畳み1つ）。通った本は1行だけ。
   名前しか残さない作りにしていたら、手元では再現しない失敗で手掛かりが何も残らなかった（VERIFICATION.md §4）
+- `pyflakes` は警告が1件でもあれば失敗にする。
+  未定義名は `compileall` も `check_mods.py` も拾わず、フックの中なら注入してその経路を遊ぶまで出ない。
+  使っていない import は動きに害は無いが、残っていると、触るたびに「前からあるものか」を確かめ直すことになる。
+  再輸出の名前は `# noqa` では黙らない（pyflakes は noqa を読まない）ので、`名前 = モジュール.名前` の代入で置く。
+  `tools/drive/` はゲームの中で exec するスクリプト（`app` などはゲーム側が渡す名前）なので外す
 - `check_mods.py` だけは §2.1 と違って `--strict` を付ける（同梱 MOD は note も通す。§2.3）。
   手元では `load_order.local.json` の知らせが note に出るので §2.1 では付けない。CI の作業ツリーにはそれが無い
 - `packaging` が zip の中身まで見るのは、`LICENSE` の入っていない配布物は誰も合法的に再配布できないから。
@@ -2250,7 +2257,7 @@ by = value_limits.raised_by()           # ゲームの上限より上げてい�
 
 #### 3.3.27 能力値の補正も窓口で分け合う（`abilities`）
 
-装備の補正（`411_equipment_ability_bonus`）や、食事・一時の強化・病気や怪我のように、能力値を足したり引いたりする MOD が補正を置く。
+装備の補正（`411_equipment_bonuses`）や、食事・一時の強化・病気や怪我のように、能力値を足したり引いたりする MOD が補正を置く。
 ローダは、ゲームが能力値を読む場面の間だけ補正を足して見せる。
 人物の能力値には書き込まない。
 置き場は `instantale_modloader/abilities.py`。
@@ -2739,6 +2746,15 @@ v2.0.0 を作るときは、この表の行を外し、`MIN_API` を上げる。
 | `ui.Screen.prune_stale(buttons, labels)`（印を失った自前のボタンを外す） | `choices.provide(labels=...)`（窓口が組み直しの最初に外す） | 働きは前のまま | 2026-10-21 |
 | `modfacility.maintain_buttons(app)` / `modfacility.press(app, index)`（建物の選択肢を自分で組む・押す） | 窓口が組み直しのたびに組む（§5.8） | 呼べばその場で組み直す・押す | 2026-10-21 |
 | `llm.text_limit(local_chars, path)` / `llm.runs_bundled_llm(path)`（同梱の llama.cpp のときだけ足す文を切る） | 切らずに渡す（同梱の窓 16384 に収まる。§5.3「頼みに足す文の上限」） | 働きは前のまま | 2026-10-31 |
+
+#### 次の API（v2.0.0）で変えるもの
+
+既定値や働きを変えると、書き換えていないほかの人の MOD の振る舞いが黙って変わる。
+今の振る舞いで困っていないものは、`API` を上げる版（v2.0.0）にまとめて変える。
+
+| 変えるもの | 今 | v2.0.0 で | 理由と、それまでの扱い | 決めた日 |
+|---|---|---|---|---|
+| `ctx.wrap` の `safe` の既定 | `False`（書かなければ素の包み。フックの例外はゲームへ抜ける） | `True`（書かなければ安全の層。素の包みにしたい所は `safe=False` と書く） | MOD のフックの失敗でゲームを落とさない（§3.1.5）。既定にすると失敗が見えにくくなるので、デバッグモードのときは安全の層の失敗を本文に出す手当てと一緒に入れる。それまでは包みごとに `safe=True` を書く。素の包みのままでも今は困っていないので、同梱の MOD の付け足しも v2.0.0 まで急がない（`safe` を書いていない包みは 2026-11-03 の数えで約150本） | 2026-11-03 |
 
 ### 3.10 パッチを剥がす（`unload`）
 

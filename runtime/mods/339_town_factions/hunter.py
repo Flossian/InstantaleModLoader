@@ -21,7 +21,7 @@ import random
 import sys
 import time
 
-from instantale_modloader import arrivals, choices, combat, llm, loads, modfacility, npcs, ui
+from instantale_modloader import arrivals, choices, combat, frames, llm, loads, modfacility, npcs, ui
 
 ARRIVAL_PRIORITY = 20           # 300（0）・911（10）より先に呼び止める
 CLAIM_PRIORITY = 50             # 刺客との会話は「受けて立つ」だけ（窓口 `choices` の `claim`）
@@ -466,12 +466,16 @@ def install(env):
         screen.when_idle(app, start, timeout=IDLE_TIMEOUT, cancel_if=gone, tag="hunter")
 
     @ctx.wrap("scripts.llm.llm_manager:conversation_starter", required=False)
-    def conversation_starter(orig, messages, *args, **kwargs):
-        """刺客が起こした会話のときだけ、開始の合図を「呼び止めて勝負を挑む」に差し替える（`300_` と同じ形）。"""
+    def conversation_starter(orig, *args, **kwargs):
+        """刺客が起こした会話のときだけ、開始の合図を「呼び止めて勝負を挑む」に差し替える（`300_` と同じ形）。
+
+        引数は受け取った形（位置かキーワード）のまま渡し、`messages` だけを来た側に合わせて差し替える。
+        """
         mark, state["opening"] = state["opening"], None
+        messages = frames.arg(args, kwargs, "messages", 0)
         if mark is None or _now() - mark["at"] > OPENING_TTL or not isinstance(messages, list) \
                 or not messages or not isinstance(messages[-1], dict):
-            return orig(messages, *args, **kwargs)
+            return orig(*args, **kwargs)
         app = ui.find_app()
         player = getattr(getattr(app, "player", None), "name", "") or "旅人"
         replacement = dict(messages[-1])
@@ -479,7 +483,8 @@ def install(env):
         replacement["content"] = OPENING.format(player=player, town=mark["town"] or "この街",
                                                 faction=mark["faction"], title=mark["title"], close=close)
         write("hunter: opening for {} -> {!r}".format(mark["npc"], replacement["content"][:60]))
-        return orig(messages[:-1] + [replacement], *args, **kwargs)
+        args, kwargs, _ = frames.replace_arg(args, kwargs, "messages", 0, messages[:-1] + [replacement])
+        return orig(*args, **kwargs)
 
     def note(app, ledger, npc_id, player):
         """会話に足す文（`notes` の中から呼ぶ）。刺客でなければ None。"""

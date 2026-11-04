@@ -164,7 +164,9 @@ class VacationRestManager(Activity):
 
 
 class VacationSocializeResolveManager:
-    def __init__(self, app, months, quality, narration, choice, scene, location_name, npc_id_list):
+    # 引数名はゲームと同じ（recon の signatures.json）。キーワード引数で作る版も通すため。
+    def __init__(self, app, months, quality, life_overview_narration, event_choice_text,
+                 event_scene_depiction, location_name, npc_id_list):
         app.resolved.append(list(npc_id_list))
 
 
@@ -182,8 +184,15 @@ class VacationSocializeManager(Activity):
                             [{"instance": owner, "life_log_dict": {"1日前": "x"}}])
         self.app.social.append(seen[-1])
         main = sys.modules["__main__"]
-        main.VacationSocializeResolveManager(self.app, self.months, self.quality,
-                                             "", "", "", "宿", [self.app.player.location.owner])
+        if getattr(self.app, "keyword_resolve", False):
+            # キーワード引数で作るビルド（327 版6 は受け取った形のまま npc_id_list だけを差し替える）。
+            main.VacationSocializeResolveManager(
+                app=self.app, months=self.months, quality=self.quality,
+                life_overview_narration="", event_choice_text="", event_scene_depiction="",
+                location_name="宿", npc_id_list=[self.app.player.location.owner])
+        else:
+            main.VacationSocializeResolveManager(self.app, self.months, self.quality,
+                                                 "", "", "", "宿", [self.app.player.location.owner])
         return Activity.execute(self, choice_text)
 
 
@@ -496,6 +505,11 @@ seen = socialize("bunk", ("player", "9"))
 check("social: companion first, any room", seen == [("仲間", {})], seen)
 check("social: npc_id_list follows", app.resolved[-1] == ["9"], app.resolved)
 check("social: roster untouched", inn.characters == ["7"], inn.characters)
+app.press("宿泊を終える")
+app.keyword_resolve = True
+seen = socialize("bunk", ("player", "9"))
+app.keyword_resolve = False
+check("social: npc_id_list follows a keyword call too", app.resolved[-1] == ["9"], app.resolved)
 app.press("宿泊を終える")
 
 seen = socialize("luxury_suite")

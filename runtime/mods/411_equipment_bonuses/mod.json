@@ -1,14 +1,14 @@
 {
-  "entry": "equipment_ability_bonus.py",
+  "entry": "equipment_bonuses.py",
   "api": 1,
   "kind": "feature",
   "name": {
-    "en": "High-quality gear grants ability bonuses",
-    "ja": "高品質の装備に能力値補正が付く"
+    "en": "High-quality gear grants ability bonuses and weapon effects",
+    "ja": "高品質の装備に能力値補正や武器の効果が付く"
   },
   "description": {
-    "en": "When an epic, legendary or mythic weapon or armor is made (shop, crafting, events), it gets random ability bonuses such as STR +3, shown in the item details. Higher rarity gets more and larger bonuses. What the hero and companions wear counts wherever the game reads ability scores (damage, defense, turn order, quest events, impressions), through the loader's ability window, and shows as (+3) on the character sheet. The ability scores themselves are never changed. Items you already own get nothing",
-    "ja": "epic・legendary・mythic の武器・防具が作られたとき（店・クラフト・イベント）、筋力 +3 のような能力値補正がランダムに付き、説明欄に出る。レア度が高いほど数も量も多い。主人公と仲間が身に着けている品の補正は、ローダの能力値の窓口を通して、ゲームが能力値を読むところ（火力・防御・手番の順・依頼の出来事・印象）に効き、ステータス画面の能力値に (+3) の形で出る。能力値そのものは書き換えない。もともと持っている品には付かない"
+    "en": "When an epic, legendary or mythic weapon or armor is made (shop, crafting, events), it gets random ability bonuses such as STR +3, and a weapon may also get effects such as Critical 15%, Lifesteal 10%, Pierce 35%, Slayer (boss fights / stronger / wounded / unhurt foes), Venom or Daunt, all shown in the item details. Higher rarity gets more and stronger ones. What the hero and companions wear counts wherever the game reads ability scores (damage, defense, turn order, quest events, impressions), through the loader's ability window, and shows as (+3) on the character sheet; weapon effects work on their own hits against enemies and are announced in the battle log. The ability scores themselves are never changed. Items you already own get nothing",
+    "ja": "epic・legendary・mythic の武器・防具が作られたとき（店・クラフト・イベント）、筋力 +3 のような能力値補正がランダムに付く。武器にはさらに、会心・吸収・貫通・特効（ボス戦・格上・手負い・無傷）・毒・怯みの効果が付くことがある。どれも説明欄に出て、レア度が高いほど数も強さも上がる。主人公と仲間が身に着けている品の補正は、ローダの能力値の窓口を通して、ゲームが能力値を読むところ（火力・防御・手番の順・依頼の出来事・印象）に効き、ステータス画面の能力値に (+3) の形で出る。武器の効果は、その者が敵に当てた一撃に効き、戦闘の文に出る。能力値そのものは書き換えない。もともと持っている品には付かない"
   },
   "version": "2",
   "author": "わさの, R01/Flossian",
@@ -19,8 +19,8 @@
       "min": 0,
       "max": 6,
       "group": {
-        "ja": "epic の補正",
-        "en": "Epic bonuses"
+        "ja": "epic の能力値補正",
+        "en": "Epic ability bonuses"
       },
       "label": {
         "ja": "数の下限",
@@ -33,8 +33,8 @@
       "min": 0,
       "max": 6,
       "group": {
-        "ja": "epic の補正",
-        "en": "Epic bonuses"
+        "ja": "epic の能力値補正",
+        "en": "Epic ability bonuses"
       },
       "label": {
         "ja": "数の上限",
@@ -47,8 +47,8 @@
       "min": 1,
       "max": 50,
       "group": {
-        "ja": "epic の補正",
-        "en": "Epic bonuses"
+        "ja": "epic の能力値補正",
+        "en": "Epic ability bonuses"
       },
       "label": {
         "ja": "1つあたりの量の下限",
@@ -61,8 +61,8 @@
       "min": 1,
       "max": 50,
       "group": {
-        "ja": "epic の補正",
-        "en": "Epic bonuses"
+        "ja": "epic の能力値補正",
+        "en": "Epic ability bonuses"
       },
       "label": {
         "ja": "1つあたりの量の上限",
@@ -75,8 +75,8 @@
       "min": 0,
       "max": 6,
       "group": {
-        "ja": "legendary の補正",
-        "en": "Legendary bonuses"
+        "ja": "legendary の能力値補正",
+        "en": "Legendary ability bonuses"
       },
       "label": {
         "ja": "数の下限",
@@ -89,8 +89,8 @@
       "min": 0,
       "max": 6,
       "group": {
-        "ja": "legendary の補正",
-        "en": "Legendary bonuses"
+        "ja": "legendary の能力値補正",
+        "en": "Legendary ability bonuses"
       },
       "label": {
         "ja": "数の上限",
@@ -103,8 +103,8 @@
       "min": 1,
       "max": 50,
       "group": {
-        "ja": "legendary の補正",
-        "en": "Legendary bonuses"
+        "ja": "legendary の能力値補正",
+        "en": "Legendary ability bonuses"
       },
       "label": {
         "ja": "1つあたりの量の下限",
@@ -117,8 +117,8 @@
       "min": 1,
       "max": 50,
       "group": {
-        "ja": "legendary の補正",
-        "en": "Legendary bonuses"
+        "ja": "legendary の能力値補正",
+        "en": "Legendary ability bonuses"
       },
       "label": {
         "ja": "1つあたりの量の上限",
@@ -131,8 +131,8 @@
       "min": 0,
       "max": 6,
       "group": {
-        "ja": "mythic の補正",
-        "en": "Mythic bonuses"
+        "ja": "mythic の能力値補正",
+        "en": "Mythic ability bonuses"
       },
       "label": {
         "ja": "数の下限",
@@ -145,8 +145,8 @@
       "min": 0,
       "max": 6,
       "group": {
-        "ja": "mythic の補正",
-        "en": "Mythic bonuses"
+        "ja": "mythic の能力値補正",
+        "en": "Mythic ability bonuses"
       },
       "label": {
         "ja": "数の上限",
@@ -159,8 +159,8 @@
       "min": 1,
       "max": 50,
       "group": {
-        "ja": "mythic の補正",
-        "en": "Mythic bonuses"
+        "ja": "mythic の能力値補正",
+        "en": "Mythic ability bonuses"
       },
       "label": {
         "ja": "1つあたりの量の下限",
@@ -173,12 +173,192 @@
       "min": 1,
       "max": 50,
       "group": {
-        "ja": "mythic の補正",
-        "en": "Mythic bonuses"
+        "ja": "mythic の能力値補正",
+        "en": "Mythic ability bonuses"
       },
       "label": {
         "ja": "1つあたりの量の上限",
         "en": "Amount, max"
+      }
+    },
+    "WEAPON_EPIC_MIN": {
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 6,
+      "group": {
+        "ja": "武器の効果の数",
+        "en": "Weapon effect count"
+      },
+      "label": {
+        "ja": "epic の下限",
+        "en": "Epic, min"
+      }
+    },
+    "WEAPON_EPIC_MAX": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 6,
+      "group": {
+        "ja": "武器の効果の数",
+        "en": "Weapon effect count"
+      },
+      "label": {
+        "ja": "epic の上限",
+        "en": "Epic, max"
+      }
+    },
+    "WEAPON_LEGENDARY_MIN": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 6,
+      "group": {
+        "ja": "武器の効果の数",
+        "en": "Weapon effect count"
+      },
+      "label": {
+        "ja": "legendary の下限",
+        "en": "Legendary, min"
+      }
+    },
+    "WEAPON_LEGENDARY_MAX": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 6,
+      "group": {
+        "ja": "武器の効果の数",
+        "en": "Weapon effect count"
+      },
+      "label": {
+        "ja": "legendary の上限",
+        "en": "Legendary, max"
+      }
+    },
+    "WEAPON_MYTHIC_MIN": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 6,
+      "group": {
+        "ja": "武器の効果の数",
+        "en": "Weapon effect count"
+      },
+      "label": {
+        "ja": "mythic の下限",
+        "en": "Mythic, min"
+      }
+    },
+    "WEAPON_MYTHIC_MAX": {
+      "type": "int",
+      "default": 2,
+      "min": 0,
+      "max": 6,
+      "group": {
+        "ja": "武器の効果の数",
+        "en": "Weapon effect count"
+      },
+      "label": {
+        "ja": "mythic の上限",
+        "en": "Mythic, max"
+      }
+    },
+    "EFFECT_SLAYER": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける武器の効果",
+        "en": "Weapon effects to grant"
+      },
+      "label": {
+        "ja": "特効",
+        "en": "Slayer"
+      },
+      "note": {
+        "ja": "ボス戦・格上・手負い・無傷のどれかの敵へのダメージが上がる",
+        "en": "More damage to one kind of foe: boss fights, stronger, wounded or unhurt"
+      }
+    },
+    "EFFECT_CRITICAL": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける武器の効果",
+        "en": "Weapon effects to grant"
+      },
+      "label": {
+        "ja": "会心",
+        "en": "Critical"
+      },
+      "note": {
+        "ja": "一撃の重さ（AI の審判の裁き）がたまに1段上がる",
+        "en": "Sometimes raises the referee's verdict on a hit by one step"
+      }
+    },
+    "EFFECT_LIFESTEAL": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける武器の効果",
+        "en": "Weapon effects to grant"
+      },
+      "label": {
+        "ja": "吸収",
+        "en": "Lifesteal"
+      },
+      "note": {
+        "ja": "敵に与えたダメージの一部を自分の体力に戻す",
+        "en": "Heals a share of the damage dealt"
+      }
+    },
+    "EFFECT_PIERCE": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける武器の効果",
+        "en": "Weapon effects to grant"
+      },
+      "label": {
+        "ja": "貫通",
+        "en": "Pierce"
+      },
+      "note": {
+        "ja": "敵の防御の一部を無視する",
+        "en": "Ignores part of the foe's defense"
+      }
+    },
+    "EFFECT_VENOM": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける武器の効果",
+        "en": "Weapon effects to grant"
+      },
+      "label": {
+        "ja": "毒",
+        "en": "Venom"
+      },
+      "note": {
+        "ja": "命中した敵がたまに毒に侵され、毎ターン体力が減る（毒では倒れない）",
+        "en": "Hits sometimes poison the foe, costing HP each turn (never lethal)"
+      }
+    },
+    "EFFECT_DAUNT": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける武器の効果",
+        "en": "Weapon effects to grant"
+      },
+      "label": {
+        "ja": "怯み",
+        "en": "Daunt"
+      },
+      "note": {
+        "ja": "命中した敵がたまに怯み、与えるダメージが下がる",
+        "en": "Hits sometimes daunt the foe, weakening its attacks"
       }
     },
     "STACK_MODE": {
@@ -194,8 +374,8 @@
           "en": "Add up all slots"
         },
         "max": {
-          "ja": "能力値ごとに最大の1品",
-          "en": "Best item per ability"
+          "ja": "能力値・効果ごとに最大の1品",
+          "en": "Best item per ability or effect"
         }
       },
       "group": {

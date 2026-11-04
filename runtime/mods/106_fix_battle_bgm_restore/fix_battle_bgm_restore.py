@@ -47,7 +47,6 @@ pygame に直接聞く。
 §2.1）。
 """
 
-import sys
 import time
 
 from instantale_modloader import choices, sounds, ui

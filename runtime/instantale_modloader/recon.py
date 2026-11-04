@@ -34,7 +34,10 @@ import zipfile
 # patch.py もエイリアス張り替えの範囲を決めるのに同じ表を見るので、
 # 2箇所に書き写さないため。
 # 名前はここからも引けるように再公開しておく。
-from . import GAME_TOPLEVEL, is_game_module, log, log_exc, write_json  # noqa: F401
+from . import GAME_TOPLEVEL as _GAME_TOPLEVEL
+from . import is_game_module, log, log_exc, write_json
+
+GAME_TOPLEVEL = _GAME_TOPLEVEL
 
 MAX_REPR = 300
 MAX_CONST_ITEMS = 40

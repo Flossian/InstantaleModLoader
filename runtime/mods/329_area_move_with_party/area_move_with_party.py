@@ -16,11 +16,14 @@ GAME.md §2.18、`217_` の `out\\area_move.log` で `days=[] texts=1`）。
 戻すときは `save_data_dict["npcs"][id]` に同じ値が写っていればそちらも戻す。
 
 外れの検知: 置いた後も `area_move_rejector` が呼ばれたら `WARN rejected:` を書く。
+
+版7: `area_move_rejector` のフックは、引数を受け取った形のまま元の関数へ渡す
+（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 """
 
 import os
 
-from instantale_modloader import arrivals, durations, ui
+from instantale_modloader import arrivals, durations, frames, ui
 
 LOG_BASENAME = "area_move_party.log"
 
@@ -124,13 +127,13 @@ def apply(ctx):
         return orig(self, *args, **kwargs)
 
     @ctx.wrap("scripts.llm.llm_manager:area_move_rejector", required=False, safe=True)
-    def area_move_rejector(orig, character_life_log=None, player=None,
-                           character_instance=None, worldview=None, *args, **kwargs):
+    def area_move_rejector(orig, *args, **kwargs):
         state["rejected"] = True
+        # (character_life_log, player, character_instance, worldview)。受け取った形のまま渡し、読むだけ。
+        character_instance = frames.arg(args, kwargs, "character_instance", 2)
         write("rejector: {} relationship={!r}".format(
             getattr(character_instance, "name", character_instance),
             getattr(character_instance, "relationship", None)))
-        return orig(character_life_log, player, character_instance, worldview,
-                    *args, **kwargs)
+        return orig(*args, **kwargs)
 
     ctx.log("area move party: installed -> {}".format(ctx.out_path(LOG_BASENAME)))

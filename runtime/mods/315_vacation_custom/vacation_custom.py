@@ -58,6 +58,10 @@
   こちらは外側から重なるだけ
 
 遊び方の説明は MODS.md の `315_` の項、検証の経過は VERIFICATION.md §3.28。
+
+版9: 宿泊のフック（`DisplayVacationChoice.__init__`・`VacationStartManager.__init__`・`execute`・各段の `execute`・`add_text`）は、
+引数を受け取った形のまま元の関数へ渡す（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
+月数と文言の差し替えは来た側（位置かキーワード）に合わせる。
 """
 
 import os
@@ -65,7 +69,7 @@ import sys
 import re
 import time
 
-from instantale_modloader import choices, durations, llm, prices, ui
+from instantale_modloader import choices, durations, frames, llm, prices, ui
 
 LOG_BASENAME = "vacation_custom.log"
 
@@ -386,8 +390,7 @@ def apply(ctx):
 
     # ============================================================ 宿泊期間
     @ctx.wrap("__main__:DisplayVacationChoice.__init__", required=False, safe=True)
-    def vacation_choice_init(orig, self, app, period_months=None,
-                             *args, **kwargs):
+    def vacation_choice_init(orig, self, *args, **kwargs):
         """`period_months` を設定の期間へ差し替える。渡す値を差し替えるだけ。
 
         部屋ボタンの `args` の月数も「Nヵ月泊まることにした。」
@@ -398,6 +401,9 @@ def apply(ctx):
         GAME.md §2.18 の実測と同型）。
         """
         state["block"] = None               # 前の宿泊の予算はここで必ず捨てる
+        # (app, period_months)。受け取った形のまま渡し、月数だけを来た側に合わせて差し替える。
+        app = frames.arg(args, kwargs, "app", 0)
+        period_months = frames.arg(args, kwargs, "period_months", 1)
         stay = stay_for(app)
         if stay is not None and period_months is not None:
             try:
@@ -412,19 +418,22 @@ def apply(ctx):
                     pass
                 write("stay: period_months {!r} -> {!r} ({})".format(
                     period_months, replacement, stay["length"]))
-                period_months = replacement
-        return orig(self, app, period_months, *args, **kwargs)
+                args, kwargs, _ = frames.replace_arg(args, kwargs, "period_months", 1, replacement)
+        return orig(self, *args, **kwargs)
 
     # ============================================================ 宿代と予算
     @ctx.wrap("__main__:VacationStartManager.__init__", required=False, safe=True)
-    def start_init(orig, self, app, months=None, quality=None, *args, **kwargs):
+    def start_init(orig, self, *args, **kwargs):
         """`execute` には引数が来ないので、月数と部屋をここで自分に控える。
 
         自分専用の属性名で持つだけで、ゲームのデータには何も書かない（マネージャはセーブに入らない。セーブに入るのは
         PhaseSpec のほう）。
         """
-        result = orig(self, app, months, quality, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         try:
+            # (app, months, quality)。受け取った形のまま渡し、ここでは読むだけ。
+            months = frames.arg(args, kwargs, "months", 1)
+            quality = frames.arg(args, kwargs, "quality", 2)
             self._mod_vacation_custom = {"months": str(months),
                                          "quality": str(quality)}
         except Exception:
@@ -432,7 +441,7 @@ def apply(ctx):
         return result
 
     @ctx.wrap("__main__:VacationStartManager.execute", required=False)
-    def start_execute(orig, self, choice_text=None, *args, **kwargs):
+    def start_execute(orig, self, *args, **kwargs):
         """宿泊の開始の間だけ窓を開け、週単位の予算を積み直す（宿代は関所が持つ）。
 
         連泊（`まだ宿泊する`）も同じ窓を通るので、週単位の予算も積み直る。
@@ -464,18 +473,18 @@ def apply(ctx):
             state["block"] = None
         state["depth"] += 1
         try:
-            return orig(self, choice_text, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         finally:
             state["depth"] -= 1
 
     # ------------------------------------------------ 週単位の予算が効く窓
     def install_stay_window(cls_name):
         @ctx.wrap("__main__:{}.execute".format(cls_name), required=False)
-        def stay_window(orig, self, choice_text=None, *args, **kwargs):
+        def stay_window(orig, self, *args, **kwargs):
             """宿泊の各段の間だけ窓を開ける。日数の予算はこの窓の中だけ。"""
             state["depth"] += 1
             try:
-                return orig(self, choice_text, *args, **kwargs)
+                return orig(self, *args, **kwargs)
             finally:
                 state["depth"] -= 1
                 if cls_name == "VacationEndManager":
@@ -515,7 +524,7 @@ def apply(ctx):
     durations.install(ctx, write)
 
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False)
-    def add_text(orig, self, context=None, *args, **kwargs):
+    def add_text(orig, self, *args, **kwargs):
         """週単位のときだけ「1ヵ月泊まることにした。」を実際の期間に直す。
 
         窓の中で、名指しの手掛かりに当たった文言だけ。
@@ -524,17 +533,17 @@ def apply(ctx):
         """
         try:
             block = state["block"]
-            if block is not None and state["depth"] > 0 \
-                    and isinstance(context, str) and STAY_TEXT_MARK in context:
+            if block is not None and state["depth"] > 0:
+                context = frames.arg(args, kwargs, "context", 0)
                 template = str(STAY_TEXT)
-                if template:
+                if isinstance(context, str) and STAY_TEXT_MARK in context and template:
                     replaced = fmt(template, length=block["length"])
                     if replaced != context:
                         write("text: {!r} -> {!r}".format(context, replaced))
-                        return orig(self, replaced, *args, **kwargs)
+                        args, kwargs, _ = frames.replace_arg(args, kwargs, "context", 0, replaced)
         except Exception:
             ctx.log_exc("vacation custom: cannot reword the stay text")
-        return orig(self, context, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     # ================================================ LLM へ出ていく文の月数
     def rewrite_outgoing(texts, site):

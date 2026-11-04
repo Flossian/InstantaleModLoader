@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
-"""epic 以上の装備品に、生成時に能力値補正（筋力 +3 など）を付ける。
+"""epic 以上の装備品に、生成時に能力値補正（筋力 +3 など）と武器の効果（会心 15% など）を付ける。
 
 ## 付け方
 
 武器・防具（`item_type` が weapon / wearable）が作られたときに、レア度で抽選して
 `attributes` に「筋力: +3」の形で書く。説明欄にそのまま出て、セーブにも残る。
 付くのは epic / legendary / mythic だけで、数と量はレア度ごとに設定で決める。
+武器にはさらに、特効・会心・吸収・貫通・毒・怯みのどれかを「会心: 15%」の形で書く
+（決まりは `effects.py`、戦闘への効かせ方は `battle.py`）。
 
 作られた瞬間を拾う経路は `410_` と同じ:
 
@@ -25,6 +27,9 @@
 身に着けている品は装備欄の窓口（`equipment.gear`。`333_` が答える）から読み、
 答えが無ければ本体の `equipments` の weapon / wearable を読む。
 合算の仕方は `333_` の合算の設定に関係なく、この MOD の設定で決める。
+
+武器の効果は、主人公と仲間（`APPLY_TO_PARTY`）が身に着けている武器のものを、
+その者の1手の中でだけ効かせる（`battle.py`）。
 """
 
 import os
@@ -34,7 +39,7 @@ import weakref
 
 from instantale_modloader import abilities, equipment, frames, items, llm, ui
 
-from . import bonus
+from . import battle, bonus, effects
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。TECH.md §3.8）----
 EPIC_COUNT_MIN = 1          # epic: 補正の数
@@ -53,14 +58,26 @@ STACK_MODE = "sum"          # sum: 全部位を足す / max: 能力値ごとに�
 STAT_CAP = 15               # 能力値ごとの上限（0 で上限なし）
 INCLUDE_FREE_SLOTS = False  # 装備欄の自由枠の品も数える（333_ は自由枠を数値に入れない）
 APPLY_TO_PARTY = True       # 仲間が身に着けている品の補正も効かせる
+WEAPON_EPIC_MIN = 0         # 武器の効果の数（epic）
+WEAPON_EPIC_MAX = 1
+WEAPON_LEGENDARY_MIN = 1
+WEAPON_LEGENDARY_MAX = 1
+WEAPON_MYTHIC_MIN = 1
+WEAPON_MYTHIC_MAX = 2
+EFFECT_SLAYER = True        # 付けてよい武器の効果
+EFFECT_CRITICAL = True
+EFFECT_LIFESTEAL = True
+EFFECT_PIERCE = True
+EFFECT_VENOM = True
+EFFECT_DAUNT = True
 
-LOG_BASENAME = "equipment_ability_bonus.log"
+LOG_BASENAME = "equipment_bonuses.log"
 LOG_LIMIT = 300
 
 #: 自由枠（`333_` の部位名）。
 FREE_PREFIX = "free"
 
-STORE_ATTR = "_instantale_equipment_ability_bonus_store"
+STORE_ATTR = "_instantale_equipment_bonuses_store"
 
 
 def process_store():
@@ -92,6 +109,19 @@ def tiers():
                       LEGENDARY_AMOUNT_MIN, LEGENDARY_AMOUNT_MAX),
         "mythic": (MYTHIC_COUNT_MIN, MYTHIC_COUNT_MAX, MYTHIC_AMOUNT_MIN, MYTHIC_AMOUNT_MAX),
     }
+
+
+def weapon_counts():
+    """武器の効果の数の表（`tiers` と同じく apply の後で読む）。"""
+    return {"epic": (WEAPON_EPIC_MIN, WEAPON_EPIC_MAX),
+            "legendary": (WEAPON_LEGENDARY_MIN, WEAPON_LEGENDARY_MAX),
+            "mythic": (WEAPON_MYTHIC_MIN, WEAPON_MYTHIC_MAX)}
+
+
+def enabled_effects():
+    flags = {"slayer": EFFECT_SLAYER, "critical": EFFECT_CRITICAL, "lifesteal": EFFECT_LIFESTEAL,
+             "pierce": EFFECT_PIERCE, "venom": EFFECT_VENOM, "daunt": EFFECT_DAUNT}
+    return [kind for kind in effects.KINDS if flags.get(kind)]
 
 
 def unwrap(item):
@@ -131,6 +161,14 @@ def current_bonus(app, holder):
     return bonus.combine(worn_items(app, holder), STACK_MODE, STAT_CAP)
 
 
+def current_effects(app, holder):
+    """身に着けている武器の効果（答える相手でなければ空）。"""
+    if not answers_for(app, holder):
+        return {}
+    return effects.combine([item for item in worn_items(app, holder) if effects.is_weapon(item)],
+                           STACK_MODE)
+
+
 def answers_for(app, holder):
     """補正を答える相手か。主人公と、`APPLY_TO_PARTY` なら仲間。"""
     player = frames.attr(app, "player", None)
@@ -145,7 +183,7 @@ def answers_for(app, holder):
 def apply(ctx):
     store = process_store()
     local = store["local"]
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "411_equipment_ability_bonus"
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "411_equipment_bonuses"
     write = ctx.logger(LOG_BASENAME)
 
     def note(text):
@@ -179,16 +217,21 @@ def apply(ctx):
         item = unwrap(item)
         if item is None or isinstance(item, dict) or not bonus.is_equipment(item):
             return
-        if not first_roll(item) or bonus.read(item):
+        if not first_roll(item) or bonus.read(item) or effects.read(item):
             return
         rarity = str(frames.attr(item, "rarity", "") or "").lower()
         rolled = bonus.roll(rarity, tiers())
-        if not rolled:
+        found = effects.roll(rarity, weapon_counts(), enabled_effects()) if effects.is_weapon(item) else []
+        if not rolled and not found:
             count("plain/" + (rarity or "?"))
             return
-        if bonus.write(item, rolled, language()):
+        lang = language()
+        if rolled and bonus.write(item, rolled, lang):
             count("bonus/" + rarity)
-            note("{}: {!r} [{}] +{}".format(source, name_of(item), rarity, rolled))
+        if found and effects.write(item, found, lang):
+            count("effect/" + rarity)
+        note("{}: {!r} [{}] +{} {}".format(source, name_of(item), rarity, rolled,
+                                           [effects.text_of(k, a, t, lang) for k, a, t in found]))
 
     @ctx.wrap("scripts.items:Item.__init__", safe=True, required=False)
     def item_init(orig, self, *args, **kwargs):
@@ -252,8 +295,10 @@ def apply(ctx):
         return current_bonus(app, holder) or None
 
     abilities.declare(owner, answer, write=write)
+    battle.install(ctx, write, current_effects, language)
 
-    write("installed tiers={} mode={} cap={} free={} party={}".format(
-        tiers(), STACK_MODE, STAT_CAP, INCLUDE_FREE_SLOTS, APPLY_TO_PARTY))
-    ctx.log("equipment ability bonus: installed (mode={}, cap={}, counts={})".format(
+    write("installed tiers={} weapon={} effects={} mode={} cap={} free={} party={}".format(
+        tiers(), weapon_counts(), enabled_effects(), STACK_MODE, STAT_CAP,
+        INCLUDE_FREE_SLOTS, APPLY_TO_PARTY))
+    ctx.log("equipment bonuses: installed (mode={}, cap={}, counts={})".format(
         STACK_MODE, STAT_CAP, store["counts"]))

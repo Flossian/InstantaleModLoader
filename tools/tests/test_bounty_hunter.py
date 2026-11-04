@@ -26,7 +26,6 @@ import io
 import json
 import os
 import sys
-import time
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))

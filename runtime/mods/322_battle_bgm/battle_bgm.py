@@ -73,13 +73,16 @@
 絶対パスがそのまま通ることは実機で確認済み（DOC.md §3.1）。
 
 乱数は MOD 専用の `random.Random`（ゲームの乱数列をずらさない。GAME.md §2.11）。
+
+版4: `play_music_from_src` と `BattleStartManager.__init__` のフックは、引数を受け取った形のまま元の関数へ渡す
+（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。曲の差し替えは来た側に合わせる。
 """
 
 import os
 import random
 import time
 
-from instantale_modloader import sounds
+from instantale_modloader import frames, sounds
 
 # GUI から変えられる値。mod.json の "settings" と同じ名前・同じ既定値。
 DEFAULT_WEIGHT = 100     # 設定画面で「使う」に入れたときの重み（本体は読まない。宣言と既定値を揃えるためにある）
@@ -317,7 +320,10 @@ def apply(ctx):
         return rewrite_src(music_src, name, path, where), name, detail
 
     @ctx.wrap("scripts.sounds:SoundManager.play_music_from_src")
-    def play_music_from_src(orig, self, app, music_src, *args, **kwargs):
+    def play_music_from_src(orig, self, *args, **kwargs):
+        # (app, music_src)。受け取った形のまま渡し、曲だけを来た側に合わせて差し替える。
+        app = frames.arg(args, kwargs, "app", 0)
+        music_src = frames.arg(args, kwargs, "music_src", 1)
         chosen = name = None
         detail = ""
         try:
@@ -328,7 +334,8 @@ def apply(ctx):
             chosen = None
         if chosen is not None:
             try:
-                result = orig(self, app, chosen, *args, **kwargs)
+                chosen_args, chosen_kwargs, _ = frames.replace_arg(args, kwargs, "music_src", 1, chosen)
+                result = orig(self, *chosen_args, **chosen_kwargs)
             except Exception:
                 ctx.log_exc("battle bgm: {} could not be played; "
                             "falling back to the game's track".format(chosen))
@@ -345,7 +352,7 @@ def apply(ctx):
             state["pending"] = None
             state["enemy_type"] = None
             write("no candidate: {} -> playing {}".format(detail, short(music_src)))
-        return orig(self, app, music_src, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     # ------------------------------------------------------- 種類の合図
     def mark(target, category):
@@ -366,10 +373,9 @@ def apply(ctx):
         return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:BattleStartManager.__init__", required=False, safe=True)
-    def battle_start_init(orig, self, app, enemy_type=None, enemy_content=None,
-                          *args, **kwargs):
-        state["enemy_type"] = enemy_type
-        return orig(self, app, enemy_type, enemy_content, *args, **kwargs)
+    def battle_start_init(orig, self, *args, **kwargs):
+        state["enemy_type"] = frames.arg(args, kwargs, "enemy_type", 1)   # (app, enemy_type, enemy_content)
+        return orig(self, *args, **kwargs)
 
     # ------------------------------------------------------- 起動時の同期
     # playlist.json を戦闘より前に作っておく（書き換える場所を先に見せる）。

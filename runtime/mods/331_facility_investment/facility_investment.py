@@ -63,6 +63,9 @@ r"""機能追加: 街に施設を建てる（出資する）。
 保存の前に外れ、書き出しの直前にも網があるので、セーブにも `world_data.json` にも残らない。
 進み（闘技場の `config` の `current_phase` / `enemy_data`）は実体と同じ辞書なので控えに載り、ロードで戻る。
 写しが無いまま押されたときのために、本体の入口は網で包んで握る（`run_guarded`）。
+
+版47: 宿泊・闘技場の相手の生成・建物の中の本体の入口のフックは、引数を受け取った形のまま元の関数へ渡す
+（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。闘技場の相手の生成は `location` だけを来た側に合わせて差し替える。
 """
 
 import datetime
@@ -1371,7 +1374,7 @@ def apply(ctx):
     loads.on(OWNER, ctx, (loads.WORLD,), before=world_loading, after=world_loaded, write=write)
 
     @ctx.wrap("__main__:VacationStartManager.execute", required=False)
-    def vacation_start(orig, self, choice_text="", *args, **kwargs):
+    def vacation_start(orig, self, *args, **kwargs):
         """自分の宿屋の「無料で泊まる」は宿代を取らない。よその宿屋には触らない。
 
         ゲームが引く額を**先に足しておき**、ゲームが引いて元へ戻す（前払い）。
@@ -1388,11 +1391,11 @@ def apply(ctx):
         app = getattr(self, "app", None) or ui.find_app()
         home = staying_here(app) if app is not None else None
         if home is None:
-            return orig(self, choice_text, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         before = ui.gold_of(app)
         prepaid = prepay_room(app, home, before)
         try:
-            result = orig(self, choice_text, *args, **kwargs)
+            result = orig(self, *args, **kwargs)
         except Exception as exc:
             write("WARN stay: the game's stay failed: {}({!r}) at {!r}".format(
                 type(exc).__name__, getattr(exc, "args", ()), home.get("name")))
@@ -1464,7 +1467,7 @@ def apply(ctx):
         return off
 
     @ctx.wrap("scripts.llm.llm_manager:colosseum_enemy_generator", required=False)
-    def colosseum_enemy_generator(orig, location=None, *args, **kwargs):
+    def colosseum_enemy_generator(orig, *args, **kwargs):
         """自分の闘技場の相手を作るとき、既に出た闘士の名前を頼み文に足す。
 
         ゲームの頼み文は世界観・エリア・施設名と概要・ランクだけで、前の相手を載せない。
@@ -1475,17 +1478,19 @@ def apply(ctx):
             app = ui.find_app()
             record = own_arena(app) if app is not None else None
             if record is not None:
+                # (location, area, world, npc_difficulty_level)。受け取った形のまま渡し、`location` だけを差し替える。
+                location = frames.arg(args, kwargs, "location", 0)
                 names = fighters_so_far(app, record)
                 varied = vary_location(location, names) if names else location
                 if varied is not location:
                     write("arena: {} earlier fighter(s) told to the generator: {}".format(
                         len(names), "、".join(names[-3:])))
-                    location = varied
+                    args, kwargs, _ = frames.replace_arg(args, kwargs, "location", 0, varied)
         except Exception:
             ctx.log_exc("investment: cannot vary the arena prompt")
-        return orig(location, *args, **kwargs)
+        return orig(*args, **kwargs)
 
-    def run_guarded(orig, self, choice_text, args, kwargs, what, kinds):
+    def run_guarded(orig, self, args, kwargs, what, kinds):
         """自分の建物で起きる本体の処理を包む。落ちたら握って操作を戻す。
 
         素データの写しはローダが置く（`modfacility` の `plain`。中に立っている間）ので普通は通る。
@@ -1495,9 +1500,9 @@ def apply(ctx):
         app = getattr(self, "app", None) or ui.find_app()
         record = own_building(app, kinds) if app is not None else None
         if record is None:
-            return orig(self, choice_text, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         try:
-            return orig(self, choice_text, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         except Exception as exc:
             write("WARN {}: the game's {} failed: {}({!r}) at {!r}".format(
                 what, what, type(exc).__name__, getattr(exc, "args", ()),
@@ -1511,21 +1516,21 @@ def apply(ctx):
     def guard(target, what, kinds):
         """`GUARDED_PHASES` の1本を包む。"""
         @ctx.wrap(target, required=False)
-        def guarded(orig, self, choice_text="", *args, **kwargs):
-            return run_guarded(orig, self, choice_text, args, kwargs, what, kinds)
+        def guarded(orig, self, *args, **kwargs):
+            return run_guarded(orig, self, args, kwargs, what, kinds)
         return guarded
 
     for _target, _what, _kinds in GUARDED_PHASES:
         guard(_target, _what, _kinds)
 
     @ctx.wrap("__main__:VacationEndManager.execute", required=False)
-    def vacation_end(orig, self, choice_text="", *args, **kwargs):
+    def vacation_end(orig, self, *args, **kwargs):
         """宿泊の覚え（`own_stay`）を落とすだけ。
 
         中の選択肢と絵の戻しはローダが持つ（`modfacility` の `PHASE_END_TARGETS` と
         `BG_OTHER_TARGETS`。TECH.md §5.8）。ここで画面を触っていたら MOD ごとに同じ直しが要る。
         """
-        result = orig(self, choice_text, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         try:
             end_stay(getattr(self, "app", None) or ui.find_app(), "vacation ended")
         except Exception:

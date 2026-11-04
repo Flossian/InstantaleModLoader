@@ -16,14 +16,18 @@
   立てても名簿からは外れない（読む側が飛ばす）
 """
 
-import sys
-
-from instantale_modloader import frames, ui
-from instantale_modloader.npcs import (
-    CHARACTER_KWARGS, NEW_NPC_TEMPLATE, NPC_FIELD_ORDER,
-    character_ids, npc_stores, save_npcs)
+from instantale_modloader import frames, npcs as _npcs, ui
+from instantale_modloader.npcs import npc_stores
 from instantale_modloader.npcs import make_npc as npcs_make_npc
 from instantale_modloader.state import UNKNOWN_WORLD, world_key
+
+# NPC の語彙はローダ（`instantale_modloader.npcs`）に在る。
+# `game.save_npcs(app)` や `world.NEW_NPC_TEMPLATE` の名前で引けるように再輸出する。
+CHARACTER_KWARGS = _npcs.CHARACTER_KWARGS
+NEW_NPC_TEMPLATE = _npcs.NEW_NPC_TEMPLATE
+NPC_FIELD_ORDER = _npcs.NPC_FIELD_ORDER
+character_ids = _npcs.character_ids
+save_npcs = _npcs.save_npcs
 
 
 def world_name(app):

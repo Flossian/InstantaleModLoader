@@ -16,7 +16,6 @@
              読めない回・空の条件でも落ちない
 """
 
-import io
 import json
 import os
 import random

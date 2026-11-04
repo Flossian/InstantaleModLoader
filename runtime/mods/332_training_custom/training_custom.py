@@ -52,6 +52,11 @@
 
 遊び方は同じフォルダの DOC.md（`docs\\MODS.md` に綴じられる）、
 実機の記録と残りの確認は VERIFICATION.md §3.64。
+
+版15: 訓練のフック（開始と段の `__init__`・`execute`、`add_text`）は、引数を受け取った形のまま元の関数へ渡す
+（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。年数・代金・文言は来た側に合わせて差し替える
+（版14までは年数と代金を位置引数のときだけ差し替えていて、キーワード引数で来ると素通しになっていた）。
+`hasattr` を既定値付きの `getattr` に替えた（TECH.md §6）。
 """
 
 import os
@@ -59,7 +64,7 @@ import re
 import sys
 import time
 
-from instantale_modloader import choices, durations, llm, ui
+from instantale_modloader import choices, durations, frames, llm, ui
 from instantale_modloader.state import UNKNOWN_WORLD, WorldStore, world_key
 
 LOG_BASENAME = "training_custom.log"
@@ -533,7 +538,7 @@ def apply(ctx):
     if not isinstance(settings_store, WorldStore):
         settings_store = WorldStore(ctx, SETTINGS_DIRNAME, default=dict, write=write)
         setattr(sys, SETTINGS_STORE_ATTR, settings_store)
-    elif settings_store is not None and hasattr(settings_store, "rebind"):
+    elif settings_store is not None and callable(getattr(settings_store, "rebind", None)):
         settings_store.rebind(ctx, write)
     # 注入のたびにモジュールは作り直され、一括設定を注入してからここへ来る（TECH.md §3.8）。
     # だからここで控えた値がそのまま一括設定（`sys` に固定してはいけない。
@@ -692,32 +697,37 @@ def apply(ctx):
 
     # ============================================================ 代金と年数
     @ctx.wrap("__main__:{}.__init__".format(START_CLS), required=False)
-    def start_init(orig, self, app, *args, **kwargs):
+    def start_init(orig, self, *args, **kwargs):
         """ゲームが受け取る `training_years` / `training_price` を差し替える。
 
-        位置で決め打ちせず、**渡ってきた数だけ**を触る
-        （引数が減ったビルドでも、そこには何も足さずに素通しする）。
+        引数は (app, training_years, training_price)。受け取った形（位置かキーワード）のまま渡し、
+        **渡ってきたものだけ**を来た側に合わせて触る（引数が減ったビルドでも、そこには何も足さずに素通しする）。
         差し替えた値でゲーム自身が引き落とし、ゲーム自身が残り年数を数えるので、
         画面の文言（`あと3年間`）も勝手に追随する。
         """
-        argv = list(args)
+        new_args, new_kwargs = args, kwargs
         try:
-            refresh_world(app)
-            if len(argv) >= 2 and isinstance(argv[1], int) \
-                    and not isinstance(argv[1], bool):
-                state["game_price"] = int(argv[1])
+            refresh_world(frames.arg(args, kwargs, "app", 0))
+            years = frames.arg(args, kwargs, "training_years", 1)
+            price = frames.arg(args, kwargs, "training_price", 2)
+            terms = [years, price]
+            if isinstance(price, int) and not isinstance(price, bool):
+                state["game_price"] = int(price)
                 if int(TRAINING_PRICE) != GAME_PRICE:
-                    argv[1] = max(0, int(TRAINING_PRICE))
-            if len(argv) >= 1 and isinstance(argv[0], int) \
-                    and not isinstance(argv[0], bool) \
+                    terms[1] = max(0, int(TRAINING_PRICE))
+                    new_args, new_kwargs, _ = frames.replace_arg(new_args, new_kwargs, "training_price", 2,
+                                                                 terms[1])
+            if isinstance(years, int) and not isinstance(years, bool) \
                     and int(COURSE_YEARS) != GAME_COURSE_YEARS:
-                argv[0] = max(1, int(COURSE_YEARS))
-            if argv != list(args):
-                write("start: the terms {} became {}".format(list(args), argv))
+                terms[0] = max(1, int(COURSE_YEARS))
+                new_args, new_kwargs, _ = frames.replace_arg(new_args, new_kwargs, "training_years", 1,
+                                                             terms[0])
+            if terms != [years, price]:
+                write("start: the terms {} became {}".format([years, price], terms))
         except Exception:
             ctx.log_exc("training custom: cannot set the training terms")
-            argv = list(args)
-        return orig(self, app, *argv, **kwargs)
+            new_args, new_kwargs = args, kwargs
+        return orig(self, *new_args, **new_kwargs)
 
     def settle_price(app, before):
         """訓練の開始時点の帳尻。
@@ -803,7 +813,7 @@ def apply(ctx):
         return True
 
     @ctx.wrap("__main__:{}.execute".format(START_CLS), required=False)
-    def start_execute(orig, self, choice_text=None, *args, **kwargs):
+    def start_execute(orig, self, *args, **kwargs):
         """代金の引き落としを前後の所持金で確かめ、続く修行内容のボタンを整える。
 
         文言の書き換え（`あと3年間` → `あと3ヵ月`）のために、この間だけ窓を開ける。
@@ -817,7 +827,7 @@ def apply(ctx):
             # 断られる前に印をたたむ。ここから先はゲームがいつもどおり進める。
             fold_trained(app)
         try:
-            return orig(self, choice_text, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         finally:
             # 窓（文言の直しと断りの伏せ）は**再訓練の支度が終わるまで**開けておく。
             # `training_start()` も `あと3年間。どうする？` を出すので、
@@ -831,25 +841,27 @@ def apply(ctx):
 
     # ============================================================ 日数
     @ctx.wrap("__main__:{}.__init__".format(PHASE_CLS), required=False, safe=True)
-    def phase_init(orig, self, app, *args, **kwargs):
+    def phase_init(orig, self, *args, **kwargs):
         """`execute` には引数が来ないので、活動の種類と残り年数をここで控える。
 
         自分専用の属性名で持つだけで、ゲームのデータには何も書かない
         （マネージャはセーブに入らない。セーブに入るのは spec のほう）。
         """
-        result = orig(self, app, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         try:
+            # (app, training_type, remaining_years, training_log)。受け取った形のまま渡し、ここでは読むだけ。
             self._mod_training_custom = {
-                "activity": args[0] if len(args) >= 1 else None,
-                "remaining": args[1] if len(args) >= 2 else None,
+                "activity": frames.arg(args, kwargs, "training_type", 1),
+                "remaining": frames.arg(args, kwargs, "remaining_years", 2),
             }
         except Exception:
             pass
         return result
 
     @ctx.wrap("__main__:{}.execute".format(PHASE_CLS), required=False)
-    def phase_execute(orig, self, choice_text=None, *args, **kwargs):
+    def phase_execute(orig, self, *args, **kwargs):
         """段の間だけ窓を開ける。日数の差し替えはこの窓の中だけ。"""
+        choice_text = frames.arg(args, kwargs, "choice_text", 0)
         app = getattr(self, "app", None) or ui.find_app()
         refresh_world(app)
         window = None
@@ -873,7 +885,7 @@ def apply(ctx):
             ctx.log_exc("training custom: cannot open the phase window")
             window = None
         try:
-            return orig(self, choice_text, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         finally:
             state["phase"] = None
             if window is not None and not window["granted"] \
@@ -931,7 +943,7 @@ def apply(ctx):
         return max(1, int(COURSE_YEARS))
 
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False)
-    def add_text(orig, self, context=None, *args, **kwargs):
+    def add_text(orig, self, *args, **kwargs):
         """訓練の窓の間だけ、文言の「N年間」を実際の期間に直す。
 
         窓の外（他の場面の文言）には一切触らない。
@@ -939,6 +951,7 @@ def apply(ctx):
         """
         try:
             window = state["phase"]
+            context = frames.arg(args, kwargs, "context", 0)
             if (window is not None or state["start"]) and isinstance(context, str):
                 refresh_world(self)
                 activity = window.get("activity") if window is not None else None
@@ -952,13 +965,14 @@ def apply(ctx):
                                   budget=budget)
                 if replaced is not None and replaced != context:
                     write("text: {!r} -> {!r}".format(context, replaced))
-                    return orig(self, replaced, *args, **kwargs)
+                    args, kwargs, _ = frames.replace_arg(args, kwargs, "context", 0, replaced)
+                    return orig(self, *args, **kwargs)
                 if PERIOD_WORDING and "年" in context and len(context) < 40:
                     write("text passing through (no year mark matched): {!r}"
                           .format(context))
         except Exception:
             ctx.log_exc("training custom: cannot reword the training text")
-        return orig(self, context, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     def rewrite_outgoing(texts, site):
         """AI へ出ていく頼み文の年数を実際の期間に直す。

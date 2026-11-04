@@ -16,7 +16,6 @@ import os
 import struct
 import sys
 import tempfile
-from ctypes import wintypes
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS_DIR = os.path.normpath(os.path.join(HERE, os.pardir))

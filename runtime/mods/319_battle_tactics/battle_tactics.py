@@ -97,6 +97,11 @@ k は審判の power で決まる（weak 1.0 〜 extreme 約 2.45）。
 
 即時回復・逃走・`physical_integrity`・経験値・戦利品はゲームのまま。
 セーブに MOD 独自の鍵は増やさない（敵の HP は戦闘中のセーブに入るが、戦闘の終わりに敵ごと消える）。
+
+## 版21
+
+1手・計算・ダメージ・審判の出力の変換・継続効果のフックは、引数を受け取った形のまま元の関数へ渡す
+（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 """
 
 import math
@@ -948,28 +953,27 @@ def apply(ctx):
     # ================================================================ 圧縮
     @ctx.wrap("__main__:BattlePhaseManager.handle_battle_situation",
               required=False, safe=True)
-    def handle_battle_situation(orig, self, character_key=None,
-                                character_side=None, battle_action=None,
-                                *args, **kwargs):
+    def handle_battle_situation(orig, self, *args, **kwargs):
         app = getattr(self, "app", None) or ui.find_app()
         try:
-            open_action(app, character_key, character_side)
+            # (character_key, character_side, battle_action)。受け取った形のまま渡し、ここでは読むだけ。
+            open_action(app, frames.arg(args, kwargs, "character_key", 0),
+                        frames.arg(args, kwargs, "character_side", 1))
         except Exception:
             ctx.log_exc("battle tactics: cannot open the action")
         # 本体が投げても1手は必ず閉じる。閉じないと古い `state["action"]` が残って
         # 手の外で呼ばれた `get_instant_damage` まで圧縮し、立てた構えも武装されない。
         try:
-            return orig(self, character_key, character_side, battle_action,
-                        *args, **kwargs)
+            return orig(self, *args, **kwargs)
         finally:
             close_action()
 
     @ctx.wrap("__main__:BattlePhaseManager.calculate_battle_effect",
               required=False, safe=True)
-    def calculate_battle_effect(orig, self, battle_action=None, *args, **kwargs):
-        result = orig(self, battle_action, *args, **kwargs)
+    def calculate_battle_effect(orig, self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
         try:
-            register_plan(battle_action, result)
+            register_plan(frames.arg(args, kwargs, "battle_action", 0), result)
         except Exception:
             ctx.log_exc("battle tactics: cannot register the plan")
         return result
@@ -983,11 +987,15 @@ def apply(ctx):
         return result
 
     @ctx.wrap("scripts.functions:get_instant_damage", required=False, safe=True)
-    def get_instant_damage(orig, attack=None, defense=None, *args, **kwargs):
-        result = orig(attack, defense, *args, **kwargs)
+    def get_instant_damage(orig, *args, **kwargs):
+        result = orig(*args, **kwargs)
         try:
             action = state["action"]
-            if action is None or not isinstance(attack, (int, float)):
+            if action is None:
+                return result
+            attack = frames.arg(args, kwargs, "attack", 0)
+            defense = frames.arg(args, kwargs, "defense", 1)
+            if not isinstance(attack, (int, float)):
                 return result
             app = action["app"]
             target, holder = find_defender(app, attack, defense)
@@ -1071,13 +1079,14 @@ def apply(ctx):
     # ================================================================ 復元
     @ctx.wrap("__main__:BattlePhaseManager.convert_llm_output_to_instruction_dict",
               required=False, safe=True)
-    def convert_llm_output_to_instruction_dict(orig, self, actor=None, skill=None,
-                                               referee_response=None,
-                                               *args, **kwargs):
-        result = orig(self, actor, skill, referee_response, *args, **kwargs)
+    def convert_llm_output_to_instruction_dict(orig, self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
         if not RESTORE_EFFECTS:
             return result
         try:
+            # (actor, skill, referee_response)。受け取った形のまま渡し、ここでは読むだけ。
+            actor = frames.arg(args, kwargs, "actor", 0)
+            referee_response = frames.arg(args, kwargs, "referee_response", 2)
             app = getattr(self, "app", None) or ui.find_app()
             extras = extract_extras(referee_response) + skill_extras(
                 frames.attr(actor, "skills", None), referee_response)
@@ -1164,9 +1173,10 @@ def apply(ctx):
 
     @ctx.wrap("__main__:BattlePhaseManager.reduce_status_turns_and_log",
               required=False, safe=True)
-    def reduce_status_turns_and_log(orig, self, character=None, *args, **kwargs):
+    def reduce_status_turns_and_log(orig, self, *args, **kwargs):
         # 元の減算より先に適用する。
         # 内側（先に適用済み）の `308_` がこの回の報告で数字を出してくれる。
+        character = frames.arg(args, kwargs, "character", 0)
         if RESTORE_EFFECTS and character is not None:
             try:
                 max_hp = max_hp_of(character)
@@ -1203,7 +1213,7 @@ def apply(ctx):
                                 tick_kind, status_name, name, hp, new_hp))
             except Exception:
                 ctx.log_exc("battle tactics: per-turn effects failed")
-        return orig(self, character, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     # ================================================================ 防御
     def begin_guard(app, holder, source):

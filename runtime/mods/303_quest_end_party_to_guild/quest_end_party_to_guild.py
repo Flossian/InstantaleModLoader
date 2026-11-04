@@ -67,6 +67,10 @@ mod は解散のときだけ置き先を差し替え、**プレイヤーがい�
 パーティの増減はあちらが既に書いている。
 **1つの時系列で解散の一部始終を読めれば**切り分けは速い（`106_` と `207_` が
 `battle_bgm.log` を共有しているのと同じ理由）。
+
+版3: `remove_party_member`・`get_party_leave_facility`・`move_npc_to_facility` のフックは、引数を受け取った形のまま `orig` へ渡す。
+版2までは名前で受けて位置に直していて、内側の MOD が受ける形が素と変わっていた（TECH.md の規則の表）。
+置き先の差し替えは、来た側（位置かキーワード）に合わせて書く（`frames.replace_arg`）。
 """
 
 
@@ -75,6 +79,10 @@ from instantale_modloader import frames, ui
 # `302_` と同じログに書く（パーティの増減と解散を1つの時系列で読むため）。
 LOG_BASENAME = "party_leave.log"
 LOG_TAG = "quest-end"
+
+# `InstantaleApp.move_npc_to_facility` の引数の並び（`self` を除く。recon の signatures.json）。
+MOVE_ARGS = ("character_id", "character_instance", "target_facility", "target_node",
+             "register_facility")
 
 # ---------------------------------------------------------------- 何を捕まえるか
 # クエストクリアで解散するマネージャ。
@@ -253,8 +261,9 @@ def apply(ctx):
 
     # ================================================================ フック
     @ctx.wrap("__main__:InstantaleApp.remove_party_member", required=False)
-    def remove_party_member(orig, self, member_id, *args, **kwargs):
+    def remove_party_member(orig, self, *args, **kwargs):
         """解散を捕まえて控える。外す処理そのものには触らない。"""
+        member_id = frames.arg(args, kwargs, "member_id", 0)
         source = None
         try:
             source = in_disband()
@@ -264,15 +273,15 @@ def apply(ctx):
         if source is None:
             # 死別・`302_` の会話からの別れ・その他。
             # こちらの管轄ではない。
-            return orig(self, member_id, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         try:
             register(self, str(member_id), source)
         except Exception:
             ctx.log_exc("quest-end guild: cannot register {!r}".format(member_id))
-        return orig(self, member_id, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:InstantaleApp.get_party_leave_facility", required=False)
-    def get_party_leave_facility(orig, self, character_instance=None, *args, **kwargs):
+    def get_party_leave_facility(orig, self, *args, **kwargs):
         """解散処理の中で聞かれたら、いま居る町のギルドを答える。
 
         戻り値の形はゲームのものに合わせる。
@@ -280,7 +289,7 @@ def apply(ctx):
         中身は解釈せず、形だけ写す。
         """
         try:
-            value = orig(self, character_instance, *args, **kwargs)
+            value = orig(self, *args, **kwargs)
         except Exception:
             # 解散の中でなければこちらの管轄ではない。
             # 握り潰さずそのまま投げる（mod があるとゲームの失敗が消える、
@@ -317,17 +326,17 @@ def apply(ctx):
             return value
 
     @ctx.wrap("__main__:InstantaleApp.move_npc_to_facility", required=False)
-    def move_npc_to_facility(orig, self, character_id, character_instance=None,
-                             target_facility=None, target_node=None, *args, **kwargs):
+    def move_npc_to_facility(orig, self, *args, **kwargs):
         """解散したばかりの相手を動かす呼び出しだけ、置き先を差し替える。
 
         NPC の日常の移動でも呼ばれる経路なので、ここではスタックを見ない。
         控えの辞書を1回引くだけで、関係が無ければそのまま通す。
         """
+        character_id = frames.arg(args, kwargs, "character_id", MOVE_ARGS)
         entry = state["pending"].get(str(character_id))
         if entry is None or entry["done"]:
-            return orig(self, character_id, character_instance, target_facility,
-                        target_node, *args, **kwargs)
+            return orig(self, *args, **kwargs)
+        target_facility = frames.arg(args, kwargs, "target_facility", MOVE_ARGS)
         try:
             if target_facility is entry["facility"]:
                 # `get_party_leave_facility` の差し替えが既に効いている。
@@ -339,11 +348,16 @@ def apply(ctx):
                     entry["name"],
                     ui.facility_name(self, target_facility) or target_facility,
                     ui.facility_name(self, entry["facility"]) or "the guild"))
-                target_facility, target_node = entry["facility"], entry["node"]
+                # 置き先とノードは来た側に合わせて書く。ノードは省かれうる（既定 None）ので、
+                # 来ていなければキーワードで足す（素の関数が受ける名前。recon）。
+                args, kwargs, _ = frames.replace_arg(args, kwargs, "target_facility", MOVE_ARGS,
+                                                     entry["facility"], insert=True)
+                args, kwargs, _ = frames.replace_arg(args, kwargs, "target_node", MOVE_ARGS,
+                                                     entry["node"], insert=True)
+                target_facility = entry["facility"]
         except Exception:
             ctx.log_exc("quest-end guild: cannot redirect {!r}".format(character_id))
-        result = orig(self, character_id, character_instance, target_facility,
-                      target_node, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         try:
             announce(self, entry["name"], target_facility)
         except Exception:

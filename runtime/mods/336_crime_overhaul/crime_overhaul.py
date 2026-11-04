@@ -21,11 +21,15 @@
 | `custody` | 身柄の拘束（捕まったら仲間を解散させる・牢に居る間は閉じ込めていると窓口へ） |
 | `common` | 共有の土台（ゲームの値の読み方・控え・画面の部品・振り分け） |
 | `rules` | 数の決まり（ゲームに触らない） |
+
+版5: `add_text`（このファイル）・`random_quest_generator`（`office.py`）・`show_popup_menu`（`theft.py`）のフックは、
+引数を受け取った形のまま元の関数へ渡す（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
+本文・依頼の指示・難易度は来た側に合わせて差し替える。
 """
 
 import random
 
-from instantale_modloader import choices, wanted
+from instantale_modloader import choices, frames, wanted
 
 from . import cellmate, common, court, custody, encounter, fence, law, loot, office, prison, rescue, theft
 
@@ -141,13 +145,19 @@ def apply(ctx):
 
     # ---- ゲームの入口は1枚だけ包み、機能へ配る ------------------------------------------
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False, safe=True)
-    def add_text(orig, self, context=None, *args, **kwargs):
-        """本文の1行を機能に通す（盗みで借りた購入の文を止める・裏の仕事の報酬の額を書き換える）。"""
+    def add_text(orig, self, *args, **kwargs):
+        """本文の1行を機能に通す（盗みで借りた購入の文を止める・裏の仕事の報酬の額を書き換える）。
+
+        受け取った形（位置かキーワード）のまま渡し、文だけを来た側に合わせて差し替える（TECH.md の規則の表）。
+        """
+        original = context = frames.arg(args, kwargs, "context", 0)
         for handler in env.text_filters:
             context, drop = handler(context)
             if drop:
                 return None
-        return orig(self, context, *args, **kwargs)
+        if context is not original:
+            args, kwargs, _ = frames.replace_arg(args, kwargs, "context", 0, context)
+        return orig(self, *args, **kwargs)
 
     # ---- 選択肢と押下は、ローダの窓口 `choices`（TECH.md §3.3.14）に預ける ---------------------
     # 自前のボタンは宣言型の口で、組み直しのたびに機能の状態から作る（押下は窓口がボタンの処理を呼ぶ。

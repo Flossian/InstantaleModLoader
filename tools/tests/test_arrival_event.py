@@ -690,6 +690,22 @@ hooks["starter"](lambda messages, *a, **k: seen.setdefault("messages", messages)
 check("印は1回で使い切る（次の会話は素通し）",
       seen["messages"][-1]["content"] == "<行動: 話しかける>", seen["messages"])
 
+# ゲームがキーワード引数で呼んでも、受け取った形のまま messages だけを差し替える（版6）。
+clock = install_fake_kivy()
+mod, ctx, calls, hooks = setup()
+do_move(hooks)
+clock.tick()
+clock.run_onces()
+seen.clear()
+hooks["starter"](lambda *a, **k: seen.update(args=a, kwargs=k),
+                 messages=original, character_life_log="life_log", player="player")
+check("キーワード引数で呼ばれても最後のメッセージが差し替わる",
+      "あなたの方から声をかけた" in seen["kwargs"]["messages"][-1]["content"],
+      seen.get("kwargs"))
+check("  → 受け取った形のまま渡す（位置引数に直さない）",
+      seen["args"] == () and sorted(seen["kwargs"]) == ["character_life_log", "messages", "player"],
+      (seen.get("args"), sorted(seen.get("kwargs") or {})))
+
 # ============================================================== narration
 print()
 print("=== narration モード ===")

@@ -93,7 +93,6 @@ mod を入れる前に保存したもの）、読み込み直後に立ってい�
 """
 
 import os
-import sys
 
 from instantale_modloader import frames, loads, ui
 

@@ -28,7 +28,6 @@ DLL 版を使っていた手元の調整を、こちらの設定と規則へ写�
 （後ろ2つが食い違うときは `landscape_*` を採り、`notes` に残す）。
 """
 import io
-import re
 
 #: 元の種類 → こちらの種類。
 KIND_OF = {"portrait": "portrait", "landscape": "background",

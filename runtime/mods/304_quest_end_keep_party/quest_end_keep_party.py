@@ -78,6 +78,9 @@
 
 記録は `302_` / `303_` と同じ `party_leave.log` に
 `quest-end keep:` を付けて書く（パーティの増減・解散・引き留めを1つの時系列で読めれば切り分けは速い）。
+
+版3: `remove_party_member`・`get_party_leave_facility`・`move_npc_to_facility`・`add_text` のフックは、引数を受け取った形のまま `orig` へ渡す。
+版2までは名前で受けて位置に直していて、内側の MOD が受ける形が素と変わっていた（TECH.md の規則の表）。
 """
 
 import time
@@ -196,12 +199,13 @@ def apply(ctx):
 
     # ================================================================ フック
     @ctx.wrap("__main__:InstantaleApp.remove_party_member", required=False)
-    def remove_party_member(orig, self, member_id, *args, **kwargs):
+    def remove_party_member(orig, self, *args, **kwargs):
         """解散の中からの removal だけ、元の処理を呼ばない。
 
         名簿を書き換えているのは `orig` の中なので、通さなければパーティは元のまま。
         こちらから名簿を触ることはしない。
         """
+        member_id = frames.arg(args, kwargs, "member_id", 0)
         key = str(member_id)
         source = None
         try:
@@ -214,7 +218,7 @@ def apply(ctx):
             # 本当に外れる。
             # 控えに残っていると直後の置き直しまで止めてしまうので先に落とす。
             release(key, "removed outside the disband")
-            return orig(self, member_id, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         try:
             keep(self, key, source, "did not disband the party")
         except Exception:
@@ -223,11 +227,11 @@ def apply(ctx):
             # 置き直しだけ通って「パーティに居るのに施設にも居る」状態になる。
             ctx.log_exc("quest-end keep: cannot hold {!r}; letting the game "
                         "disband as usual".format(member_id))
-            return orig(self, member_id, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         return None
 
     @ctx.wrap("__main__:InstantaleApp.get_party_leave_facility", required=False)
-    def get_party_leave_facility(orig, self, character_instance=None, *args, **kwargs):
+    def get_party_leave_facility(orig, self, *args, **kwargs):
         """解散の中で置き先を聞かれたら、その相手を先に控える。
 
         実測のビルドは removal の後に置き直すので、
@@ -238,24 +242,23 @@ def apply(ctx):
         try:
             source = in_disband()
             if source is not None:
-                member_id = id_of(character_instance)
+                member_id = id_of(frames.arg(args, kwargs, "character_instance", 0))
                 if member_id:
                     keep(self, member_id, source, "was asked where to leave them")
         except Exception:
             ctx.log_exc("quest-end keep: cannot hold the character the game "
                         "asked about")
-        return orig(self, character_instance, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:InstantaleApp.move_npc_to_facility", required=False)
-    def move_npc_to_facility(orig, self, character_id, character_instance=None,
-                             target_facility=None, target_node=None, *args, **kwargs):
+    def move_npc_to_facility(orig, self, *args, **kwargs):
         """引き留めた相手を施設へ置く呼び出しだけ、通さない。
 
         NPC の日常の移動でも呼ばれる経路なので、**控えが空なら何もせず抜ける**（`303_` と同じ理由でスタックは見ない）。
         """
         if not state["kept"]:
-            return orig(self, character_id, character_instance, target_facility,
-                        target_node, *args, **kwargs)
+            return orig(self, *args, **kwargs)
+        character_id = frames.arg(args, kwargs, "character_id", 0)
         try:
             entry = kept_entry(str(character_id))
         except Exception:
@@ -263,29 +266,29 @@ def apply(ctx):
                         .format(character_id))
             entry = None
         if entry is None:
-            return orig(self, character_id, character_instance, target_facility,
-                        target_node, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         write("not placing {!r} anywhere: they are still in the party".format(
             entry["name"]))
         return None
 
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False)
-    def add_text(orig, self, context, *args, **kwargs):
+    def add_text(orig, self, *args, **kwargs):
         """「…はパーティから離脱した。」を、残った旨に差し替える。
 
         引き留めた直後に**その相手の名前が入った離脱の文**だけを見る。
         控えが空なら何もせず抜けるので、普段の描画には触らない。
         """
-        if REPLACE_LEAVE_TEXT and state["kept"] and isinstance(context, str):
+        if REPLACE_LEAVE_TEXT and state["kept"]:
             try:
-                replaced = keep_text_for(context)
+                context = frames.arg(args, kwargs, "context", 0)
+                replaced = keep_text_for(context) if isinstance(context, str) else None
                 if replaced is not None:
                     write("text: {!r} -> {!r}".format(frames.short(context, 60),
                                                       frames.short(replaced, 60)))
-                    context = replaced
+                    args, kwargs, _ = frames.replace_arg(args, kwargs, "context", 0, replaced)
             except Exception:
                 ctx.log_exc("quest-end keep: cannot rewrite the farewell line")
-        return orig(self, context, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     def keep_text_for(context):
         """離脱を告げる文なら、残った旨の文を返す。違えば None。"""

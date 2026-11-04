@@ -32,7 +32,6 @@
              束縛が変わらない
 """
 import ast
-import io
 import os
 import sys
 

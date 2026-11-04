@@ -223,9 +223,6 @@ def main():
     ap.add_argument("--preview")
     args = ap.parse_args()
     table, prefix = SETS[args.set]
-    magic = args.set == "magic"
-    sf = args.set == "sf"
-    item = args.set == "item"
 
     b.SHEETS.update(SHEETS)
     entries = json.load(open(HERE / table, encoding="utf-8"))

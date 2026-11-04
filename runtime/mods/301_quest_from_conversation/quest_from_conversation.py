@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """機能追加: NPC との会話から依頼を受注する。
 
-会話中の「行動」メニューに 「依頼を受ける」 を足す。
+会話の画面に 「依頼を受ける（話を切り上げる）」 を足す。
 押すと個別の依頼が一覧で並び、
 選ぶとゲーム本来の受注画面（`QuestChoiceManager`）に入る。
 一覧の先頭には 「この話から依頼を作る」 があり、
@@ -95,6 +95,11 @@ mod を import はしない。
 
 依頼人のいない依頼（ゲームが作る依頼の多く）は、依頼の街の住人に噂として伝える（`town_quests_of`）。
 掲示板に出さない依頼（ローダの窓口 `board`）は誰の仕業かを伏せる。VERIFICATION.md §3.115。
+
+版8: 会話中の「行動」メニュー（`toggle_to_action_in_conversation`）に出す経路を外した。
+この版のゲームではその欄が大きさ 0 で画面に出ず（GAME.md §2.6）、8月から一度も呼ばれていなかった。
+`random_quest_generator` と `ConversationStartManager.__init__` の包みは、引数を受けた形のまま `orig` へ渡す
+（名前で受けて位置に直すと、内側の MOD が受ける形が素と変わる。TECH.md の規則の表）。
 """
 
 import os
@@ -160,14 +165,17 @@ END_TEXT = "<行動: 依頼の話を切り出すため、会話を切り上げ�
 #                  会話中の app.buttons は ['会話を終了する'] の1個だけだと
 #                  実測できたので、「行動」メニューを経由する必要は無い
 #   "facility"     施設の選択肢に「会話する」と並べて出す
-#   "action_menu"  会話中の「行動」メニュー（`toggle_to_action_in_conversation`
-#                  ＝ 会話画面の上部右ボタン）。そこは HUD 上部のボタンで
-#                  app.buttons とは別系統らしく、一度も発火していない
+#
+# 会話中の「行動」メニューに出す経路は版8で外した（この版のゲームでは画面に出ない。GAME.md §2.6）。
 #
 # 会話中だけに出す。この機能の値打ちは「話の流れから依頼になる」ことで、
 # 施設に出すとゲーム本来の「クエスト掲示板」（`DisplayQuestChoice`）と同じ動作の
 # 重複ボタンになるだけ。
 OFFER_SITES = ("conversation",)
+
+# `random_quest_generator` の引数の並び（recon の signatures.json）。書き起こしは `area_description` に足す。
+QUEST_GENERATOR_ARGS = ("world_overview", "settlement_name", "settlement_overview",
+                        "settlement_structure_description", "area_description", "quest_difficulty")
 
 # 施設側から入ったときも「この話から依頼を作る」を使えるようにするため、
 # 会話が終わるときに書き起こしを控えておく。
@@ -358,9 +366,7 @@ def apply(ctx):
     cls_of = ui.cls_of
     spec_cls_name = ui.spec_cls_name
     spec_args = ui.spec_args
-    pressed_entry = ui.pressed_entry
     say = screen.say
-    refresh = screen.refresh
 
     def button(text, mark=None, cls_name=None, args=()):
         return screen.button(text, mark=mark, cls_name=cls_name, args=args)
@@ -1241,7 +1247,6 @@ def apply(ctx):
     # 読むのはどちらでもよいが、書くときは必ず両方。
     # その作法はローダに集約してある（`ui.quest_stores` ほか。
     # `305_` / `307_` と共有。TECH.md §3.2.3）。
-    quest_stores = ui.quest_stores
     quest_ids = ui.quest_ids
     quest_of = ui.quest_of
     quest_value = ui.quest_value
@@ -1460,7 +1465,7 @@ def apply(ctx):
         """
         for index, entry in enumerate(buttons):
             name = spec_cls_name(entry)
-            if name == "ConversationEndManager" and ("conversation" in OFFER_SITES or "action_menu" in OFFER_SITES):
+            if name == "ConversationEndManager" and "conversation" in OFFER_SITES:
                 return index, "conversation"
             if name == "DisplayTalkChoice" and "facility" in OFFER_SITES:
                 return index + 1, "facility"
@@ -1599,29 +1604,13 @@ def apply(ctx):
                                      offer=offer, screens={MOD_LIST_SCREEN: mod_list_screen},
                                      labels=OUR_LABELS)
 
-    @ctx.wrap("__main__:InstantaleApp.toggle_to_action_in_conversation", required=False)
-    def toggle_to_action(orig, self, *args, **kwargs):
-        """会話中の「行動」メニューが開いたら組み直す（「依頼を受ける」は窓口が `offer` で組む）。
-
-        この経路は切り替えが画面のどこにあるか未確認なので、
-        出れば儲けものという位置づけ。
-        確実な経路は会話画面（`offer`）。
-        """
-        result = orig(self, *args, **kwargs)
-        if "action_menu" not in OFFER_SITES:
-            return result
-        try:
-            refresh(self)
-        except Exception:
-            ctx.log_exc("quest offer: cannot refresh the action menu")
-        return result
-
     @ctx.wrap("__main__:ConversationStartManager.__init__", required=False)
-    def conversation_start(orig, self, app, character_id, *args, **kwargs):
+    def conversation_start(orig, self, *args, **kwargs):
         # 誰と話しているか。
         # 生成した依頼の依頼人にする。
+        character_id = frames.arg(args, kwargs, "character_id", 1)   # (app, character_id)
         state["npc_id"] = str(character_id) if character_id is not None else None
-        return orig(self, app, character_id, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:ConversationEndManager.finish_conversation", required=False)
     def finish_conversation(orig, self, *args, **kwargs):
@@ -1661,26 +1650,22 @@ def apply(ctx):
     # ------------------------------------- 生成プロンプトへ会話を差し込む
     @ctx.wrap("scripts.llm.llm_manager_world_generate:random_quest_generator",
               required=False)
-    def random_quest_generator(orig, world_overview, settlement_name,
-                               settlement_overview, settlement_structure_description,
-                               area_description, quest_difficulty, *args, **kwargs):
+    def random_quest_generator(orig, *args, **kwargs):
         """`area_description` にこの会話の書き起こしを添える。
 
         引数を足すのではなく既存の自由記述欄に載せるだけなので、
         出力スキーマ（QuestStructure）にも呼び出し側にも一切影響しない。
         印は1回で使い切るので、掲示板から普通に作られた依頼は素通しする。
+        引数は受けた形（位置かキーワード）のまま渡し、`area_description` だけを差し替える（TECH.md の規則の表）。
         """
         mark = state["inject"]
         if mark is None:
-            return orig(world_overview, settlement_name, settlement_overview,
-                        settlement_structure_description, area_description,
-                        quest_difficulty, *args, **kwargs)
+            return orig(*args, **kwargs)
         state["inject"] = None
         if time.monotonic() - state["inject_at"] > INJECT_TTL:
             write("inject: stale marker, left untouched")
-            return orig(world_overview, settlement_name, settlement_overview,
-                        settlement_structure_description, area_description,
-                        quest_difficulty, *args, **kwargs)
+            return orig(*args, **kwargs)
+        area_description = frames.arg(args, kwargs, "area_description", QUEST_GENERATOR_ARGS)
 
         addition = (
             "\n\n【この依頼の発端 ― 最優先で反映すること】\n"
@@ -1712,9 +1697,11 @@ def apply(ctx):
         write("inject: area_description {} -> {} chars (npc={!r}, persona={} chars)"
               .format(len(area_description or ""), len(merged), mark["npc_name"],
                       len(persona)))
-        result = orig(world_overview, settlement_name, settlement_overview,
-                      settlement_structure_description, merged,
-                      quest_difficulty, *args, **kwargs)
+        args, kwargs, placed = frames.replace_arg(args, kwargs, "area_description",
+                                                  QUEST_GENERATOR_ARGS, merged)
+        if not placed:
+            write("inject: area_description was not passed; left untouched")
+        result = orig(*args, **kwargs)
         if isinstance(result, dict):
             write("inject: generated {!r} client={!r}".format(
                 result.get("quest_title"), result.get("client_name")))

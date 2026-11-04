@@ -91,7 +91,6 @@ VERIFICATION.md §3.21）。
 
 import datetime
 import json
-import os
 import sys
 import weakref
 
@@ -461,7 +460,6 @@ def apply(ctx):
             return None
         return button
 
-    window_size = ui.window_size
     upx = ui.upx
 
     def clamp(widget):

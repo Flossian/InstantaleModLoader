@@ -149,14 +149,18 @@ MOD が自分で起こす滞在（`331_facility_investment` の「無料で泊�
 
 ボタンはセーブに焼かれうる（GAME.md §2.2）。無害な既存クラスを持たせ、
 押下は `on_button_press` を包んで印（`mod_real_estate`）で横取りする。
+
+## 版46
+
+滞在の各段の `execute` と `InventoryItem.change_inventory` のフックは、引数を受け取った形のまま元の関数へ渡す
+（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。使っていない import（`copy`・`npcs`）を外した。
 """
 
-import copy
 import datetime
 import sys
 
 from instantale_modloader import (choices, confinement, durations, frames, holdings, llm, loads, modfacility,
-                                  modnpc, npcs, prices, ui)
+                                  modnpc, prices, ui)
 from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, playthrough_key,
                                         playthrough_key_of_dict)
 
@@ -2222,7 +2226,7 @@ def apply(ctx):
     llm.wrap_outgoing(ctx, tell_where_the_stay_is, label="real estate")
 
     @ctx.wrap("__main__:VacationStartManager.execute", required=False)
-    def vacation_start(orig, self, choice_text="", *args, **kwargs):
+    def vacation_start(orig, self, *args, **kwargs):
         """自分の建物での滞在は宿代を取らない。宿屋での宿泊には触らない。
 
         取り方は**前払い**（`314_area_move_custom` の運賃・`315_vacation_custom`
@@ -2245,7 +2249,7 @@ def apply(ctx):
             # 家賃はその引き落としが済むまで見送り、抜けてから払う（`check_leases`）。
             state["inn_stay"] = True
             try:
-                result = orig(self, choice_text, *args, **kwargs)
+                result = orig(self, *args, **kwargs)
             finally:
                 state["inn_stay"] = False
                 if app is not None and state.get("rent_pending"):
@@ -2267,7 +2271,7 @@ def apply(ctx):
         day_before = ui.game_day(app)
         prepaid = prepay_room(app, quality, before)
         try:
-            result = orig(self, choice_text, *args, **kwargs)
+            result = orig(self, *args, **kwargs)
         except Exception as exc:
             # 何を引き損ねたかは例外自身が持っている（GAME.md §2.28）。
             # 施設のどの値が足りなかったのかを、その場の値と一緒に残す。
@@ -2405,52 +2409,52 @@ def apply(ctx):
         write("{}: gave the controls back".format(why))
 
     @ctx.wrap("__main__:VacationRestManager.execute", required=False)
-    def vacation_rest(orig, self, choice_text="", *args, **kwargs):
+    def vacation_rest(orig, self, *args, **kwargs):
         """休養。自分の家ではこれで滞在を締める。"""
-        result = orig(self, choice_text, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         app = getattr(self, "app", None) or ui.find_app()
         if app is not None:
             close_stay_after_activity(app, "rest")
         return result
 
     @ctx.wrap("__main__:VacationTrainManager.execute", required=False)
-    def vacation_train(orig, self, choice_text="", *args, **kwargs):
+    def vacation_train(orig, self, *args, **kwargs):
         """訓練。同上。"""
-        result = orig(self, choice_text, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         app = getattr(self, "app", None) or ui.find_app()
         if app is not None:
             close_stay_after_activity(app, "train")
         return result
 
     @ctx.wrap("__main__:VacationLaborManager.execute", required=False)
-    def vacation_labor(orig, self, choice_text="", *args, **kwargs):
+    def vacation_labor(orig, self, *args, **kwargs):
         """労働。同上。"""
-        result = orig(self, choice_text, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         app = getattr(self, "app", None) or ui.find_app()
         if app is not None:
             close_stay_after_activity(app, "labor")
         return result
 
     @ctx.wrap("__main__:VacationBeggingManager.execute", required=False)
-    def vacation_begging(orig, self, choice_text="", *args, **kwargs):
+    def vacation_begging(orig, self, *args, **kwargs):
         """物乞い。同上。"""
-        result = orig(self, choice_text, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         app = getattr(self, "app", None) or ui.find_app()
         if app is not None:
             close_stay_after_activity(app, "begging")
         return result
 
     @ctx.wrap("__main__:VacationSocializeResolveManager.execute", required=False)
-    def vacation_socialize(orig, self, choice_text="", *args, **kwargs):
+    def vacation_socialize(orig, self, *args, **kwargs):
         """社交の後段。前段（相手を選ぶ側）では締めない。"""
-        result = orig(self, choice_text, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         app = getattr(self, "app", None) or ui.find_app()
         if app is not None:
             close_stay_after_activity(app, "socialize")
         return result
 
     @ctx.wrap("__main__:VacationEndManager.execute", required=False)
-    def vacation_end(orig, self, choice_text="", *args, **kwargs):
+    def vacation_end(orig, self, *args, **kwargs):
         """滞在が終わったら、据えた主を戻して滞在の印を落とす。"""
         app = getattr(self, "app", None) or ui.find_app()
         state["ending"] = False
@@ -2461,22 +2465,22 @@ def apply(ctx):
             ctx.log_exc("real estate: cannot finish the stay")
             state["free_stay"] = None
         try:
-            return orig(self, choice_text, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         finally:
             # 建物の選択肢が組み直された後で解く（先に解くと活動の後の選択肢が見える）。
             if app is not None:
                 uncover(app, "the stay ended")
 
     @ctx.wrap("scripts.hud.new_hud:InventoryItem.change_inventory", required=False)
-    def change_inventory(orig, self, new_inventory, *args, **kwargs):
+    def change_inventory(orig, self, *args, **kwargs):
         """保管庫の窓の中の移動だけを見る。店の売買と受け渡しは素通し。"""
         holder = storage_holder()
         if holder is None:
-            return orig(self, new_inventory, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         old_owner = _owner_of_grid(getattr(self, "inventory", None))
-        result = orig(self, new_inventory, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         try:
-            new_owner = _owner_of_grid(new_inventory)
+            new_owner = _owner_of_grid(frames.arg(args, kwargs, "new_inventory", 0))
             app = ui.find_app()
             pair = (old_owner, new_owner)
             if app is not None and old_owner is not new_owner \

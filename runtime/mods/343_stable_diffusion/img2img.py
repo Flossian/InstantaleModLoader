@@ -208,4 +208,7 @@ def first_image(result):
     """出口の戻り値から絵を1枚。sdcpp 系は絵の一覧を返す。絵でなければ None。"""
     if isinstance(result, (list, tuple)):
         result = result[0] if result else None
-    return result if hasattr(result, "size") and hasattr(result, "convert") else None
+    if result is None or getattr(result, "size", None) is None \
+            or not callable(getattr(result, "convert", None)):
+        return None
+    return result

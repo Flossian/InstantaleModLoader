@@ -16,7 +16,7 @@
 """
 import time
 
-from instantale_modloader import board, choices, durations, quest_clients, ui, wanted
+from instantale_modloader import board, choices, durations, frames, quest_clients, ui, wanted
 
 from . import common, theft, underworld
 
@@ -43,6 +43,10 @@ QUEST_TYPE = "settlement_quest"
 QUEST_CHOICE_SPEC = "QuestChoiceManager"
 #: 生成の頼み文へ差し込む印の寿命（秒）。`307_` と同じ。
 INJECT_TTL = 300.0
+
+# `random_quest_generator` の引数の並び（recon の signatures.json）。
+QUEST_GENERATOR_ARGS = ("world_overview", "settlement_name", "settlement_overview",
+                        "settlement_structure_description", "area_description", "quest_difficulty")
 #: 裏の仕事の受注期限（ゲームの日数）。作ってからこの日数が経つと、受けている最中でなければ取り下げる（2026-10-25。版4）。
 DEADLINE_DAYS = 30
 LOOKING_TEXT = "{broker}が帳面をめくり、回せる仕事を探している……"
@@ -312,26 +316,27 @@ def install(env):
         screen.when_idle(app, lambda: show_board(app), proceed_on_timeout=True, tag="underworld board")
 
     @ctx.wrap("scripts.llm.llm_manager_world_generate:random_quest_generator", required=False)
-    def random_quest_generator(orig, world_overview, settlement_name, settlement_overview,
-                               settlement_structure_description, area_description,
-                               quest_difficulty, *args, **kwargs):
+    def random_quest_generator(orig, *args, **kwargs):
         """裏の仕事・処刑場からの脱出を作る回だけ、`area_description` に指示を足す。印は1回で使い切る。
 
         `328_`（街の描写を伏せる）より内側に居るので、伏せられた後の描写に足される。
         難易度が置かれていれば `quest_difficulty` も差し替える（`307_` と同じ形。依頼の敵の強さはこの値で決まる）。
+        引数は受け取った形（位置かキーワード）のまま渡し、この2つだけを来た側に合わせて差し替える（TECH.md の規則の表）。
         """
         brief, at = inject.get("brief"), inject.get("at") or 0.0
         difficulty, tag = inject.get("difficulty"), inject.get("tag") or "underworld"
         inject.update(brief=None, difficulty=None)
         if brief and time.monotonic() - at <= INJECT_TTL:
-            area_description = (area_description or "") + brief
+            area_description = frames.arg(args, kwargs, "area_description", QUEST_GENERATOR_ARGS)
+            args, kwargs, _ = frames.replace_arg(args, kwargs, "area_description", QUEST_GENERATOR_ARGS,
+                                                 (area_description or "") + brief)
             write("{}: injected the brief ({} chars)".format(tag, len(brief)))
             if isinstance(difficulty, int) and not isinstance(difficulty, bool):
+                quest_difficulty = frames.arg(args, kwargs, "quest_difficulty", QUEST_GENERATOR_ARGS)
                 write("{}: quest difficulty {!r} -> {}".format(tag, quest_difficulty, difficulty))
-                quest_difficulty = difficulty
-        return orig(world_overview, settlement_name, settlement_overview,
-                    settlement_structure_description, area_description, quest_difficulty,
-                    *args, **kwargs)
+                args, kwargs, _ = frames.replace_arg(args, kwargs, "quest_difficulty",
+                                                     QUEST_GENERATOR_ARGS, difficulty)
+        return orig(*args, **kwargs)
 
     @ctx.wrap("__main__:DisplayQuestChoice.get_active_quest_count", required=False, safe=True)
     def active_quest_count(orig, self, *args, **kwargs):

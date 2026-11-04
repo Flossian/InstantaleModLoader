@@ -37,7 +37,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
-from instantale_modloader import llm, talk_affinity    # noqa: E402
+from instantale_modloader import talk_affinity         # noqa: E402
 
 MOD_NAME = "conversation_affinity_mod"
 RESOLVER = "scripts.llm.llm_manager:conversation_resolver"

@@ -70,6 +70,9 @@ REJECTED_MAX 件まで控え、頼み文の「使えない名前」に並べる�
 MODを外しても消えない（DOC.md に明記）。
 増えすぎない根拠はボタンの出る条件そのもの ―
 一覧が RECRUIT_MIN 人以下のときしか募集できない。
+
+版6: 一覧の `execute` のフック2本は、引数を受け取った形のまま元の関数へ渡す
+（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 """
 
 import sys
@@ -143,15 +146,15 @@ def apply(ctx):
     # ================================================== 冒険者一覧の見分け
     @ctx.wrap("__main__:DisplayAdventurerTalkChoice.execute",
               required=False, safe=True)
-    def adventurer_list_execute(orig, self, choice_text, *args, **kwargs):
+    def adventurer_list_execute(orig, self, *args, **kwargs):
         state["armed"] = True
-        return orig(self, choice_text, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:DisplayTalkChoice.execute", required=False, safe=True)
-    def talk_list_execute(orig, self, choice_text, *args, **kwargs):
+    def talk_list_execute(orig, self, *args, **kwargs):
         # 「会話する」の一覧は冒険者一覧と同じ形なので、明示的に旗を下ろす。
         state["armed"] = False
-        return orig(self, choice_text, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     def offer(app, view):
         """冒険者の一覧なら、人数が閾値以下のとき「やめる」の手前に募集ボタンを出す（窓口 `choices` の `offer`）。"""

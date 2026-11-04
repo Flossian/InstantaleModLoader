@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """能力値補正の決まり（ゲームに触らない部分）。抽選・品への書き込み・読み取り・合算。
 
-入口（`equipment_ability_bonus.py`）が設定をまとめて渡す。ここは設定を読まない。
+入口（`equipment_bonuses.py`）が設定をまとめて渡す。ここは設定を読まない。
 """
 
 import random

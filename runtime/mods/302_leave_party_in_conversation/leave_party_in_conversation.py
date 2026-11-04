@@ -88,9 +88,13 @@ id の配列）。
 ボタンは組み直しのたびに名簿と画面から作り直し、押下は窓口がボタンに持たせた処理を呼ぶ。
 確認の画面は MOD だけの画面（`open_screen`）で、下の会話のボタンは窓口が書き換えずに残す。
 確認の画面で保存しても、ロードの後に確認の画面へ戻る。「やめておく」で会話のボタンに戻る。
+
+版6: 選択肢の描画の追跡（`InstanTaleHUD.update_button_texts` の包み）を外した。
+「塗っているのは HUD 側」と分かって目的を果たした後は上限 0 で切ってあり、
+ボタンの文字が変わるたびに何もせず素通しする層だけが残っていた（GAME.md §2.3）。
+見張りのフック4本は、引数を受け取った形のまま元の関数へ渡す（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 """
 
-import sys
 import time
 
 from instantale_modloader import choices, frames, ui
@@ -156,14 +160,6 @@ SETTLE = 0.4
 # 署名が変わったときだけ書くので、量は増えない。
 TRACE_SCREENS = True
 
-# 選択肢の描画が誰の変化で起きているかを見るための上限付きトレース。
-# 既定では切ってある。
-# これで「監視対象は HUD 側のプロパティであって
-# `app.to_display_buttons` ではない」と分かり、目的を果たしたため。
-# 加えて読み込み中の文字送り（'.' '..' '...'）で1秒に数本出るので普段は邪魔になる。
-# 描画の経路をもう一度確かめたくなったら 40 くらいを入れる。
-PAINT_TRACE_LIMIT = 0
-
 # 注入時に「`method_1` を持つマネージャ」と、その定義行の対応表を書き出すか。
 # 既定オフ。
 # `method_1 (instantale.py:6602)` は `QuestEndManager` と確定しており（GAME.md
@@ -192,7 +188,6 @@ def apply(ctx):
         "last_skip": None,       # ボタンを出さなかった理由（ログの重複よけ）
         "last_screen": None,     # 直近に記録した会話画面の署名（同上）
         "censused": False,       # app の持ち物を書き出したか（1回きり）
-        "paint_traces": 0,       # 描画トレースの本数（上限で打ち切る）
         "recent_remove": None,   # ゲーム本来の解散の直後を見張る印 (id, 時刻)
     }
 
@@ -759,12 +754,14 @@ def apply(ctx):
 
     # ------------------------------------------------- 見張り（読み取りのみ）
     @ctx.wrap("__main__:InstantaleApp.move_npc_to_facility", required=False)
-    def move_npc_to_facility(orig, self, character_id, *args, **kwargs):
+    def move_npc_to_facility(orig, self, *args, **kwargs):
         """こちらの解散処理の最中にゲームが自分で置き直したかを見る。
 
         置いたのなら二重に動かさない。
         見張っていないときは何もしない。
         """
+        # (character_id, character_instance, target_facility, ...)。受け取った形のまま渡す。
+        character_id = frames.arg(args, kwargs, "character_id", 0)
         watching = state["watching"]
         if watching is not None and str(character_id) == watching["member_id"]:
             watching["watch"]["moved"] = True
@@ -777,13 +774,14 @@ def apply(ctx):
             if (recent is not None and recent[0] == str(character_id)
                     and time.monotonic() - recent[1] <= RECENT_REMOVE_WINDOW):
                 state["recent_remove"] = None
+                target = frames.arg(args, kwargs, "target_facility", 2)
                 write("observed: the game placed {!r} at {!r} after its own removal"
-                      .format(character_id, facility_name(self, args[1])
-                              if len(args) > 1 else "?"))
-        return orig(self, character_id, *args, **kwargs)
+                      .format(character_id, facility_name(self, target)
+                              if target is not None else "?"))
+        return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:InstantaleApp.remove_party_member", required=False)
-    def remove_party_member(orig, self, member_id, *args, **kwargs):
+    def remove_party_member(orig, self, *args, **kwargs):
         """誰が・どこから外されたかを記録する。値は一切変えない。
 
         ゲーム本来の解散（死別・クエストクリア）がどの関数から呼ばれているかはソースが読めない以上ここでしか分からない。
@@ -791,38 +789,22 @@ def apply(ctx):
         次にそれが起きたときに経路が確定する。
         """
         if state["watching"] is not None:
-            return orig(self, member_id, *args, **kwargs)   # こちらの解散
+            return orig(self, *args, **kwargs)   # こちらの解散
+        member_id = frames.arg(args, kwargs, "member_id", 0)
         before = party_ids(self)
         write("=" * 78)
         write("remove_party_member({!r} {!r}) from {}".format(
             member_id, name_of(self, str(member_id)), caller()))
         # 直後にゲームが置き直すかどうかを見るための印（短命）。
         state["recent_remove"] = (str(member_id), time.monotonic())
-        result = orig(self, member_id, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         write("remove_party_member: party {} -> {}".format(before, party_ids(self)))
         return result
 
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_button_texts", required=False)
-    def update_button_texts(orig, self, instance, value, *args, **kwargs):
-        """選択肢の描画が誰の変化で起きているかを見る。読むだけ。
-
-        `to_display_buttons` を入れ替えても画面が変わらなかったので、
-        そもそもこの関数が呼ばれているのかを確かめる。
-        ゲーム自身がメニューを変えたときに呼ばれ、
-        こちらが変えたときに呼ばれないなら、
-        監視の対象がこちらの触っている属性ではない、ということになる。
-
-        出過ぎないよう上限を設ける（文字送りで1文字ずつ呼ばれる可能性がある）。
-        """
-        if state["paint_traces"] < PAINT_TRACE_LIMIT:
-            state["paint_traces"] += 1
-            write("hud.update_button_texts({}) <- {}".format(
-                repr_value(value), type(instance).__name__))
-        return orig(self, instance, value, *args, **kwargs)
-
     @ctx.wrap("__main__:InstantaleApp.add_party_member", required=False)
-    def add_party_member(orig, self, character_id, *args, **kwargs):
-        result = orig(self, character_id, *args, **kwargs)
+    def add_party_member(orig, self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
+        character_id = frames.arg(args, kwargs, "character_id", 0)
         try:
             label, ids = pick_store(self)
             if label is None:
@@ -840,11 +822,12 @@ def apply(ctx):
         return result
 
     @ctx.wrap("__main__:InstantaleApp.process_party_member_choice", required=False)
-    def process_party_member_choice(orig, self, character_id, *args, **kwargs):
+    def process_party_member_choice(orig, self, *args, **kwargs):
         """仲間の label から入る経路。どこへ繋がるかを1行残すだけ。"""
+        character_id = frames.arg(args, kwargs, "character_id", 0)
         write("process_party_member_choice({!r} {!r}) | {}".format(
             character_id, name_of(self, str(character_id)), describe_stores(self)))
-        return orig(self, character_id, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     # 呼び出し元の記録は `frames.caller` / `frames.owner_of` に移した
     # （`203_` やクラッシュ記録からも同じものが使える）。要点は2つ:

@@ -532,9 +532,9 @@ api = Api()
 parsed = []
 request = {"model": "claude-haiku-5-5", "max_tokens": 100, "messages": [],
            "output_config": {"format": {"type": "json_schema", "schema": QUEST}}}
-reply = post(api, OPENAI, "/v1/messages", body=request,
+answer = post(api, OPENAI, "/v1/messages", body=request,
              options={"post_parser": lambda message: parsed.append(json.loads(message.content[0].text)) or "parsed"})
-assert reply == "parsed" and len(api.calls) == 2, (reply, len(api.calls))
+assert answer == "parsed" and len(api.calls) == 2, (answer, len(api.calls))
 assert parsed[0]["enemies"][0]["skills"][0]["effects"][0] == {"type": "buff", "turns": 3}, parsed
 assert any("grammar too large; sent with 1 choice(s)" in line for line in ctx.lines), ctx.lines
 assert request["output_config"]["format"]["schema"] is QUEST  # 呼び出し側の本文は変えない

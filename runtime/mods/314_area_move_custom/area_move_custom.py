@@ -65,6 +65,11 @@
 こちらが外側に居ると先に置き換えてしまい、307_ の伏せが効かなくなる。
 
 遊び方の説明は MODS.md の `314_` の項、検証の経過は VERIFICATION.md §3.27。
+
+版7: `AreaMoveManager.__init__` と `add_text` のフックは、引数を受け取った形のまま元の関数へ渡す
+（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。文言の言い換えは来た側に合わせて差し替える。
+`hasattr` を既定値付きの `getattr` に替えた（TECH.md §6）。
+`add_text` は窓の外では設定を読み直さない（版6までは本文1行ごとにワールド別の設定ファイルを `os.stat` していた）。
 """
 
 import os
@@ -72,7 +77,7 @@ import re
 import sys
 import time
 
-from instantale_modloader import arrivals, choices, durations, ui
+from instantale_modloader import arrivals, choices, durations, frames, ui
 from instantale_modloader.state import UNKNOWN_WORLD, WorldStore, playthrough_key, world_key
 
 LOG_BASENAME = "area_move_custom.log"
@@ -288,7 +293,7 @@ def apply(ctx):
         settings_store = WorldStore(ctx, SETTINGS_DIRNAME, default=dict,
                                     write=write)
         setattr(sys, SETTINGS_STORE_ATTR, settings_store)
-    elif settings_store is not None and hasattr(settings_store, "rebind"):
+    elif settings_store is not None and callable(getattr(settings_store, "rebind", None)):
         settings_store.rebind(ctx, write)
     # 注入のたびにモジュールは作り直され、一括設定を注入してからここへ来る（TECH.md §3.8）。
     # だからここで控えた値がそのまま一括設定（`sys` に固定してはいけない。
@@ -570,14 +575,17 @@ def apply(ctx):
 
     # ============================================================ 移動の窓
     @ctx.wrap("__main__:AreaMoveManager.__init__", required=False, safe=True)
-    def area_move_init(orig, self, app, target_area_id, mode, *args, **kwargs):
+    def area_move_init(orig, self, *args, **kwargs):
         """`execute` には引数が来ないので、行き先と手段をここで自分に控える。
 
         自分専用の属性名で持つだけで、ゲームのデータには何も書かない（マネージャはセーブに入らない。セーブに入るのは
         PhaseSpec のほう）。
         """
-        result = orig(self, app, target_area_id, mode, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         try:
+            # (app, target_area_id, mode)。受け取った形のまま渡し、ここでは読むだけ。
+            target_area_id = frames.arg(args, kwargs, "target_area_id", 1)
+            mode = frames.arg(args, kwargs, "mode", 2)
             self._mod_area_move_custom = {"target_id": str(target_area_id),
                                           "mode": str(mode)}
         except Exception:
@@ -755,18 +763,24 @@ def apply(ctx):
         return None
 
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False)
-    def add_text(orig, self, context=None, *args, **kwargs):
+    def add_text(orig, self, *args, **kwargs):
         try:
+            window = state["window"]
+            if window is None:
+                # 言い換えはエリア移動の窓の中だけ。窓の外の本文では設定も読み直さない
+                # （窓を開く `area_move_begin` が開く前に読み直している）。
+                return orig(self, *args, **kwargs)
             refresh_world(self)
             window = state["window"]
+            context = frames.arg(args, kwargs, "context", 0)
             if window is not None and isinstance(context, str):
                 replaced = reword(window, context)
                 if replaced is not None and replaced != context:
                     write("text: {!r} -> {!r}".format(context, replaced))
-                    return orig(self, replaced, *args, **kwargs)
+                    args, kwargs, _ = frames.replace_arg(args, kwargs, "context", 0, replaced)
         except Exception:
             ctx.log_exc("area move custom: cannot reword the travel text")
-        return orig(self, context, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     # ------------------------------------------------------------ 自己検証
     # 実経路はエリア移動を1回するまで通らない。

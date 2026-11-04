@@ -22,7 +22,6 @@ import types
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(_ROOT, "runtime"))
 
-import instantale_modloader  # noqa: E402,F401
 from instantale_modloader import drift  # noqa: E402
 from instantale_modloader import patch as P  # noqa: E402
 from instantale_modloader import patch_registry as R  # noqa: E402

@@ -81,4 +81,12 @@ a, kw = hook(orig, *ARGS)
 n = MOD.NOTE_WORLD_ONLY
 assert a == ("world", "town", n, n, n, 7), a
 assert any(l.startswith("world-only") for l in ctx.lines)
+
+# ゲームがキーワード引数で呼んでも、受け取った形のまま3欄だけを差し替える（版4）。
+names = ("world_overview", "settlement_name", "settlement_overview",
+         "settlement_structure_description", "area_description", "quest_difficulty")
+a, kw = hook(orig, **dict(zip(names, ARGS)))
+assert a == () and kw == {"world_overview": "world", "settlement_name": "town",
+                          "settlement_overview": n, "settlement_structure_description": n,
+                          "area_description": n, "quest_difficulty": 7}, (a, kw)
 print("ok")

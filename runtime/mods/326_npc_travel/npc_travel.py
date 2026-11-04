@@ -63,6 +63,9 @@
 
 ロードの直後は `world.characters` がほぼ空（GAME.md §2.7 の表）なので、
 ロードのフックの中では動かさず、旗だけ立てる。
+
+版4: 一覧の `execute` のフック2本は、引数を受け取った形のまま元の関数へ渡す
+（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 """
 
 import os
@@ -954,15 +957,15 @@ def apply(ctx):
     # ================================================================ フック
     @ctx.wrap("__main__:DisplayAdventurerTalkChoice.execute",
               required=False, safe=True)
-    def adventurer_list_execute(orig, self, choice_text=None, *args, **kwargs):
+    def adventurer_list_execute(orig, self, *args, **kwargs):
         listing["armed"] = True
-        return orig(self, choice_text, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:DisplayTalkChoice.execute", required=False, safe=True)
-    def talk_list_execute(orig, self, choice_text=None, *args, **kwargs):
+    def talk_list_execute(orig, self, *args, **kwargs):
         # 「会話する」の一覧は冒険者の一覧と同じ形なので、明示的に旗を下ろす（`320_`）。
         listing["armed"] = False
-        return orig(self, choice_text, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     def after_days(call):
         """日が進んだ後に見回る（ローダの日数の関所 `durations.on_days`）。日数の進め方には触らない。

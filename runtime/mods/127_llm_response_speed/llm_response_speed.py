@@ -174,6 +174,7 @@ config.json の欄  --parallel 2 --ctx-size 32768 --cache-reuse 256
 """
 
 import glob
+import importlib
 import os
 import re
 import struct
@@ -804,7 +805,7 @@ def apply(ctx):
     # 保留の当て直し（5秒ごと）を待つと、すぐ押したときに包みの無いまま起きる（VERIFICATION.md §3.100）。
     # 包む先を先に読み込んでおけば注入の1回目で張れ、llama のモジュールは後から包んだ方を from-import する。
     try:
-        import sidecar_process  # noqa: F401
+        importlib.import_module("sidecar_process")
     except Exception:
         pass
 

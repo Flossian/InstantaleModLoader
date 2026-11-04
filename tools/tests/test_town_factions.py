@@ -1751,6 +1751,15 @@ check("設定を切って作った次の新しい世界にも、前の印を持�
       settings.load("次の世界", fresh=True).get("ENABLED") is not True)
 check("例外が無い（後から足した場面）", not ctx.errors, ctx.errors)
 
+# 刺客の会話の始まり（`hunter.py`）：キーワード引数で呼ばれても受け取った形のまま渡す（版7）
+starter_hooks = ctx.hooks.get("scripts.llm.llm_manager:conversation_starter") or []
+shapes = []
+if starter_hooks:
+    starter_hooks[-1](lambda *a, **k: shapes.append((len(a), sorted(k))),
+                      messages=[{"role": "user", "content": "<行動: 話しかける>"}], character_life_log="")
+check("刺客の会話の始まりのフック：キーワード引数の形のまま渡す",
+      shapes == [(0, ["character_life_log", "messages"])], (len(starter_hooks), shapes))
+
 
 print()
 if failures:

@@ -670,7 +670,6 @@ class Picker(object):
         return q / self.np.linalg.norm(q)
 
     def pick(self, detail, text):
-        np = self.np
         q = self.embed(text)
         own = self.rank(detail, q)
         if own is None:

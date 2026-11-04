@@ -114,10 +114,15 @@ HP の持ち主が `Character` インスタンスか辞書かは決めつけな�
 
 読むのは HP だけ、書くのは画面のテキストだけ。
 セーブにも `world` にも触らない。
+
+## 版5
+
+1手と継続効果のフックは、引数を受け取った形のまま元の関数へ渡す
+（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 """
 
 
-from instantale_modloader import ui
+from instantale_modloader import frames, ui
 
 LOG_BASENAME = "battle_damage.log"
 LOG_TAG = "battle dmg"
@@ -555,29 +560,29 @@ def apply(ctx):
     # ゲームの地の文の後ろに付く（この中で HP が動き、地の文も出る）。
     @ctx.wrap("__main__:BattlePhaseManager.handle_battle_situation",
               required=False, safe=True)
-    def handle_battle_situation(orig, self, character_key=None, character_side=None,
-                                battle_action=None, *args, **kwargs):
+    def handle_battle_situation(orig, self, *args, **kwargs):
         app = getattr(self, "app", None) or ui.find_app()
         try:
             seed(app)
         except Exception:
             ctx.log_exc("battle dmg: cannot read the combatants before the action")
-        result = orig(self, character_key, character_side, battle_action,
-                      *args, **kwargs)
-        report(app, "action by {!r} ({})".format(character_key, character_side))
+        result = orig(self, *args, **kwargs)
+        # (character_key, character_side, battle_action)。受け取った形のまま渡し、ここでは読むだけ。
+        report(app, "action by {!r} ({})".format(frames.arg(args, kwargs, "character_key", 0),
+                                                  frames.arg(args, kwargs, "character_side", 1)))
         return result
 
     # 毒などの継続分。
     # 1人ずつ呼ばれるが、台帳が差を吸うので何度出しても重ならない。
     @ctx.wrap("__main__:BattlePhaseManager.reduce_status_turns_and_log",
               required=False, safe=True)
-    def reduce_status_turns_and_log(orig, self, character=None, *args, **kwargs):
+    def reduce_status_turns_and_log(orig, self, *args, **kwargs):
         app = getattr(self, "app", None) or ui.find_app()
         try:
             seed(app)
         except Exception:
             ctx.log_exc("battle dmg: cannot read the combatants before the status turn")
-        result = orig(self, character, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         report(app, "status effects")
         return result
 

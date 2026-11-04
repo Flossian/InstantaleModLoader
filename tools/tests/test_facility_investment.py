@@ -1339,6 +1339,27 @@ app.buttons = [{"text": "試合に出る", "spec": PhaseSpec("EntryColosseumMatc
 app.refresh_choice_buttons(reset_page=True)
 CLOCK.settle()
 check("ゲームの「試合に出る」はそのまま", app.has("試合に出る"), app.labels())
+# 相手の生成：既に出た闘士の名前を `location` の概要に足す。ゲームがキーワード引数で呼んでも
+# 受け取った形のまま `location` だけを差し替える（版47）。
+gen_hooks = ctx.hooks.get("scripts.llm.llm_manager:colosseum_enemy_generator") or []
+saved_config = getattr(arena, "config", None)
+arena.config = {"enemy_data": {"1": {"data": {"name": "ヴィオラ"}}}}
+try:
+    gen_seen = []
+
+    def gen_orig(*a, **kw):
+        gen_seen.append((a, dict(kw)))
+        return {}
+
+    if gen_hooks:
+        gen_hooks[-1](gen_orig, location={"name": "闘技場", "description": "砂の闘技場"},
+                      area="area", world="world", npc_difficulty_level=10)
+    check("闘技場の相手の生成：キーワード引数でも既出の闘士を概要に足し、形はそのまま",
+          gen_seen and gen_seen[0][0] == ()
+          and sorted(gen_seen[0][1]) == ["area", "location", "npc_difficulty_level", "world"]
+          and "ヴィオラ" in (gen_seen[0][1]["location"].get("description") or ""), gen_seen)
+finally:
+    arena.config = saved_config
 check("売上と出口が並び、自前の試合の選択肢は無い",
       app.has("売上を受け取る") and app.has(module.LEAVE_LABEL) and not app.has("興行"), app.labels())
 check("闘技場の絵もゲームに任せる（部屋の絵は描かない）", ("room", module.STAY_QUALITY) not in app.backgrounds)

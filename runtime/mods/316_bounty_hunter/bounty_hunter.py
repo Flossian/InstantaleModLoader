@@ -97,12 +97,15 @@
 ##### 記録
 
 `out/bounty_hunter_send.log`。来た回も、来なかった回とその理由も1行ずつ。
+
+版6: `BattleStartManager.__init__` のフックは、引数を受け取った形のまま元の関数へ渡す
+（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 """
 
 import random
 import sys
 
-from instantale_modloader import arrivals, choices, confinement, durations, guards, ui, wanted
+from instantale_modloader import arrivals, choices, confinement, durations, frames, guards, ui, wanted
 from instantale_modloader.state import WorldStore, world_key
 
 from . import hunt
@@ -584,8 +587,7 @@ def apply(ctx):
         return result
 
     @ctx.wrap("__main__:BattleStartManager.__init__", required=False, safe=True)
-    def battle_start_init(orig, self, app=None, enemy_type=None, enemy_content=None,
-                          *args, **kwargs):
+    def battle_start_init(orig, self, *args, **kwargs):
         """**ゲーム自身が衛兵を出したこと**を知る唯一の入口。
 
         自分が組んだぶんは `memo["building"]` で見分ける
@@ -594,7 +596,10 @@ def apply(ctx):
         同じマネージャを通るので、見ないとクエストの戦闘1回でクールダウンがやり直しになる
         （クエスト中は暦が進まないので、そのまま日数ぶん追手が来なくなる）。
         """
-        result = orig(self, app, enemy_type, enemy_content, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
+        # (app, enemy_type, enemy_content)。受け取った形のまま渡し、ここでは読むだけ。
+        app = frames.arg(args, kwargs, "app", 0)
+        enemy_type = frames.arg(args, kwargs, "enemy_type", 1)
         if not memo["building"]:
             # 別の戦闘が始まった。前の追手の戦闘が終わりを通らずに消えていても（負けた・ロードした）、
             # 次の戦闘の終わりを追手の戦闘と取り違えない。

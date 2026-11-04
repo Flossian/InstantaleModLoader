@@ -403,7 +403,7 @@ def describe_shape(app, area_id):
     if history is None:
         return "area_history: {} には無い（{}）".format(
             type(player).__name__, ", ".join(sorted(vars(player))[:12])
-            if hasattr(player, "__dict__") else "vars() が引けない")
+            if getattr(player, "__dict__", None) is not None else "vars() が引けない")
     record = ui.area_record(player, area_id)
     return ("area_history: {}件のエリア / いま {!r} / 記録は {} / "
             "achievements {}件 / lawfulness {!r} / residency {!r}".format(

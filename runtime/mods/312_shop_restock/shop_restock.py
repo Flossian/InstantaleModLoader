@@ -170,6 +170,9 @@ id は採番台帳から採る（`ids.claim`）。
 控えをその日に付け直して入れ替えない（次の来店から数え直す）。
 控えより先に進んだ日数だけで判断するので、
 複数の世界・複数のセーブを行き来しても混ざらない（周回ごとにファイルを分けてある）。
+
+版9: `toggle_twin_inventory_window` と `set_item_from_world_data` のフックは、引数を受け取った形のまま元の関数へ渡す
+（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 """
 
 import sys
@@ -928,7 +931,7 @@ def apply(ctx):
 
     @ctx.wrap("__main__:InstantaleApp.toggle_twin_inventory_window",
               required=False, safe=True)
-    def before_window(orig, self, left_inventory_obtainer=None, *args, **kwargs):
+    def before_window(orig, self, *args, **kwargs):
         """売買画面が組み上がる手前で、その来店で増えたぶんを外す。
 
         ここはメインスレッドで、ゲームが持ち物の辞書を回すより前。
@@ -936,6 +939,7 @@ def apply(ctx):
         """
         held = store.get("held")
         if held is not None:
+            left_inventory_obtainer = frames.arg(args, kwargs, "left_inventory_obtainer", 0)
             owner = held["owner"]
             same = (left_inventory_obtainer is owner
                     or (owner is not None and str(getattr(
@@ -946,12 +950,14 @@ def apply(ctx):
                     drop_refilled(held)
                 except Exception:
                     ctx.log_exc("shop restock: cannot drop the refilled stock")
-        return orig(self, left_inventory_obtainer, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:ShoppingStartManagerRemake.set_item_from_world_data",
               required=False, safe=True)
-    def observe_tier(orig, self, shop_owner_instance, next_tier, *args, **kwargs):
+    def observe_tier(orig, self, *args, **kwargs):
         try:
+            shop_owner_instance = frames.arg(args, kwargs, "shop_owner_instance", 0)
+            next_tier = frames.arg(args, kwargs, "next_tier", 1)
             owner_id = getattr(shop_owner_instance, "id", None)
             if owner_id is not None and isinstance(next_tier, (int, float, str)):
                 known = store["tiers"].get(str(owner_id))
@@ -960,7 +966,7 @@ def apply(ctx):
                     write("tier: owner={} tier={!r}".format(owner_id, next_tier))
         except Exception:
             ctx.log_exc("shop restock: cannot record the stock tier")
-        return orig(self, shop_owner_instance, next_tier, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     ctx.log("shop restock: every {} in-game day(s), keep_sold_out={}, "
             "new_stock={}; log goes to out/{}".format(

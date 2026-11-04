@@ -87,6 +87,29 @@ jobs:
       - name: compileall
         run: python -m compileall -q runtime tools -x "(mods.9[0-9][0-9]_|test_wip_)"
 
+      # 使っていない import・代入したまま使っていない変数・未定義名。1件でもあれば失敗にする。
+      # 未定義名は compileall も check_mods も拾わず、フックの中なら注入してその経路を遊ぶまで出ない。
+      # 使っていない import は動きに害は無いが、残っていると触るたびに「前からあるものか」を
+      # 確かめ直すことになるので、0件を保つ（TECH.md §2.5）。
+      # pyflakes には除外の指定が無いので、出力の行を落とす。外すのは tools/drive（ゲームの中で
+      # exec するスクリプトで、`app` などはゲーム側が渡す名前）と、上と同じ 9xx・test_wip_。
+      # 版は固定する（上げると判定が変わりうるので、上げるときは手元で runtime と tools を通してから）。
+      # 最後の `exit 0` は、除外した行のぶんで pyflakes が返した終了コードを引き継がないため。
+      - name: pyflakes
+        shell: pwsh
+        run: |
+          python -m pip install --quiet pyflakes==4.0.3
+          $found = @(python -m pyflakes runtime tools 2>&1 | Where-Object {
+            $_ -notmatch '^tools[\\/]drive[\\/]' -and
+            $_ -notmatch '^runtime[\\/]mods[\\/]9[0-9][0-9]_' -and
+            $_ -notmatch 'test_wip_' })
+          if ($found) {
+            $found | ForEach-Object { Write-Host $_ }
+            exit 1
+          }
+          Write-Host "  ok    pyflakes"
+          exit 0
+
       # デコレータの対象と引数の食い違い、mod.json の entry、load_order の
       # 突き合わせ。構文が正しくてもゲームを落とすものはここで捕まる。
       # 同梱 MOD は `--strict`（note も失敗に数える。TECH.md §2.3）。手元では

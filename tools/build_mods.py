@@ -207,7 +207,7 @@ BANDS = (
         "408_visual_changes_based_on_equipment",
         "409_fix_crafted_item_type",
         "410_weapon_skill_chance",
-        "411_equipment_ability_bonus",
+        "411_equipment_bonuses",
     )),
 )
 

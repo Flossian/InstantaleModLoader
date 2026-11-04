@@ -321,20 +321,30 @@ def difficulties(app, area_id):
              for qid in ids if qid in app.world_dict["quests"]])
 
 
-def search_quest(ctx, app, born_id, born_area, born_difficulty):
+def search_quest(ctx, app, born_id, born_area, born_difficulty, keyword=False, shapes=None):
     """依頼を1件作らせる（生成はゲームの側の仕事なので偽物で演じる）。
 
     **素の帯で生まれる**のが実機で測れた挙動（VERIFICATION_LOG.md §2.66）。
     生成の中で `random_quest_generator` も1度呼ばれる。
+    `keyword=True` ならゲームがキーワード引数で呼んだ形にし、`shapes` に元の関数が受けた形を控える。
     """
     calls = []
+
+    def plain(*a, **kw):
+        if shapes is not None:
+            shapes.append((len(a), sorted(kw)))
+        calls.append(kw["quest_difficulty"] if "quest_difficulty" in kw else a[5])
+        return {"quest_title": "作られた依頼"}
 
     def generate(self, *args, **kwargs):
         gen = ctx.hooks.get(
             "scripts.llm.llm_manager_world_generate:random_quest_generator")
-        if gen is not None:
-            gen(lambda *a, **kw: calls.append(a[5]) or {"quest_title": "作られた依頼"},
-                "世界", "町", "概要", "構造", "土地の説明", born_difficulty)
+        if gen is not None and keyword:
+            gen(plain, world_overview="世界", settlement_name="町", settlement_overview="概要",
+                settlement_structure_description="構造", area_description="土地の説明",
+                quest_difficulty=born_difficulty)
+        elif gen is not None:
+            gen(plain, "世界", "町", "概要", "構造", "土地の説明", born_difficulty)
         quest = Quest(born_id, born_area, born_difficulty)
         app.world.quests[quest.id] = quest
         return quest
@@ -433,6 +443,15 @@ check("生まれた依頼をその場で上げる",
 check("頼み文へ渡す難易度も上げる", passed == [13], passed)
 check("素の値はそのまま控える",
       state_file()["0"]["base"].get("9") == 4, state_file()["0"].get("base"))
+shapes = []
+passed_kw = search_quest(ctx, app, born_id="19", born_area="0", born_difficulty=4,
+                         keyword=True, shapes=shapes)
+check("キーワード引数で呼ばれても頼み文へ渡す難易度を上げる", passed_kw == [13], passed_kw)
+check("  → 受け取った形のまま渡す（位置引数に直さない）",
+      shapes == [(0, ["area_description", "quest_difficulty", "settlement_name",
+                      "settlement_overview", "settlement_structure_description",
+                      "world_overview"])], shapes)
+app.world.quests.pop("19", None)
 
 # 次のクリアでは、生まれた依頼も一緒に上がる。
 end_quest(ctx, app, "9")

@@ -16,6 +16,9 @@
   （`ui.remove_quest`。セーブの辞書とダンジョンの土地まで）
 - 呼び名や情景の文は、発生のときに LLM に1回だけ書かせる（背景の待ち行列。`911_` の登場の語りと同じ形）
 - 状況を見る窓は、画面左下のゲームのアイコンの列に足したアイコンから開く（ローダの `hudicons`）
+
+版4: `random_quest_generator` のフックは、引数を受け取った形のまま元の関数へ渡し、`area_description` だけを
+来た側に合わせて差し替える（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 """
 
 import os
@@ -25,8 +28,8 @@ import sys
 import threading
 import time
 
-from instantale_modloader import (arrivals, choices, durations, hudicons, jobs, llm, loads, modnpc, prices,
-                                  quest_claims, state as loader_state, ui)
+from instantale_modloader import (arrivals, choices, durations, frames, hudicons, jobs, llm, loads, modnpc,
+                                  prices, quest_claims, state as loader_state, ui)
 
 from . import incidents, window
 
@@ -84,6 +87,10 @@ RUMOR_LIMIT = 2
 RUMOR_STAGE = 2                # よその街で噂になる段
 ENDED_SHOWN_DAYS = 360         # 窓に出す「終わったもの」の日数
 INJECT_TTL = 300.0
+
+# `random_quest_generator` の引数の並び（recon の signatures.json）。
+QUEST_GENERATOR_ARGS = ("world_overview", "settlement_name", "settlement_overview",
+                        "settlement_structure_description", "area_description", "quest_difficulty")
 SIZES = ("village", "town", "city")
 GUILD_TYPE = "guild"
 COMPLETED = "completed"
@@ -776,21 +783,20 @@ def apply(ctx):
         return orig(self, *args, **kwargs)
 
     @ctx.wrap("scripts.llm.llm_manager_world_generate:random_quest_generator", required=False)
-    def random_quest_generator(orig, world_overview, settlement_name, settlement_overview,
-                               settlement_structure_description, area_description,
-                               quest_difficulty, *args, **kwargs):
+    def random_quest_generator(orig, *args, **kwargs):
         """出来事の依頼を作る回だけ、`area_description` に出来事の説明を足す。印は1回で使い切る。
 
         `328_`（街の描写を伏せる）より内側に居るので、伏せられた後の描写に足される（`336_` と同じ）。
+        引数は受け取った形（位置かキーワード）のまま渡し、`area_description` だけを来た側に合わせて差し替える。
         """
         brief, at = inject.get("brief"), inject.get("at") or 0.0
         inject.update(brief=None)
         if brief and time.monotonic() - at <= INJECT_TTL:
-            area_description = (area_description or "") + brief
+            area_description = frames.arg(args, kwargs, "area_description", QUEST_GENERATOR_ARGS)
+            args, kwargs, _ = frames.replace_arg(args, kwargs, "area_description", QUEST_GENERATOR_ARGS,
+                                                 (area_description or "") + brief)
             write("quest: injected the brief ({} chars)".format(len(brief)))
-        return orig(world_overview, settlement_name, settlement_overview,
-                    settlement_structure_description, area_description, quest_difficulty,
-                    *args, **kwargs)
+        return orig(*args, **kwargs)
 
     @ctx.wrap("__main__:QuestEndManager.execute", required=False, safe=True)
     def quest_end(orig, self, *args, **kwargs):

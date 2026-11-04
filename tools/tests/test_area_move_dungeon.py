@@ -289,7 +289,14 @@ class DisplayQuestChoice:
         return None
 
     def generate_random_quest(self):
-        if self.app.generator_hook is not None:
+        if self.app.generator_hook is not None and getattr(self.app, "keyword_generator", False):
+            # ゲームがキーワード引数で呼ぶ版（307 版7 は受け取った形のまま渡す）。
+            self.app.generator_hook(world_overview="世界の概要", settlement_name="風鳴りの村",
+                                    settlement_overview="静かな農村",
+                                    settlement_structure_description="丘陵地帯",
+                                    area_description="風が吹き抜ける丘陵地帯。",
+                                    quest_difficulty=type(self).game_difficulty)
+        elif self.app.generator_hook is not None:
             self.app.generator_hook("世界の概要", "風鳴りの村", "静かな農村",
                                     "丘陵地帯", "風が吹き抜ける丘陵地帯。",
                                     type(self).game_difficulty)
@@ -652,9 +659,12 @@ def setup(configure=None, levels=None, keep_state=False, mod=None):
     raw = ctx.hooks.get(
         "scripts.llm.llm_manager_world_generate:random_quest_generator")
 
-    def plain_generator(world_overview, settlement_name, settlement_overview,
-                        structure, area_description, difficulty, *a, **kw):
+    def plain_generator(*args, **kwargs):
+        # 位置でもキーワードでも受け、渡ってきた形も控える。
+        area_description = kwargs["area_description"] if "area_description" in kwargs else args[4]
+        difficulty = kwargs["quest_difficulty"] if "quest_difficulty" in kwargs else args[5]
         app.generated.append((area_description, difficulty))
+        app.__dict__.setdefault("generated_shapes", []).append((len(args), sorted(kwargs)))
         return {"quest_title": board_cls.next_title}
 
     def generator(*args, **kwargs):
@@ -955,6 +965,23 @@ mod, ctx, app, classes = setup(
 show_confirmation(app, classes[0])
 press(app, "危険な道を行く")
 check("destination なら移動先に合わせる", app.generated[-1][1] == 9, app.generated)
+
+mod, ctx, app, classes = setup(
+    configure=lambda m: setattr(m, "DIFFICULTY_MODE", "destination"))
+app.keyword_generator = True
+show_confirmation(app, classes[0])
+press(app, "危険な道を行く")
+check("キーワード引数で呼ばれても難易度を差し替える",
+      app.generated and app.generated[-1][1] == 9, app.generated)
+check("  → 道中の性質も area_description に足す",
+      app.generated and app.generated[-1][0].startswith("風が吹き抜ける丘陵地帯。")
+      and len(app.generated[-1][0]) > len("風が吹き抜ける丘陵地帯。"), app.generated)
+check("  → 受け取った形のまま渡す（位置引数に直さない）",
+      getattr(app, "generated_shapes", None) == [(0, ["area_description", "quest_difficulty",
+                                                       "settlement_name", "settlement_overview",
+                                                       "settlement_structure_description",
+                                                       "world_overview"])],
+      getattr(app, "generated_shapes", None))
 
 mod, ctx, app, classes = setup(
     configure=lambda m: setattr(m, "DIFFICULTY_MODE", "harder"))

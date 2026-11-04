@@ -14,7 +14,6 @@
 一枚絵を外したら、ほかの build_*.py の後で回す（git に載った版の辞書を読むので、外す前の版をコミットしてから）。
 """
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path

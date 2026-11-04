@@ -13,10 +13,12 @@
 
 import sys
 
-from instantale_modloader import ui
+from instantale_modloader import state, ui
+
 # 世界と周回の見分け方はローダの語彙。
 # ここで再輸出して `world.world_key(app)` / `world.playthrough_key(app)` を保つ。
-from instantale_modloader.state import playthrough_key, world_key
+playthrough_key = state.playthrough_key
+world_key = state.world_key
 
 
 def short(value, limit=60):

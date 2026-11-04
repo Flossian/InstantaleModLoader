@@ -7,7 +7,6 @@
 日数送りの関所（`claim_days` / `resolve_days` / `install`）は、
 望みが複数あるときの決め方と、包みが1世代に1枚であることを見る。
 """
-import io
 import os
 import sys
 import types

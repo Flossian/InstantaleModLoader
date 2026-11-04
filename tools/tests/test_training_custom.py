@@ -620,6 +620,14 @@ check("2段目で卒業", texts_of(app) == ["やった"], texts_of(app))
 check("暦は3年ぶんが2回", app.elapsed == [1095, 1095], app.elapsed)
 check("エラーなし", not ctx.errors, ctx.errors)
 
+print("[引数] キーワード引数で作られても、年数と代金を来た側に合わせて差し替える（版15）")
+module, ctx, app, choice_cls = setup(
+    configure=lambda m: (setattr(m, "COURSE_YEARS", 6), setattr(m, "TRAINING_PRICE", 5000)))
+start = sys.modules["__main__"].TrainingStartManager(app=app, training_years=GAME_COURSE_YEARS,
+                                                     training_price=GAME_PRICE)
+check("年数はキーワード引数でも 6 に", start.training_years == 6, start.training_years)
+check("代金はキーワード引数でも 5000 に", start.training_price == 5000, start.training_price)
+
 # ================================================================ 日数
 print("[期間] ベース期間を変えると、段の暦とボタンの表示が一緒に変わる")
 module, ctx, app, choice_cls = setup(

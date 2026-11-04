@@ -45,9 +45,18 @@ import json
 import os
 import zipfile
 
-from instantale_modloader.saves import (            # noqa: F401  再輸出
-    DATA_VENDOR, SAVE_KEY, data_dir, decode, list_worlds, read_save,
-    save_path, saves_dir, worlds_dir, xor)
+from instantale_modloader import saves as _saves
+from instantale_modloader.saves import data_dir, worlds_dir
+
+# 再輸出（下の説明）。
+DATA_VENDOR = _saves.DATA_VENDOR
+SAVE_KEY = _saves.SAVE_KEY
+decode = _saves.decode
+list_worlds = _saves.list_worlds
+read_save = _saves.read_save
+save_path = _saves.save_path
+saves_dir = _saves.saves_dir
+xor = _saves.xor
 
 # ---- ゲームのデータの場所 ------------------------------------------------
 

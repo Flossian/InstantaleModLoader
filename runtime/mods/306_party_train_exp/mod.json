@@ -10,7 +10,7 @@
     "en": "Shares the experience the player gains from training with the party members travelling with them",
     "ja": "訓練で得た経験値を同行中の仲間にも入れ、仲間もレベルアップするようにする"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "SHARE_INN_TRAINING": {

@@ -101,6 +101,10 @@ narration モードのセリフは `move_phase` の内側（入れ子の narrato
 申し出だけ出すと、同じ優先度で後から申し出たほかの MOD が、会話を始めないこちらに譲って黙ってしまう。
 
 版3: ローダの窓口 `arrivals` で、同じ到着で会話を始めるほかの MOD に譲るようにした（conversation モードのみ）。
+
+版6: `conversation_starter`・`ConversationPhaseManager.conversation_continued`・`ConversationStartManager.__init__` の
+フックは、引数を受け取った形のまま元の関数へ渡す（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
+第一声の読み替えは、来た側（位置かキーワード）に合わせて `messages` を差し替える。
 """
 
 import random
@@ -701,7 +705,7 @@ def apply(ctx):
 
     # ---------------------------------------------- 第一声の読み替え（conversation）
     @ctx.wrap("scripts.llm.llm_manager:conversation_starter", required=False)
-    def conversation_starter(orig, messages, *args, **kwargs):
+    def conversation_starter(orig, *args, **kwargs):
         """こちらが起こした会話のときだけ、開始の合図を差し替える。
 
         ゲーム本来の合図は `<行動: 話しかける>`（＝プレイヤーが話しかけた）。
@@ -710,16 +714,17 @@ def apply(ctx):
         """
         mark = state["rephrase"]
         if mark is None or not REPHRASE_OPENING:
-            return orig(messages, *args, **kwargs)
+            return orig(*args, **kwargs)
         state["rephrase"] = None
         if time.monotonic() - mark["at"] > REPHRASE_TTL:
             write("rephrase: stale marker, left untouched")
-            return orig(messages, *args, **kwargs)
+            return orig(*args, **kwargs)
+        messages = frames.arg(args, kwargs, "messages", 0)
         if not isinstance(messages, list) or not messages:
-            return orig(messages, *args, **kwargs)
+            return orig(*args, **kwargs)
         last = messages[-1]
         if not isinstance(last, dict) or "content" not in last:
-            return orig(messages, *args, **kwargs)
+            return orig(*args, **kwargs)
         replacement = dict(last)
         replacement["content"] = (
             "<状況: {facility}に入ってきた{player}に、あなたの方から声をかけた。"
@@ -729,7 +734,9 @@ def apply(ctx):
                                          "name", "旅人"), 40))
         write("rephrase: {!r} -> {!r}".format(
             frames.short(last.get("content"), 60), replacement["content"]))
-        return orig(messages[:-1] + [replacement], *args, **kwargs)
+        args, kwargs, _ = frames.replace_arg(args, kwargs, "messages", 0,
+                                             messages[:-1] + [replacement])
+        return orig(*args, **kwargs)
 
     # ================================================================
     # 応答されずに終わった回数を数える
@@ -790,13 +797,13 @@ def apply(ctx):
 
     @ctx.wrap("__main__:ConversationPhaseManager.conversation_continued",
               required=False)
-    def conversation_continued(orig, self, choice_text, *args, **kwargs):
+    def conversation_continued(orig, self, *args, **kwargs):
         """1ターン進んだ＝プレイヤーが返事をした。値には触らない。"""
         try:
             note_response(getattr(getattr(self, "app", None), "in_conversation", None))
         except Exception:
             ctx.log_exc("watch: cannot note the response")
-        return orig(self, choice_text, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:ConversationEndManager.__init__", required=False)
     def conversation_end_init(orig, self, *args, **kwargs):
@@ -839,12 +846,13 @@ def apply(ctx):
 
     # ------------------------------- ゲーム自身が使う character_id の形を控える
     @ctx.wrap("__main__:ConversationStartManager.__init__", required=False)
-    def conversation_start_init(orig, self, app, character_id, *args, **kwargs):
+    def conversation_start_init(orig, self, *args, **kwargs):
+        character_id = frames.arg(args, kwargs, "character_id", 1)   # (app, character_id)
         kind = "{} {!r}".format(type(character_id).__name__, character_id)
         if state["npc_id_kind"] != kind:
             state["npc_id_kind"] = kind
             write("observed ConversationStartManager(character_id={})".format(kind))
-        return orig(self, app, character_id, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     # ------------------------------------------------------------ 自己テスト
     def selftest():

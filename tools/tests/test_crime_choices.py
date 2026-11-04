@@ -380,6 +380,26 @@ check("前の版の印の自前のボタンは外し、ゲームのボタンか�
 check("例外が無い", not ctx.errors, ctx.errors)
 
 choices.reset()
+# ---- 引数の渡し方（版5）: キーワード引数で呼ばれても受け取った形のまま渡す
+shapes = []
+
+
+def record_shape(*a, **kw):
+    shapes.append((len(a), sorted(kw)))
+    return None
+
+
+ctx.hook("__main__:InstantaleApp.add_text")(record_shape, app, context="ただの一文。")
+check("本文のフック：キーワード引数の形のまま渡す",
+      shapes == [(1, ["context"])], shapes)          # 位置は self（app）だけ
+shapes.clear()
+generator_names = ("world_overview", "settlement_name", "settlement_overview",
+                   "settlement_structure_description", "area_description", "quest_difficulty")
+ctx.hook("scripts.llm.llm_manager_world_generate:random_quest_generator")(
+    record_shape, **dict(zip(generator_names, ("世界", "町", "概要", "構造", "描写", 30))))
+check("依頼の生成のフック：キーワード引数の形のまま渡す",
+      shapes == [(0, sorted(generator_names))], shapes)
+
 confinement.reset()
 shutil.rmtree(STATE, ignore_errors=True)
 shutil.rmtree(OUT, ignore_errors=True)

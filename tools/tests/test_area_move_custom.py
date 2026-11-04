@@ -149,7 +149,11 @@ class AreaMoveManager:
             # 実測の文言（217_）。
             # **金額はゲームの運賃で焼き込まれ、
             # mod が料金をいくらに直しても 1000 のまま**という実挙動を真似る。
-            self.app.add_text("{}ゴールドを支払った。快適な旅だ...".format(GAME_FARE))
+            if getattr(self.app, "keyword_text", False):
+                # キーワード引数で出すビルド（314 版7 は受け取った形のまま文言を差し替える）。
+                self.app.add_text(context="{}ゴールドを支払った。快適な旅だ...".format(GAME_FARE))
+            else:
+                self.app.add_text("{}ゴールドを支払った。快適な旅だ...".format(GAME_FARE))
             # 支払い直後にゲームが所持金の表示を描き直す瞬間の値。
             # **ここが既に差し引き後の正しい値**でないと、
             # 「文言は500なのに画面は
@@ -602,6 +606,31 @@ check("文言の金額も実際の引き落としに揃う",
 check("ゲームの言う1000は出ない",
       not any("1000ゴールド" in t for t in app.texts), app.texts)
 check("エラーなし", not ctx.errors, ctx.errors)
+store = getattr(sys, module.SETTINGS_STORE_ATTR)
+loads = []
+plain_load = store.load
+
+
+def counting_load(*args, **kwargs):
+    loads.append(args)
+    return plain_load(*args, **kwargs)
+
+
+store.load = counting_load
+try:
+    app.add_text("宿の主人がこちらを見た。")
+    check("移動の窓の外の本文では設定を読み直さない（版7）", loads == [], loads)
+    press(app, CARRIAGE_300)
+    check("  → 移動を始めるときは読み直す（この世界では読み込みが走る）", len(loads) > 0, loads)
+finally:
+    store.load = plain_load
+
+module, ctx, app, confirm_cls, move_cls = setup(configure=fare_only)
+app.keyword_text = True
+press(app, CARRIAGE_300)
+check("キーワード引数の文言も実際の引き落としに揃う",
+      "300ゴールドを支払った。快適な旅だ..." in app.texts
+      and not any("1000ゴールド" in t for t in app.texts), app.texts)
 
 print("[料金] 手持ちが素の運賃未満でも乗れる（手持ち600・設定300）")
 module, ctx, app, confirm_cls, move_cls = setup(configure=fare_only)

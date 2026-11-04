@@ -18,7 +18,6 @@ def load_safetensors(path):
     with open(path, "rb") as f:
         n = struct.unpack("<Q", f.read(8))[0]
         header = json.loads(f.read(n).decode("utf-8"))
-        base = 8 + n
         blob = f.read()
     out = {}
     for name, info in header.items():

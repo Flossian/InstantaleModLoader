@@ -9,7 +9,6 @@
   自分が
   top1 に来る率（キャプション同士が似すぎていないか＝新規画像が実際に選ばれ得るかの目安）
 """
-import glob
 import io
 import json
 import os

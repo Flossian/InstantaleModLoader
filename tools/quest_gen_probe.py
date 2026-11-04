@@ -158,7 +158,6 @@ def open_path(text):
     in_string = escape = False
     key_buffer = None
     last_string = ""
-    expecting_key = False
     for char in text:
         if in_string:
             if escape:
@@ -178,7 +177,6 @@ def open_path(text):
             key_buffer = ""
         elif char == "{":
             stack.append(["obj", None])
-            expecting_key = True
         elif char == "[":
             stack.append(["arr", 0])
         elif char in "}]":

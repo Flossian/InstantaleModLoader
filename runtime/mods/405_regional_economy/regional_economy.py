@@ -875,18 +875,6 @@ def _build_messages(snapshot):
 
 
 def _ask_profile(ctx, write, snapshot):
-    score_structure = llm.create_structure(
-        ctx,
-        "RegionalEconomyGenreScore",
-        {"genre": (str, ...), "score": (int, ...)},
-        label="regional economy genre",
-    )
-    score_type = typing.List[typing.Dict[str, str]]
-    if score_structure is not None:
-        try:
-            score_type = typing.List[score_structure]
-        except Exception:
-            score_type = typing.List[typing.Dict[str, str]]
     structure = llm.create_structure(
         ctx,
         "RegionalEconomySummary",
@@ -1562,10 +1550,7 @@ def _regional_multiplier(score):
 
 
 def apply(ctx):
-    # 節目だけを書く write と、1品ごとの note を分ける。
-    # 品物欄は品を選ぶたびに通るので、上限が無いとログが数万行になる。
     write = ctx.logger(LOG_BASENAME)
-    note = ctx.logger(LOG_BASENAME, cap=2000)
     state = _store()
     # 注入のときにログが世代送りされたら、`installed:` などを新しいログに書き直す（版4）。
     _forget_if_log_replaced(state, ctx.out_path(LOG_BASENAME))

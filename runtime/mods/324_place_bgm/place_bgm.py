@@ -89,13 +89,16 @@
 
 乱数は MOD 専用の `random.Random`（ゲームの乱数列をずらさない。GAME.md §2.11）。
 pygame に触る（鳴っているかを見る・鳴らし直す）のは Kivy の Clock の上だけ（GAME.md §2.1）。
+
+版5: `play_music_from_src` のフックは、引数を受け取った形のまま元の関数へ渡す
+（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。曲の差し替えは来た側に合わせる。
 """
 
 import os
 import random
 import sys
 
-from instantale_modloader import arrivals, sounds, ui
+from instantale_modloader import arrivals, frames, sounds, ui
 from instantale_modloader.state import WorldStore, world_key
 
 # GUI から変えられる値。mod.json の "settings" と同じ名前・同じ既定値。
@@ -654,11 +657,14 @@ def apply(ctx):
 
     # ----------------------------------------------------- ゲームが鳴らす経路
     @ctx.wrap("scripts.sounds:SoundManager.play_music_from_src")
-    def play_music_from_src(orig, self, app, music_src, *args, **kwargs):
+    def play_music_from_src(orig, self, *args, **kwargs):
         store["manager"] = self
+        # (app, music_src)。受け取った形のまま渡し、曲だけを来た側に合わせて差し替える。
+        app = frames.arg(args, kwargs, "app", 0)
+        music_src = frames.arg(args, kwargs, "music_src", 1)
         if store.get("passthrough") or is_battle_track(music_src):
             store["current_src"] = music_src
-            return orig(self, app, music_src, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         real_app = ui.find_app() or app
         if not is_mine(music_src):
             store["game_src"] = music_src
@@ -683,7 +689,8 @@ def apply(ctx):
             chosen = None
         if chosen is not None:
             try:
-                result = orig(self, app, chosen, *args, **kwargs)
+                chosen_args, chosen_kwargs, _ = frames.replace_arg(args, kwargs, "music_src", 1, chosen)
+                result = orig(self, *chosen_args, **chosen_kwargs)
             except Exception:
                 ctx.log_exc("place bgm: {} could not be played; "
                             "falling back to the game's track".format(chosen))
@@ -700,7 +707,7 @@ def apply(ctx):
             store["playing"] = (LEVEL_GAME, None, None)
             write("game's track {} <- no candidate | {}".format(short(music_src), detail or "?"))
         store["current_src"] = music_src
-        return orig(self, app, music_src, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     # ----------------------------------------------------- 場所が変わった
     def reconcile(why, app=None):

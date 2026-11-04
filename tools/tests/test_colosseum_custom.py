@@ -301,6 +301,17 @@ def enemy_level_kw(enemy_tier, quest_difficulty):
 
 check("本体の引数名のキーワードで呼ばれても二重に渡さず、上限も効く",
       lvl(enemy_level_kw, enemy_tier="normal", quest_difficulty=58) == 41, seen)
+shapes = []
+
+
+def enemy_level_shape(*a, **kw):
+    shapes.append((len(a), sorted(kw)))
+    return kw.get("quest_difficulty", a[1] if len(a) > 1 else None)
+
+
+lvl(enemy_level_shape, enemy_tier="normal", quest_difficulty=58)
+check("  → 受け取った形のまま渡す（位置引数に直さない。版9）",
+      shapes == [(0, ["enemy_tier", "quest_difficulty"])], shapes)
 
 
 def made(self, enemy_id):

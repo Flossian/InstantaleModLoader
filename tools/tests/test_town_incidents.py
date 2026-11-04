@@ -705,6 +705,13 @@ check("作らせている間に届いた押下は作らせずに捨てる（依�
 check("作らせる間は待機表示を出し、選択肢を塗らずに解く", BUSY == ["on", ("off", False)], BUSY)
 check("頼み文に出来事の説明を足した", "人の流入" in DisplayQuestChoice.prompts[-1],
       DisplayQuestChoice.prompts)
+generator_names = ("world_overview", "settlement_name", "settlement_overview",
+                   "settlement_structure_description", "area_description", "quest_difficulty")
+shapes = []
+HOOK_GENERATOR(lambda *a, **k: shapes.append((len(a), sorted(k))),
+               **dict(zip(generator_names, ("世界", "町", "概要", "構造", "周辺の描写", 10))))
+check("生成のフック：キーワード引数の形のまま渡す（版4）",
+      shapes == [(0, sorted(generator_names))], shapes)
 check("掲示板の一言", any("依頼が新しく貼り出されている" in t for t in app.texts), app.texts)
 check("作らせた回は続きを呼ばず、同じボタンで開き直す", result is None
       and getattr(app, "chosen", []) == [("DisplayQuestChoice", "クエスト掲示板")],

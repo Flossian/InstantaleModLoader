@@ -68,6 +68,7 @@ VERIFICATION_LOG.md §2.29）。
 """
 
 import datetime
+import importlib
 import itertools
 import random
 import sys
@@ -441,7 +442,7 @@ OUR_LABELS = (START_LABEL, ACCUSE_LABEL, STATUS_LABEL,
 def has_clock():
     """Kivy の `Clock` が使えるか。オフライン検証では使えない。"""
     try:
-        from kivy.clock import Clock          # noqa: F401
+        importlib.import_module("kivy.clock")
         return True
     except Exception:
         return False
@@ -1033,7 +1034,7 @@ def apply(ctx):
         そこを嘘にすると何を信じてよいか分からなくなる。
         """
         culprit = cast[0]["traits"]
-        words, texts = state.get("words") or {}, state.get("facts") or {}
+        texts = state.get("facts") or {}
         tries = []
         for axis in axes:
             name = axis["id"]

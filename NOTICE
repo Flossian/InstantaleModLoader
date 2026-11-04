@@ -45,7 +45,7 @@ MIT で配っているが、著作権表示（LICENSE の Copyright 行）は提
   * わさの 様
         409_fix_crafted_item_type   （提供を受けたものを共同で仕上げた）
         410_weapon_skill_chance     （提供を受けたものを共同で仕上げた）
-        411_equipment_ability_bonus （提供を受けたものを共同で仕上げた）
+        411_equipment_bonuses （提供を受けたものを共同で仕上げた）
 
 **MOD そのものの提供とは別に、既にあるこちらの MOD へ機能の提案（PR）を
 頂いたものがある。** MOD 自体はこちらの著作物だが、取り込んだコードの

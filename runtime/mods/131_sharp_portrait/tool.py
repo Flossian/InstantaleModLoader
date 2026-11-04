@@ -38,14 +38,12 @@ MOD 本体（`sharp_portrait.py`）は import しない。共通部品は `faces
 """
 
 import io
-import json
 import os
 import queue
 import shutil
 import struct
 import sys
 import threading
-import time
 
 MOD_DIR = os.path.dirname(os.path.abspath(__file__))
 

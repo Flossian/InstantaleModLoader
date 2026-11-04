@@ -42,6 +42,8 @@ thunder / thunder_aoe / earth だけで、記録では8割強が slash だった
 画風は控えめ（soft）とはっきり（bright）の2組で、設定 `ART_STYLE` で選ぶ。
 属性（風・光・闇・魔力・水の全体・土の全体・爆発）はゲームの `Assets/effects` に在るのに
 使われていない絵を指す。ゲームの更新でフォルダが消えていれば、その値は運び手の絵のまま出す。
+
+版3: `hasattr` を既定値付きの `getattr` に替えた（TECH.md §6）。
 """
 
 import os
@@ -229,7 +231,8 @@ def narrow_answer(answer, found=None, depth=0):
         for item in answer:
             narrow_answer(item, found, depth + 1)
         return found
-    elif hasattr(answer, "model_fields") and hasattr(answer, "__dict__"):
+    elif getattr(answer, "model_fields", None) is not None \
+            and getattr(answer, "__dict__", None) is not None:
         items = list(vars(answer).items())
     else:
         return found
