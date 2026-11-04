@@ -31,7 +31,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
-from instantale_modloader import abilities, equipment, ui  # noqa: E402
+from instantale_modloader import abilities, equipment, prices, ui  # noqa: E402
 
 failures = []
 
@@ -107,7 +107,7 @@ class FakeCtx:
 
     def wrap(self, target, **kw):
         def decorator(func):
-            self.hooks[target] = func
+            self.hooks.setdefault(target, func)  # 411 の後で prices.install が同じ対象を包む。検査は 411 のものを呼ぶ
             return func
         return decorator
 
@@ -218,7 +218,9 @@ generated(make_weapon, None, "mythic")
 check("生成で mythic の武器に効果が付く", 1 <= len(effects.read(made[-1])) <= 2, made[-1].attributes)
 check("効果の行も値段の手前", list(made[-1].attributes)[-1] == "買価", made[-1].attributes)
 generated(make, None, "mythic")
-check("防具には効果が付かない", effects.read(made[-1]) == [], made[-1].attributes)
+check("防具に付くのは防具の効果だけ",
+      1 <= len(effects.read(made[-1])) <= 2
+      and {k for k, _, _ in effects.read(made[-1])} <= set(effects.ARMOR_KINDS), made[-1].attributes)
 check("例外が出ていない", not ctx.errors, ctx.errors)
 
 print("武器の効果: 抽選")
@@ -229,7 +231,7 @@ check("mythic は 1〜2 個", all(1 <= len(r) <= 2 for r in rolls))
 check("同じ種類は重ならない", all(len({k for k, _, _ in r}) == len(r) for r in rolls))
 check("mythic の強さ", all(a == effects.STRENGTH[k][2] for r in rolls for k, a, _ in r))
 check("特効には相手が付く", all(t in effects.SLAYER_TARGETS for r in rolls for k, _, t in r if k == "slayer"))
-check("6種類とも出る", {k for r in rolls for k, _, _ in r} == set(effects.KINDS))
+check("どの種類も出る", {k for r in rolls for k, _, _ in r} == set(effects.KINDS))
 check("切った種類は付かない", all(k == "critical" for _ in range(50)
                                 for k, _, _ in effects.roll("legendary", counts, ["critical"], rng)))
 check("rare には付かない", effects.roll("rare", counts, effects.KINDS, rng) == [])
@@ -356,6 +358,254 @@ handle(game_turn, manager, "主人公", "味方陣営",
        {"instant_damage": [{"target": "ゴブリン", "power": "normal", "category": "physical"}]})
 check("武器でない品の効果は効かない", seen["power"] == "normal" and seen["defense"] == 100, seen)
 check("例外が出ていない（戦闘）", not ctx.errors, ctx.errors)
+
+print("武器の効果: 呪い・成長・処刑・連携")
+start_battle = ctx.hooks["__main__:BattleStartManager.start_battle"]
+
+
+def fresh_foe(hp=500, top=500):
+    foe.current_hp, foe.max_hp, foe.status = hp, top, {}
+    start_battle(lambda s: None, manager)
+
+
+def strike(actor, raw=400, defense=100):
+    """味方の手。戻りはゲームが受け取るダメージで、敵の体力へ当てる。"""
+    def turn(self, key, side, action):
+        got = instant(lambda attack, d: attack - d, raw, npc_defense(lambda s: defense, foe))
+        seen["dealt"] = got
+        foe.current_hp -= got
+    handle(turn, manager, actor, "味方陣営", {})
+    return seen["dealt"]
+
+
+said.clear()
+fresh_foe()
+worn[id(player)] = [("weapon", Item("呪剣", "weapon", "mythic", {"呪い": "+50%・当てると体力 -3%"}))]
+player.current_hp, player.max_hp = 100, 300
+check("呪い: 与えるダメージ +50%", strike("主人公") == 450, seen)
+check("呪い: 当てた手で最大体力の3%を失う", player.current_hp == 91, player.current_hp)
+check("呪い: 出どころを 308 へ控える", ui.take_damage_notes("主人公", 9) == "呪い")
+player.current_hp = 2
+strike("主人公")
+check("呪いでは倒れない", player.current_hp == 1, player.current_hp)
+
+fresh_foe()
+blade = Item("育つ剣", "weapon", "mythic", {})
+effects.write(blade, [("growth", 5, None)], "ja")
+check("成長: 説明欄の形", blade.attributes["成長"] == "+5% / 10体（討伐 0）", blade.attributes)
+check("成長: 量を読む", effects.read(blade) == [("growth", 5, None)], effects.read(blade))
+worn[id(player)] = [("weapon", blade)]
+foe.current_hp = 100
+strike("主人公")
+check("成長: 倒すと討伐数が増える", effects.kills_of(blade) == 1, blade.attributes)
+foe.current_hp = 1000
+foe.max_hp = 1000
+strike("主人公")
+check("成長: 倒していなければ増えない", effects.kills_of(blade) == 1, blade.attributes)
+blade.attributes["成長"] = "+5% / 10体（討伐 9）"
+foe.current_hp = 100
+said.clear()
+strike("主人公")
+check("成長: 節目で本文に出る", any("討伐 10" in text for text in said), said)
+foe.current_hp = 1000
+check("成長: 10体で +5%", strike("主人公") == 315, seen)
+blade.attributes["成長"] = "+5% / 10体（討伐 900）"
+foe.current_hp = 5000
+foe.max_hp = 5000
+check("成長: 上乗せは 100% で止まる", strike("主人公") == 600, seen)
+english = Item("en", "weapon", "mythic", {})
+effects.write(english, [("growth", 3, None)], "en")
+check("成長: 英語の討伐数", effects.add_kill(english) == 1 and "(1 kills)" in english.attributes["Growth"],
+      english.attributes)
+
+fresh_foe()
+worn[id(player)] = [("weapon", Item("処刑の斧", "weapon", "mythic", {"処刑": "残り体力 15% 以下"}))]
+foe.current_hp = 450
+check("処刑: 残りが割合を超えるなら普通のダメージ", strike("主人公") == 300, seen)
+foe.current_hp = 370
+foe.max_hp = 1000
+check("処刑: 残りが割合以下なら敵の体力ぶん", strike("主人公") == 370 and foe.current_hp == 0, seen)
+foe.current_hp = 200
+check("処刑: もともと倒せる一撃は変えない", strike("主人公") == 300, seen)
+
+said.clear()
+fresh_foe(hp=5000, top=5000)
+pair = Item("連携の剣", "weapon", "mythic", {"連携": "味方の後 +30%"})
+worn[id(player)] = [("weapon", pair)]
+worn[id(ally)] = [("weapon", sword)]
+check("連携: 味方が当てる前は上がらない", strike("主人公") == 300, seen)
+check("連携: 自分の直後は上がらない", strike("主人公") == 300, seen)
+strike("仲間")
+check("連携: 味方の直後は上がる", strike("主人公") == 390, seen)
+check("連携: 本文に出る", any("連携" in text for text in said), said)
+
+print("防具の効果")
+worn[id(player)] = [("wearable", Item("鎧", "wearable", "mythic", {}))]
+worn[id(ally)] = []
+ally.current_hp, ally.max_hp, ally.status = 500, 500, {}
+player.current_hp, player.max_hp = 500, 500
+
+
+def blow(target, raw=200, npc=None):
+    """敵の手。主人公は防具の値で来る（`get_npc_defense` を通らない）。仲間は通る。"""
+    def turn(self, key, side, action):
+        calc(lambda s, a: ({target: raw},), self, action)
+        defense = npc_defense(lambda s: 50, npc) if npc is not None else 500
+        got = instant(lambda attack, d: attack, raw, defense)
+        seen["taken"] = got
+        (npc if npc is not None else player).current_hp -= got
+    handle(turn, manager, "ゴブリン1", "敵側", {})
+    return seen["taken"]
+
+
+def wear(holder, *attributes):
+    worn[id(holder)] = [("wearable", Item("防具{}".format(i), "wearable", "mythic", a))
+                        for i, a in enumerate(attributes)]
+
+
+fresh_foe(hp=5000, top=5000)
+check("防具の効果なし: 素のまま", blow("主人公") == 200, seen)
+wear(player, {"重装": "受けるダメージ -30%・器用 -4"})
+check("重装: 主人公（素点で照らす）", blow("主人公") == 140, seen)
+check("重装: 器用が下がる", abilities.bonus(app, player).get("dexterity") == -4, abilities.bonus(app, player))
+wear(ally, {"重装": "受けるダメージ -20%・器用 -4"})
+check("重装: 仲間（防御の持ち主で分かる）", blow("仲間", npc=ally) == 160, seen)
+wear(player, {"重装": "受けるダメージ -20%・器用 -4"}, {"重装": "受けるダメージ -30%・器用 -4"})
+player.current_hp = 500
+check("同じ効果を2つ着ても重ならず、最大の1品だけ", blow("主人公") == 140, seen)
+check("器用の低下も1回ぶん", abilities.bonus(app, player).get("dexterity") == -4, abilities.bonus(app, player))
+check("武器の連携は防具に数えない", "teamwork" not in mod.current_armor(app, player))
+
+wear(player, {"不屈": "100% 戦闘に1回"})
+player.current_hp = 100
+said.clear()
+check("不屈: 倒れる一撃を体力 1 で耐える", blow("主人公") == 99 and player.current_hp == 1, seen)
+check("不屈: 本文に出る", any("不屈" in text for text in said), said)
+player.current_hp = 100
+check("不屈: 戦闘に1回", blow("主人公") == 200, seen)
+start_battle(lambda s: None, manager)
+player.current_hp = 300
+check("不屈: 倒れない一撃は変えない", blow("主人公") == 200 and player.current_hp == 100, seen)
+player.current_hp = 100
+check("不屈: 次の戦闘でまた効く", blow("主人公") == 99, seen)
+
+wear(player, {"棘": "受けたダメージの 40%"})
+player.current_hp = 500
+foe.current_hp = 1000
+check("棘: 受けるダメージは変えない", blow("主人公") == 200, seen)
+check("棘: 受けた割合を敵に返す", foe.current_hp == 920, foe.current_hp)
+check("棘: 出どころを 308 へ控える", ui.take_damage_notes("ゴブリン", 80) == "棘")
+foe.current_hp = 10
+player.current_hp = 500
+blow("主人公")
+check("棘では敵を倒さない", foe.current_hp == 1, foe.current_hp)
+foe.current_hp = 1000
+
+wear(player, {"再生": "毎ターン 最大体力の 4%"})
+player.current_hp = 100
+reduce_status(lambda s, c: None, manager, player)
+check("再生: 最大体力の4%が戻る", player.current_hp == 120, player.current_hp)
+check("再生: 出どころを 308 へ控える", ui.take_damage_notes("主人公", 20) == "再生")
+player.current_hp = 499
+reduce_status(lambda s, c: None, manager, player)
+check("再生: 最大で止まる", player.current_hp == 500, player.current_hp)
+player.current_hp = 0
+reduce_status(lambda s, c: None, manager, player)
+check("再生: 倒れている者は戻さない", player.current_hp == 0, player.current_hp)
+hp_before = foe.current_hp
+reduce_status(lambda s, c: None, manager, foe)
+check("再生: 敵には効かない", foe.current_hp == hp_before, foe.current_hp)
+
+wear(ally)
+wear(player, {"守護": "仲間をかばう 100%"})
+player.current_hp, ally.current_hp = 500, 500
+said.clear()
+check("守護: 仲間への一撃は 0 になる", blow("仲間", npc=ally) == 0 and ally.current_hp == 500, seen)
+check("守護: 肩代わりした者が受ける", player.current_hp == 300, player.current_hp)
+check("守護: 本文に出る", any("かばった" in text for text in said), said)
+player.current_hp, ally.current_hp = 100, 500
+check("守護: 倒れるなら肩代わりしない", blow("仲間", npc=ally) == 200 and player.current_hp == 100, seen)
+wear(player, {"守護": "仲間をかばう 100%", "重装": "受けるダメージ -50%・器用 -4"})
+player.current_hp, ally.current_hp = 150, 500
+blow("仲間", npc=ally)
+check("守護: 肩代わりした者の重装で受ける", player.current_hp == 50, player.current_hp)
+wear(ally, {"守護": "仲間をかばう 100%"})
+wear(player)
+player.current_hp, ally.current_hp = 500, 500
+check("守護: 主人公への一撃も仲間がかばう", blow("主人公") == 0 and ally.current_hp == 300, seen)
+player.current_hp = 500
+worn[id(player)] = [("weapon", Item("飾り", "wearable", "mythic", {"守護": "仲間をかばう 100%"}))]
+
+print("防具の効果: 耐性・軽業・火事場・呪縛・威光")
+wear(ally)
+wear(player, {"軽業": "一撃をかわす 100%"})
+player.current_hp = 500
+said.clear()
+check("軽業: 一撃が 0 になる", blow("主人公") == 0 and player.current_hp == 500, seen)
+check("軽業: 本文に出る", any("かわした" in text for text in said), said)
+
+wear(player, {"火事場": "受けるダメージ -40%（体力 30% 以下）"})
+player.current_hp = 151
+check("火事場: 体力が多い間は効かない", blow("主人公") == 200, seen)
+player.current_hp = 150
+player.max_hp = 500
+check("火事場: 体力 30% 以下で効く", blow("主人公") == 120, seen)
+
+wear(player, {"呪縛": "受けるダメージ -50%・与えるダメージ -20%"})
+player.current_hp = 500
+check("呪縛: 受けるダメージが下がる", blow("主人公") == 100, seen)
+fresh_foe(hp=5000, top=5000)
+check("呪縛: 与えるダメージも下がる", strike("主人公") == 240, seen)
+
+wear(player, {"重装": "受けるダメージ -30%・器用 -4"}, {"呪縛": "受けるダメージ -50%・与えるダメージ -20%"},
+     {"火事場": "受けるダメージ -40%（体力 30% 以下）"})
+player.current_hp = 100
+check("軽減は足さずに順に掛ける", blow("主人公") == 42, seen)
+check("種類が違えば全部効いても 0 にならない", effects.after_cuts(200, [90, 90, 90]) >= 1)
+
+wear(player, {"耐性": "状態異常を防ぐ 100%"})
+player.status = {"もとから": {"duration": 3}}
+ally.status = {}
+resolve = ctx.hooks["__main__:BattlePhaseManager.resolve_battle_effect"]
+
+
+def curses(self):
+    player.status["麻痺"] = {"duration": 2}
+    ally.status["麻痺"] = {"duration": 2}
+
+
+said.clear()
+handle(lambda s, k, side, a: resolve(curses, s), manager, "ゴブリン1", "敵側", {})
+check("耐性: 新しい状態異常を防ぐ", set(player.status) == {"もとから"}, player.status)
+check("耐性: 着ていない者には付く", "麻痺" in ally.status, ally.status)
+check("耐性: 本文に出る", any("防いだ" in text for text in said), said)
+player.status = {}
+handle(lambda s, k, side, a: resolve(curses, s), manager, "主人公", "味方陣営", {})
+check("耐性: 味方の手で付いたものは外さない", "麻痺" in player.status, player.status)
+
+wear(player, {"威光": "店の買値 -10%"})
+registry = sys.modules["instantale_modloader.prices"]._item_registry()
+layer = next(entry[1] for entry in registry["adjust"] if entry[0] == package)
+ui.find_app = lambda: app
+check("威光: 買値が下がる", layer(None, prices.BUY, 1000) == 900)
+check("威光: 売値は触らない", layer(None, prices.SELL, 1000) is None)
+wear(player)
+check("威光: 着ていなければ触らない", layer(None, prices.BUY, 1000) is None)
+wear(ally, {"威光": "店の買値 -10%"})
+check("威光: 仲間が着ていても効かない", layer(None, prices.BUY, 1000) is None)
+
+print("防具の効果: 抽選")
+armor_rolls = [effects.roll("mythic", {"mythic": (2, 2)}, effects.ARMOR_KINDS, rng) for _ in range(300)]
+check("防具の10種類とも出る", {k for r in armor_rolls for k, _, _ in r} == set(effects.ARMOR_KINDS))
+check("武器10種・防具10種", len(effects.WEAPON_KINDS) == 10 and len(effects.ARMOR_KINDS) == 10)
+for kind in effects.KINDS:
+    check_item = Item("読み取り", "wearable", "mythic", {})
+    effects.write(check_item, [(kind, 7, "boss" if kind == "slayer" else None)], "ja")
+    english_item = Item("読み取り", "wearable", "mythic", {})
+    effects.write(english_item, [(kind, 7, "boss" if kind == "slayer" else None)], "en")
+    check("書いて読む: " + kind, effects.read(check_item) == [(kind, 7, "boss" if kind == "slayer" else None)]
+          and effects.read(english_item) == effects.read(check_item), (check_item.attributes, english_item.attributes))
+check("例外が出ていない（新しい効果）", not ctx.errors, ctx.errors)
 
 if failures:
     print("{} failed: {}".format(len(failures), failures))

@@ -3,12 +3,12 @@
   "api": 1,
   "kind": "feature",
   "name": {
-    "en": "High-quality gear grants ability bonuses and weapon effects",
-    "ja": "高品質の装備に能力値補正や武器の効果が付く"
+    "en": "High-quality gear grants ability bonuses and weapon and armor effects",
+    "ja": "高品質の装備に能力値補正や武器・防具の効果が付く"
   },
   "description": {
-    "en": "When an epic, legendary or mythic weapon or armor is made (shop, crafting, events), it gets random ability bonuses such as STR +3, and a weapon may also get effects such as Critical 15%, Lifesteal 10%, Pierce 35%, Slayer (boss fights / stronger / wounded / unhurt foes), Venom or Daunt, all shown in the item details. Higher rarity gets more and stronger ones. What the hero and companions wear counts wherever the game reads ability scores (damage, defense, turn order, quest events, impressions), through the loader's ability window, and shows as (+3) on the character sheet; weapon effects work on their own hits against enemies and are announced in the battle log. The ability scores themselves are never changed. Items you already own get nothing",
-    "ja": "epic・legendary・mythic の武器・防具が作られたとき（店・クラフト・イベント）、筋力 +3 のような能力値補正がランダムに付く。武器にはさらに、会心・吸収・貫通・特効（ボス戦・格上・手負い・無傷）・毒・怯みの効果が付くことがある。どれも説明欄に出て、レア度が高いほど数も強さも上がる。主人公と仲間が身に着けている品の補正は、ローダの能力値の窓口を通して、ゲームが能力値を読むところ（火力・防御・手番の順・依頼の出来事・印象）に効き、ステータス画面の能力値に (+3) の形で出る。武器の効果は、その者が敵に当てた一撃に効き、戦闘の文に出る。能力値そのものは書き換えない。もともと持っている品には付かない"
+    "en": "When an epic, legendary or mythic weapon or armor is made (shop, crafting, events), it gets random ability bonuses such as STR +3, and may also get an effect, all shown in the item details. Weapons: Critical, Lifesteal, Pierce, Slayer, Venom, Daunt, Cursed, Growth, Execute, Teamwork. Armor: Endure, Thorns, Regen, Heavy, Guardian, Resist, Nimble, Last Stand, Binding, Presence. Higher rarity gets more and stronger ones. What the hero and companions wear counts wherever the game reads ability scores (damage, defense, turn order, quest events, impressions), through the loader's ability window, and shows as (+3) on the character sheet; weapon effects work on their own hits against enemies, armor effects on hits they take, and both are announced in the battle log. The same armor effect worn twice does not stack. The ability scores themselves are never changed. Items you already own get nothing",
+    "ja": "epic・legendary・mythic の武器・防具が作られたとき（店・クラフト・イベント）、筋力 +3 のような能力値補正がランダムに付き、さらに効果が付くことがある。武器は会心・吸収・貫通・特効・毒・怯み・呪い・成長・処刑・連携、防具は不屈・棘・再生・重装・守護・耐性・軽業・火事場・呪縛・威光。どれも説明欄に出て、レア度が高いほど数と強さが上がる。主人公と仲間が身に着けている品の補正は、ローダの能力値の窓口を通して、ゲームが能力値を読むところ（火力・防御・手番の順・依頼の出来事・印象）に効き、ステータス画面の能力値に (+3) の形で出る。武器の効果はその者が敵に当てた一撃に、防具の効果はその者が受ける一撃に効き、戦闘の文に出る。同じ防具の効果を2つ着ても重ならない。能力値そのものは書き換えない。もともと持っている品には付かない"
   },
   "version": "2",
   "author": "わさの, R01/Flossian",
@@ -359,6 +359,314 @@
       "note": {
         "ja": "命中した敵がたまに怯み、与えるダメージが下がる",
         "en": "Hits sometimes daunt the foe, weakening its attacks"
+      }
+    },
+    "EFFECT_CURSE": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける武器の効果",
+        "en": "Weapon effects to grant"
+      },
+      "label": {
+        "ja": "呪い",
+        "en": "Cursed"
+      },
+      "note": {
+        "ja": "与えるダメージが上がるが、当てた手で自分の体力が減る（呪いでは倒れない）",
+        "en": "More damage, but each attack costs HP (it never kills you)"
+      }
+    },
+    "EFFECT_GROWTH": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける武器の効果",
+        "en": "Weapon effects to grant"
+      },
+      "label": {
+        "ja": "成長",
+        "en": "Growth"
+      },
+      "note": {
+        "ja": "敵を倒した数が説明欄に残り、10体ごとに与えるダメージが上がる",
+        "en": "Kills are kept in the details; every 10 raises the damage"
+      }
+    },
+    "EFFECT_EXECUTE": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける武器の効果",
+        "en": "Weapon effects to grant"
+      },
+      "label": {
+        "ja": "処刑",
+        "en": "Execute"
+      },
+      "note": {
+        "ja": "当てた後の敵の体力が決まった割合以下なら、そのまま倒す",
+        "en": "Finishes a foe left below a set share of its HP"
+      }
+    },
+    "EFFECT_TEAMWORK": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける武器の効果",
+        "en": "Weapon effects to grant"
+      },
+      "label": {
+        "ja": "連携",
+        "en": "Teamwork"
+      },
+      "note": {
+        "ja": "直前に味方が当てた敵へのダメージが上がる",
+        "en": "More damage to the foe an ally just hit"
+      }
+    },
+    "ARMOR_EPIC_MIN": {
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 6,
+      "group": {
+        "ja": "防具の効果の数",
+        "en": "Armor effect count"
+      },
+      "label": {
+        "ja": "epic の下限",
+        "en": "Epic, min"
+      }
+    },
+    "ARMOR_EPIC_MAX": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 6,
+      "group": {
+        "ja": "防具の効果の数",
+        "en": "Armor effect count"
+      },
+      "label": {
+        "ja": "epic の上限",
+        "en": "Epic, max"
+      }
+    },
+    "ARMOR_LEGENDARY_MIN": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 6,
+      "group": {
+        "ja": "防具の効果の数",
+        "en": "Armor effect count"
+      },
+      "label": {
+        "ja": "legendary の下限",
+        "en": "Legendary, min"
+      }
+    },
+    "ARMOR_LEGENDARY_MAX": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 6,
+      "group": {
+        "ja": "防具の効果の数",
+        "en": "Armor effect count"
+      },
+      "label": {
+        "ja": "legendary の上限",
+        "en": "Legendary, max"
+      }
+    },
+    "ARMOR_MYTHIC_MIN": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 6,
+      "group": {
+        "ja": "防具の効果の数",
+        "en": "Armor effect count"
+      },
+      "label": {
+        "ja": "mythic の下限",
+        "en": "Mythic, min"
+      }
+    },
+    "ARMOR_MYTHIC_MAX": {
+      "type": "int",
+      "default": 2,
+      "min": 0,
+      "max": 6,
+      "group": {
+        "ja": "防具の効果の数",
+        "en": "Armor effect count"
+      },
+      "label": {
+        "ja": "mythic の上限",
+        "en": "Mythic, max"
+      }
+    },
+    "EFFECT_ENDURE": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける防具の効果",
+        "en": "Armor effects to grant"
+      },
+      "label": {
+        "ja": "不屈",
+        "en": "Endure"
+      },
+      "note": {
+        "ja": "倒れる一撃を体力 1 で耐えることがある（戦闘に1回）",
+        "en": "May survive a fatal blow with 1 HP (once per battle)"
+      }
+    },
+    "EFFECT_THORNS": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける防具の効果",
+        "en": "Armor effects to grant"
+      },
+      "label": {
+        "ja": "棘",
+        "en": "Thorns"
+      },
+      "note": {
+        "ja": "受けたダメージの一部を相手に返す（敵は体力 1 で止まる）",
+        "en": "Returns part of the damage taken (the foe stops at 1 HP)"
+      }
+    },
+    "EFFECT_REGEN": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける防具の効果",
+        "en": "Armor effects to grant"
+      },
+      "label": {
+        "ja": "再生",
+        "en": "Regen"
+      },
+      "note": {
+        "ja": "毎ターン最大体力の一部が戻る",
+        "en": "Regains part of max HP each turn"
+      }
+    },
+    "EFFECT_HEAVY": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける防具の効果",
+        "en": "Armor effects to grant"
+      },
+      "label": {
+        "ja": "重装",
+        "en": "Heavy"
+      },
+      "note": {
+        "ja": "受けるダメージが下がるが、器用が下がって手番が遅くなる",
+        "en": "Takes less damage, but lower DEX means later turns"
+      }
+    },
+    "EFFECT_GUARDIAN": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける防具の効果",
+        "en": "Armor effects to grant"
+      },
+      "label": {
+        "ja": "守護",
+        "en": "Guardian"
+      },
+      "note": {
+        "ja": "仲間への一撃を肩代わりすることがある（倒れるなら肩代わりしない）",
+        "en": "May take a blow for an ally (not if it would fell the wearer)"
+      }
+    },
+    "EFFECT_RESIST": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける防具の効果",
+        "en": "Armor effects to grant"
+      },
+      "label": {
+        "ja": "耐性",
+        "en": "Resist"
+      },
+      "note": {
+        "ja": "敵に付けられた状態異常を防ぐことがある",
+        "en": "May block a status inflicted by a foe"
+      }
+    },
+    "EFFECT_EVADE": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける防具の効果",
+        "en": "Armor effects to grant"
+      },
+      "label": {
+        "ja": "軽業",
+        "en": "Nimble"
+      },
+      "note": {
+        "ja": "敵の一撃をかわすことがある",
+        "en": "May dodge a blow"
+      }
+    },
+    "EFFECT_DESPERATE": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける防具の効果",
+        "en": "Armor effects to grant"
+      },
+      "label": {
+        "ja": "火事場",
+        "en": "Last Stand"
+      },
+      "note": {
+        "ja": "体力が少ない間、受けるダメージが下がる",
+        "en": "Takes less damage while HP is low"
+      }
+    },
+    "EFFECT_BINDING": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける防具の効果",
+        "en": "Armor effects to grant"
+      },
+      "label": {
+        "ja": "呪縛",
+        "en": "Binding"
+      },
+      "note": {
+        "ja": "受けるダメージが大きく下がるが、与えるダメージも下がる",
+        "en": "Takes much less damage, but also deals less"
+      }
+    },
+    "EFFECT_PRESENCE": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "付ける防具の効果",
+        "en": "Armor effects to grant"
+      },
+      "label": {
+        "ja": "威光",
+        "en": "Presence"
+      },
+      "note": {
+        "ja": "主人公が着ていると、店の買値が下がる",
+        "en": "Lowers shop prices while the hero wears it"
       }
     },
     "STACK_MODE": {

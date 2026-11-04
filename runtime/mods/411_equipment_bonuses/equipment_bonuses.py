@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-"""epic 以上の装備品に、生成時に能力値補正（筋力 +3 など）と武器の効果（会心 15% など）を付ける。
+"""epic 以上の装備品に、生成時に能力値補正（筋力 +3 など）と武器・防具の効果（会心 15% など）を付ける。
 
 ## 付け方
 
 武器・防具（`item_type` が weapon / wearable）が作られたときに、レア度で抽選して
 `attributes` に「筋力: +3」の形で書く。説明欄にそのまま出て、セーブにも残る。
 付くのは epic / legendary / mythic だけで、数と量はレア度ごとに設定で決める。
-武器にはさらに、特効・会心・吸収・貫通・毒・怯みのどれかを「会心: 15%」の形で書く
-（決まりは `effects.py`、戦闘への効かせ方は `battle.py`）。
+武器と防具にはさらに、それぞれの効果を「会心: 15%」の形で書く
+（種類と決まりは `effects.py`、戦闘への効かせ方は `battle.py`）。
 
 作られた瞬間を拾う経路は `410_` と同じ:
 
@@ -30,6 +30,9 @@
 
 武器の効果は、主人公と仲間（`APPLY_TO_PARTY`）が身に着けている武器のものを、
 その者の1手の中でだけ効かせる（`battle.py`）。
+防具の効果は同じ者が身に着けている防具のもので、同じ種類を複数の部位に着ても重ならず、最大の1品だけが効く。
+重装の器用の低下は、能力値の窓口へ答える補正に足す。
+威光は主人公が着ているときだけ、値段の窓口（`prices.adjust`）で店の買値を下げる。
 """
 
 import os
@@ -37,7 +40,7 @@ import sys
 import threading
 import weakref
 
-from instantale_modloader import abilities, equipment, frames, items, llm, ui
+from instantale_modloader import abilities, equipment, frames, items, llm, prices, ui
 
 from . import battle, bonus, effects
 
@@ -70,6 +73,26 @@ EFFECT_LIFESTEAL = True
 EFFECT_PIERCE = True
 EFFECT_VENOM = True
 EFFECT_DAUNT = True
+EFFECT_CURSE = True
+EFFECT_GROWTH = True
+EFFECT_EXECUTE = True
+EFFECT_TEAMWORK = True
+ARMOR_EPIC_MIN = 0          # 防具の効果の数（epic）
+ARMOR_EPIC_MAX = 1
+ARMOR_LEGENDARY_MIN = 1
+ARMOR_LEGENDARY_MAX = 1
+ARMOR_MYTHIC_MIN = 1
+ARMOR_MYTHIC_MAX = 2
+EFFECT_ENDURE = True        # 付けてよい防具の効果
+EFFECT_THORNS = True
+EFFECT_REGEN = True
+EFFECT_HEAVY = True
+EFFECT_GUARDIAN = True
+EFFECT_RESIST = True
+EFFECT_EVADE = True
+EFFECT_DESPERATE = True
+EFFECT_BINDING = True
+EFFECT_PRESENCE = True
 
 LOG_BASENAME = "equipment_bonuses.log"
 LOG_LIMIT = 300
@@ -118,10 +141,27 @@ def weapon_counts():
             "mythic": (WEAPON_MYTHIC_MIN, WEAPON_MYTHIC_MAX)}
 
 
+def armor_counts():
+    """防具の効果の数の表。"""
+    return {"epic": (ARMOR_EPIC_MIN, ARMOR_EPIC_MAX),
+            "legendary": (ARMOR_LEGENDARY_MIN, ARMOR_LEGENDARY_MAX),
+            "mythic": (ARMOR_MYTHIC_MIN, ARMOR_MYTHIC_MAX)}
+
+
 def enabled_effects():
     flags = {"slayer": EFFECT_SLAYER, "critical": EFFECT_CRITICAL, "lifesteal": EFFECT_LIFESTEAL,
-             "pierce": EFFECT_PIERCE, "venom": EFFECT_VENOM, "daunt": EFFECT_DAUNT}
-    return [kind for kind in effects.KINDS if flags.get(kind)]
+             "pierce": EFFECT_PIERCE, "venom": EFFECT_VENOM, "daunt": EFFECT_DAUNT,
+             "curse": EFFECT_CURSE, "growth": EFFECT_GROWTH, "execute": EFFECT_EXECUTE,
+             "teamwork": EFFECT_TEAMWORK}
+    return [kind for kind in effects.WEAPON_KINDS if flags.get(kind)]
+
+
+def enabled_armor_effects():
+    flags = {"endure": EFFECT_ENDURE, "thorns": EFFECT_THORNS, "regen": EFFECT_REGEN,
+             "heavy": EFFECT_HEAVY, "guardian": EFFECT_GUARDIAN, "resist": EFFECT_RESIST,
+             "evade": EFFECT_EVADE, "desperate": EFFECT_DESPERATE, "binding": EFFECT_BINDING,
+             "presence": EFFECT_PRESENCE}
+    return [kind for kind in effects.ARMOR_KINDS if flags.get(kind)]
 
 
 def unwrap(item):
@@ -159,6 +199,13 @@ def worn_items(app, holder):
 
 def current_bonus(app, holder):
     return bonus.combine(worn_items(app, holder), STACK_MODE, STAT_CAP)
+
+
+def current_armor(app, holder):
+    """身に着けている防具の効果（答える相手でなければ空）。同じ種類は最大の1品だけが効く。"""
+    if not answers_for(app, holder):
+        return {}
+    return effects.combine([item for item in worn_items(app, holder) if effects.is_armor(item)], "max")
 
 
 def current_effects(app, holder):
@@ -221,7 +268,12 @@ def apply(ctx):
             return
         rarity = str(frames.attr(item, "rarity", "") or "").lower()
         rolled = bonus.roll(rarity, tiers())
-        found = effects.roll(rarity, weapon_counts(), enabled_effects()) if effects.is_weapon(item) else []
+        if effects.is_weapon(item):
+            found = effects.roll(rarity, weapon_counts(), enabled_effects())
+        elif effects.is_armor(item):
+            found = effects.roll(rarity, armor_counts(), enabled_armor_effects())
+        else:
+            found = []
         if not rolled and not found:
             count("plain/" + (rarity or "?"))
             return
@@ -292,13 +344,42 @@ def apply(ctx):
         """身に着けている品の補正（窓口が場面ごとに聞く）。"""
         if not answers_for(app, holder):
             return None
-        return current_bonus(app, holder) or None
+        found = current_bonus(app, holder)
+        if current_armor(app, holder).get("heavy"):
+            found["dexterity"] = found.get("dexterity", 0) - effects.HEAVY_DEX
+        return found or None
 
     abilities.declare(owner, answer, write=write)
-    battle.install(ctx, write, current_effects, language)
+    battle.install(ctx, write, current_effects, current_armor, language)
 
-    write("installed tiers={} weapon={} effects={} mode={} cap={} free={} party={}".format(
-        tiers(), weapon_counts(), enabled_effects(), STACK_MODE, STAT_CAP,
-        INCLUDE_FREE_SLOTS, APPLY_TO_PARTY))
+    # ================================================================ 威光
+    def presence_now():
+        app = ui.find_app()
+        player = frames.attr(app, "player", None)
+        return current_armor(app, player).get("presence", 0) if player is not None else 0
+
+    def presence_layer(_item, key, price):
+        """主人公が威光の防具を着ていれば買値を下げる。触らないなら None。"""
+        percent = presence_now()
+        if key != prices.BUY or not percent:
+            return None
+        return max(1, int(round(price * (1.0 - percent / 100.0))))
+
+    prices.install(ctx, write)
+    prices.adjust(owner, presence_layer, temporary=True, write=write)
+    seen_presence = {"percent": 0}
+
+    @ctx.wrap("__main__:ShoppingStartManagerRemake.execute", required=False, safe=True)
+    def shop_start(orig, self, *args, **kwargs):
+        """着替えた後に店へ入ったら、古い額が残らないように組み直す。"""
+        percent = presence_now()
+        if percent != seen_presence["percent"]:
+            seen_presence["percent"] = percent
+            prices.refresh("presence armor")
+        return orig(self, *args, **kwargs)
+
+    write("installed tiers={} weapon={} effects={} armor={} effects={} mode={} cap={} free={} party={}".format(
+        tiers(), weapon_counts(), enabled_effects(), armor_counts(), enabled_armor_effects(),
+        STACK_MODE, STAT_CAP, INCLUDE_FREE_SLOTS, APPLY_TO_PARTY))
     ctx.log("equipment bonuses: installed (mode={}, cap={}, counts={})".format(
         STACK_MODE, STAT_CAP, store["counts"]))

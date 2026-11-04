@@ -153,7 +153,7 @@
 | [`407_npc_starting_equipment`](MODS.md#407_npc_starting_equipment-パーティーに加わった-npc-に初期装備を一度だけ持たせる) | NPC初期装備 | パーティーに加わった NPC に初期装備を一度だけ持たせる | - |  |
 | [`408_visual_changes_based_on_equipment`](MODS.md#408_visual_changes_based_on_equipment-立ち絵を再生成すると装備の見た目が描き足される) | 装備品に応じた立ち絵の追加描写 | 立ち絵を再生成すると装備の見た目が描き足される | 1 |  |
 | [`410_weapon_skill_chance`](MODS.md#410_weapon_skill_chance-武器にたまにスキルが付く) | 武器にたまにスキルが付く | 武器にたまにスキルが付く | 13 |  |
-| [`411_equipment_bonuses`](MODS.md#411_equipment_bonuses-高品質の装備に能力値補正や武器の効果が付く) | 高品質の装備に能力値補正や武器の効果が付く | 高品質の装備に能力値補正や武器の効果が付く | 28 |  |
+| [`411_equipment_bonuses`](MODS.md#411_equipment_bonuses-高品質の装備に能力値補正や武器防具の効果が付く) | 高品質の装備に能力値補正や武器・防具の効果が付く | 高品質の装備に能力値補正や武器・防具の効果が付く | 48 |  |
 
 ---
 
@@ -242,7 +242,7 @@
 | [`408_visual_changes_based_on_equipment`](MODS.md#408_visual_changes_based_on_equipment-立ち絵を再生成すると装備の見た目が描き足される) | MoririnJP 様 | そのまま取り込み |
 | [`409_fix_crafted_item_type`](MODS.md#409_fix_crafted_item_type-右クリックに消費が出ない飲食物薬を使えるようにする) | わさの 様 | 提供者と共同 |
 | [`410_weapon_skill_chance`](MODS.md#410_weapon_skill_chance-武器にたまにスキルが付く) | わさの 様 | 提供者と共同 |
-| [`411_equipment_bonuses`](MODS.md#411_equipment_bonuses-高品質の装備に能力値補正や武器の効果が付く) | わさの 様 | 提供者と共同 |
+| [`411_equipment_bonuses`](MODS.md#411_equipment_bonuses-高品質の装備に能力値補正や武器防具の効果が付く) | わさの 様 | 提供者と共同 |
 
 ---
 
