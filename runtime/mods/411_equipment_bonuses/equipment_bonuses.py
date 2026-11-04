@@ -231,7 +231,7 @@ def apply(ctx):
         if found and effects.write(item, found, lang):
             count("effect/" + rarity)
         note("{}: {!r} [{}] +{} {}".format(source, name_of(item), rarity, rolled,
-                                           [effects.text_of(k, a, t, lang) for k, a, t in found]))
+                                           ["{} {}".format(k, effects.text_of(k, a, t, lang)) for k, a, t in found]))
 
     @ctx.wrap("scripts.items:Item.__init__", safe=True, required=False)
     def item_init(orig, self, *args, **kwargs):

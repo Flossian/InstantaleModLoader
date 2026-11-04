@@ -44,6 +44,21 @@ need() {   # need 変数名 …: 空なら止める
   done
 }
 
+# ローダの当て直し（boot #2 以降）が終わるまで待つ（1秒ごとに見る。上限 $1 回）。
+# 当て直しの間はフックが抜けていて、世界を読むと落ちる（load_game_new の 'facilityが見つからない'.name）。
+# 2回目以降の boot が complete まで進み、ログの大きさが1回ぶん動かなくなったら終わりとみなす。
+# ログは長いので末尾だけ読む（1回の起動のぶんは収まる）。
+wait_boot_settled() {
+  log="$ROOT/out/modloader.log"; i=0; prev=-1
+  while [ $i -lt "$1" ]; do
+    s=$(tail -n 30000 "$log" | awk '/ boot #[0-9]+ gen=/{n++; done=0} / boot #1 gen=/{n=1} /boot complete:/{done=1} END{print n+0, done+0}')
+    size=$(wc -c < "$log")
+    [ "${s% *}" -ge 2 ] && [ "${s#* }" = 1 ] && [ "$size" = "$prev" ] && return 0
+    prev=$size; i=$((i + 1)); sleep 1
+  done
+  return 1
+}
+
 # 起動の段が $1 になるまで待つ（1秒ごとに見る。上限 $2 回）。relaunch.sh / reload.sh が使う。
 wait_stage() {   # $1 = 待つ段、$2 = 上限（回）
   i=0

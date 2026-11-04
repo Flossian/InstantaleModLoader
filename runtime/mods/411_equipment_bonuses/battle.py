@@ -7,7 +7,7 @@
     会心   `calculate_battle_effect` の前に、敵に当たる裁きを1段上げる
     貫通   `get_instant_damage(素点, 防御)` に渡る敵の防御を減らす
     特効   `get_instant_damage` の戻り（その一撃のダメージ）に上乗せする
-    吸収   その手で敵に与えたダメージ（敵の残りの体力まで）の割合を、1手の終わりに戻す
+    吸収   敵に当てるたびに、その手で与えたダメージ（敵の残りの体力まで）の割合を戻す
     毒刃   命中した敵の `status` にゲームと同じ形で書き、毎手の減算の前に体力を削る
     怯み   命中した敵の `status` に書き、その敵の一撃を弱める
 
@@ -38,7 +38,7 @@ def install(ctx, write, effects_of, language):
     答える相手でなければ空。`language()` はゲームの表示言語。
     """
     state = {
-        # 開いている1手。{"app","side","actor","name","effects","notes","dealt","slayer"}
+        # 開いている1手。{"app","side","actor","name","effects","notes","dealt","drained","slayer"}
         "action": None,
         # 直近の get_npc_defense（持ち主, 値）
         "last_defense": None,
@@ -135,7 +135,7 @@ def install(ctx, write, effects_of, language):
             found = effects_of(app, actor) or {}
         state["action"] = {"app": app, "side": side, "actor": actor,
                            "name": name_of(actor, character_key),
-                           "effects": found, "notes": [], "dealt": 0, "slayer": []}
+                           "effects": found, "notes": [], "dealt": 0, "drained": 0, "slayer": []}
         state["last_defense"] = None
 
     def close_action():
@@ -143,25 +143,33 @@ def install(ctx, write, effects_of, language):
         state["last_defense"] = None
         if action is None:
             return
-        app, actor = action["app"], action["actor"]
         lang = language()
         if action["slayer"]:
             labels = [effects.TARGET_LABELS[lang][t] for t in action["slayer"]]
             action["notes"].append(("（特効: {}）" if lang == "ja" else "(Slayer: {})")
                                    .format("・".join(labels) if lang == "ja" else ", ".join(labels)))
-        heal = effects.drained(action["dealt"], action["effects"].get("lifesteal"))
-        if heal and actor is not None:
-            hp, top = number(frames.attr(actor, "current_hp", None)), number(frames.attr(actor, "max_hp", None))
-            if hp is not None and hp > 0:
-                new_hp = int(min(top, hp + heal)) if top else int(hp + heal)
-                if new_hp > hp:
-                    actor.current_hp = new_hp
-                    action["notes"].append(("（{}は体力を {} 吸収した）" if lang == "ja"
-                                            else "({} drains {} HP)").format(action["name"], new_hp - int(hp)))
-                    write("lifesteal: {} dealt {} -> +{} ({} -> {})".format(
-                        action["name"], action["dealt"], new_hp - int(hp), hp, new_hp))
         if action["notes"]:
-            say(app, "\n".join(action["notes"]))
+            say(action["app"], "\n".join(action["notes"]))
+
+    def drain(action):
+        """吸収の体力を戻す。戻す量は1手の累計から決める（小さな当たりが続いても端数を捨てない）。
+
+        1手の報告（`308_`）より先に動かし、出どころを控える。行は 308 が出す（毒刃と同じ受け渡し）。
+        """
+        actor = action["actor"]
+        owed = effects.drained(action["dealt"], action["effects"].get("lifesteal")) - action["drained"]
+        if actor is None or owed <= 0:
+            return
+        action["drained"] += owed
+        hp, top = number(frames.attr(actor, "current_hp", None)), number(frames.attr(actor, "max_hp", None))
+        if hp is None or hp <= 0:
+            return
+        new_hp = int(min(top, hp + owed)) if top else int(hp + owed)
+        if new_hp <= hp:
+            return
+        ui.note_damage(action["name"], new_hp - hp, effects.LABELS[language()]["lifesteal"])
+        actor.current_hp = new_hp
+        write("lifesteal: {} dealt {} -> +{} ({} -> {})".format(action["name"], action["dealt"], new_hp - hp, hp, new_hp))
 
     @ctx.wrap("__main__:BattlePhaseManager.handle_battle_situation", required=False, safe=True)
     def handle_battle_situation(orig, self, *args, **kwargs):
@@ -261,6 +269,10 @@ def install(ctx, write, effects_of, language):
                         action["slayer"].append(target)
             if number(dealt) and dealt > 0:
                 action["dealt"] += min(dealt, hp) if hp is not None and hp > 0 else dealt
+                try:
+                    drain(action)
+                except Exception:
+                    ctx.log_exc("equipment bonuses: lifesteal failed")
                 for kind, turns in (("venom", effects.VENOM_TURNS), ("daunt", effects.DAUNT_TURNS)):
                     chance = found.get(kind)
                     if chance and effects.RNG.random() * 100 < chance and mark(defender, kind, turns):

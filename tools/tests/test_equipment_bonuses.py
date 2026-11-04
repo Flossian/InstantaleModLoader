@@ -288,6 +288,7 @@ def game_turn(self, key, side, action):
     defense = npc_defense(lambda s: 100, foe)
     dealt = instant(lambda attack, d: seen.setdefault("defense", d) and attack - d, 400, defense)
     seen["dealt"] = dealt
+    seen["hp_at_hit"] = player.current_hp
     if isinstance(dealt, (int, float)):
         foe.current_hp -= dealt
 
@@ -298,9 +299,33 @@ check("会心で裁きが1段上がる", seen["power"] == "strong", seen)
 check("貫通で防御が半分になって渡る", seen["defense"] == 50, seen)
 check("特効（無傷）で 1.4 倍", seen["dealt"] == 490, seen)
 check("吸収で与えたダメージの1割を戻す", player.current_hp == 149, player.current_hp)
+check("吸収は当たった時点で戻す（308 の報告より先）", seen["hp_at_hit"] == 149, seen)
+check("吸収の出どころを 308 へ控える", ui.take_damage_notes("主人公", 49) == "吸収")
 check("毒刃と怯みが敵の status に付く", set(foe.status) == {"毒刃", "怯み"}, foe.status)
-check("画面に会心・特効・吸収が出る", said and "会心" in said[-1] and "特効: 無傷" in said[-1]
-      and "吸収" in said[-1], said)
+check("画面に会心・特効が出て、吸収の行は 411 から出さない",
+      said and "会心" in said[-1] and "特効: 無傷" in said[-1] and "吸収" not in said[-1], said)
+
+hits_blade = Item("連撃の剣", "weapon", "mythic", {"吸収": "10%"})
+worn[id(player)] = [("weapon", hits_blade)]
+
+
+def many_hits(self, key, side, action):
+    """小さな当たりの連続。1発ごとに丸めると 0 になる量でも、累計で戻す。"""
+    for _ in range(3):
+        instant(lambda attack, d: attack - d, 4, npc_defense(lambda s: 0, foe))
+
+
+foe.current_hp, foe.max_hp = 500, 600
+player.current_hp = 100
+handle(many_hits, manager, "主人公", "味方陣営", {})
+check("吸収の端数を当たりごとに捨てない", player.current_hp == 101, player.current_hp)
+check("控えの合計が戻した量と合う", ui.take_damage_notes("主人公", 1) == "吸収")
+foe.current_hp, player.current_hp = 500, 300
+handle(many_hits, manager, "主人公", "味方陣営", {})
+check("体力が満タンなら戻さない", player.current_hp == 300, player.current_hp)
+check("満タンのときは出どころを控えない", ui.take_damage_notes("主人公", 1) is None)
+foe.current_hp, foe.max_hp, foe.status = 500, 500, {"毒刃": foe.status["毒刃"], "怯み": foe.status["怯み"]}
+worn[id(player)] = [("weapon", hero_blade), ("wearable", mail)]
 
 seen.clear()
 foe_turn_dealt = instant(lambda a, d: a - d, 400, 0)

@@ -62,9 +62,12 @@ stamp "injected"
 
 wait_stage title 90 >/dev/null || exit 1
 [ "$1" = "title" ] && { stamp "title"; exit 0; }
+wait_boot_settled 60 || stamp "boot not settled; going on"
 drive clicktext.py --wait 30 --args "$(jarg texts '["開始する"]')" >/dev/null
 stamp "title -> 開始する"
 wait_stage worlds 60 >/dev/null || exit 1
+# 「開始する」でもモジュールが読まれ、当て直しがもう1回起きることがある
+wait_boot_settled 60 || stamp "boot not settled; going on"
 drive clicktext.py --wait 20 --args "$(jarg texts "[\"$IML_DRIVE_WORLD\"]" contains true)" >/dev/null
 stamp "world picked"
 s=$(wait_stage playing 120) || { echo "$s"; exit 1; }

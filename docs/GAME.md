@@ -1077,8 +1077,12 @@ MOD 側でも「戦闘中は出さない」条件に使われるので、残骸�
   `None` を返すと抜けず、敵の次の手（継続効果など）を処理しに行く。
   一覧から消えた敵を引くと `KeyError`（`resolve_opponents`、`instantale.py:7266`）でワーカースレッドが死ぬ。
 - 敵の一覧が残ったまま戦闘の欄が畳まれると（大きさ 0）、その後に走る敵の欄の更新が
-  `ZeroDivisionError`（`scripts/hud/new_hud.py:2306` の `update_enemy_display`）でゲームごと落ちる。
+  `ZeroDivisionError`（`scripts/hud/new_hud.py:2307` の `update_enemy_display`。割る相手は `top_info_layout_battle` の高さ）でゲームごと落ちる。
   ゲーム自身の逃走は判定の中で敵を先に空にするので、この更新は欄が畳まれる前に済む。
+- 戦闘の点送りの最中に鞄を開いても、戦闘の欄は畳まれる（`[384, 456.3]` → `[0, 0]`。`333_` を切っても同じ）。
+  敵の欄の更新（`update_enemy_info` から `enemy_info` の差し替えを通って走る）は手の約1秒後に走るので、重なると上の 0 除算で落ちる。
+  更新が割り算で止まると、敵の名前で引く次の手が `resolve_opponents` の `KeyError` で止まる（更新を呼んで途中で失敗させた回で1回観察）。
+  ローダの手当ては [VERIFICATION §3.123](verification/3.123.md)。
 - 倒れた仲間も同じく `check_character_death` で一覧から外されるだけで、預けられない。
   一覧に居る仲間は主人公と一緒に動くので、もともと居場所（`location` の area / node / facility）を持たない
   （戦闘の前の控えでも、一覧に居る仲間の居場所はすべて None だった）。
