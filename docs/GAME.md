@@ -3959,7 +3959,7 @@ Atk:<n>(+<n>)\nDef:<n>(+<n>)\nExp:<n>/<n>\nGold:<n>\nAge:<n>\nSta:…\nLocation:
   （モンスター・衛兵）と
   `generate_enemy_image_from_character(world_name, name, fullbody_path, size)`
   （NPC の戦闘用の絵）。`131_` はここを包んでスレッドに旗を立て、
-  その中に居る間は工程の包みを全部ゲームのままにする
+  その中に居る間は立ち絵の処理と顔の処理を通さない
 - SD の段の設定（`character_generation_quality` の `highres_upscale` / `highres`）はここへ来る寸法を変えない。
   プロキシ MOD が 640x1216 で描いていても、この経路へ渡るのは 512x1024
 
@@ -3994,6 +3994,57 @@ HUD の `toggle_setting_window_visibility` を直に呼ぶと、ゲームが `At
 ゲームが背景を抜いた形は `pixelated_image_resized.png`（256x256）と `reduced_color_image.png`（128x128）の透明度にある。
 描いた絵に明るい背景が入ると、背景抜きが本体ごと消し、戦闘の画面では輪郭だけが残る（`343_` の描き直しで2回。VERIFICATION.md §3.65）。
 宿の犬小屋の部屋は背景を新しく描かず、ゲームの既定の背景を出す。
+
+#### 敵の絵の工程（2026-11-06 実測）
+
+`generate_enemy_image` の中の順は立ち絵と違う。
+`size` は `small` / `medium` / `large` で、縮める先が 96 / 128 / 200 になる。
+
+| 順 | 工程 | 中くらいの敵の寸法 |
+| --- | --- | --- |
+| 1 | `generate_image_real_lcm` | 描いた絵（プリセットで 512〜1024 の正方形） |
+| 2 | `remove_background` | 同じ |
+| 3 | `pixel_art_process(絵, 128, 128, num_colors='16')` | `(入力そのまま, 128x128)`。ゲームが使うのは2つ目 |
+| 4 | `add_border_to_image` | 128x128。白い縁を固定のピクセル数で足す |
+| 5 | `apply_dark_fantasy_tone`（引数なし） | 128x128。既定の `randomize=35` で雑音が乗る |
+| 6 | `reduce_image_colors(絵, 64)` | 128x128 |
+| 7 | 2倍に伸ばして保存（包めない） | 256x256。戦闘画面が読む `pixelated_image_resized.png` |
+
+- 戻り値は `(base_image.png のパス, pixelated_image_resized.png のパス, 正のプロンプト, 負のプロンプト)`
+- 7の2倍は入って来た絵の実寸を見る。1024x1024 を渡すと 2048x2048 を保存する
+- `generate_enemy_image_from_character(世界, 名前, 全身の絵のパス, size)` の `size` は `{"width": …, "height": …}` の辞書で、`pixel_art_process` をキーワード（`pixelation_width` / `pixelation_height`）で呼ぶ。
+  縁・色調・減色を通らず、2倍に伸ばして `characters\<名前>\opponent_image.png` に保存し、そのパスを文字列で返す。
+  `<名前>` のフォルダが無いと保存で `FileNotFoundError` になる
+- 戦闘画面の絵は `hud.enemy_images[敵の名前]` の `scripts.hud.new_hud:NearestNeighborImage`。
+  `on_texture` が `mag_filter` と `min_filter` を両方 `nearest` にする
+- 部品の大きさは実寸で決まらない。192x192 でも 1024x1024 でも 240x240 のまま（`fit_mode` は `contain`）。
+  画面の大きさと敵の数で決まる部分は測っていない
+- 依頼の敵は同じ名前の絵があれば使い回すので、新しく描かれないことがある（VERIFICATION.md §3.65 の記録と同じ）。描き直しは設定の画面の「画像の再生成」が戦闘中の最初の敵に効く
+
+#### 背景抜きのモデル（2026-11-06 実測）
+
+`scripts.image_processing.request_remove_background:remove_background(image, use_rembg_alpha_matting=True)` が `bin\rembg_sidecar\rembg.exe` の `POST /remove` を呼ぶ。
+サイドカーのポートは起動ごとに変わり（`url` に入る）、引数は `alpha_matting` だけで、モデルは u2net に固定。
+`generate_enemy_image` はこの関数を入口と同じスレッドで呼ぶ。
+ゲームのフォルダの `runtime\models\u2net\` には `u2net.onnx`・`isnet-anime.onnx`・`u2netp.onnx`・`u2net_human_seg.onnx` がある。
+
+敵は `(plain background,black background:1.1)` で描かれるが、モデルごとに本体を落とす絵が違う。
+
+| モデル | 残りやすい | 消えやすい |
+| --- | --- | --- |
+| u2net | 生き物・機械 | 飾りの多い人型 |
+| isnet-anime | 人型・飾り | 生き物・機械 |
+| u2net_human_seg | 人型の一部 | 人型でない敵。人型も大きく欠ける |
+
+ゲームの工程は透明度をそのまま運ぶので、本体の透明度が低いと荒くした絵では輪郭の線だけが残る。
+
+#### 背景の工程
+
+`generate_image_real_lcm` → `pixel_art_process(絵, 512, 256)` → `apply_dark_fantasy_tone` → `reduce_image_colors(絵, 16)` の順。
+`pixel_art_process` は `image_generation_background` の写しを呼び、色調と減色は `scripts.image_processing` のモジュールの属性を呼ぶ。
+立ち絵と敵は3つとも `from` の写しを持つので、それぞれの置き場を `alias_scan=False` で包むと片方だけに当たる。
+`apply_dark_fantasy_tone` に `randomize=0` を渡すと `np.random.randint` が `ValueError: high <= 0` を投げ、生成スレッドが死ぬ。
+下限の 1 は画素値が最大1落ちるだけ。
 
 #### 顔
 

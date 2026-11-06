@@ -3,12 +3,12 @@
   "api": 1,
   "kind": "fix",
   "name": {
-    "en": "Sharper portraits and better face detection",
-    "ja": "立ち絵の高画質化と顔認識精度の向上"
+    "en": "Sharper portraits, enemies and backgrounds, with more accurate background removal and face detection",
+    "ja": "立ち絵・敵・背景の高画質化、背景抜きと顔認識の精度向上"
   },
   "description": {
-    "en": "Before saving a generated picture the game shrinks it to a third of its size, doubles it back and cuts the colours down; the face is then cropped out of that. Skips both steps, so the background-removed drawing (512x1024) becomes the standing portrait as it is, and the face is re-cropped from it at 256x256. The 2x stretch the game applies in between is undone too. Faces are looked for first with YuNet (OpenCV's neural face detector, bundled), which finds most of the faces the game misses or mistakes for clothing; when it misses, the game's own detection runs, then a retry on a preprocessed copy. Enemies, monsters and backgrounds are left alone",
-    "ja": "ゲームは生成した絵を保存する前に3分の1へ縮め、2倍に伸ばし直して減色している。顔画像もその絵から切り出している。その2つの工程を通さず、背景を抜いた絵（512x1024）をそのまま立ち絵にし、顔もそこから 256x256 で切り直す。ゲームが途中で2倍に伸ばすぶんも戻す。顔はまず YuNet（OpenCV の深層学習の顔検出。同梱）で探す。ゲームが外す顔や服を顔として切る絵の大半で顔を当てる。外したらゲームの検出、それも外れたら前処理した絵で検出をやり直す。敵・モンスターと背景は触らない"
+    "en": "Before saving a generated picture the game shrinks it, cuts the colours down and adds noise; the face is then cropped out of the shrunken portrait. Each of portraits, enemies and backgrounds can skip those steps through its own setting (all off by default, so the pictures stay as the game makes them). With portraits on, the background-removed drawing becomes the standing portrait as it is and the face is re-cropped from it at 256x256. Background removal can use the anime-oriented model in the game folder, and enemies can combine two models so that bodies do not vanish or turn see-through. Faces are looked for first with YuNet (OpenCV's neural face detector, bundled), which finds most of the faces the game misses or mistakes for clothing; when it misses, the game's own detection runs, then a retry on a preprocessed copy",
+    "ja": "ゲームは生成した絵を保存する前に縮め、減色し、雑音を乗せている。顔画像も縮めた立ち絵から切り出している。立ち絵・敵・背景のそれぞれで、設定を入れるとこの工程を通さない（既定はすべて切で、ゲームのままの絵になる）。立ち絵を入れると、背景を抜いた絵をそのまま立ち絵にし、顔もそこから 256x256 で切り直す。背景抜きはゲームのフォルダのアニメ絵向けのモデルも選べ、敵は2つのモデルを合わせて本体が消えたり透けたりしにくくできる。顔はまず YuNet（OpenCV の深層学習の顔検出。同梱）で探す。ゲームが外す顔や服を顔として切る絵の大半で顔を当てる。外したらゲームの検出、それも外れたら前処理した絵で検出をやり直す"
   },
   "version": "19",
   "author": "R01/Flossian",
@@ -34,6 +34,70 @@
       "note": {
         "ja": "縮小と減色を通さず、背景を抜いた絵（512x1024）をそのまま立ち絵にする。顔もそこから 256x256 で切り直す。切るとゲームのまま（330x660 のドット絵寄り）。縮小と減色は別々には切れない（片方だけ飛ばしても細かさは戻らない）",
         "en": "Skips the shrink and colour-reduction steps so the background-removed 512x1024 drawing becomes the standing portrait, and the face is re-cropped from it at 256x256. Off = the game's own 330x660 pixel-art look. The two steps cannot be toggled separately; skipping only one does not restore any detail"
+      }
+    },
+    "SHARP_ENEMY": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "敵の絵を荒くしない",
+        "en": "Keep enemy pictures sharp"
+      },
+      "note": {
+        "ja": "縮小と減色を通さず、色調の雑音も落とす。暗い色調は残る。切るとゲームのまま。効くのはこれから描く敵だけで、既にある敵は描き直すまでドット絵寄りのまま",
+        "en": "Skips the shrink and colour reduction and drops the tone pass's noise; the dark tone itself stays. Off = the game's own look. Only enemies drawn from now on change; existing ones keep their pixel-art look until redrawn"
+      }
+    },
+    "ENEMY_BORDER": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "敵の絵に縁を付ける",
+        "en": "Keep the border on enemy pictures"
+      },
+      "note": {
+        "ja": "「敵の絵を荒くしない」が入のときだけ効く。入れるとゲームの白い縁を付ける。暗い背景で暗い敵の輪郭が分かりやすくなるが、線は細く途切れ、足元の影なども囲む。絵を描くときに決まる",
+        "en": "Only applies with sharp enemy pictures on. Adds the game's white border, which separates dark enemies from dark backgrounds but is thin and broken and also outlines leftovers such as shadows. Decided when the picture is drawn"
+      }
+    },
+    "SHARP_BACKGROUND": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "背景を荒くしない",
+        "en": "Keep backgrounds sharp"
+      },
+      "note": {
+        "ja": "縮小と減色を通さず、色調の雑音も落とす。暗い色調は残る。切るとゲームのまま。効くのはこれから描く背景だけで、既にある背景は描き直すと変わる",
+        "en": "Skips the shrink and colour reduction and drops the tone pass's noise; the dark tone itself stays. Off = the game's own look. Only backgrounds drawn from now on change; existing ones change when redrawn"
+      }
+    },
+    "CUTOUT_MODEL": {
+      "type": "choice",
+      "values": [
+        "game",
+        "isnet-anime"
+      ],
+      "default": "game",
+      "label": {
+        "ja": "背景の切り抜きのモデル",
+        "en": "Background removal model"
+      },
+      "note": {
+        "ja": "立ち絵と敵の背景を抜くモデル。game はゲームのまま（同梱の rembg。汎用の u2net）。isnet-anime はゲームのフォルダにあるアニメ絵向けのモデルで抜く。人物を削りにくく飾りも残すが、生き物や機械の敵は薄くなることがある。敵は下の設定で別に指定できる",
+        "en": "Model used to cut the background out of portraits and enemies. game keeps the game's own cutout (the bundled rembg with the general u2net). isnet-anime uses the anime-oriented model in the game folder, which keeps people and their decorations but can fade creatures and machines. Enemies can be handled separately with the setting below"
+      }
+    },
+    "ENEMY_CUTOUT_MERGE": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "敵の背景抜きを2つのモデルで合わせる",
+        "en": "Combine two models for enemy background removal"
+      },
+      "note": {
+        "ja": "敵だけ、u2net と isnet-anime の結果を合わせて薄い所を濃くする。本体が消えたり透けたりしにくくなるが、翼の内側などに黒い地が残ることがある。荒くする設定とは関係なく効く。これから描く敵に効き、既にいる敵は描き直すと変わる",
+        "en": "For enemies only, combines the u2net and isnet-anime results and strengthens faint areas. Bodies are less likely to vanish or turn see-through, but black background can remain, for example inside wings. Works regardless of the sharpening settings. Applies to enemies drawn from now on; existing ones change when redrawn"
       }
     },
     "FACE_YUNET": {

@@ -70,6 +70,21 @@ saves = modtool.saves_module(mod_dir=MOD_DIR)
 #: 設定の名前と既定値は `mod.json` の "settings" が唯一の出所（写しを持たない）。
 SETTING_DEFAULTS = modtool.defaults(MOD_DIR)
 
+#: 選択式の設定と、その選択肢。
+CUTOUT_SETTING = "CUTOUT_MODEL"
+CUTOUT_CHOICES = ("game", "isnet-anime")
+
+#: 設定の欄に並べる入切の項目（名前と画面の文）。
+SETTING_LABELS = (
+    ("SHARP_PORTRAIT", "立ち絵を荒くしない（縮小と減色を通さず、顔もそこから切り直す）"),
+    ("SHARP_ENEMY", "敵の絵を荒くしない（縮小と減色を通さず、雑音を落とす。色調は残す）"),
+    ("ENEMY_BORDER", "敵の絵に縁を付ける（「敵の絵を荒くしない」が入のときだけ効く）"),
+    ("SHARP_BACKGROUND", "背景を荒くしない（縮小と減色を通さず、雑音を落とす。色調は残す）"),
+    ("ENEMY_CUTOUT_MERGE", "敵の背景抜きを2つのモデルで合わせる（本体が消えたり透けたりしにくい。黒い地は残ることがある）"),
+    ("FACE_YUNET", "顔の検出に YuNet を使う（ゲームの検出より先に探す）"),
+    ("FACE_RETRY", "顔の検出をやり直す（YuNet もゲームも見つけられなかった回だけ）"),
+)
+
 #: NPC のフォルダにある絵。
 GENERATED = "generated_image.png"     # SD の出力。検出はこれに対して
 NO_BG = "no_bg_image.png"             # 背景を抜いた 512x1024
@@ -351,7 +366,7 @@ def build_window(root_dir, game_dir, base=""):
     from tkinter import messagebox, ttk
 
     root = tk.Tk()
-    root.title("立ち絵の高画質化と顔認識精度の向上")
+    root.title("立ち絵・敵・背景の高画質化、背景抜きと顔認識の精度向上")
     root.minsize(980, 640)
     root.geometry("1180x760")
     modtool.setup_theme(root, root_dir)
@@ -365,7 +380,7 @@ def build_window(root_dir, game_dir, base=""):
 
     outer = ttk.Frame(root, padding=12)
     outer.pack(fill="both", expand=True)
-    ttk.Label(outer, text="立ち絵の高画質化と顔認識精度の向上", style="Title.TLabel").pack(anchor="w")
+    ttk.Label(outer, text="立ち絵・敵・背景の高画質化、背景抜きと顔認識の精度向上", style="Title.TLabel").pack(anchor="w")
     ttk.Label(outer, style="Sub.TLabel",
               text="上は、これから作られる絵に効く MOD の設定。下は、既に居る NPC の顔を検出し直して切り直す道具").pack(anchor="w", pady=(0, 8))
 
@@ -373,18 +388,23 @@ def build_window(root_dir, game_dir, base=""):
     settings = modtool.load_settings(root_dir, MOD_DIR)
     box = ttk.LabelFrame(outer, text="設定（ゲームの中で効くもの）", padding=8)
     box.pack(fill="x")
-    sharp_var = tk.BooleanVar(value=settings["SHARP_PORTRAIT"])
-    retry_var = tk.BooleanVar(value=settings["FACE_RETRY"])
-    ttk.Checkbutton(box, text="立ち絵を荒くしない（縮小と減色を通さず、顔もそこから切り直す）",
-                    variable=sharp_var).pack(anchor="w")
-    ttk.Checkbutton(box, text="顔の検出をやり直す（ゲームが見つけられなかった回だけ）",
-                    variable=retry_var).pack(anchor="w")
+    # 保存は渡した項目でこの MOD の項を置き換えるので、宣言した設定を全部ここに並べる。
+    setting_vars = {}
+    for name, text in SETTING_LABELS:
+        setting_vars[name] = tk.BooleanVar(value=settings[name])
+        ttk.Checkbutton(box, text=text, variable=setting_vars[name]).pack(anchor="w")
+    cutout_row = ttk.Frame(box)
+    cutout_row.pack(anchor="w", pady=(4, 0))
+    ttk.Label(cutout_row, text="背景の切り抜きのモデル（game はゲームのまま）").pack(side="left")
+    setting_vars[CUTOUT_SETTING] = tk.StringVar(value=settings[CUTOUT_SETTING])
+    ttk.Combobox(cutout_row, textvariable=setting_vars[CUTOUT_SETTING], state="readonly", width=14,
+                 values=CUTOUT_CHOICES).pack(side="left", padx=(8, 0))
     setting_status = ttk.Label(box, style="Sub.TLabel", text="")
     setting_status.pack(side="right")
 
     def save_now():
         ok = modtool.save_settings(root_dir, MOD_DIR,
-                                   {"SHARP_PORTRAIT": sharp_var.get(), "FACE_RETRY": retry_var.get()})
+                                   {name: var.get() for name, var in setting_vars.items()})
         setting_status.configure(text="保存しました。次の注入から効きます" if ok else "保存できませんでした（settings/mod_settings.json）")
 
     ttk.Button(box, text="設定を保存", command=save_now).pack(side="right", padx=(0, 8))

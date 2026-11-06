@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""立ち絵を荒くする工程を通さず、顔は YuNet で先に探し、外れた回はやり直す。
+"""立ち絵・敵の絵・背景を荒くする工程を通さず、顔は YuNet で先に探し、外れた回はやり直す。
 
 ゲームは Stable Diffusion で描いた絵を、保存する前に**わざと荒くしている**
-（経路と寸法は GAME.md §2.30）:
+（経路と寸法は GAME.md §2.30。下は立ち絵。敵と背景は工程の順が違うので別の節に書く）:
 
     no_bg_image.png                512x1024   背景を抜いた絵
       pixel_art_process(512x1024) -> (512x1024, 165x330)
@@ -102,23 +102,60 @@ anime の回の `None` では呼び直さない。ここで拾って返すとゲ
 
 ## 効く範囲
 
-**これから作られる画像だけ**。既にある NPC の絵は荒いまま残る。
-背景は触らない（`image_generation_background` が持つ写しには当てない。
-`alias_scan=False` はそのため ― 元の1本に当てると張り替えで両方変わる）。
-
-**敵・モンスターも触らない。** 荒くする工程は NPC と敵が同じ関数を通るので、
-工程の側では見分けられない。入口の `generate_enemy_image`（モンスター・衛兵）と
+**これから作られる画像だけ**。既にある絵は荒いまま残る。
+荒くする工程は立ち絵と敵が同じ関数を通るので、工程の側では見分けられない。
+入口の `generate_enemy_image`（モンスター・衛兵）と
 `generate_enemy_image_from_character`（NPC の戦闘用の絵）を包み、
-その中に居る間はスレッドに旗を立てて、4つの包みを全部ゲームのままにする。
-入口の包みは旗を立てて元を呼ぶだけで、守るべき後処理が無いので `safe=True` にしない。
+その中に居る間はスレッドに旗を立てて、立ち絵の処理と顔の処理を通さない。
+入口の包みは `safe=True` にしない（投げたときにゲームが2度描く）。
+後処理は自分で例外を受ける。
+
+## 敵の絵（`SHARP_ENEMY`。工程と寸法は GAME.md §2.30）
+
+    描いた絵 → 背景抜き → pixel_art_process → 縁 → 色調 → reduce_image_colors → ゲームが2倍にする
+
+  * `pixel_art_process`: 立ち絵と同じく元を呼んで形だけ借り、`(絵, 絵の写し)` を返す
+  * 縁（`add_border_to_image`）: `ENEMY_BORDER` が切なら通さない。太さは固定のピクセル数で、
+    大きな絵では途切れた細い線になり、背景抜きの取り残しまで囲む
+  * 色調（`apply_dark_fantasy_tone`）: 色調は残し、雑音だけ下限まで落とす
+  * `reduce_image_colors`: 減色せず、入って来た絵を控えて返す
+  * 2倍: 実寸を見て倍にするので 2048x2048 になる。包めない位置にあるので、
+    入口が返した後で、戦闘画面が読むファイルを控えの絵で上書きする
+  * 戦闘画面（`NearestNeighborImage`）: 縮小も最近傍なので細部がギザつく。
+    敵の絵の縮小だけ線形にする。拡大は触らないので、既にある敵のドット絵は変わらない
+
+表示の大きさは部品が決める（実寸を変えても同じ）。
+`generate_enemy_image_from_character` は縮小して2倍に伸ばし、保存するだけで、縁・色調・減色を通らない。
+2倍は同じように戻す。
+
+## 背景（`SHARP_BACKGROUND`）
+
+    描いた絵 → pixel_art_process → 色調 → reduce_image_colors
+
+背景の工程は立ち絵の工程とは別の入口を持つ。
+`pixel_art_process` は `image_generation_background` の写しを、色調と減色はモジュールの属性を
+`alias_scan=False` で包むと、背景にだけ当たる（立ち絵と敵は `from` の写しを持つ。
+元の1本に当てると張り替えで両方変わる）。
+雑音は敵と同じく下限まで落とし、色調は残す。
+
+## 背景抜き（`CUTOUT_MODEL`・`ENEMY_CUTOUT_MERGE`。`cutout.py`）
+
+`remove_background` を包み、ゲームのフォルダのモデルで抜く。
+`ENEMY_CUTOUT_MERGE` が入なら、敵の入口の中だけ2つのモデルを合わせて濃くする。
+立ち絵は `CUTOUT_MODEL` に従う。
+抜けなければ（ファイルが無い・推論で落ちた）ゲームの切り抜きへ戻す。
+
+`CUTOUT_MODEL` は `343_` から移した設定で、`343_` の欄に残っていれば最初の起動で1度だけ移す。
 """
 
 import os
 import threading
+import time
 
+from instantale_modloader import config as loader_config
 from instantale_modloader import imagegen, patch
 
-from . import faces
+from . import cutout, faces
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる。TECH.md §3.8.3）------------
@@ -126,6 +163,22 @@ from . import faces
 # 縮小と減色を通さず、背景を抜いた絵をそのまま立ち絵にするか。
 # 既定は切（ゲームのまま。330x660 のドット絵寄り）。画風が変わるので、入れるのは選んだ人だけ。
 SHARP_PORTRAIT = False
+
+# 敵の絵の縮小・減色・雑音を通さないか。既定は切（ゲームのまま）。
+SHARP_ENEMY = False
+
+# `SHARP_ENEMY` が入のとき、ゲームの白い縁を付けるか。既定は切。
+ENEMY_BORDER = False
+
+# 背景の縮小・減色・雑音を通さないか。既定は切（ゲームのまま）。
+SHARP_BACKGROUND = False
+
+# 背景抜きのモデル。game はゲームのまま（サイドカーの u2net）、
+# isnet-anime はゲームのフォルダのアニメ絵向けのモデルで抜く（`cutout.py`）。
+CUTOUT_MODEL = "game"
+
+# 敵の背景抜きを、2つのモデルで合わせて濃くするか。既定は切（`CUTOUT_MODEL` のまま）。
+ENEMY_CUTOUT_MERGE = False
 
 # 顔の検出が外れた回に、前処理した絵でやり直すか。
 FACE_RETRY = True
@@ -150,6 +203,32 @@ _LOCAL = threading.local()
 #: 敵の絵の入口。この中に居る間は何も変えない（モンスター・衛兵と、NPC の戦闘用の絵）。
 ENEMY_ENTRIES = ("generate_enemy_image", "generate_enemy_image_from_character")
 
+#: ゲームが2倍にして保存し、戦闘画面が読む敵の絵（モンスター・衛兵と、NPC の戦闘用の絵）。
+ENEMY_SHOWN = ("pixelated_image_resized.png", "opponent_image.png")
+
+#: 背景の工程を持つモジュール。方式ごとに別のパッケージに居る。
+BACKGROUND_FORMAT = "image_generation.{}.image_generation_background"
+
+#: 背景の減色と色調が呼ぶ、モジュールの属性。
+BACKGROUND_REDUCE = "scripts.image_processing.reduce_color:reduce_image_colors"
+BACKGROUND_TONE = "scripts.image_processing.dark_fantasy_tone:apply_dark_fantasy_tone"
+
+#: ゲームの背景の切り抜き（rembg のサイドカーへ頼む関数）。
+CUTOUT_TARGET = "scripts.image_processing.request_remove_background:remove_background"
+
+#: `CUTOUT_MODEL` を前に持っていた MOD の欄（設定の移し替えに使う）。
+CUTOUT_OLD_OWNER = "343_stable_diffusion"
+
+#: 戦闘画面の敵の絵の部品。
+ENEMY_IMAGE_TEXTURE ="scripts.hud.new_hud:NearestNeighborImage.on_texture"
+
+#: `apply_dark_fantasy_tone(img, color, contrast, brightness, randomize)` の、img を除いた randomize の位置。
+TONE_RANDOMIZE_POS = 3
+
+#: 色調の雑音の下限。0 を渡すとゲームの関数が `np.random.randint(0, 0)` で投げ、生成スレッドが死ぬ。
+#: 1 なら画素値が最大1落ちるだけで見えない。
+TONE_QUIET = 1
+
 #: `detect_face_coordinates(image, cascade_path, padding, crop_size)` の引数名。
 #: 位置で来ても名前で来ても同じ形に揃えて、カスケードだけ差し替えて呼び直す。
 ARG_NAMES = ("cascade_path", "padding", "crop_size")
@@ -159,9 +238,46 @@ def dims(image):
     return "{}x{}".format(*image.size)
 
 
+def quiet_tone(orig, image, args, kwargs):
+    """色調はゲームのまま、雑音だけ下限まで落として呼ぶ。"""
+    if len(args) > TONE_RANDOMIZE_POS:
+        args = args[:TONE_RANDOMIZE_POS] + (TONE_QUIET,) + args[TONE_RANDOMIZE_POS + 1:]
+    else:
+        kwargs = dict(kwargs, randomize=TONE_QUIET)
+    return orig(image, *args, **kwargs)
+
+
+def take_over_cutout_setting(ctx, note):
+    """`343_` の欄に残った `CUTOUT_MODEL` を、この MOD の欄へ1度だけ移す。"""
+    global CUTOUT_MODEL
+    runtime_dir = getattr(ctx, "runtime_dir", None)
+    if not runtime_dir:
+        return
+    try:
+        store = loader_config.load_store_for_write(runtime_dir)
+        old = store.get(CUTOUT_OLD_OWNER)
+        if not isinstance(old, dict) or "CUTOUT_MODEL" not in old:
+            return
+        value = old.pop("CUTOUT_MODEL")
+        if not old:
+            store.pop(CUTOUT_OLD_OWNER)
+        own_name = os.path.basename(ctx.mod_dir)
+        own = store.get(own_name)
+        # この MOD の欄に既に値があれば、そちらを選び直したものとして尊重する。
+        if value == "isnet-anime" and not (isinstance(own, dict) and "CUTOUT_MODEL" in own):
+            store.setdefault(own_name, {})["CUTOUT_MODEL"] = value
+            CUTOUT_MODEL = value
+        loader_config.save_store(runtime_dir, store)
+        note("設定: 背景抜きのモデル {} を {} から移した".format(value, CUTOUT_OLD_OWNER))
+    except Exception as exc:
+        note("設定: 背景抜きのモデルを移せず {}: {}".format(type(exc).__name__, exc))
+
+
 def apply(ctx):
     # 打ち切らない。書くのは NPC の生成のたび（1体につき4〜5行）で、毎フレームではない。
     note = ctx.logger(LOG_BASENAME)
+    take_over_cutout_setting(ctx, note)
+    game_dir = ctx.game_dir
     # `ctx` の値は `apply()` の間だけ。カスケードの置き場は今のうちに控える。
     cascade_dir = os.path.join(ctx.game_dir, faces.CASCADE_DIR)
     yunet_path = os.path.join(ctx.mod_dir, faces.YUNET_MODEL)
@@ -179,24 +295,123 @@ def apply(ctx):
     def enemy():
         return getattr(_LOCAL, "enemy", False)
 
+    def sharp_enemy():
+        return enemy() and SHARP_ENEMY
+
+    def undo_doubling(result):
+        """ゲームが2倍にして保存した敵の絵を、2倍にする前の絵で上書きする。"""
+        source = getattr(_LOCAL, "enemy_source", None)
+        if source is None:
+            return
+        paths = result if isinstance(result, (tuple, list)) else (result,)
+        doubled = [p for p in paths if isinstance(p, str) and os.path.basename(p) in ENEMY_SHOWN]
+        if not doubled:
+            note("敵: 戻り値に戦闘画面の絵が無いので、2倍の絵のまま残す")
+            return
+        try:
+            source.save(doubled[0])
+            note("敵: 2倍の絵を {} に戻した".format(dims(source)))
+        except Exception as exc:
+            note("敵: 2倍の絵を戻せず {}: {}".format(type(exc).__name__, exc))
+
     def make_enemy_entry(name):
         @hook(name, required=False)
         def enemy_entry(orig, *args, **kwargs):
             _LOCAL.enemy = True
+            _LOCAL.enemy_source = None
             try:
-                return orig(*args, **kwargs)
+                result = orig(*args, **kwargs)
+                undo_doubling(result)
+                return result
             finally:
                 _LOCAL.enemy = False
+                _LOCAL.enemy_source = None
 
         return enemy_entry
 
     for entry in ENEMY_ENTRIES:
         make_enemy_entry(entry)
 
+    @ctx.wrap(CUTOUT_TARGET, required=False, safe=True)
+    def remove_background(orig, *args, **kwargs):
+        """設定に従ってゲームのフォルダのモデルで抜く。抜けなければゲームの切り抜きへ戻す。"""
+        image = args[0] if args else kwargs.get("image")
+        merge = enemy() and ENEMY_CUTOUT_MERGE
+        if image is None or not (merge or str(CUTOUT_MODEL) == "isnet-anime"):
+            return orig(*args, **kwargs)
+        needed = (cutout.ISNET, cutout.U2NET) if merge else (cutout.ISNET,)
+        missing = [m[0] for m in needed if not os.path.isfile(cutout.model_path(game_dir, m))]
+        if missing:
+            note("背景抜き: {} が無いのでゲームの切り抜きで抜く".format(", ".join(missing)))
+            return orig(*args, **kwargs)
+        start = time.time()
+        try:
+            got = cutout.cut_merged(image, game_dir) if merge else cutout.cut(image, cutout.model_path(game_dir))
+        except Exception as exc:
+            note("背景抜き: 抜けなかったのでゲームの切り抜きで抜く（{}: {}）".format(type(exc).__name__, exc))
+            return orig(*args, **kwargs)
+        note("背景抜き: {} {} {:.2f} 秒".format("2つのモデル" if merge else "isnet-anime", dims(got), time.time() - start))
+        return got
+
+    @hook("add_border_to_image", required=False, safe=True, alias_scan=False)
+    def add_border_to_image(orig, image, *args, **kwargs):
+        if sharp_enemy() and not ENEMY_BORDER:
+            return image
+        return orig(image, *args, **kwargs)
+
+    @hook("apply_dark_fantasy_tone", required=False, safe=True, alias_scan=False)
+    def creature_tone(orig, image, *args, **kwargs):
+        if sharp_enemy():
+            note("敵: 色調 {} 雑音を {} に".format(dims(image), TONE_QUIET))
+            return quiet_tone(orig, image, args, kwargs)
+        return orig(image, *args, **kwargs)
+
+    @ctx.wrap(ENEMY_IMAGE_TEXTURE, required=False, safe=True, alias_scan=False)
+    def on_texture(orig, widget, *args, **kwargs):
+        result = orig(widget, *args, **kwargs)
+        if SHARP_ENEMY and os.path.basename(str(getattr(widget, "source", None) or "")) in ENEMY_SHOWN:
+            texture = getattr(widget, "texture", None)
+            if texture is not None:
+                texture.min_filter = "linear"
+        return result
+
+    def background_pixel(orig, image, *args, **kwargs):
+        if not SHARP_BACKGROUND:
+            return orig(image, *args, **kwargs)
+        # 元の工程は形の保険として呼ぶ。形が違えばここで投げ、safe=True が素に落とす。
+        _big, _small = orig(image, *args, **kwargs)
+        note("背景: 縮小 {} をそのまま通す".format(dims(image)))
+        return image, image.copy()
+
+    for family in imagegen.families(backend):
+        ctx.wrap(BACKGROUND_FORMAT.format(family) + ":pixel_art_process",
+                 required=False, safe=True, alias_scan=False)(background_pixel)
+
+    @ctx.wrap(BACKGROUND_TONE, required=False, safe=True, alias_scan=False)
+    def background_tone(orig, image, *args, **kwargs):
+        if not SHARP_BACKGROUND:
+            return orig(image, *args, **kwargs)
+        note("背景: 色調 {} 雑音を {} に".format(dims(image), TONE_QUIET))
+        return quiet_tone(orig, image, args, kwargs)
+
+    @ctx.wrap(BACKGROUND_REDUCE, required=False, safe=True, alias_scan=False)
+    def background_reduce(orig, image, *args, **kwargs):
+        if not SHARP_BACKGROUND:
+            return orig(image, *args, **kwargs)
+        note("背景: 減色 {} をそのまま通す".format(dims(image)))
+        return image
+
     @hook("pixel_art_process", safe=True, alias_scan=False)
     def pixel_art_process(orig, image, *args, **kwargs):
         if enemy():
-            return orig(image, *args, **kwargs)
+            if not SHARP_ENEMY:
+                return orig(image, *args, **kwargs)
+            # 元の工程は形の保険として呼ぶ。形が違えばここで投げ、safe=True が素に落とす。
+            _big, _small = orig(image, *args, **kwargs)
+            # NPC の戦闘用の絵はこの後に減色を通らないので、ここでも控える。
+            _LOCAL.enemy_source = image
+            note("敵: 縮小 {} をそのまま通す".format(dims(image)))
+            return image, image.copy()
         if getattr(_LOCAL, "after_reduce", False):
             _LOCAL.after_reduce = False
             note("縮小: {} 顔の代わりを作る回なのでゲームに任せる".format(dims(image)))
@@ -215,7 +430,11 @@ def apply(ctx):
     @hook("reduce_image_colors", safe=True, alias_scan=False)
     def reduce_image_colors(orig, image, *args, **kwargs):
         if enemy():
-            return orig(image, *args, **kwargs)
+            if not SHARP_ENEMY:
+                return orig(image, *args, **kwargs)
+            _LOCAL.enemy_source = image
+            note("敵: 減色 {} をそのまま通す".format(dims(image)))
+            return image
         _LOCAL.after_reduce = True
         source = getattr(_LOCAL, "source", None)
         _LOCAL.source = None

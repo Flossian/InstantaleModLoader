@@ -51,7 +51,6 @@ from instantale_modloader import saves
 from instantale_modloader import ui
 
 from . import assets
-from . import cutout
 from . import img2img
 from . import live as hot
 from . import presets
@@ -156,10 +155,6 @@ PORTRAIT_PRESET = ""
 ENEMY_PRESET = ""
 BACKGROUND_PRESET = ""
 
-#: 背景の切り抜きのモデル（版27）。game はゲームのまま（サイドカーの u2net）、
-#: isnet-anime はゲームのフォルダのアニメ絵向けのモデルで抜く（`cutout.py`）。
-CUTOUT_MODEL = "game"
-
 #: 今の絵を下絵にした描き直し（img2img）。使うかどうかと、種類ごとのプリセット
 #: （空でゲーム既定のモデル）・強さ。入なら再生成のボタンに出る（再生成でだけ使う）。
 #: 既定は切（ゲームのまま）。sdcpp 系の出口だけで効く（`img2img.py`）。
@@ -202,9 +197,6 @@ FAILED_ATTR = "_mod343_failed_pipes"
 #: 343 が書き換える前のゲームの材料（manager のモジュールに持たせる）。
 #: プリセットのチェックポイントが空のとき（ゲームのまま）に使う。
 GAME_ATTR = "_mod343_game_materials"
-
-#: ゲームの背景の切り抜き（rembg のサイドカーへ頼む関数。版27 で isnet-anime に差し替えられる）。
-CUTOUT_TARGET = "scripts.image_processing.request_remove_background:remove_background"
 
 #: 設定の画面（ゲームを終了する・タイトルに戻る・画像の再生成）を開け閉めする関数。
 #: 開いた直後に「画像の再生成」を描き方ごとのボタンへ分ける。
@@ -1316,38 +1308,6 @@ def apply(ctx):
     install_observer()
     HANDOFF["attach"] = attach
     attach()
-
-    # ------------------------------------------------- 背景の切り抜き（版27）
-
-    cutout_file = cutout.model_path(game_dir)
-    cutout_seen = {}
-
-    @ctx.wrap(CUTOUT_TARGET, required=False, safe=True)
-    def remove_background(orig, *args, **kwargs):
-        """設定が isnet-anime なら、サイドカー（u2net 固定）の代わりに isnet-anime で抜く。
-
-        抜けなければ（ファイルが無い・推論で落ちた）ゲームの切り抜きへ戻す。
-        """
-        if str(live.values.get("CUTOUT_MODEL") or "game") != "isnet-anime":
-            return orig(*args, **kwargs)
-        image = frames.arg(args, kwargs, "image", 0)
-        if image is None or not os.path.isfile(cutout_file):
-            warn("cutout-missing", "isnet-anime が使えないのでゲームの切り抜きで抜く"
-                 "（{} が無い）".format(cutout_file))
-            return orig(*args, **kwargs)
-        start = time.time()
-        try:
-            got = cutout.cut(image, cutout_file)
-        except Exception as exc:
-            warn("cutout-failed", "isnet-anime で抜けなかったのでゲームの切り抜きで抜く"
-                 "（{}: {}）".format(type(exc).__name__, exc))
-            return orig(*args, **kwargs)
-        count = cutout_seen.get("count", 0) + 1
-        cutout_seen["count"] = count
-        if count <= 3 or count % 50 == 0:
-            write("cutout: isnet-anime {}x{} {:.2f} 秒（{} 枚目）".format(
-                got.size[0], got.size[1], time.time() - start, count))
-        return got
 
     # ------------------------------------- 再生成のボタンを描き方ごとに分ける
 

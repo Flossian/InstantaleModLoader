@@ -13,6 +13,11 @@
              ゲームのカスケードと、実際に外れた絵で通す**（無ければ飛ばす）。
              呼び直すのは包みを剥がした素の関数で、`orig` は本番の1回だけ。
              素の関数が投げても None で返す。anime の回の None では呼び直さない
+  敵       … 既定はゲームのまま。入れると縮小と減色を通さず、縁は設定で選び、雑音は下限へ。
+             2倍の絵は返った後に戻す。戦闘画面の絵の縮小だけ線形にする
+  背景     … 既定はゲームのまま。入れると縮小と減色を通さず、雑音は下限へ
+  背景抜き … 既定はゲームのまま。設定に従ってモデルを選び、敵は2つのモデルを合わせる。
+             抜けなければゲームへ戻す。343 の欄に残った設定は1度だけ移す
   設置     … `safe=True` / `alias_scan=False`。対象名はリコンのダンプに在る
 """
 import importlib.util
@@ -138,6 +143,8 @@ def fresh_mod(**overrides):
     overrides.setdefault("SHARP_PORTRAIT", True)
     # YuNet（版19）は「YuNet」の節で入れて確かめる。ほかの節はゲームの検出とやり直しだけを見る。
     overrides.setdefault("FACE_YUNET", False)
+    game_dir = overrides.pop("GAME_DIR_OVERRIDE", None)
+    runtime_dir = overrides.pop("RUNTIME_DIR_OVERRIDE", None)
     spec = importlib.util.spec_from_file_location(
         "mod_sharp_portrait", MOD, submodule_search_locations=[MOD_DIR])
     module = importlib.util.module_from_spec(spec)
@@ -146,6 +153,10 @@ def fresh_mod(**overrides):
     for name, value in overrides.items():
         setattr(module, name, value)
     ctx = FakeCtx(OUT_DIR)
+    if game_dir:
+        ctx.game_dir = game_dir
+    if runtime_dir:
+        ctx.runtime_dir = runtime_dir
     log_path = ctx.out_path(module.LOG_BASENAME)
     if os.path.exists(log_path):
         os.remove(log_path)
@@ -591,13 +602,260 @@ def main():
         pass
     check("入口が投げても旗は降りる", pixel(Original(), FakeImage(512, 1024, "元絵"), 165, 330)[1].who == "元絵")
 
+    print("敵の絵を荒くしない")
+    module, ctx, pixel, reduce_ = fresh_mod(SHARP_ENEMY=True)
+    entries = {name: ctx.hooks[module.CREATURE + ":" + name] for name in module.ENEMY_ENTRIES}
+    border = ctx.hooks[module.CREATURE + ":add_border_to_image"]
+    tone = ctx.hooks[module.CREATURE + ":apply_dark_fantasy_tone"]
+    inside = {}
+
+    def game_enemy_sharp(world, race, name, appearance, size):
+        orig = Original()
+        drawn = FakeImage(1024, 1024, "敵の絵")
+        big, small = pixel(orig, drawn, 128, 128)
+        inside["pixel"] = (orig.calls, big is drawn, small is not drawn, small.size)
+        inside["border"] = border(lambda image, *a, **k: "ゲームの縁", small)
+        toned = tone(lambda image, *a, **k: (image, a, k), small)
+        inside["tone_kw"] = toned[2]
+        inside["tone_pos"] = tone(lambda image, *a, **k: (a, k), small, 0.3, 1.5, 0.8, 35)
+        calls = []
+        inside["reduce"] = reduce_(lambda image, *a, **k: calls.append(1), small, 64)
+        inside["reduce_calls"] = len(calls)
+        inside["small"] = small
+        return ("base_image.png", os.path.join(OUT_DIR, module.ENEMY_SHOWN[0]), "正", "負")
+
+    saved = []
+    original_save = getattr(FakeImage, "save", None)
+    FakeImage.save = lambda self, path: saved.append((self, path))
+    got = entries["generate_enemy_image"](game_enemy_sharp, "世界", "orc", "オーク", "big", "large")
+    check("縮小は元の工程を形の保険に呼び、(絵, 写し) を返す", inside["pixel"] == (1, True, True, (1024, 1024)), inside["pixel"])
+    check("縁は既定で通さない", inside["border"] is inside["small"], inside["border"])
+    check("色調は雑音だけ下限へ（名前で）", inside["tone_kw"] == {"randomize": module.TONE_QUIET}, inside["tone_kw"])
+    check("色調は雑音だけ下限へ（位置で）",
+          inside["tone_pos"] == ((0.3, 1.5, 0.8, module.TONE_QUIET), {}), inside["tone_pos"])
+    check("減色は元の工程を呼ばず、入って来た絵を返す",
+          inside["reduce"] is inside["small"] and inside["reduce_calls"] == 0, inside["reduce_calls"])
+    check("返った後に2倍の絵を2倍の前の絵で上書きする",
+          len(saved) == 1 and saved[0][0] is inside["small"]
+          and os.path.basename(saved[0][1]) == module.ENEMY_SHOWN[0], saved)
+    check("入口の戻り値はそのまま", got[0] == "base_image.png")
+
+    del saved[:]
+    entries["generate_enemy_image"](lambda *a: game_enemy_sharp(*a)[:1], "世界", "orc", "オーク", "big", "large")
+    check("戻り値に絵が無ければ上書きしない", not saved and any("2倍の絵のまま" in line for line in log_lines(module, ctx)))
+
+    del saved[:]
+
+    def game_from_character(world, name, fullbody, size):
+        orig = Original()
+        inside["npc"] = pixel(orig, FakeImage(512, 1024, "立ち絵"), pixelation_width=128, pixelation_height=256)
+        inside["npc_source"] = inside["npc"][0]
+        return os.path.join(OUT_DIR, "opponent_image.png")
+
+    entries["generate_enemy_image_from_character"](game_from_character, "世界", "名前", "path", {"width": 128})
+    check("NPC の戦闘用の絵は縮小を素通しし、2倍の絵も戻す（減色を通らない経路）",
+          inside["npc"][1].who == "立ち絵" and inside["npc"][1].size == (512, 1024)
+          and len(saved) == 1 and saved[0][0] is inside["npc_source"]
+          and os.path.basename(saved[0][1]) == "opponent_image.png", saved)
+    del saved[:]
+
+    def game_boom_after_reduce(*a, **k):
+        reduce_(Original(), FakeImage(256, 256, "途中の絵"), 64)
+        raise RuntimeError("boom")
+
+    try:
+        entries["generate_enemy_image"](game_boom_after_reduce, "世界", "orc", "オーク", "big", "large")
+    except RuntimeError:
+        pass
+    check("入口が投げたら上書きせず、控えも残さない", not saved and module._LOCAL.enemy_source is None, saved)
+    entries["generate_enemy_image"](lambda *a: ("base_image.png", module.ENEMY_SHOWN[0]), "世界", "orc", "オーク", "big", "large")
+    check("減色を通らなかった回は上書きしない", not saved, saved)
+
+    def boom_save(self, path):
+        raise OSError("disk")
+
+    FakeImage.save = boom_save
+    def game_save_fails(*a):
+        reduce_(Original(), FakeImage(256, 256, "途中の絵"), 64)
+        return ("base_image.png", module.ENEMY_SHOWN[0])
+
+    result = entries["generate_enemy_image"](game_save_fails, "世界", "orc", "オーク", "big", "large")
+    check("上書きに失敗しても戻り値を返す", result[0] == "base_image.png"
+          and any("戻せず" in line for line in log_lines(module, ctx)), log_lines(module, ctx))
+    if original_save is None:
+        del FakeImage.save
+    else:
+        FakeImage.save = original_save
+
+    module.ENEMY_BORDER = True
+    entries["generate_enemy_image"](
+        lambda *a: inside.update(border=border(lambda image, *x, **k: "ゲームの縁", FakeImage(8, 8))) or (),
+        "世界", "orc", "オーク", "big", "large")
+    check("ENEMY_BORDER が入なら縁を通す", inside["border"] == "ゲームの縁", inside["border"])
+    module.ENEMY_BORDER = False
+    outside = FakeImage(8, 8)
+    check("入口の外の縁はゲームのまま", border(lambda image: "ゲームの縁", outside) == "ゲームの縁")
+    check("入口の外の色調はゲームのまま", tone(lambda image, **k: k, outside) == {})
+    module.SHARP_PORTRAIT = False
+    after = pixel(Original(), FakeImage(512, 1024, "元絵"), 165, 330)
+    check("立ち絵の設定は敵の設定と独立", after[1].who == "ゲーム", after[1].who)
+
+    print("戦闘画面の絵の縮小")
+    texture_hook = ctx.hooks[module.ENEMY_IMAGE_TEXTURE]
+    check("部品のフックは safe=True", ctx.kwargs[module.ENEMY_IMAGE_TEXTURE].get("safe") is True)
+
+    def widget(source):
+        return types.SimpleNamespace(source=source, texture=types.SimpleNamespace(mag_filter="nearest", min_filter="nearest"))
+
+    for name in module.ENEMY_SHOWN:
+        part = widget(os.path.join("monsters", "orc", name))
+        texture_hook(lambda w, *a: None, part, None, None)
+        check("{} は縮小だけ線形".format(name),
+              part.texture.min_filter == "linear" and part.texture.mag_filter == "nearest", part.texture)
+    part = widget(os.path.join("characters", "x", "reduced_color_image.png"))
+    texture_hook(lambda w, *a: None, part, None, None)
+    check("敵の絵でなければ触らない", part.texture.min_filter == "nearest")
+    part = widget(None)
+    part.texture = None
+    check("絵が無くても落ちない", texture_hook(lambda w, *a: "素", part, None, None) == "素")
+    module.SHARP_ENEMY = False
+    part = widget(os.path.join("monsters", "orc", module.ENEMY_SHOWN[0]))
+    texture_hook(lambda w, *a: None, part, None, None)
+    check("設定が切ならゲームのまま", part.texture.min_filter == "nearest")
+
+    print("背景")
+    module, ctx, pixel, reduce_ = fresh_mod()
+    check("既定は切", module.SHARP_BACKGROUND is False and module.SHARP_ENEMY is False and module.ENEMY_BORDER is False)
+    targets = [t for t in ctx.hooks if t.endswith("image_generation_background:pixel_art_process")]
+    check("背景の縮小に当たる", targets and all(ctx.kwargs[t].get("required") is False for t in targets), sorted(ctx.hooks))
+    bg_pixel = ctx.hooks[targets[0]]
+    bg_tone = ctx.hooks[module.BACKGROUND_TONE]
+    bg_reduce = ctx.hooks[module.BACKGROUND_REDUCE]
+    picture = FakeImage(1024, 512, "背景")
+    check("切なら縮小はゲームのまま", bg_pixel(Original(), picture, 512, 256)[1].who == "ゲーム")
+    check("切なら色調はゲームのまま", bg_tone(lambda image, *a, **k: (a, k), picture) == ((), {}))
+    check("切なら減色はゲームのまま", bg_reduce(lambda image, *a, **k: "ゲーム", picture, 16) == "ゲーム")
+    module.SHARP_BACKGROUND = True
+    orig = Original()
+    big, small = bg_pixel(orig, picture, 512, 256)
+    check("入なら縮小は形の保険に呼んで (絵, 写し) を返す",
+          orig.calls == 1 and big is picture and small is not picture and small.who == "背景", (orig.calls, small))
+    check("入なら雑音だけ下限へ", bg_tone(lambda image, *a, **k: k, picture) == {"randomize": module.TONE_QUIET})
+    check("入なら減色は入って来た絵", bg_reduce(lambda image, *a, **k: "ゲーム", picture, 16) is picture)
+    source = FakeImage(512, 1024, "元絵")
+    check("背景の設定は立ち絵の工程に効かない",
+          pixel(Original(), source, 165, 330)[1].who == "元絵" and module.SHARP_ENEMY is False)
+    module.SHARP_PORTRAIT = False
+    check("背景の設定は立ち絵の工程をゲームのままにする", pixel(Original(), source, 165, 330)[1].who == "ゲーム")
+
+    print("背景抜き")
+    module, ctx, pixel, reduce_ = fresh_mod()
+    cut_hook = ctx.hooks[module.CUTOUT_TARGET]
+    check("背景抜きのフックは safe=True", ctx.kwargs[module.CUTOUT_TARGET].get("safe") is True)
+
+    def game_cut(image, use_rembg_alpha_matting=True):
+        return ("ゲーム", image, use_rembg_alpha_matting)
+
+    check("既定はゲームの切り抜きのまま（引数も素通し）",
+          cut_hook(game_cut, "絵", use_rembg_alpha_matting=False) == ("ゲーム", "絵", False))
+    entry = ctx.hooks[module.CREATURE + ":generate_enemy_image"]
+    check("既定は敵の入口の中でもゲームの切り抜きのまま",
+          entry(lambda *a: cut_hook(game_cut, "絵"), "世界", "orc", "オーク", "big", "large") == ("ゲーム", "絵", True))
+
+    tmp_game = os.path.join(OUT_DIR, "fake_game")
+    model_dir = os.path.join(tmp_game, module.cutout.MODEL_DIR)
+    os.makedirs(model_dir, exist_ok=True)
+    for model in (module.cutout.ISNET, module.cutout.U2NET):
+        path = os.path.join(model_dir, model[0])
+        if os.path.exists(path):
+            os.remove(path)
+    module, ctx, pixel, reduce_ = fresh_mod(CUTOUT_MODEL="isnet-anime", ENEMY_CUTOUT_MERGE=True, GAME_DIR_OVERRIDE=tmp_game)
+    cut_hook = ctx.hooks[module.CUTOUT_TARGET]
+    entry = ctx.hooks[module.CREATURE + ":generate_enemy_image"]
+    check("モデルが無ければゲームの切り抜きへ戻す",
+          cut_hook(game_cut, "絵") == ("ゲーム", "絵", True)
+          and any("isnet-anime.onnx が無い" in line for line in log_lines(module, ctx)), log_lines(module, ctx))
+    for model in (module.cutout.ISNET, module.cutout.U2NET):
+        io.open(os.path.join(model_dir, model[0]), "wb").write(b"x")
+    calls = []
+    real_cut, real_merged = module.cutout.cut, module.cutout.cut_merged
+    module.cutout.cut = lambda image, path: calls.append(("isnet", path)) or FakeImage(8, 8, "isnet")
+    module.cutout.cut_merged = lambda image, game: calls.append(("merged", game)) or FakeImage(8, 8, "merged")
+    try:
+        check("立ち絵は CUTOUT_MODEL に従う", cut_hook(game_cut, "絵").who == "isnet", calls)
+        check("キーワードで来た絵も読む", cut_hook(game_cut, image="絵").who == "isnet", calls)
+        got = entry(lambda *a: cut_hook(game_cut, "絵"), "世界", "orc", "オーク", "big", "large")
+        check("敵の入口の中は2つのモデルを合わせる", got.who == "merged" and calls[-1] == ("merged", tmp_game), calls)
+        check("入口を抜ければ立ち絵の扱いに戻る", cut_hook(game_cut, "絵").who == "isnet", calls)
+        module.CUTOUT_MODEL = "game"
+        check("モデルが game でも、敵の合わせは効く",
+              entry(lambda *a: cut_hook(game_cut, "絵"), "世界", "orc", "オーク", "big", "large").who == "merged")
+        check("モデルが game なら、立ち絵はゲームの切り抜き", cut_hook(game_cut, "絵")[0] == "ゲーム")
+        module.ENEMY_CUTOUT_MERGE = False
+        check("合わせが切なら、敵も CUTOUT_MODEL に従う",
+              entry(lambda *a: cut_hook(game_cut, "絵"), "世界", "orc", "オーク", "big", "large")[0] == "ゲーム")
+        module.ENEMY_CUTOUT_MERGE = True
+
+        def boom(image, game):
+            raise RuntimeError("推論で落ちた")
+
+        module.cutout.cut_merged = boom
+        got = entry(lambda *a: cut_hook(game_cut, "絵"), "世界", "orc", "オーク", "big", "large")
+        check("推論で落ちたらゲームの切り抜きへ戻す",
+              got[0] == "ゲーム" and any("抜けなかった" in line for line in log_lines(module, ctx)), got)
+    finally:
+        module.cutout.cut, module.cutout.cut_merged = real_cut, real_merged
+    check("モデルの場所はゲームのフォルダの runtime/models/u2net",
+          module.cutout.model_path("G", module.cutout.U2NET).replace("\\", "/") == "G/runtime/models/u2net/u2net.onnx")
+    try:
+        import numpy as np
+        from PIL import Image
+    except ImportError:
+        print("  --   numpy か PIL が無いので、マスクを合わせる検査は飛ばす")
+    else:
+        first = Image.fromarray(np.array([[0, 0, 200, 92, 24, 160]], dtype=np.uint8), "L")
+        second = Image.fromarray(np.array([[0, 200, 0, 0, 10, 30]], dtype=np.uint8), "L")
+        merged = np.asarray(module.cutout.merged_mask(first, second))[0].tolist()
+        check("濃いほうを取って薄い所を濃くする", merged == [0, 255, 255, 127, 0, 255], merged)
+
+    print("背景抜きの設定の移し替え")
+    runtime = os.path.join(OUT_DIR, "fake_root", "runtime")
+    os.makedirs(runtime, exist_ok=True)
+    store_file = module.loader_config.store_path(runtime)
+    os.makedirs(os.path.dirname(store_file), exist_ok=True)
+
+    def run_take_over(store):
+        with io.open(store_file, "w", encoding="utf-8") as fh:
+            json.dump(store, fh, ensure_ascii=False)
+        probe, ctx_probe, _, _ = fresh_mod(RUNTIME_DIR_OVERRIDE=runtime)
+        with io.open(store_file, encoding="utf-8") as fh:
+            return probe, json.load(fh)
+
+    own = os.path.basename(MOD_DIR)
+    probe, saved_store = run_take_over({module.CUTOUT_OLD_OWNER: {"CUTOUT_MODEL": "isnet-anime", "IMG2IMG": True}, "他": {"X": 1}})
+    check("343 の欄から移し、他の項目は残す",
+          saved_store == {module.CUTOUT_OLD_OWNER: {"IMG2IMG": True}, "他": {"X": 1}, own: {"CUTOUT_MODEL": "isnet-anime"}}, saved_store)
+    check("移した起動から効く", probe.CUTOUT_MODEL == "isnet-anime", probe.CUTOUT_MODEL)
+    probe, saved_store = run_take_over({module.CUTOUT_OLD_OWNER: {"CUTOUT_MODEL": "game"}})
+    check("既定の値なら移さず、空の欄も消す", saved_store == {} and probe.CUTOUT_MODEL == "game", saved_store)
+    probe, saved_store = run_take_over({module.CUTOUT_OLD_OWNER: {"CUTOUT_MODEL": "isnet-anime"}, own: {"CUTOUT_MODEL": "game"}})
+    check("この MOD に値があれば上書きしない",
+          saved_store == {own: {"CUTOUT_MODEL": "game"}} and probe.CUTOUT_MODEL == "game", saved_store)
+    probe, saved_store = run_take_over({"他": {"X": 1}})
+    check("移すものが無ければ何も変えない", saved_store == {"他": {"X": 1}}, saved_store)
+    with io.open(store_file, "w", encoding="utf-8") as fh:
+        fh.write("{壊れた")
+    probe, ctx_probe, _, _ = fresh_mod(RUNTIME_DIR_OVERRIDE=runtime)
+    with io.open(store_file, encoding="utf-8") as fh:
+        check("壊れた設定ファイルは書き換えない", fh.read() == "{壊れた")
+    check("壊れていても MOD は動く", any("移せず" in line for line in log_lines(probe, ctx_probe)), log_lines(probe, ctx_probe))
+
     print("設置")
     module, ctx, pixel, reduce_ = fresh_mod()
-    hooks_of_steps = {t: kw for t, kw in ctx.kwargs.items() if t.rsplit(":", 1)[1] not in module.ENEMY_ENTRIES}
+    hooks_of_steps ={t: kw for t, kw in ctx.kwargs.items() if t.rsplit(":", 1)[1] not in module.ENEMY_ENTRIES}
     check("工程の包みは全て safe=True", all(kw.get("safe") for kw in hooks_of_steps.values()), hooks_of_steps)
-    check("工程の包みは全て alias_scan=False",
-          all(kw.get("alias_scan") is False for kw in hooks_of_steps.values()), hooks_of_steps)
-    check("背景には当たらない", not any("background" in t for t in ctx.hooks), sorted(ctx.hooks))
+    check("工程の包みは全て alias_scan=False（ゲームの写しごと差し替える背景抜きを除く）",
+          all(kw.get("alias_scan") is False for t, kw in hooks_of_steps.items() if t != module.CUTOUT_TARGET), hooks_of_steps)
     if os.path.exists(RECON):
         with io.open(RECON, encoding="utf-8") as fh:
             dump = fh.read()
@@ -608,7 +866,7 @@ def main():
             if head in dump:
                 tail = dump.split(head, 1)[-1].split("\n", 2)[-1]
                 body = tail.split("\n====", 1)[0]
-            check("リコンのダンプに在る: " + name, bool(body) and "def {}(".format(func) in body)
+            check("リコンのダンプに在る: " + name, bool(body) and "def {}(".format(func.rsplit(".", 1)[-1]) in body)
     else:
         print("  --   リコンのダンプが無いので照合は飛ばす")
 

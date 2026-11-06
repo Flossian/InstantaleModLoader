@@ -106,7 +106,6 @@ MODEL_GROUPS = (
     ("モデルの差し替え (空 = ゲームのまま)", ("CHECKPOINT_PATH", "TAESD_PATH",
                                               "VAE_PATH", "LORA_DIR")),
     ("安全弁", ("MODEL_SAFETY", "STRIP_LORA")),
-    ("背景の切り抜き", ("CUTOUT_MODEL",)),
     ("実験用", ("DISABLE_TAESD", "DISABLE_VAE", "DIFFUSERS_RESIZE")),
 )
 

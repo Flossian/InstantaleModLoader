@@ -486,52 +486,6 @@ check("上限なしは今までどおり倍率だけ", SZ.scaled(768, 512, 2.0) 
 check("上限より短い1段目には効かない（立ち絵 256x512 を 1.625 倍）",
       SZ.scaled(256, 512, 1.625, 1664) == (448, 832), SZ.scaled(256, 512, 1.625, 1664))
 
-print("背景の切り抜き（版27）")
-CUT = MOD.CUTOUT_TARGET
-
-
-class _Cut(object):
-    size = (640, 1280)
-
-
-def _game_cut(image, use_rembg_alpha_matting=True):
-    return ("game", image, use_rembg_alpha_matting)
-
-
-ctx_cut = fresh()
-check("切り抜きの関数を包む", CUT in ctx_cut.hooks, sorted(ctx_cut.hooks))
-check("既定（game）はゲームの切り抜きのまま",
-      ctx_cut.hooks[CUT](_game_cut, "img", use_rembg_alpha_matting=False) == ("game", "img", False))
-ctx_cut = fresh(CUTOUT_MODEL="isnet-anime")
-got = ctx_cut.hooks[CUT](_game_cut, "img")
-check("isnet-anime でもモデルのファイルが無ければゲームの切り抜きに戻す",
-      got == ("game", "img", True) and any(k == "cutout-missing" for k, _ in ctx_cut.warnings),
-      (got, ctx_cut.warnings))
-_onnx = MOD.cutout.model_path(ctx_cut.game_dir)
-os.makedirs(os.path.dirname(_onnx), exist_ok=True)
-io.open(_onnx, "wb").write(b"x")
-_real_cut = MOD.cutout.cut
-try:
-    MOD.cutout.cut = lambda image, path: _Cut()
-    got = ctx_cut.hooks[CUT](_game_cut, "img")
-    check("ファイルがあれば isnet-anime の結果を返す（位置引数の絵も読む）", isinstance(got, _Cut), got)
-    got = ctx_cut.hooks[CUT](_game_cut, image="img")
-    check("キーワードで来た絵も読む", isinstance(got, _Cut), got)
-    check("切り抜いた記録を残す", any(n.startswith("cutout: isnet-anime 640x1280") for n in ctx_cut.notes),
-          ctx_cut.notes[-3:])
-
-    def _boom(image, path):
-        raise RuntimeError("推論で落ちた")
-    MOD.cutout.cut = _boom
-    got = ctx_cut.hooks[CUT](_game_cut, "img")
-    check("isnet-anime で落ちたらゲームの切り抜きに戻す",
-          got == ("game", "img", True) and any(k == "cutout-failed" for k, _ in ctx_cut.warnings), got)
-finally:
-    MOD.cutout.cut = _real_cut
-check("モデルの場所はゲームのフォルダの runtime/models/u2net/isnet-anime.onnx",
-      MOD.cutout.model_path("G").replace("\\", "/") == "G/runtime/models/u2net/isnet-anime.onnx",
-      MOD.cutout.model_path("G"))
-
 print("LoRA タグ")
 ctx_lora = fresh(STRIP_LORA=True)
 MOD.MARKS.kind, MOD.MARKS.func = "background", "generate_image_real_lcm"

@@ -483,22 +483,6 @@
         "en": "Empty draws without a preset (the checkpoint replacement and the values on the other tabs). A custom preset name draws only backgrounds with that preset's checkpoint, TAESD, resolution, sampler and LoRA tag removal. It loads a second model besides the game's, which uses more VRAM."
       }
     },
-    "CUTOUT_MODEL": {
-      "type": "choice",
-      "values": [
-        "game",
-        "isnet-anime"
-      ],
-      "default": "game",
-      "label": {
-        "ja": "背景の切り抜きのモデル",
-        "en": "Background removal model"
-      },
-      "note": {
-        "ja": "立ち絵と敵の背景を抜くモデル。game はゲームのまま（同梱の rembg。汎用の u2net）。isnet-anime はゲームのフォルダにあるアニメ絵向けのモデルで抜く。人物の周りの飾りと人物を取り違えて体を削ることが減り、1枚 0.4〜0.6 秒（CPU）で済む。ファイルが無いか抜けないときはゲームの切り抜きに戻す。設定は描くたびに読み直す",
-        "en": "Model used to cut the background out of portraits and enemies. game keeps the game's own cutout (the bundled rembg with the general u2net). isnet-anime uses the anime-oriented model already in the game folder, which cuts away parts of the character far less often and takes 0.4-0.6 s per image on the CPU. Falls back to the game's cutout if the file is missing or the cutout fails. Re-read on every image"
-      }
-    },
     "IMG2IMG": {
       "type": "bool",
       "default": false,
