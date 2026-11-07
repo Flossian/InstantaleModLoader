@@ -195,6 +195,7 @@ BANDS = (
         "341_shopkeeper_attitude",
         "342_attack_animations",
         "343_stable_diffusion",
+        "345_date_display",
     )),
     #: 提供（4xx）は出どころの帯なので kind を固定しない（TECH.md §3.2.2）。
     (None, CONTRIB_HEAD, (

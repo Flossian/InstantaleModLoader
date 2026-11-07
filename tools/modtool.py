@@ -849,14 +849,18 @@ class _Form(object):
     型に戻すのは保存の直前に `coerce_all` が1箇所で行う。
     入力欄ごとに型を持たせると、打ちかけの「1」を数として読もうとして
     途中の状態を弾いてしまう。
+
+    `editors` は `{設定名: 関数(親, StringVar) → 部品}`。1行の値を表で編集する項目に、
+    Entry の代わりに置く（`345_` の暦）。値は `StringVar` の文字列のままなので、保存も比較も他の項目と同じ。
     """
 
-    def __init__(self, parent, found, note_of):
+    def __init__(self, parent, found, note_of, editors=None):
         import tkinter as tk
         from tkinter import ttk
 
         self.decls = found
         self.vars = {}
+        editors = editors or {}
         # 1列目（入力欄）だけ伸ばす。0列目のラベルは字の幅のまま。
         parent.columnconfigure(1, weight=1)
         # 1項目で2行使う（入力欄の行と、その下の説明の行）。だから row は 2 ずつ進む。
@@ -886,6 +890,9 @@ class _Form(object):
                 ttk.Combobox(parent, textvariable=var,
                              values=[_choice_text(decl, v) for v in decl["values"]],
                              state="readonly").grid(row=row, column=1, sticky="ew", pady=(6, 0))
+            elif key in editors:
+                var = tk.StringVar()
+                editors[key](parent, var).grid(row=row, column=1, sticky="ew", pady=(6, 0))
             else:
                 var = tk.StringVar()
                 ttk.Entry(parent, textvariable=var).grid(row=row, column=1, sticky="ew", pady=(6, 0))
@@ -921,7 +928,7 @@ class _Form(object):
                 var.set(str(values[key]))
 
 
-def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None):
+def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None, editors=None):
     """ワールド別設定の窓を組んで返す（`mainloop()` は呼ばない）。
 
     `title` と `blurb` を省くと `mod.json` の `name` / `description` から取る
@@ -929,6 +936,8 @@ def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None):
 
     `extra_tabs(tabs, root_dir)` を渡すと、2つのタブの後ろに MOD が自分のタブを足せる
     （`128_` の画像一覧。設定の保存とは関わらない見るだけのタブに使う）。
+
+    `editors` は項目ごとの入力部品（`_Form`）。2段のどちらの組にも同じものを置く。
     """
     # tkinter は関数の中で import する。
     # `modtool` を import しただけで tkinter を要求しないため（`--dump` の道など）。
@@ -991,7 +1000,8 @@ def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None):
     bulk_bottom.pack(side="bottom", fill="x", pady=(6, 0))
     body = ttk.Frame(bulk, padding=(0, 0, 6, 0))    # 入力欄は grid、外は pack。混ぜないための子枠
     body.pack(fill="both", expand=True)
-    shared_form = _Form(_scrollable(body), found, lambda k: "既定: " + shown(found[k]["default"], found[k]))
+    shared_form = _Form(_scrollable(body), found, lambda k: "既定: " + shown(found[k]["default"], found[k]),
+                        editors=editors)
     shared_form.set(shared)
     ttk.Button(bulk_bottom, text="既定に戻す", command=lambda: shared_form.set(
         dict((k, d["default"]) for k, d in found.items()))).pack(side="right")
@@ -1017,7 +1027,8 @@ def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None):
                            if worlds else "世界が見つかりません: " + store)
     body = ttk.Frame(per_world, padding=(0, 0, 6, 0))
     body.pack(fill="both", expand=True)
-    world_form = _Form(_scrollable(body), found, lambda k: "一括設定: " + shown(shared[k], found[k]))
+    world_form = _Form(_scrollable(body), found, lambda k: "一括設定: " + shown(shared[k], found[k]),
+                       editors=editors)
     ttk.Button(world_bottom, text="一括設定に戻す",
                command=lambda: world_form.set(shared)).pack(side="right")
 

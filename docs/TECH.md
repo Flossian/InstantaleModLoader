@@ -3071,6 +3071,10 @@ python tools/check_tool_screens.py --only 322   名前に 322 を含む MOD だ�
 タブを足す関数（`関数(tabs, root_dir)`）を渡す。窓・保存・世界の選び方は共通のまま、MOD は自分のタブだけを書く。
 `128_item_image_variety` が絵の一覧に使っている（`tools\tests\test_item_image_tool.py`）。
 
+1行の値を表で編集したい項目には `build_world_settings_window(MOD_DIR, editors={設定名: 関数})` を渡す。
+`関数(親, StringVar)` が返す部品を入力欄の代わりに置く。値は `StringVar` の文字列のままなので、2段の保存と差分はそのまま働く。
+`345_date_display` の暦が使っている（1年の日数・月数・月ごとの表で `MONTHS` の1行を編集する）。
+
 シムで足りないのは**項目が表の形をしているとき**。`331_facility_investment` は種類6×3項目＋共通5の 23 項目で、
 1列に並べると読めないので、種類を行・項目を列にした独自の画面を持つ（`tool.py`）。
 土台（場所・宣言・読み書き・窓の記憶・配色・共通項目の入力欄 `_Form`）は `modtool` を借り、

@@ -8,7 +8,7 @@
 手で書き換えても次の生成で消える。
 直す先は各 MOD の `mod.json` か MODS.md の見出し。
 
-同梱 150 本（基盤 2 / 修正 51 / 追加 51 / 計測 46）。
+同梱 151 本（基盤 2 / 修正 51 / 追加 52 / 計測 46）。
 うち 16 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
 ほかに 3 本は自作だが、外部からの提案を取り込んでいる（下の「提案を取り込んだ MOD」）。
 
@@ -97,7 +97,7 @@
 
 ---
 
-## 追加（51本）
+## 追加（52本）
 
 ゲームに無かった遊びを足す。
 
@@ -145,6 +145,7 @@
 | [`341_shopkeeper_attitude`](MODS.md#341_shopkeeper_attitude-店主の人柄と主人公との関係で売買の値段が変わる) | 店主の人柄と主人公との関係で売買の値段が変わる | 店主の人柄と主人公との関係で売買の値段が変わる | 6 |  |
 | [`342_attack_animations`](MODS.md#342_attack_animations-攻撃の演出が武器と属性に合ったものになる) | 攻撃の演出が武器と属性に合ったものになる | 攻撃の演出が武器と属性に合ったものになる | 1 |  |
 | [`343_stable_diffusion`](MODS.md#343_stable_diffusion-stable-diffusion-の解像度サンプラーモデルプロンプトを差し替える) | Stable Diffusionの各種差し替え | Stable Diffusion の解像度・サンプラー・モデル・プロンプトを差し替える | 51 |  |
+| [`345_date_display`](MODS.md#345_date_display-現在地の下に日付を表示する) | 現在地の下に日付を表示する | 現在地の下に日付を表示する | 3 |  |
 | [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘の審判への仲間の情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |
 | [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | 仲間とのアイテム受け渡し | 仲間とアイテムを受け渡しできる | - |  |
 | [`403_npc_social_memory`](MODS.md#403_npc_social_memory-npc同士がお互いを認知し関係を覚える) | NPC同士の認知と関係記憶 | NPC同士がお互いを認知し、関係を覚える | 5 |  |

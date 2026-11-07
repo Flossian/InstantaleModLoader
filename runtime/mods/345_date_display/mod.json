@@ -1,0 +1,69 @@
+{
+  "entry": "date_display.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Show the date under your location",
+    "ja": "現在地の下に日付を表示する"
+  },
+  "description": {
+    "en": "Adds the date under Location in the status panel. The start year, days in a year, number of months, and each month's name and length can be set, shared or per world. A long location never pushes the date off the panel",
+    "ja": "画面左下の欄の Location の下に日付を出す。開始の年・1年の日数・月数・各月の名前と日数を、全世界共通でも世界ごとにでも決められる。Location が長くても日付は欄に収まる"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "state": [
+    "date_display"
+  ],
+  "settings": {
+    "START_YEAR": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 999999,
+      "label": {
+        "ja": "ゲーム開始の年",
+        "en": "Starting year"
+      },
+      "note": {
+        "ja": "経過0日がこの年の最初の月の1日になる",
+        "en": "Day 0 is the first day of the first month of this year"
+      }
+    },
+    "MONTHS": {
+      "type": "str",
+      "default": "31,28,31,30,31,30,31,31,30,31,30,31",
+      "label": {
+        "ja": "暦",
+        "en": "Calendar"
+      },
+      "note": {
+        "ja": "1年の日数か月数を変えると、日数を各月に均等に割り振り直す。月の日数を直すと1年の日数がその合計になる。名前が空の月は「3月」のように番号で出る",
+        "en": "Changing the days in a year or the number of months spreads the days evenly again. Editing a month updates the year to the new total. A month with no name shows its number"
+      }
+    },
+    "FORMAT": {
+      "type": "str",
+      "default": "Date:{year}年{month}{day}日",
+      "label": {
+        "ja": "表示の形",
+        "en": "Display format"
+      },
+      "note": {
+        "ja": "{year} 年 / {month} 月の名前（無ければ「3月」）/ {month_number} 月の番号 / {day} 日 / {day_of_year} 年の中の何日目 / {elapsed} 開始からの日数。空にすると日付を出さない",
+        "en": "{year} / {month} the month's name, or its number / {month_number} / {day} / {day_of_year} / {elapsed} days since the start. Leave empty to show no date"
+      }
+    }
+  },
+  "tool": {
+    "entry": "tool.py",
+    "label": {
+      "ja": "暦の設定",
+      "en": "Calendar settings"
+    },
+    "note": {
+      "ja": "月の名前と日数を表で決める。全世界共通の設定と世界ごとの設定を持てる",
+      "en": "Set each month's name and length in a table, shared or per world"
+    }
+  }
+}
