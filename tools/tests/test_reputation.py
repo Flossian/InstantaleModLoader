@@ -895,6 +895,12 @@ def run():
           stats_g["3"]["arena_ranks"] == [30, 44], stats_g["3"])
     check("物語の依頼と闘技場の勝ちも行いの件数に入る",
           stats_g["3"]["deeds"] == 2 + 1 + 2, stats_g["3"])
+    fresh_win = make_app()
+    fresh_win.world.areas["3"].nodes = {"1": Node({"5": Facility("colosseum", "灰の闘技場", {
+        "current_phase": 4, "enemy_data": {"0": {"data": {"rank": 30}}, 2: {"data": {"rank": 44}}}})})}
+    check("読み込みの後に勝った試合（段の鍵が数）の相手の格も数える",
+          material.survey(fresh_win)["3"]["arena_ranks"] == [30, 44],
+          material.survey(fresh_win)["3"])
     item_g = material.gather(saga, "3")
     check("評判の素材に物語の依頼と闘技場の戦績が載る",
           item_g["story"] == ["霧の境界の捕食者"]

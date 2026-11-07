@@ -75,6 +75,7 @@ r"""闘技場の相手の強さと懸賞金を設定で決める。
 版9: 難易度の関数・`generate_enemy_data`・試合の始め・`remove_party_member`・`add_text` のフックは、
 引数を受け取った形のまま元の関数へ渡す（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 難易度と懸賞金の文は来た側に合わせて差し替える。
+相手の名前が主人公や仲間と重ならないようにした（生成に伝え、それでも重なれば `generate_enemy_data` の戻りで改名する）。
 """
 
 import sys
@@ -193,6 +194,13 @@ VARIETY_NOTE = ("この闘技場には既に {names} が出場している。"
 VARIETY_HEAD = "この闘技場には既に"
 VARIETY_LIMIT = 8
 
+#: 主人公の一行の名前を相手に使わせない一文と、それでも重なったときの名前。
+#: 街の概要に主人公の名が載ると、LLM が相手にその名を付けることがある（実機）。
+#: 同じ名前だと審判の攻撃先が主人公にも当たる（VERIFICATION.md §3.126）。
+OWN_NAMES_NOTE = "闘士の名前に {names} を使ってはならない（挑戦者の一行の名前である）。"
+OWN_NAMES_HEAD = "闘士の名前に"
+SAME_NAME_RENAME = "{name}の名を騙る闘士"
+
 
 def rank_word(rank):
     """格を言い換えた語。"""
@@ -219,6 +227,21 @@ def variety_note(names):
         return ""
     return VARIETY_NOTE.format(
         names="".join("「{}」".format(name) for name in names[-VARIETY_LIMIT:]))
+
+
+def own_names_note(names):
+    """主人公の一行の名前を使わせない一文。名前が無ければ空。"""
+    names = [str(n).strip() for n in names if isinstance(n, str) and str(n).strip()]
+    if not names:
+        return ""
+    return OWN_NAMES_NOTE.format(names="".join("「{}」".format(name) for name in names))
+
+
+def name_key(name):
+    """同じ名前かを比べる形（空白と中黒の違いは同じ名前に数える）。"""
+    if not isinstance(name, str):
+        return ""
+    return "".join(ch for ch in name if not ch.isspace() and ch not in "・･.").casefold()
 
 
 def replace_amount(text, base, want):
@@ -286,18 +309,22 @@ def vary_location(location, names):
     ゲームの頼み文が読むのは施設の名前と概要だけ（GAME.md §2.11）なので概要の末尾に足す。
     既に同じ一文が入っていればそのまま返す。
     """
-    note = variety_note(names)
+    return with_note(location, variety_note(names), VARIETY_HEAD)
+
+
+def with_note(location, note, head):
+    """`location` の概要の末尾に一文を足したものを返す。`head` が既に入っていればそのまま返す。"""
     if not note or location is None:
         return location
     if isinstance(location, dict):
         description = location.get("description") or ""
-        if VARIETY_HEAD in description:
+        if head in description:
             return location
         copied = dict(location)
         copied["description"] = "{}\n{}".format(description, note).strip()
         return copied
     description = getattr(location, "description", None) or ""
-    if VARIETY_HEAD in description:
+    if head in description:
         return location
     return _LocationView(location, "{}\n{}".format(description, note).strip())
 
@@ -370,6 +397,16 @@ def apply(ctx):
         if isinstance(phase, bool) or not isinstance(phase, (int, float)):
             return 0
         return max(0, int(phase) // 2)
+
+    def party_names(app):
+        """主人公と仲間の名前。"""
+        party = getattr(app, "party", None)
+        members = list(party.values()) if isinstance(party, dict) else []
+        player = getattr(app, "player", None)
+        if player is not None and not any(member is player for member in members):
+            members.append(player)
+        names = [getattr(member, "name", None) for member in members]
+        return [name for name in names if isinstance(name, str) and name.strip()]
 
     def fighters_so_far(app):
         """この闘技場に既に出た相手の名前（ゲームが貯める順）。"""
@@ -545,6 +582,16 @@ def apply(ctx):
                 write("saved rank: {} -> {}".format(opened["raw"], opened["new"]))
         except Exception:
             ctx.log_exc("colosseum: cannot align the saved rank")
+        try:
+            data = result.get("data") if isinstance(result, dict) else None
+            app = getattr(self, "app", None) or ui.find_app()
+            if isinstance(data, dict) and name_key(data.get("name")) in \
+                    set(name_key(name) for name in party_names(app)):
+                renamed = SAME_NAME_RENAME.format(name=data["name"])
+                write("same name as the party: {!r} -> {!r}".format(data["name"], renamed))
+                data["name"] = renamed
+        except Exception:
+            ctx.log_exc("colosseum: cannot check the opponent's name")
         return result
 
     @ctx.wrap("scripts.llm.llm_manager:colosseum_enemy_generator", required=False)
@@ -571,6 +618,11 @@ def apply(ctx):
                         kwargs["location"] = vary_location(kwargs["location"], names)
                     write("variety: {} earlier fighter(s) told to the generator".format(
                         len(names)))
+            note = own_names_note(party_names(app))
+            if args:
+                args = (with_note(args[0], note, OWN_NAMES_HEAD),) + args[1:]
+            elif "location" in kwargs:
+                kwargs["location"] = with_note(kwargs["location"], note, OWN_NAMES_HEAD)
         except Exception:
             ctx.log_exc("colosseum: cannot adjust the opponent")
         return orig(*args, **kwargs)

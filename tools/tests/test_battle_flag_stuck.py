@@ -317,6 +317,14 @@ check("実体が id のままなら world.characters から引く",
 check("仲間だけ戻したときは並びを動かさない", list(app.party) == ["player", "88"], list(app.party))
 
 app = App()
+app.party = {"88": benny, "player": hero}
+check("ui.player_to_front は主人公を先頭へ置く",
+      ui.player_to_front(app) is True and list(app.party) == ["player", "88"], list(app.party))
+check("もう先頭なら動かさない", ui.player_to_front(app) is False)
+app.party = None
+check("一覧が読めなくても落ちない", ui.player_to_front(app) is False)
+
+app = App()
 app.party = None
 check("一覧が読めなければ何もしない", ui.put_back_party(app, [("player", hero)]) == ([], []))
 

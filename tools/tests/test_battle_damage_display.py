@@ -453,6 +453,15 @@ set_hp(app.player, 20)
 strike(app, (app.player, 45))
 check("回復も出る", any("25 回復した" in t for t in mod_lines(app)), app.texts)
 
+print("=== 倒れた者を起こした差は回復ではない ===")
+app, ctx, mod = setup()
+strike(app, (app.player, -3210))
+strike(app, (app.player, 1))
+check("-3210 から 1 へ戻っても回復と出さない",
+      not any("回復した" in t for t in mod_lines(app)), app.texts)
+strike(app, (app.player, 21))
+check("起きた後の回復は出る", any("20 回復した" in t for t in mod_lines(app)), app.texts)
+
 app, ctx, mod = setup(configure=lambda m: setattr(m, "SHOW_HEALING", False))
 set_hp(app.player, 20)
 strike(app, (app.player, 45))

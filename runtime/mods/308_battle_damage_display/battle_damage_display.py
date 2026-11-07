@@ -456,6 +456,12 @@ def apply(ctx):
         """
         if before["hp"] is None or record["hp"] is None:
             return None, None
+        if before["hp"] <= 0 < record["hp"]:
+            # 倒れて 0 以下になった者を起こした回（窓口 `defeat` の HP 1 など）。差は回復ではない
+            # （-3210 → 1 が「3211 回復した」と出た。VERIFICATION.md §3.126）。
+            write("{} {} stood up: hp {} -> {} (not shown)".format(
+                side, name, before["hp"], record["hp"]))
+            return None, None
         delta = before["hp"] - record["hp"]
         if delta == 0 or abs(delta) < MIN_AMOUNT or not wanted(side, delta):
             return None, None

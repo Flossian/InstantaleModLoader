@@ -269,11 +269,12 @@ def main():
     targets = durations.install(first, write)
     second = FakeCtx(1)
     durations.install(second, write)
-    ok &= check("同じ世代では2枚目を包まない", calls == [durations.DAYS_TARGET], calls)
+    days_calls = [target for target in calls if target == durations.DAYS_TARGET]
+    ok &= check("同じ世代では2枚目を包まない", days_calls == [durations.DAYS_TARGET], calls)
     ok &= check("包んだ対象を返す", targets == [durations.DAYS_TARGET], targets)
     third = FakeCtx(2)
     durations.install(third, write)
-    ok &= check("世代が変われば包み直す", len(calls) == 2, calls)
+    ok &= check("世代が変われば包み直す", calls.count(durations.DAYS_TARGET) == 2, calls)
 
     print("日数送りの関所: 包みは orig を必ず呼ぶ")
     passed = []
@@ -317,6 +318,40 @@ def main():
     for name in ("road_a", "road_b", "road_c"):
         ok &= check("{} を外せる".format(name), "quest_travel" in durations.forget(name))
     ok &= check("外すと答えない", durations.quest_travels(app, "1") is False)
+
+    print("旅の記録: 文の日数を記録の範囲に合わせる")
+
+    def record(text, start, end):
+        return {"day_start": start, "day_end": end, "summarized_count": 0, "content": text}
+
+    walk = "<旅の記録>['主人公', '仲間']は徒歩で、3ヵ月の時間をかけて「甲」から「乙」へと移動した。"
+    coach = "<旅の記録>主人公は馬車を利用し、14日間の時間をかけて「甲」から「乙」へと移動した。"
+    hero = types.SimpleNamespace(life_log=[
+        record("〈生活の記憶〉昔の旅", 0, 30),
+        record(walk, 786, 800),
+    ])
+    friend = types.SimpleNamespace(life_log=[record(walk, 786, 846)])
+    traveller = types.SimpleNamespace(player=hero, party={"player": hero, "95": friend})
+    note = []
+    ok &= check("直した件数を返す", durations.correct_travel_records(traveller, note.append) == 2)
+    ok &= check("徒歩の 14 日は 14日間", "徒歩で、14日間の時間をかけて" in hero.life_log[-1]["content"],
+                hero.life_log[-1])
+    ok &= check("30 日の倍数はヵ月で書く", "徒歩で、2ヵ月の時間をかけて" in friend.life_log[-1]["content"],
+                friend.life_log[-1])
+    ok &= check("旅の記録でない文は触らない", hero.life_log[0]["content"] == "〈生活の記憶〉昔の旅")
+    ok &= check("直したことを記録する", len(note) == 1 and "travel record" in note[0], note)
+    plain = types.SimpleNamespace(life_log=[record(walk, 0, 90), record(coach, 100, 114)])
+    plain_app = types.SimpleNamespace(player=plain, party={"player": plain})
+    ok &= check("文と範囲が合っていれば何もしない", durations.correct_travel_records(plain_app) == 0)
+    short = types.SimpleNamespace(life_log=[record(coach, 100, 107)])
+    ok &= check("馬車の 7 日も直す",
+                durations.correct_travel_records(types.SimpleNamespace(player=short, party={})) == 1
+                and "馬車を利用し、7日間の時間をかけて" in short.life_log[0]["content"], short.life_log)
+    same_day = types.SimpleNamespace(life_log=[record(walk, 5, 5)])
+    ok &= check("範囲が 0 日なら書き換えない（まだ進んでいない）",
+                durations.correct_travel_records(types.SimpleNamespace(player=same_day, party={})) == 0)
+    ok &= check("一覧が読めなくても落ちない",
+                durations.correct_travel_records(types.SimpleNamespace(player=None, party=None)) == 0)
 
     print("OK" if ok else "FAILED")
     return 0 if ok else 1

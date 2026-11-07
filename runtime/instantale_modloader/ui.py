@@ -2123,12 +2123,26 @@ def put_back_party(app, members):
         if isinstance(escaped, dict):
             escaped.pop(member_id, None)
         back.append(member_id)
-    if PLAYER_ID in back and next(iter(party)) != PLAYER_ID:
-        ordered = [(PLAYER_ID, party[PLAYER_ID])] + [
-            (key, value) for key, value in party.items() if key != PLAYER_ID]
-        party.clear()
-        party.update(ordered)
+    if PLAYER_ID in back:
+        player_to_front(app)
     return back, missing
+
+
+def player_to_front(app):
+    """主人公を一覧（`app.party`）の先頭へ置く。動かしたら True。
+
+    ゲームは預かりから戻すときも一覧の末尾へ足す（GAME.md §2.10）。
+    画面の並びもセーブの並びも一覧の順なので、戻した後はここで揃える。
+    """
+    party = getattr(app, "party", None) if app is not None else None
+    if not isinstance(party, dict) or PLAYER_ID not in party \
+            or next(iter(party)) == PLAYER_ID:
+        return False
+    ordered = [(PLAYER_ID, party[PLAYER_ID])] + [
+        (key, value) for key, value in party.items() if key != PLAYER_ID]
+    party.clear()
+    party.update(ordered)
+    return True
 
 
 def return_escaped(app):

@@ -1238,6 +1238,28 @@ def snapshot_all(app, write=None):
     return done
 
 
+def _bring_back_config(facility, snapshot, write=None):
+    """控えの `config` を、もう建っている実体へ戻す。
+
+    持ち主の MOD が世界の読み込みの中で先に建てると（`331_` の `apply_holdings`）、
+    その時点では控えをまだ読んでおらず、`config` は既定のまま建つ。
+    `spawn` は建っている実体をそのまま返すので、そのままでは次の保存（`snapshot_all`）が
+    空の `config` で控えを上書きし、闘技場の `current_phase` / `enemy_data` が消える（VERIFICATION.md §3.126）。
+    実体の辞書は入れ替えない（売買や試合の写しが同じ辞書を指している。`install_plain`）。
+    """
+    saved = snapshot.get("config") if isinstance(snapshot, dict) else None
+    config = getattr(facility, "config", None)
+    if not isinstance(saved, dict) or not isinstance(config, dict):
+        return
+    changed = [key for key, value in saved.items() if config.get(key) != value]
+    if not changed:
+        return
+    config.update(copy.deepcopy(saved))
+    if write:
+        write("modfacility: brought back the saved config of {} ({})".format(
+            getattr(facility, "id", "?"), ", ".join(str(key) for key in changed)))
+
+
 def restore_world(app, world=None, save_data_dict=None, write=None):
     """世界を読んだ直後、控えから建て直す。
 
@@ -1271,8 +1293,9 @@ def restore_world(app, world=None, save_data_dict=None, write=None):
                 spot = entry.get("place")
                 if entry.get("spawned") and isinstance(spot, (list, tuple)) and spot:
                     spot = (list(spot) + ["", "", ""])[:3]
-                    spawn(app, facility_id, spot[0], node_id=spot[1],
-                          hub_id=spot[2], world=world, write=write)
+                    built = spawn(app, facility_id, spot[0], node_id=spot[1],
+                                  hub_id=spot[2], world=world, write=write)
+                    _bring_back_config(built, record["snapshot"], write)
                 done.append((owner, facility_id))
     if write and done:
         write("modfacility: restored {} entr(y/ies) from the state of {!r}".format(

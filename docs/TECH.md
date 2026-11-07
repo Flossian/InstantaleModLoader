@@ -1051,7 +1051,7 @@ MOD 同梱の設定画面（`tool.py`。§3.12）は**ゲームの中では走�
 | HUD への置き場所 | `ui.overlay_host`（§5.1.3） | 2本 |
 | 表示・ログ用の切り詰め | `frames.short` | 6本 |
 | 人物の引き方と表示名 | `ui.character_of` / `character_name` | 5本 |
-| 戦闘の終わりに、預かり（`escaped_member_in_battle`）から一覧へ戻す | `ui.put_back_party` / `return_escaped` | 4か所（`107_` / `147_` / `334_` / 窓口 `defeat`）。主人公を先頭へ戻すのは `107_` だけで、ほかは末尾に足していた |
+| 戦闘の終わりに、預かり（`escaped_member_in_battle`）から一覧へ戻す | `ui.put_back_party` / `return_escaped` / `player_to_front` | 4か所（`107_` / `147_` / `334_` / 窓口 `defeat`）。主人公を先頭へ戻すのは `107_` だけで、ほかは末尾に足していた。ゲーム自身が戻した回も末尾なので、`defeat` は `player_to_front` で並べ直す |
 | 上限付きの記録・一度きりの警告 | `ctx.logger(cap=)` / `ctx.warner`（§3.11.2） | 5本 / 4本 |
 | 次のフレームで走らせる | `ui.scheduler` | 5本 |
 | 控えを進めた後にゲーム自身の保存を1回呼ぶ（続けて呼べば最後の1回） | `ui.saver`（§5.1.3） | 2本（`330_` と、1本の中に2つ持つ `402_`）。`331_` / `325_` が3本目・4本目になるところで移した |
@@ -1379,6 +1379,10 @@ MOD は `durations.on_days(owner, ctx, before=fn, after=fn)` で渡し、`elapse
 片付けると別の土地へ移動する依頼（`307_` / `325_`）は、移動で日数が進む。
 依頼の後に日数を進める MOD（`344_`）が重ねないよう、移動する側が `durations.declare_quest_travel(owner, fn)` で答え、進める側が `durations.quest_travels(app, quest_id)` で聞く。
 `fn(app, quest_id)` は真偽を返す。依頼が片付く前（`QuestEndManager.execute` の前）に聞くこと。片付くと控えの段階が進む。
+
+ゲームが移動の記録（`life_log` の `<旅の記録>`）に書く日数は定数なので、関所で日数を変えると文が食い違う。
+関所を立てると、街を移った後（窓口 `arrivals` の `AREA` の `after`）に `durations.correct_travel_records(app)` が走り、文を記録の日数の範囲に合わせる。
+移動の日数を変える MOD が自分で直す必要は無い（VERIFICATION.md §3.126）。
 
 計測（200番台）は関所より後＝外側に当たるので、
 **MOD が差し替える前の生の日数**が録れる性質は変わらない（`217_` / `218_` / `231_`）。
@@ -3248,6 +3252,7 @@ ui.facility_type_of(...) / ui.GUILD_FACILITY_TYPE
 ui.choices_painted(app)   # いまの選択肢（`app.to_display_buttons`）を HUD が塗り終えたか。読めなければ True
 ui.battle_on_screen(app)  # いま並んでいるボタンが戦闘のものか（ロードの直後に戦闘の続きへ戻ったかの見分け。`107_` / `336_`）
 ui.put_back_party(app, [(id, 実体)]) / ui.return_escaped(app)   # 一覧に居ない者を預かりから戻す（主人公は先頭へ）。戻した id と引けなかった id を返す
+ui.player_to_front(app)                                        # 主人公を一覧の先頭へ。動かしたら True（ゲームが預かりから戻すと末尾に入る）
 ui.right_panel_left_open(app) / ui.fold_right_panel(app)   # 取り残された右の欄の見分けと畳み直し（窓口 `choices` が呼ぶ。§3.3.14）
 ```
 
@@ -4160,7 +4165,7 @@ MOD は自分の進行中の旗（宿泊中・滞在中）で画面を判断し�
 | id | `mod:<持ち主>:<鍵>` の文字列。`ids.claim` を通さないので `index['facility']` が進まない |
 | `fields` | 素データの8項目（`FACILITY_FIELDS`。実セーブの `location` と同じ並び）で受ける初期値。控えの写しが在ればそちらが勝つ |
 | 保存 | 関所が素データを控えへ写し（`snapshot_all`）、**id が載る器**（選択肢・自由入力。`scrub_saved_refs`）から落とし、立ち位置が MOD の施設なら入口へ移して**その場の選択肢と背景も一緒に置く**（ロードはどちらも組み直さない。GAME.md §2.3）。保存の後に戻す |
-| ロード | 実体は捨てられ、層に `on["world"]` が来て、控えから建て直す（`restore_world`）。**その後で立ち位置を検める**（`repair_player_location`） |
+| ロード | 実体は捨てられ、層に `on["world"]` が来て、控えから建て直す（`restore_world`）。持ち主の MOD が読み込みの中で先に建てていれば、その実体の `config` へ控えを戻す（`_bring_back_config`。戻さないと次の保存で闘技場の戦績が消える。VERIFICATION.md §3.126）。**その後で立ち位置を検める**（`repair_player_location`） |
 | 選択肢 | 組み直しと押下は包まない。窓口 `choices` の宣言型の口（§3.3.14）に、持ち主 `loader:modfacility` で預ける（2026-10-21〜）。組み直しの前（`declared_refresh`）に素データの写しを同期し、伏せるゲームの選択肢を落とし、窓口の組み立て（`declared_offer`）で建物の中の選択肢・出口・道を出す |
 | 押下 | 窓口がボタンに持たせた処理を呼び、層のハンドラへ渡す（`act`）。押した後は手が空いてから窓口に組み直させる（`repaint_when_idle`） |
 | 文言 | 組み直しのたびに層の今の文言で作り直す。売上の額のように押した後に変わる文言のため（実機） |

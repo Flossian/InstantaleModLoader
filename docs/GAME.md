@@ -1071,6 +1071,7 @@ MOD 側でも「戦闘中は出さない」条件に使われるので、残骸�
 | `check_battle_end` の中 | 敵の一覧を空にし（`current_enemy_dict` 1 → 0）、敵を消す演出を1つ予約する（`fade_effect_cue` 0 → 1）。`BattleEndManager(app, 'escaped')` を作り（`instantale.py:7817`）、`True` を返す | `GameOverManager` を作る |
 | 判定の後 | `BattlePhaseManager.battle` が終わり方を実行する。その中で預かりを一覧へ戻す（`app.party` 0 → 1、預かり 1 → 0）。旗 `in_battle` は下りる（`in_colosseum_battle` は上の表のとおり残る） | ゲームオーバー |
 
+- 預かりから戻すときは一覧の末尾へ足す。主人公だけが預かりに入った回は `['95', '104', 'player']` になり、画面の仲間欄もその順で並ぶ（読み直すと先頭へ戻る。`ui.player_to_front`。VERIFICATION.md §3.126）。
 - `app.party` は鍵が `'player'` と仲間の id の辞書（実機のログで `['player', '78']` など）。
   `app.escaped_member_in_battle` も辞書で、値は `Character`（`{'player': 'Character'}` を実測）。
   セーブの `game_variables` では `escaped_member_in_battle` は配列、`party` は id の配列になる。
@@ -1631,10 +1632,12 @@ play_sound_from_src(app, パス)     'Assets/sounds/sounds/ui/拠点/移動(屋�
 （2戦＋7戦。`322_battle_bgm` の `[BGMPICK]` の行）
 
 闘技場の相手は `scripts.llm.llm_manager:colosseum_enemy_generator(location, area, world, npc_difficulty_level)` が作り、
-施設の `config` に `current_phase` と `enemy_data`（相手の素、鍵は `"0"` / `"2"` / `"4"` …）として貯まる。
+施設の `config` に `current_phase` と `enemy_data`（相手の素。段の鍵はセーブから読むと文字列の `"0"` / `"2"` / `"4"` …、読み込みの後に戦った分は数の `0` / `2` / `4` …で、読み直すまで混ざる）として貯まる。
 頼み文は 世界観 / エリア名と概要 / 施設名と概要（`location` の `name` と `description`） / 強さのランク の4つだけで、
 **前に出た相手は載らない**（`output_data\...\colosseum_enemy_generator\N.json`）。
 同じ施設で同じ人物に収束することがある（`331_` の闘技場で4試合とも同じ名。あちらは既出の名を概要に足して避けている）。
+エリアの概要に主人公の名前が載っていると、相手にその名前を付けることがある（実機。`334_` が防ぐ）。
+相手が主人公と同じ名前だと、審判の攻撃先は名前で引くので、主人公の攻撃が自分にも当たる（2つの `get_instant_damage` が同じ手に並んだ。VERIFICATION.md §3.126）。
 
 **相手のランクはその土地の依頼の難易度から決まる**（`233_probe_colosseum` の実機。4つの闘技場・16点が一致）。
 
@@ -2779,6 +2782,7 @@ process_choice(AreaMoveManager,       '馬車(1000G)' / '徒歩(3ヵ月)')
 - 家族: 会話の「家族になろう」（`conversation_become_family_response`）で `二人は家族になった。` と書き、以後は「雇いたい」の代わりに「パーティに入れる」（`FamilyPartyJoinManager`、雇用の値段なし）が並ぶ。印は `relationship.player.relationship` に `家族` が入ること（定数表の並びと、`329_` 版3の実機で確認）。`Character.state` は雇用 NPC で `""` か `None` で、分岐は読まない（`329_` 版2で外れ）
 - 定数表で `area_move_rejector` の近くに並ぶ属性名は `target_area` / `target_area_dict` / `mode` / `show_loading_finished` だけで、`relationship` や `party` は畳まれていて位置から辿れない。読み手の側に印を付けて録る（`228_`）ほうが早い
 - 保存は Character の値を `save_data_dict["npcs"]` へ写してから書く。拒否の途中でも保存が走る（`329_` 版1で 999 が残った）
+- 移動すると、主人公と同行の仲間の `life_log` に `<旅の記録>[…]は徒歩で、3ヵ月の時間をかけて「A」から「B」へと移動した。` が入る（馬車は `は馬車を利用し、14日間の時間をかけて`）。日数の文は定数で、`elapse_days` の差し替えに付いてこない。`day_start` / `day_end` は実際の値。書かれるのは `AreaMoveManager.execute` の中（ローダの `durations` が直す。VERIFICATION.md §3.126）
 
 #### クエストは日数を進めない（実機と全件計数の両方で確認）
 

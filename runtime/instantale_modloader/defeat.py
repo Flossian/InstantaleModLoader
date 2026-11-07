@@ -142,14 +142,19 @@ def _prepare_escape(app):
 
 
 def _ensure_player_back(app):
-    """ゲームが主人公を一覧へ戻さなかったときだけ、控えた値で戻す。"""
+    """ゲームが主人公を一覧へ戻さなかったときだけ、控えた値で戻す。
+
+    ゲームが戻したときも末尾に入るので、先頭へ並べ直す（`ui.player_to_front`）。
+    """
     state = _state()
     party = getattr(app, "party", None)
     removed, state["removed_player"] = state["removed_player"], None
     if not isinstance(party, dict):
         return
     if PLAYER_KEY in party:
-        _write("defeat: the player is back in the party")
+        moved = ui.player_to_front(app)
+        _write("defeat: the player is back in the party{}".format(
+            " (moved to the front)" if moved else ""))
         return
     if removed is None:
         _write("WARN defeat: the player is not in the party and cannot be put back")

@@ -1034,6 +1034,35 @@ def main():
     town.player.location = entrance2
     modfacility.unregister("914_home", app=town)
 
+    print("順: 持ち主が控えを読む前に建てても、次の保存で config を失わない")
+    arena_id = modfacility.register("915_invest", key="arena1", fields={"name": "円環"})
+    built = modfacility.spawn(app2, arena_id, "1", world=world2)
+    built.config.update(current_phase=2, enemy_data={0: {"data": {"rank": 82}}})
+    modfacility.snapshot_all(app2)
+    modfacility.forget()
+    app4, world4, _area4, _node4, _entrance4, _inn4 = make_town()
+    early = modfacility.spawn(app4, arena_id, "1", world=world4)
+    ok &= check("先に建てると config は既定のまま", "current_phase" not in early.config)
+    same_config = early.config
+    fixed_log = []
+    modfacility.restore_world(app4, world=world4, save_data_dict=app4.save_data_dict,
+                              write=fixed_log.append)
+    ok &= check("控えの config が戻る",
+                early.config.get("current_phase") == 2
+                and (early.config.get("enemy_data") or {}).get("0", {}).get("data", {}).get("rank") == 82)
+    ok &= check("実体の辞書は入れ替えない（写しが同じ辞書を指す）", early.config is same_config)
+    ok &= check("戻したことを記録する",
+                any("brought back the saved config" in row for row in fixed_log))
+    modfacility.snapshot_all(app4)
+    kept = modfacility._persisted_entry(app4, "915_invest", arena_id)
+    ok &= check("次の保存でも控えに残る",
+                ((kept or {}).get("snapshot") or {}).get("config", {}).get("current_phase") == 2)
+    again = []
+    modfacility.restore_world(app4, world=world4, save_data_dict=app4.save_data_dict,
+                              write=again.append)
+    ok &= check("揃っていれば書き直さない",
+                not any("brought back" in row for row in again))
+
     print("片付け: unregister で層も控えも消える")
     modfacility.unregister("915_invest", app=app2)
     modfacility.unregister("330_real_estate", app=app2)

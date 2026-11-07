@@ -36,10 +36,17 @@ MOD ごとに `elapse_days` を包むのをやめ、ローダが1枚だけ包ん
 その注入で適用されなかった MOD（切った・apply に失敗した）のぶんは、
 ローダの `boot()` が最後に `forget` で外す。`unload()` は全部外す。
 """
+import re
 import sys
 
-from . import gates, log_exc
+from . import arrivals, gates, log_exc
 
+#: 街を移ったときにゲームが `life_log` へ書く記録（exe の定数。徒歩 3ヵ月・馬車 14日間に決め打ち）。
+#: 日数の範囲（`day_start` / `day_end`）は実際の値で入るので、文だけを範囲に合わせる（VERIFICATION.md §3.126）。
+TRAVEL_RECORD_MARK = "<旅の記録>"
+TRAVEL_RECORD_DAYS = re.compile(r"(3ヵ月|14日間)(の時間をかけて)")
+TRAVEL_RECORD_LOOK_BACK = 4
+TRAVEL_RECORD_OWNER = "(durations)"
 
 #: 関所を立てた行を最後に書いた中身。同じなら繰り返さない。
 #: 関所は boot ごとに立て直すので、遅れて当て直す boot のたびに同じ行が並んでいた。
@@ -592,6 +599,40 @@ def gate():
     return done if isinstance(done, dict) else None
 
 
+def days_wording(days):
+    """ゲームの文の書き方に合わせた日数。30日の倍数は「Nヵ月」、ほかは「N日間」。"""
+    return "{}ヵ月".format(days // 30) if days % 30 == 0 else "{}日間".format(days)
+
+
+def correct_travel_records(app, write=None):
+    """主人公と仲間の新しい旅の記録の文を、記録の日数の範囲に合わせる。直した件数を返す。"""
+    party = getattr(app, "party", None)
+    members = list(party.values()) if isinstance(party, dict) else []
+    player = getattr(app, "player", None)
+    if player is not None and not any(member is player for member in members):
+        members.append(player)
+    fixed = 0
+    for member in members:
+        logs = getattr(member, "life_log", None)
+        if not isinstance(logs, list):
+            continue
+        for entry in logs[-TRAVEL_RECORD_LOOK_BACK:]:
+            content = entry.get("content") if isinstance(entry, dict) else None
+            if not isinstance(content, str) or TRAVEL_RECORD_MARK not in content:
+                continue
+            start, end = entry.get("day_start"), entry.get("day_end")
+            if not isinstance(start, int) or not isinstance(end, int) or end <= start:
+                continue
+            wording = days_wording(end - start)
+            changed = TRAVEL_RECORD_DAYS.sub(lambda m: wording + m.group(2), content)
+            if changed != content:
+                entry["content"] = changed
+                fixed += 1
+    if fixed and write:
+        write("durations: {} travel record(s) now say {}".format(fixed, wording))
+    return fixed
+
+
 def install(ctx, write=None):
     """日数送りの関所を立てる。包んだ対象の名前を返す。
 
@@ -640,6 +681,11 @@ def install(ctx, write=None):
 
     ctx.wrap(DAYS_TARGET, required=False)(elapse_days)
     setattr(sys, _GATE_ATTR, {"generation": generation, "targets": [DAYS_TARGET]})
+
+    def travel_records(call):
+        correct_travel_records(call.app, write)
+
+    arrivals.on(TRAVEL_RECORD_OWNER, ctx, (arrivals.AREA,), after=travel_records, write=write)
     global _gate_written
     if write and _gate_written != DAYS_TARGET:
         _gate_written = DAYS_TARGET

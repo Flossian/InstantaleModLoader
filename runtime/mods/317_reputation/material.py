@@ -199,6 +199,7 @@ def arenas(app):
     勝つと `current_phase` が +2 され、試合ごとの相手の格は `enemy_data.<段>.data.rank` に焼かれる。
     勝った試合は段 0, 2, … の `wins` 個。逃げると段は進まないので数えない。
     MOD が建てた闘技場（`331_`）も生きた世界の施設に居るので同じ読み方で拾う。
+    段の鍵は、セーブから読んだ分は文字列、読み込みの後に戦った分は数（どちらも実機）。
     """
     found = {}
     for area_id, area in ui.world_areas(app).items():
@@ -216,7 +217,8 @@ def arenas(app):
                 enemies = config.get("enemy_data")
                 ranks = []
                 for index in range(wins):
-                    entry = (enemies.get(str(index * ARENA_PHASE_STEP))
+                    step = index * ARENA_PHASE_STEP
+                    entry = (enemies.get(str(step), enemies.get(step))
                              if isinstance(enemies, dict) else None)
                     data = entry.get("data") if isinstance(entry, dict) else None
                     rank = _number(data.get("rank") if isinstance(data, dict) else

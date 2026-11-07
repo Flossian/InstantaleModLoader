@@ -931,6 +931,44 @@ check("足した回はログに残る",
       and "nonlethal: guard_battle_summarizer (summary)" in lines, lines)
 check("例外を漏らさない（描写）", not ctx.errors, ctx.errors)
 
+# ---------------------------------------------------------------- 主人公と同じ名前
+print("相手の名前が主人公や仲間と重ならない")
+arena = Facility(config={"current_phase": 0, "enemy_data": {}})
+app = App(Player(arena))
+app.player.name = "ヴェイン・カスティロ"
+ally = Player(arena)
+ally.name = "リュウ"
+app.party = {"player": app.player, "95": ally}
+module, ctx, manifest = fresh(app)
+
+
+def named(name):
+    def orig(self, enemy_id):
+        return {"type": "normal", "data": {"name": name, "rank": 30}}
+    return ctx.hooks["__main__:ColosseumMatchStart.generate_enemy_data"](orig, Manager(app), "0")
+
+
+check("主人公と同じ名前は改名する",
+      named("ヴェイン・カスティロ")["data"]["name"] == "ヴェイン・カスティロの名を騙る闘士")
+check("中黒と空白の違いも同じ名前に数える",
+      named("ヴェイン カスティロ")["data"]["name"] != "ヴェイン カスティロ")
+check("仲間と同じ名前も改名する", named("リュウ")["data"]["name"] == "リュウの名を騙る闘士")
+check("重ならない名前はそのまま", named("白金の騎士")["data"]["name"] == "白金の騎士")
+check("改名を記録する", "same name as the party" in io.open(os.path.join(OUT_DIR, module.LOG_BASENAME), encoding="utf-8").read())
+told = generate(ctx, arena, 30)["location"]
+check("生成の頼みに一行の名前を伝える",
+      "闘士の名前に 「ヴェイン・カスティロ」「リュウ」 を使ってはならない" in told.description,
+      told.description)
+check("頼みに足した文は施設に残らない", "闘士の名前に" not in arena.description, arena.description)
+check("足すのは1度だけ", module.with_note(told, "闘士の名前に X", "闘士の名前に") is told)
+
+print("窓口 defeat: ゲームが末尾へ戻した主人公を先頭へ並べ直す")
+app.party = {"95": ally, "player": app.player}
+defeat._state()["removed_player"] = app.player
+defeat._ensure_player_back(app)
+check("主人公が一覧の先頭へ戻る", list(app.party) == ["player", "95"], list(app.party))
+check("並べ直しを記録する", any("moved to the front" in line for line in DEFEAT_LOG), DEFEAT_LOG)
+
 if failures:
     print("FAILED: " + ", ".join(failures))
     sys.exit(1)
