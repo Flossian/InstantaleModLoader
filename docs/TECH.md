@@ -1376,6 +1376,10 @@ def days_note(app, days, granted):     # 決まった後に必ず来る（勝っ
 MOD は `durations.on_days(owner, ctx, before=fn, after=fn)` で渡し、`elapse_days` を自分で包まない（§3.3.21）。
 前の処理は日数を決める前に、後の処理は `orig` の後に来る。後の処理は `call.granted`（実際に渡した日数）と `call.moved`（暦の前後の差）を読める。
 
+片付けると別の土地へ移動する依頼（`307_` / `325_`）は、移動で日数が進む。
+依頼の後に日数を進める MOD（`344_`）が重ねないよう、移動する側が `durations.declare_quest_travel(owner, fn)` で答え、進める側が `durations.quest_travels(app, quest_id)` で聞く。
+`fn(app, quest_id)` は真偽を返す。依頼が片付く前（`QuestEndManager.execute` の前）に聞くこと。片付くと控えの段階が進む。
+
 計測（200番台）は関所より後＝外側に当たるので、
 **MOD が差し替える前の生の日数**が録れる性質は変わらない（`217_` / `218_` / `231_`）。
 

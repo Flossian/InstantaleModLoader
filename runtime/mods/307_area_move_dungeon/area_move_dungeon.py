@@ -954,6 +954,15 @@ def apply(ctx):
     durations.claim_days(owner, days_wish, note=days_note, write=write)
     durations.install(ctx, write)
 
+    def travels_after_quest(app, quest_id):
+        """片付けるとこの道の先へ移動する依頼か（`quest_end` と同じ見分け方）。"""
+        journey.sync()
+        record = road_of(app, "offered", "armed")
+        return record is not None and (quest_id == record.get("quest_id")
+                                       or (quest_id is None and record.get("stage") == "armed"))
+
+    durations.declare_quest_travel(owner, travels_after_quest)
+
     @ctx.wrap("__main__:AreaMoveManager.__init__", required=False)
     def area_move(orig, self, *args, **kwargs):
         """自分が起こしたのでない移動が始まったら、待っている道は捨てる。

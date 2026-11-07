@@ -297,6 +297,27 @@ def main():
     ok &= check("望みが無ければ渡された日数のまま",
                 gate(orig, app, 90) == "done" and passed == [90], passed)
 
+    print("片付けると移動する依頼")
+    ok &= check("誰も置いていなければ移動しない", durations.quest_travels(app, "1") is False)
+    durations.declare_quest_travel("road_a", lambda _app, quest_id: quest_id == "1")
+    durations.declare_quest_travel("road_b", lambda _app, quest_id: quest_id == "2")
+    ok &= check("どれか1つが答えれば移動する",
+                durations.quest_travels(app, "1") and durations.quest_travels(app, "2"))
+    ok &= check("どれも答えなければ移動しない", durations.quest_travels(app, "3") is False)
+    ok &= check("持ち主の一覧に載る", "road_a" in durations.owners(), durations.owners())
+
+    def broken(_app, _quest_id):
+        raise RuntimeError("x")
+
+    travel_log = []
+    durations.declare_quest_travel("road_c", broken)
+    ok &= check("壊れた答えは飛ばす",
+                durations.quest_travels(app, "3", write=travel_log.append) is False)
+    ok &= check("壊れた答えは WARN に残す", any("WARN" in row for row in travel_log), travel_log)
+    for name in ("road_a", "road_b", "road_c"):
+        ok &= check("{} を外せる".format(name), "quest_travel" in durations.forget(name))
+    ok &= check("外すと答えない", durations.quest_travels(app, "1") is False)
+
     print("OK" if ok else "FAILED")
     return 0 if ok else 1
 

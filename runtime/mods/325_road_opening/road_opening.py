@@ -1577,6 +1577,14 @@ def apply(ctx):
     durations.claim_days(owner, days_wish, note=days_note, write=write)
     durations.install(ctx, write)
 
+    def travels_after_quest(app, quest_id):
+        """片付けるとこの道の先へ移動する依頼か（`quest_end` と同じ見分け方）。"""
+        record = pending_of(app, "offered", "armed")
+        return record is not None and (quest_id == record.get("quest_id")
+                                       or (quest_id is None and record.get("stage") == "armed"))
+
+    durations.declare_quest_travel(owner, travels_after_quest)
+
     def after_days(call):
         """日数が進んだ後に、期日が来た委託を開く（`check_commissions`）。
 

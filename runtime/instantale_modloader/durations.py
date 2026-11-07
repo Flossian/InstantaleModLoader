@@ -138,6 +138,8 @@ def forget(owner, write=None):
         registry.pop(kind, None)
     if _claims().pop(str(owner), None) is not None:
         gone.append("days")
+    if _quest_travels().pop(str(owner), None) is not None:
+        gone.append("quest_travel")
     for cleaner in list(_CLEANERS):
         try:
             gone.extend(cleaner(str(owner)) or [])
@@ -156,6 +158,7 @@ def owners():
     """
     names = {who for who, _fn in _registry().values()}
     names.update(_claims())
+    names.update(_quest_travels())
     return sorted(names)
 
 
@@ -324,6 +327,47 @@ def training_days(app, activity, write=None):
     plan = training(app, write=write)
     years = plan["activity_years"].get(str(activity), 1)
     return years * plan["days_per_year"]
+
+
+# --------------------------------------------------------------------------
+# 片付けるとそのまま移動する依頼
+# --------------------------------------------------------------------------
+# 道中の依頼（`307_` / `325_`）は、片付けた後で別の土地へ移動し、そこで日数が進む。
+# 依頼の後に日数を進める MOD は、そういう依頼に日数を重ねないよう、ここに聞く。
+_QUEST_TRAVEL_ATTR = "_instantale_durations_quest_travels"
+
+
+def _quest_travels():
+    """`{持ち主: fn}`。`sys` に置いて注入し直しをまたぐ。"""
+    found = getattr(sys, _QUEST_TRAVEL_ATTR, None)
+    if not isinstance(found, dict):
+        found = {}
+        setattr(sys, _QUEST_TRAVEL_ATTR, found)
+    return found
+
+
+def declare_quest_travel(owner, fn):
+    """片付けると移動する依頼かを答える関数を置く。同じ持ち主の登録は差し替える。
+
+    `fn(app, quest_id)` は真偽を返す。依頼が片付く前（`QuestEndManager.execute` の前）に呼ばれる。
+    `quest_id` は読めなければ None。
+    """
+    if not callable(fn):
+        raise TypeError("declare_quest_travel() needs a callable, got {!r}".format(type(fn)))
+    _quest_travels()[str(owner)] = fn
+
+
+def quest_travels(app, quest_id, write=None):
+    """この依頼を片付けると移動するか。誰も置いていなければ False。例外は握って WARN を残す。"""
+    for owner, fn in list(_quest_travels().items()):
+        try:
+            if fn(app, quest_id):
+                return True
+        except Exception as exc:
+            if write:
+                write("WARN durations: the quest travel check of {!r} raised {}: {}".format(
+                    owner, type(exc).__name__, exc))
+    return False
 
 
 # --------------------------------------------------------------------------

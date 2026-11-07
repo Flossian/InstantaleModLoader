@@ -765,6 +765,7 @@ add_text('…はパーティから離脱した。')
 
 - `QuestEndManager`（`__init__@6508` / `method_1@6511` / `execute@6634`。解散は 6602行）。
   別スレッドで走る。放棄側は `QuestRetireManager`
+- 放棄は、依頼の中の自由入力で審判が retire を選ぶと起きる。「パーティは撤退した...」の後に仲間が解散し、抜けた先はエリアの入口（2026-11-07 の実機）
 - 帰還は解散より先なので、解散の時点で `player.current_area` はもう町
 - ゲーム側の置き先は `initial_location`（雇用された場所）
 

@@ -1,0 +1,55 @@
+{
+  "entry": "quest_return_days.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Days pass when you return from a quest",
+    "ja": "依頼から帰還すると日付が進む"
+  },
+  "description": {
+    "en": "When you clear or abandon a quest, the calendar advances by one inn stay, up to 30 days. Talks from before the quest are no longer treated as earlier today. Off by default",
+    "ja": "依頼を片付けるか放棄して帰還すると、宿の宿泊1回ぶん（最大30日）日付が進む。出発前の会話が今日の続きとして扱われなくなる。既定は切"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "after": [
+    "142_balance_quest_stamina",
+    "301_quest_from_conversation",
+    "303_quest_end_party_to_guild",
+    "304_quest_end_keep_party",
+    "307_area_move_dungeon",
+    "318_area_difficulty_growth",
+    "321_area_chronicle",
+    "325_road_opening",
+    "336_crime_overhaul",
+    "338_town_incidents"
+  ],
+  "settings": {
+    "ENABLED": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "依頼から帰還すると日付を進める",
+        "en": "Advance the calendar after a quest"
+      },
+      "note": {
+        "ja": "入れると、依頼を片付けるか放棄して帰還したときに日付が進む。家賃や街の出来事など、日数で動くものも一緒に進む。切っていると何もしない",
+        "en": "When on, the calendar advances when you clear or abandon a quest, along with everything that runs on days, such as rent and town events. Off does nothing"
+      }
+    },
+    "MAX_DAYS": {
+      "type": "int",
+      "default": 30,
+      "min": 1,
+      "max": 30,
+      "label": {
+        "ja": "進める日数の上限",
+        "en": "Most days to advance"
+      },
+      "note": {
+        "ja": "進むのは宿の宿泊1回の日数で、これを超えるときはこの日数で止める。素のゲームの宿泊は3ヵ月以上なので、宿泊期間を変えていなければ毎回この日数になる",
+        "en": "The calendar advances by one inn stay, stopping at this limit. The game's own stay is 3 months or more, so unless you changed the stay length this limit is what you get"
+      }
+    }
+  }
+}
