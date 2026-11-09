@@ -1789,11 +1789,31 @@ if _Image is not None:
     check("下絵は透過を黒地に置いて RGB にし、出口の寸法に合わせる",
           shaped.mode == "RGB" and shaped.size == (20, 40) and shaped.getpixel((19, 39)) == (0, 0, 0),
           (shaped.mode, shaped.size, shaped.getpixel((19, 39))))
+    square = _Image.new("RGB", (30, 30), (0, 0, 255))
+    square.paste((255, 0, 0), (10, 0, 20, 30))
+    shaped = I2I.as_init(square, 10, 30)
+    check("縦横比の違う下絵は中央を切り出してから合わせる（正方形の敵の絵から縦長を描く）",
+          shaped.size == (10, 30) and shaped.getpixel((0, 15)) == (255, 0, 0)
+          and shaped.getpixel((9, 15)) == (255, 0, 0), (shaped.size, shaped.getpixel((0, 15))))
+    tall = _Image.new("RGB", (20, 30), (10, 20, 30))
+    padded = MOD.humans.pad_square(tall)
+    check("縦長の絵は左右を端の色で埋めて正方形にする",
+          padded.size == (30, 30) and padded.getpixel((0, 0)) == (10, 20, 30), padded.size)
 else:
     # 下絵の形だけは PIL が要る。流れの検査は偽の絵で回す（読む口と形を作る口を差し替える）。
     print("  skip 下絵の形（PIL が無い。流れは偽の絵で回す）")
     I2I.as_init = lambda image, width, height: _FakeImage("RGB", (width, height))
     I2I.load_image = lambda path: _FakeImage("RGBA", (256, 512))
+check("種族は敵の本文の creature の後の括弧から読む",
+      MOD.humans.race_of("masterpiece,full body,creature,(human woman:1.1), cloak") == "human woman"
+      and MOD.humans.race_of("young man, cloak") is None)
+check("人間の語が1つでもあれば人間、語の一部（lizardman）は数えない",
+      MOD.humans.is_human("elf woman") and not MOD.humans.is_human("lizardman")
+      and not MOD.humans.is_human("goblin"))
+check("正方形だけ縦長にする（幅は高さの 2/3 を 64 の倍数に丸める）",
+      MOD.humans.tall_size(768, 768, MOD.sizes.round_side) == (512, 768)
+      and MOD.humans.tall_size(1024, 1024, MOD.sizes.round_side) == (704, 1024)
+      and MOD.humans.tall_size(1024, 704, MOD.sizes.round_side) is None)
 shaped = new_image("RGB", (20, 40))
 check("絵の一覧からは1枚目", I2I.first_image([shaped, new_image("RGB", (1, 1))]) is shaped)
 check("絵でなければ None", I2I.first_image({"width": 1}) is None and I2I.first_image([]) is None)
@@ -1823,6 +1843,8 @@ class ImgSD(object):
         image = new_image("RGB", (width, height))
         image.info.update({"model": self.model_path, "init": init_image, "strength": strength,
                            "prompt": prompt})
+        # 埋め戻した絵は info を持たないので、描いた引数はクラスにも控える
+        ImgSD.last = {"negative": negative_prompt, "size": (width, height), "model": self.model_path}
         return [image]
 
 
@@ -1893,6 +1915,45 @@ try:
           seen.get("source") is None and plain.info["init"] is None, (seen, plain.info))
     check("今の絵が無い新しい絵は、ふだんどおり描く（下絵なし・ゲームの部品）",
           got.info["init"] is None and got.info["model"] == GAME_SOTE, got.info)
+    # 人間の敵（版28。humans.py）
+    MOD.MARKS.kind, MOD.MARKS.func = "enemy", "generate_image_real_lcm"
+    game_neg = "nsfw,human,girl,women,people,(worst quality, low quality:1.4), multiple characters"
+
+    def enemy_draw(race, hooks=None):
+        prompt = ("masterpiece,high quality,full body,creature,({}:1.1), torn cloak,"
+                  "(plain background,black background:1.1)").format(race)
+        return (hooks or ctx_img.hooks)[img_exit](ImgSD.generate_image, game_img, prompt=prompt,
+                                                  negative_prompt=game_neg, width=512, height=512)
+
+    got = enemy_draw("human woman")
+    check("女性の人間の敵は否定から human / girl / women / people を外す",
+          ImgSD.last["negative"] == "nsfw,(worst quality, low quality:1.4), multiple characters",
+          ImgSD.last["negative"])
+    check("立ち絵の描き方の設定が切なら、人間の敵も正方形のまま描く",
+          ImgSD.last["size"] == (512, 512) and got[0].size == (512, 512), ImgSD.last)
+    enemy_draw("human man")
+    check("男性の人間の敵は human / people だけ外す（girl / women は残す）",
+          ImgSD.last["negative"] == "nsfw,girl,women,(worst quality, low quality:1.4), multiple characters",
+          ImgSD.last["negative"])
+    got = enemy_draw("goblin")
+    check("人間でない敵は否定も寸法も変えない",
+          ImgSD.last["negative"] == game_neg and ImgSD.last["size"] == (512, 512)
+          and got[0].size == (512, 512), ImgSD.last)
+    ctx_human = fresh(_state_dir=img_dir, HUMAN_ENEMY_AS_PORTRAIT=True, KIND_PRESETS=True,
+                      PORTRAIT_PRESET="XL")
+    ctx_human.game_dir = os.path.dirname(sd15_path)
+    MOD.MARKS.kind, MOD.MARKS.func = "enemy", "generate_image_real_lcm"
+    got = enemy_draw("human woman", ctx_human.hooks)
+    check("設定が入なら、人間の敵は同じ高さの縦長で描く", ImgSD.last["size"] == (320, 512), ImgSD.last)
+    check("人間の敵は立ち絵に割り当てたプリセットで描く", ImgSD.last["model"] == sdxl_path, ImgSD.last)
+    if _Image is not None:
+        check("縦長の絵は正方形に埋め戻してゲームへ返す",
+              isinstance(got, list) and got[0].size == (512, 512), [g.size for g in got])
+    enemy_draw("goblin", ctx_human.hooks)
+    check("設定が入でも、人間でない敵は敵の割り当て（空ならゲームの部品）で正方形に描く",
+          ImgSD.last["model"] == GAME_SOTE and ImgSD.last["size"] == (512, 512), ImgSD.last)
+    MOD.MARKS.kind, MOD.MARKS.func = None, None
+
     MOD.MARKS.func = "image_to_image_anime"
     MOD.MARKS.kind, MOD.MARKS.source = "portrait", zeno
     got = ctx_img.hooks[img_exit](ImgSD.generate_image, game_img, prompt="p",

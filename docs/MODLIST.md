@@ -74,7 +74,7 @@
 | [`128_item_image_variety`](MODS.md#128_item_image_variety-アイテム画像を似た候補から散らして選び素材に無い武器防具服消耗品の絵を足す) | アイテム画像の拡充 | アイテム画像を似た候補から散らして選び、素材に無い武器・防具・服・消耗品の絵を足す | 65 |  |
 | [`129_balance_item_price`](MODS.md#129_balance_item_price-アイテムの値段を付け直す) | アイテムの値付けの調整 | アイテムの値段を付け直す | 19 |  |
 | [`130_currency_unit`](MODS.md#130_currency_unit-通貨の呼び名と所持金の表示を変える) | 通貨の表記を変更する | 通貨の呼び名と所持金の表示を変える | 4 |  |
-| [`131_sharp_portrait`](MODS.md#131_sharp_portrait-立ち絵敵背景の縮小と減色を通さず背景抜きと顔の検出を確かにする) | 立ち絵・敵・背景の高画質化、背景抜きと顔認識の精度向上 | 立ち絵・敵・背景の縮小と減色を通さず、背景抜きと顔の検出を確かにする | 8 |  |
+| [`131_sharp_portrait`](MODS.md#131_sharp_portrait-立ち絵敵背景の縮小と減色を通さず背景抜きと顔の検出を確かにする) | 立ち絵・敵・背景の高画質化、背景抜きと顔認識の精度向上 | 立ち絵・敵・背景の縮小と減色を通さず、背景抜きと顔の検出を確かにする | 10 |  |
 | [`132_npc_variety`](MODS.md#132_npc_variety-npc-の外見性格経歴に種を渡す) | NPC の外見・性格・経歴の多様化 | NPC の外見・性格・経歴に種を渡す | 7 |  |
 | [`133_ui_area_difficulty`](MODS.md#133_ui_area_difficulty-移動先に適正レベル帯を出す) | 移動先の適正レベル帯の表示 | 移動先に適正レベル帯を出す | 9 |  |
 | [`134_balance_item_effects`](MODS.md#134_balance_item_effects-アイテムの効果を分類ごとに作り直す) | アイテム効果の調整 | アイテムの効果を分類ごとに作り直す | 18 |  |
@@ -144,7 +144,7 @@
 | [`340_shop_lineup`](MODS.md#340_shop_lineup-宿屋と鍛冶屋でも売買でき店の種類ごとに品揃えの傾向が付く) | 宿屋と鍛冶屋でも売買でき、店の種類ごとに品揃えの傾向が付く | 宿屋と鍛冶屋でも売買でき、店の種類ごとに品揃えの傾向が付く | 1 |  |
 | [`341_shopkeeper_attitude`](MODS.md#341_shopkeeper_attitude-店主の人柄と主人公との関係で売買の値段が変わる) | 店主の人柄と主人公との関係で売買の値段が変わる | 店主の人柄と主人公との関係で売買の値段が変わる | 6 |  |
 | [`342_attack_animations`](MODS.md#342_attack_animations-攻撃の演出が武器と属性に合ったものになる) | 攻撃の演出が武器と属性に合ったものになる | 攻撃の演出が武器と属性に合ったものになる | 1 |  |
-| [`343_stable_diffusion`](MODS.md#343_stable_diffusion-stable-diffusion-の解像度サンプラーモデルプロンプトを差し替える) | Stable Diffusionの各種差し替え | Stable Diffusion の解像度・サンプラー・モデル・プロンプトを差し替える | 51 |  |
+| [`343_stable_diffusion`](MODS.md#343_stable_diffusion-stable-diffusion-の解像度サンプラーモデルプロンプトを差し替える) | Stable Diffusionの各種差し替え | Stable Diffusion の解像度・サンプラー・モデル・プロンプトを差し替える | 52 |  |
 | [`344_quest_return_days`](MODS.md#344_quest_return_days-依頼から帰還すると日付が進む) | 依頼から帰還すると日付が進む | 依頼から帰還すると日付が進む | 2 |  |
 | [`345_date_display`](MODS.md#345_date_display-現在地の下に日付を表示する) | 現在地の下に日付を表示する | 現在地の下に日付を表示する | 3 |  |
 | [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘の審判への仲間の情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |

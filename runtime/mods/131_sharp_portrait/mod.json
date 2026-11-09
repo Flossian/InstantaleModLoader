@@ -100,6 +100,32 @@
         "en": "For enemies only, combines the u2net and isnet-anime results and strengthens faint areas. Bodies are less likely to vanish or turn see-through, but black background can remain, for example inside wings. Works regardless of the sharpening settings. Applies to enemies drawn from now on; existing ones change when redrawn"
       }
     },
+    "HUMAN_ENEMY_SCALE": {
+      "type": "float",
+      "default": 1.0,
+      "min": 1.0,
+      "max": 2.0,
+      "label": {
+        "ja": "人間の敵（闘技場の相手など）を戦闘画面で大きく見せる倍率",
+        "en": "How much larger human enemies (arena opponents and so on) look in battle"
+      },
+      "note": {
+        "ja": "種族が人間の敵だけ、戦闘画面の絵の部品をこの倍率で大きくする。足元の高さと左右の中心は変えない。部品は正方形で、立った人は縦に長いので小さく見えるため。1.0 でゲームのまま。敵が何人も並ぶと、大きくした部品の左右が隣と重なることがある",
+        "en": "For enemies whose race is human only, enlarges their picture on the battle screen by this factor, keeping the feet and the horizontal centre in place. The picture slot is square, so a standing person otherwise looks small. 1.0 keeps the game's size. With several enemies side by side, an enlarged slot can overlap its neighbours"
+      }
+    },
+    "HUMAN_ENEMY_NO_TONE": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "人間の敵（闘技場の相手など）に暗い色調を当てない",
+        "en": "Skip the dark tone on human enemies (arena opponents and so on)"
+      },
+      "note": {
+        "ja": "種族が人間の敵だけ、ゲームが敵の絵に当てる暗い色調（色を3割に落とし、コントラストを上げ、少し暗くする）を通さない。黒い服の人間は肌まで灰色になり白黒に見えるため。人間でない敵は色調のまま。荒くする設定とは関係なく効く。これから描く敵に効き、既にいる敵は描き直すと変わる",
+        "en": "For enemies whose race is human only, skips the dark tone the game puts on enemy pictures (colour cut to 30%, more contrast, a little darker), which turns people in dark clothes grey down to the skin. Other enemies keep the tone. Works regardless of the sharpening settings. Applies to enemies drawn from now on; existing ones change when redrawn"
+      }
+    },
     "FACE_YUNET": {
       "type": "bool",
       "default": true,

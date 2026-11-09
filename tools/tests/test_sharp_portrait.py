@@ -696,6 +696,88 @@ def main():
     outside = FakeImage(8, 8)
     check("入口の外の縁はゲームのまま", border(lambda image: "ゲームの縁", outside) == "ゲームの縁")
     check("入口の外の色調はゲームのまま", tone(lambda image, **k: k, outside) == {})
+
+    print("人間の敵に色調を当てない")
+    h_mod, h_ctx, _h_pixel, _h_reduce = fresh_mod(HUMAN_ENEMY_NO_TONE=True)
+    h_entries = {name: h_ctx.hooks[h_mod.CREATURE + ":" + name] for name in h_mod.ENEMY_ENTRIES}
+    h_tone = h_ctx.hooks[h_mod.CREATURE + ":apply_dark_fantasy_tone"]
+    h_picture = FakeImage(128, 128, "敵")
+
+    def game_toned(world, race, name, appearance, size):
+        return h_tone(lambda image, *a, **k: "ゲームの色調", h_picture)
+
+    check("種族が人間の敵は色調を通さず、入って来た絵を返す",
+          h_entries["generate_enemy_image"](game_toned, "世界", "human woman", "相手", "cloak", "medium") is h_picture)
+    check("名前で渡った種族も見る",
+          h_entries["generate_enemy_image"](lambda **k: game_toned(**k), world="世界", race="human man",
+                                          name="相手", appearance="cloak", size="medium") is h_picture)
+    check("人間でない敵は色調のまま（語の一部の lizardman も人間に数えない）",
+          h_entries["generate_enemy_image"](game_toned, "世界", "orc", "オーク", "big", "large") == "ゲームの色調"
+          and h_entries["generate_enemy_image"](game_toned, "世界", "lizardman", "蜥蜴", "big", "large")
+          == "ゲームの色調")
+    check("種族が空でも、本文の creature の後の種族が人間なら通さない（設定の画面の描き直しの呼び方）",
+          h_entries["generate_enemy_image"](
+              lambda *a, **k: game_toned(*a[:5]), "世界", None, "相手", "", "medium",
+              positive_prompt="masterpiece,full body,creature,(human woman:1.1), cloak") is h_picture)
+    check("本文の種族が人間でなければ色調のまま",
+          h_entries["generate_enemy_image"](
+              lambda *a, **k: game_toned(*a[:5]), "世界", None, "蜥蜴", "", "medium",
+              positive_prompt="masterpiece,full body,creature,(lizardman:1.1), scales") == "ゲームの色調")
+    check("入口を出れば人間の印は降りる", not getattr(h_mod._LOCAL, "human", False))
+
+    print("人間の敵を戦闘画面で大きく見せる")
+    s_mod, s_ctx, _s_pixel, _s_reduce = fresh_mod(HUMAN_ENEMY_SCALE=1.5)
+    display = s_ctx.hooks.get(s_mod.ENEMY_DISPLAY)
+    check("敵の欄の組み直しを包む（無くても撥ねない）",
+          display is not None and s_ctx.kwargs[s_mod.ENEMY_DISPLAY].get("required") is False)
+
+    class Widget(object):
+        def __init__(self):
+            self.size, self.pos = [320, 320], [800.0, 498.8]
+
+    def record(prompt):
+        return types.SimpleNamespace(config={"image_generate_prompts": {"positive_prompt": prompt}})
+
+    hud = types.SimpleNamespace(enemy_images={"相手": Widget(), "狼": Widget()})
+    app = types.SimpleNamespace(current_enemy_dict={
+        "相手": record("masterpiece,full body,creature,(human woman:1.1), cloak"),
+        "狼": record("masterpiece,full body,creature,(wolf:1.1), fur")})
+    real_find_app = s_mod.ui.find_app
+    s_mod.ui.find_app = lambda: app
+
+    def game_layout(self):
+        """ゲームの組み直しの代わり。決め直さない回（大きさと位置をそのまま残す）。"""
+        return "laid out"
+
+    try:
+        got = display(game_layout, hud)
+        person, wolf = hud.enemy_images["相手"], hud.enemy_images["狼"]
+        check("人間の敵は 1.5 倍、足元の高さと左右の中心はそのまま",
+              got == "laid out" and tuple(person.size) == (480.0, 480.0)
+              and tuple(person.pos) == (720.0, 498.8), (person.size, person.pos))
+        check("人間でない敵は変えない", wolf.size == [320, 320] and wolf.pos == [800.0, 498.8])
+        display(game_layout, hud)
+        check("ゲームが決め直さずに2度組み直しても二重にかけない",
+              tuple(person.size) == (480.0, 480.0) and tuple(person.pos) == (720.0, 498.8),
+              (person.size, person.pos))
+
+        def game_resets(self):
+            for widget in self.enemy_images.values():
+                widget.size, widget.pos = [400, 400], [700.0, 450.0]
+
+        display(game_resets, hud)
+        check("ゲームが決め直したら、新しい大きさから掛け直す",
+              tuple(person.size) == (600.0, 600.0) and tuple(person.pos) == (600.0, 450.0),
+              (person.size, person.pos))
+        s_mod.HUMAN_ENEMY_SCALE = 1.0
+        display(game_resets, hud)
+        check("1.0 ならゲームのまま", person.size == [400, 400])
+    finally:
+        s_mod.ui.find_app = real_find_app
+    h_mod.HUMAN_ENEMY_NO_TONE = False
+    check("切なら人間の敵も色調のまま",
+          h_entries["generate_enemy_image"](game_toned, "世界", "human woman", "相手", "cloak", "medium")
+          == "ゲームの色調")
     module.SHARP_PORTRAIT = False
     after = pixel(Original(), FakeImage(512, 1024, "元絵"), 165, 330)
     check("立ち絵の設定は敵の設定と独立", after[1].who == "ゲーム", after[1].who)

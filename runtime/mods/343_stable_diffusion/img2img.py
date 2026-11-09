@@ -199,6 +199,17 @@ def as_init(image, width, height):
         back.alpha_composite(rgba)
         got = back
     got = got.convert("RGB")
+    # 縦横比が違えば中央を切り出してから合わせる（人間の敵は正方形の今の絵から縦長を描く。humans.py）
+    have, want = float(got.size[0]) / got.size[1], float(width) / height
+    if abs(have - want) > 0.02 * want:
+        if have > want:
+            keep = int(round(got.size[1] * want))
+            left = (got.size[0] - keep) // 2
+            got = got.crop((left, 0, left + keep, got.size[1]))
+        else:
+            keep = int(round(got.size[0] / want))
+            top = (got.size[1] - keep) // 2
+            got = got.crop((0, top, got.size[0], top + keep))
     if got.size != (width, height):
         got = got.resize((width, height), Image.LANCZOS)
     return got

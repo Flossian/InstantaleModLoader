@@ -336,6 +336,8 @@ def idle_notes(values, plans, family, backend, log):
             notes.append("種類ごとのプリセット（diffusers 系では使わない）")
         if values.get("IMG2IMG") or values.get("CHAIN"):
             notes.append("高度設定（diffusers 系では使わない）")
+        if values.get("HUMAN_ENEMY_AS_PORTRAIT"):
+            notes.append("人間の敵を立ち絵の描き方で描く（diffusers 系では使わない）")
         resized = any(size_of(kind, "lcm", dict(values, DIFFUSERS_RESIZE=True), "sdcpp")
                       != BASE_SIZES[(kind, "lcm")] for kind, _label in KINDS)
         if resized and not values.get("DIFFUSERS_RESIZE"):
@@ -362,7 +364,8 @@ def build(values, custom, backend, game_model, log, game_dir=""):
     """帯の中身。
 
     `{"rows": [(種類, txt2img のモデル, 寸法, サンプラー, img2img のモデル, txt2img→img2img のモデル)],
-    "game": ゲーム既定のモデルの名前, "last": [(種類, 前に描いた絵)], "notes": [文]}`。
+    "game": ゲーム既定のモデルの名前, "last": [(種類, 前に描いた絵)], "notes": [文],
+    "human": 人間の敵を立ち絵の描き方で描くか}`。
     寸法とサンプラーは txt2img（ふだんの生成）のもの。欄の「ゲーム既定」の中身は `game` に1回だけ出す。
     `backend` はゲームの `config.json` の画像生成の欄（読めなければ空）。`log` は `read_log` の戻り値。
     """
@@ -383,4 +386,5 @@ def build(values, custom, backend, game_model, log, game_dir=""):
     notes = idle_notes(values, plans, family, backend, log)
     if family != "diffusers":
         notes += method_missing(values, custom)
-    return {"rows": rows, "game": game_model or "", "last": last_rows, "notes": notes}
+    return {"rows": rows, "game": game_model or "", "last": last_rows, "notes": notes,
+            "human": bool(values.get("HUMAN_ENEMY_AS_PORTRAIT")) and family != "diffusers"}

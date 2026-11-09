@@ -52,7 +52,7 @@
     },
     "EPITHET_FAME": {
       "type": "int",
-      "default": 100,
+      "default": 500,
       "min": 0,
       "max": 9999,
       "label": {
@@ -60,8 +60,8 @@
         "en": "Fame + notoriety needed for an epithet"
       },
       "note": {
-        "ja": "名声と悪名の合計がこれ以上で二つ名が付く。名声は依頼1件ごとに難易度の2乗÷25（難易度25の依頼で25、開始の村の依頼は1件1にも満たない）、物語の依頼は2倍、闘技場は破った相手の格で同じく数える。悪名は手配が重くなった分の累計。既定の100は、中盤の街で依頼を4件ほど片付けた頃に届く",
-        "en": "An epithet forms once fame plus notoriety reaches this. Each quest gives difficulty squared / 25 (25 for a difficulty-25 quest, under 1 for a starting-village quest), story quests count double, and arena wins count the same way by the rank of the opponent. Notoriety is the running total of every rise in how heavily you are wanted. The default 100 is reached about four quests into the middle towns"
+        "ja": "名声と悪名の合計がこれ以上で二つ名が付く。名声は依頼1件ごとに難易度の2乗÷25（難易度25の依頼で25、開始の村の依頼は1件1にも満たない）、物語の依頼は2倍、闘技場の1勝は破った相手の格で数えた ¼（格は70で頭打ち）。悪名は手配が重くなった分の累計。既定の500は、本編の半ばのころに届く",
+        "en": "An epithet forms once fame plus notoriety reaches this. Each quest gives difficulty squared / 25 (25 for a difficulty-25 quest, under 1 for a starting-village quest), story quests count double, and an arena win counts a quarter of that by the rank of the opponent, with the rank capped at 70. Notoriety is the running total of every rise in how heavily you are wanted. The default 500 is reached around the middle of the main story"
       }
     },
     "USE_LAND_NAMES": {
@@ -78,7 +78,7 @@
     },
     "LAND_NAME_FAME": {
       "type": "int",
-      "default": 100,
+      "default": 300,
       "min": 0,
       "max": 9999,
       "label": {
@@ -86,8 +86,8 @@
         "en": "Fame + notoriety in one land for a local name"
       },
       "note": {
-        "ja": "その土地の名声と悪名の合計がこれ以上で呼び名が付く。既定の100は中盤の街の依頼4件、または難易度50の依頼1件に当たる。開始の村では依頼を重ねても届かない",
-        "en": "A land gives you a local name once its fame plus notoriety reaches this. The default 100 is four quests in a middle town, or one difficulty-50 quest. Quests in the starting village never get there"
+        "ja": "その土地の名声と悪名の合計がこれ以上で呼び名が付く。既定の300は中盤の街の依頼12件、または終盤の街（難易度60）の依頼2件に当たる。序盤の街では依頼を重ねても届かない",
+        "en": "A land gives you a local name once its fame plus notoriety reaches this. The default 300 is twelve quests in a middle town, or two quests in the last towns (difficulty 60). Quests in the early towns never get there"
       }
     },
     "EPITHET_MIN_LANDS": {

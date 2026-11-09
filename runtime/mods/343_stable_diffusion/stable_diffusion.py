@@ -51,6 +51,7 @@ from instantale_modloader import saves
 from instantale_modloader import ui
 
 from . import assets
+from . import humans
 from . import img2img
 from . import live as hot
 from . import presets
@@ -182,6 +183,10 @@ CHAIN_BACKGROUND_FIRST = ""
 CHAIN_BACKGROUND_SECOND = ""
 CHAIN_BACKGROUND_STRENGTH = img2img.CHAIN_STRENGTH
 CHAIN_BACKGROUND_AUTO = False
+
+#: 人間の敵（闘技場の相手など）を立ち絵の描き方（プリセット・img2img・続けて描く）で、
+#: 同じ高さの縦長に描いて正方形へ埋め戻す。既定は切（ゲームのまま）。sdcpp 系だけ（humans.py）。
+HUMAN_ENEMY_AS_PORTRAIT = False
 
 #: ゲームが部品を建てたときの引数。種類ごとの部品を同じ作りで建てるために控える。
 #: 部品のクラスに持たせる（注入のたびにモジュールは作り直されるが、クラスは同じ）。
@@ -553,12 +558,17 @@ def apply(ctx):
                            conf.get("long_caps", {}).get(kind))
         if new is not None:
             changes["width"], changes["height"] = new
+        # 人間の敵は、ゲームの否定から種族とぶつかる語を外してから規則を当てる（humans.py）
+        race = humans.race_of(params.get("prompt")) if kind == "enemy" else None
         for name, target in (("prompt", "prompt"), ("negative_prompt", "negative")):
             body = params.get(name)
             if not isinstance(body, str):
                 continue
+            base = humans.strip_negative(body, race) if target == "negative" else body
             book = tag_book(rules, kind, target, model)
-            got = rulebook.rewrite(rules, kind, target, body, body, model, book)
+            got = rulebook.rewrite(rules, kind, target, base, body, model, book)
+            if got is None and base != body:
+                got = base
             if got is not None:
                 changes[name] = got
             if target == "prompt" and book is not None:
@@ -582,6 +592,14 @@ def apply(ctx):
         if seed is not None and "seed" in params:
             changes["seed"] = seed
         return changes
+
+    def is_human_enemy(kind, params):
+        """ゲームの敵の本文の種族が人間か（humans.py）。"""
+        return kind == "enemy" and humans.is_human(humans.race_of(params.get("prompt")))
+
+    def as_portrait(kind, params):
+        """立ち絵の描き方で描く人間の敵か（`HUMAN_ENEMY_AS_PORTRAIT`）。"""
+        return bool(live.values.get("HUMAN_ENEMY_AS_PORTRAIT")) and is_human_enemy(kind, params)
 
     def drop_game_lora(params, changes):
         """**ゲームが入れた** `<lora:...>` だけを外す。外したら True。
@@ -985,6 +1003,13 @@ def apply(ctx):
                 if target is None:          # 建てられなかった。プリセットを使わずに描く
                     target, route = self, None
             changes = wanted(kind, stage, params, route)
+            # 立ち絵の描き方で描く人間の敵は、正方形を同じ高さの縦長にする。
+            # 正方形への埋め戻しは `hook` の出口（sdcpp だけ）
+            if not diffusers and as_portrait(kind, params):
+                tall = humans.tall_size(changes.get("width", params.get("width")),
+                                        changes.get("height", params.get("height")), sizes.round_side)
+                if tall is not None:
+                    changes["width"], changes["height"] = tall
             if diffusers:
                 changes = for_diffusers(changes, params)
             # その一族の出口に無い引数は落とす（名前を新設しない）。
@@ -1026,6 +1051,18 @@ def apply(ctx):
             return extra
 
         def hook(orig, self, *args, **kwargs):
+            result = run(orig, self, *args, **kwargs)
+            if diffusers or sig is None:
+                return result
+            try:
+                bound = sig.bind_partial(self, *args, **kwargs)
+                if as_portrait(kind_now(), bound.arguments):
+                    return humans.pad_result(result)
+            except Exception:
+                ctx.log_exc("image quality: padding a human enemy failed")
+            return result
+
+        def run(orig, self, *args, **kwargs):
             live.refresh()                 # 設定と規則が変わっていれば読み直す
             kind = kind_now()
             stage = stage_of(frames.attr(MARKS, "func", None))
@@ -1034,13 +1071,17 @@ def apply(ctx):
             source = frames.attr(MARKS, "source", None)
             forced = imagegen.method_now()
             mode = None
+            # 描き方（プリセット・描き直し・続けて描く）を選ぶ種類。人間の敵は設定で立ち絵の描き方にする
+            pick = kind
             if sdcpp:
                 bound = sig.bind_partial(self, *args, **kwargs)
                 bound.apply_defaults()
-                mode = img2img.plan(kind, stage, dict(bound.arguments), live.img2img,
+                if as_portrait(kind, bound.arguments):
+                    pick = "portrait"
+                mode = img2img.plan(pick, stage, dict(bound.arguments), live.img2img,
                                     source is not None, forced)
             if mode == "redraw":
-                conf = img2img.conf_for(live.img2img, mode, kind)
+                conf = img2img.conf_for(live.img2img, mode, pick)
                 # プリセットが空なら、ゲーム既定のモデルで描く（続けて描くと同じ）。
                 route = method_route(conf["preset"], "描き直し（{}）".format(kind))
                 try:
@@ -1052,7 +1093,7 @@ def apply(ctx):
                          "今の絵を下絵にして描けなかったので、ふだんどおり描く（{}: {}）".format(
                              type(exc).__name__, exc))
             elif mode == "chain":
-                conf = img2img.conf_for(live.img2img, mode, kind)
+                conf = img2img.conf_for(live.img2img, mode, pick)
                 try:
                     first = draw(orig, self, args, kwargs, kind, stage,
                                  method_route(conf["first"], "続けて描く1つ目（{}）".format(kind)),
@@ -1080,7 +1121,7 @@ def apply(ctx):
                         return first
             # 種類にプリセットを割り当てていれば、その部品と値で描く（sdcpp だけ）。
             return draw(orig, self, args, kwargs, kind, stage,
-                        kind_route(kind) if sdcpp else None)
+                        kind_route(pick) if sdcpp else None)
         return hook
 
     # ------------------------------------------------------- 当てる・当て直す

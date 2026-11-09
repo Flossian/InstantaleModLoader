@@ -794,8 +794,13 @@ def run():
           module.area_fame({"achievements": 2, "difficulties": []}) == 0)
     check("物語の依頼は2倍",
           module.area_fame({"story_difficulties": [25]}) == 50)
-    check("闘技場は破った相手の格ごとに数える",
-          module.area_fame({"arena_ranks": [30, 44]}) == 113)
+    check("闘技場は破った相手の格ごとに、同じ格の依頼の ¼ で数える",
+          module.area_fame({"arena_ranks": [30, 44]}) == 28)
+    check("闘技場の相手の格は 70 で頭打ち（その上の1勝は 49）",
+          module.area_fame({"arena_ranks": [70]}) == 49
+          and module.area_fame({"arena_ranks": [150]}) == 49)
+    check("終盤の闘技場の10勝は依頼3件分ほどに収まる",
+          module.area_fame({"arena_ranks": [30, 43, 57, 70, 83, 97, 110, 123, 137, 150]}) == 403)
     check("開始の村の依頼は20件重ねても名声は小さい",
           module.area_fame({"done_difficulties": [3] * 20, "done": 20}) == 7)
     check("名声に手配度は混ぜない",

@@ -114,10 +114,10 @@ from . import material, window
 USE_EPITHET = True        # 二つ名を編纂し、注入にも載せるか
 EPITHET_CHARS = 8         # 二つ名の上限（全角）。既定8は実機の所感（MODS.md `317_reputation` の「二つ名が編み直される契機」）
 EPITHET_RANDOM_LENGTH = True  # 編纂のたびに狙う長さを揺らすか（下限3〜上限）
-EPITHET_FAME = 100        # 二つ名が付く名声＋悪名（MODS.md `317_reputation` の「名声と悪名」）
+EPITHET_FAME = 500        # 二つ名が付く名声＋悪名（MODS.md `317_reputation` の「名声と悪名」）
 EPITHET_MIN_LANDS = 2     # 二つ名が付くのに要る、評判の立つ土地の数
 USE_LAND_NAMES = True     # 土地ごとの呼び名を付けるか
-LAND_NAME_FAME = 100      # その土地の名声＋悪名がこれ以上で呼び名が付く
+LAND_NAME_FAME = 300      # その土地の名声＋悪名がこれ以上で呼び名が付く
 IN_CONVERSATION = True    # 会話5関数に注入するか
 #: 会話の相手の `profile` に評判を足す順（ローダの `modnpc` の notes。小さいほど先）。
 #: 自分で包んでいたときの重なり（外側から 321・317・403・311・326・301）を保つ。TECH.md §3.3.21。
@@ -202,6 +202,15 @@ FAME_DIVISOR = 25.0
 
 #: 物語の依頼の重み。本編の節目は通常の依頼より広く知られる。
 STORY_WEIGHT = 2.0
+
+#: 闘技場の1勝の重み。依頼は道中の戦いとボスを含む数戦分で、闘技場は1戦だけなので ¼。
+#: 闘技場の相手の格は勝つたびに上限なく上がる（GAME.md の闘技場の節）ので、2乗のまま足すと
+#: 10勝で依頼27件分になった。
+ARENA_WEIGHT = 0.25
+
+#: 名声に数える闘技場の相手の格の天井。闘技場のプロンプトで格70が「歴史に名を残す勇者や魔王に値する強者」。
+#: これより強い相手に勝っても1勝の名声は増えない（`deed_fame(70)` × `ARENA_WEIGHT` ＝ 49）。
+ARENA_RANK_CAP = 70
 
 #: 呼び名の上限（全角）。二つ名と同じ上限を使う（`EPITHET_CHARS`）。
 LAND_NAME_LINE = "この土地では「{nickname}」と呼ばれている。"
@@ -320,7 +329,8 @@ def area_fame(entry):
       完了した依頼        難易度ごとに1件ずつ
       依頼の付かない成した事  依頼より多い分だけ、その土地の依頼の難易度の中央値で
       物語の依頼          `STORY_WEIGHT` 倍
-      闘技場の勝ち        破った相手の格ごとに1勝ずつ（闘技場の相手の格は依頼の難易度と同じ目盛り）
+      闘技場の勝ち        破った相手の格ごとに1勝ずつ、`ARENA_WEIGHT` 倍。格は `ARENA_RANK_CAP` で頭打ち
+                          （闘技場の相手の格は依頼の難易度と同じ目盛り）
     成した事は依頼1件につき1文ずつ書かれる（GAME.md §2.20）ので、件数をそのまま足すと二重に数える。
     悪名はここに入れない（`accumulate_notoriety`）。
     """
@@ -331,7 +341,9 @@ def area_fame(entry):
     if extra:
         fame += extra * deed_fame(_median(entry.get("difficulties") or ()))
     fame += STORY_WEIGHT * sum(deed_fame(value) for value in entry.get("story_difficulties") or ())
-    fame += sum(deed_fame(value) for value in entry.get("arena_ranks") or ())
+    fame += ARENA_WEIGHT * sum(deed_fame(min(value, ARENA_RANK_CAP))
+                               for value in entry.get("arena_ranks") or ()
+                               if isinstance(value, (int, float)) and not isinstance(value, bool))
     return int(round(fame))
 
 

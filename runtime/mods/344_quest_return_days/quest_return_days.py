@@ -17,7 +17,7 @@ MAX_DAYS = 30
 LOG_BASENAME = "quest_return_days.log"
 
 #: 日付が進んだことを知らせる本文。{days} は日数。
-RETURN_TEXT = "帰還してから{days}日が過ぎた。"
+RETURN_TEXT = "帰還までに{days}日経過した。"
 
 QUEST_END_TARGET = "__main__:QuestEndManager.execute"
 QUEST_RETIRE_TARGET = "__main__:QuestRetireManager.execute"

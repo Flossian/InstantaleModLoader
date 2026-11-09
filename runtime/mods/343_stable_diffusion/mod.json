@@ -734,6 +734,18 @@
         "ja": "1つ目の絵をどこまで描き変えるか。小さいほど1つ目の絵が残る",
         "en": "How far the second pass moves away from the first image. Lower keeps more of it"
       }
+    },
+    "HUMAN_ENEMY_AS_PORTRAIT": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "人間の敵（闘技場の相手など）を立ち絵の描き方で描く",
+        "en": "Draw human enemies (arena opponents and so on) the way portraits are drawn"
+      },
+      "note": {
+        "ja": "入にすると、種族が人間の敵だけ、立ち絵に割り当てたプリセット・img2img・txt2img→img2img で描き、正方形でなく同じ高さの縦長で描いてから左右を埋めて正方形に戻す。異形向けのモデルで敵を描いていると、人間の相手まで骸骨や仮面の顔になり、頭や足が切れるのを避けるため。規則と寸法の目標は敵のまま。sdcpp 系だけで効く",
+        "en": "When on, only enemies whose race is human are drawn with the preset, img2img and txt2img then img2img assigned to portraits, at the same height but in portrait proportions, and then padded back to a square. With a monster-oriented model for enemies, human opponents otherwise come out with skull or mask faces and with the head or feet cut off. Rules and target sizes stay those of enemies. Works only on the sdcpp family"
+      }
     }
   },
   "tool": {

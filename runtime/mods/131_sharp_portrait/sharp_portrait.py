@@ -117,7 +117,10 @@ anime の回の `None` では呼び直さない。ここで拾って返すとゲ
   * `pixel_art_process`: 立ち絵と同じく元を呼んで形だけ借り、`(絵, 絵の写し)` を返す
   * 縁（`add_border_to_image`）: `ENEMY_BORDER` が切なら通さない。太さは固定のピクセル数で、
     大きな絵では途切れた細い線になり、背景抜きの取り残しまで囲む
-  * 色調（`apply_dark_fantasy_tone`）: 色調は残し、雑音だけ下限まで落とす
+  * 色調（`apply_dark_fantasy_tone`）: 色調は残し、雑音だけ下限まで落とす。
+    `HUMAN_ENEMY_NO_TONE` が入なら、種族が人間の敵（入口の `race` か本文の種族）は色調を通さない（VERIFICATION.md §3.43）
+  * 戦闘画面の大きさ: `HUMAN_ENEMY_SCALE` が 1.0 より大きければ、敵の欄の組み直し（`update_enemy_display`）の後に、
+    人間の敵（`app.current_enemy_dict` の記録の本文の種族）の部品だけ大きくする。足元の高さと左右の中心は変えない
   * `reduce_image_colors`: 減色せず、入って来た絵を控えて返す
   * 2倍: 実寸を見て倍にするので 2048x2048 になる。包めない位置にあるので、
     入口が返した後で、戦闘画面が読むファイルを控えの絵で上書きする
@@ -149,11 +152,12 @@ anime の回の `None` では呼び直さない。ここで拾って返すとゲ
 """
 
 import os
+import re
 import threading
 import time
 
 from instantale_modloader import config as loader_config
-from instantale_modloader import imagegen, patch
+from instantale_modloader import imagegen, patch, ui
 
 from . import cutout, faces
 
@@ -180,6 +184,14 @@ CUTOUT_MODEL = "game"
 # 敵の背景抜きを、2つのモデルで合わせて濃くするか。既定は切（`CUTOUT_MODEL` のまま）。
 ENEMY_CUTOUT_MERGE = False
 
+# 種族が人間の敵（闘技場の相手など）に、ゲームの暗い色調を当てないか。既定は切（ゲームのまま）。
+# 色調は色を3割に落としコントラストを上げるので、黒い服の人間は肌まで灰色になる（GAME.md §2.30）。
+HUMAN_ENEMY_NO_TONE = False
+
+# 戦闘画面で、種族が人間の敵の絵の部品を何倍に見せるか。足元の高さと左右の中心は変えない。
+# 1.0 でゲームのまま。部品は正方形で、立った人は縦に長いので小さく見える（GAME.md §2.30）。
+HUMAN_ENEMY_SCALE = 1.0
+
 # 顔の検出が外れた回に、前処理した絵でやり直すか。
 FACE_RETRY = True
 
@@ -203,6 +215,16 @@ _LOCAL = threading.local()
 #: 敵の絵の入口。この中に居る間は何も変えない（モンスター・衛兵と、NPC の戦闘用の絵）。
 ENEMY_ENTRIES = ("generate_enemy_image", "generate_enemy_image_from_character")
 
+#: `generate_enemy_image(world_name, race, name, appearance, size)` の種族の位置。
+RACE_POS = 1
+
+#: ゲームの敵の本文の種族（`creature,(human woman:1.1)` の括弧の中。GAME.md §2.30）。
+PROMPT_RACE = re.compile(r"\bcreature\s*,\s*\(([^():]+):[0-9.]+\)", re.IGNORECASE)
+
+#: 種族の語にこれが1つでもあれば人間の敵（`343_` の `humans.py` と同じ語）。
+HUMAN_WORDS = frozenset(("human", "humans", "man", "men", "woman", "women", "girl", "girls",
+                         "boy", "boys", "male", "female", "person", "people", "elf", "humanoid"))
+
 #: ゲームが2倍にして保存し、戦闘画面が読む敵の絵（モンスター・衛兵と、NPC の戦闘用の絵）。
 ENEMY_SHOWN = ("pixelated_image_resized.png", "opponent_image.png")
 
@@ -222,6 +244,13 @@ CUTOUT_OLD_OWNER = "343_stable_diffusion"
 #: 戦闘画面の敵の絵の部品。
 ENEMY_IMAGE_TEXTURE ="scripts.hud.new_hud:NearestNeighborImage.on_texture"
 
+#: 戦闘画面の敵の欄を組み直す関数。組み直した後に人間の敵の部品を大きくする。
+ENEMY_DISPLAY = "scripts.hud.new_hud:InstanTaleHUD.update_enemy_display"
+
+#: 部品に覚えておく、大きくする前の (大きさ, 位置) と大きくした後の大きさ。
+#: ゲームが組み直すたびに大きさを決め直すかは読めないので、二重にかけないために持つ。
+SCALED_ATTR = "_mod131_scaled"
+
 #: `apply_dark_fantasy_tone(img, color, contrast, brightness, randomize)` の、img を除いた randomize の位置。
 TONE_RANDOMIZE_POS = 3
 
@@ -236,6 +265,54 @@ ARG_NAMES = ("cascade_path", "padding", "crop_size")
 
 def dims(image):
     return "{}x{}".format(*image.size)
+
+
+def is_human_race(race):
+    """種族の文が人間を指すか。語の一部（lizardman）は数えない。"""
+    return isinstance(race, str) and bool(set(re.findall(r"[a-z]+", race.lower())) & HUMAN_WORDS)
+
+
+def is_human_call(args, kwargs):
+    """入口の呼び方から、人間の敵か。
+
+    種族の引数のほかに、文字列の引数に入った本文の `creature,(<種族>:1.1)` も見る
+    （設定の画面の「画像の再生成」は、記録から組み直した本文で入口を呼ぶ）。
+    """
+    race = args[RACE_POS] if len(args) > RACE_POS else kwargs.get("race")
+    if is_human_race(race):
+        return True
+    texts = [value for value in list(args) + list(kwargs.values()) if isinstance(value, str)]
+    return any(is_human_race(found) for text in texts for found in PROMPT_RACE.findall(text))
+
+
+def enemy_is_human(enemy):
+    """戦闘中の敵（`app.current_enemy_dict` の値）が人間か。
+
+    記録の `config.image_generate_prompts.positive_prompt`（送った本文）の種族で決める。
+    """
+    config = enemy.get("config") if isinstance(enemy, dict) else getattr(enemy, "config", None)
+    prompts = config.get("image_generate_prompts") if isinstance(config, dict) else None
+    prompt = prompts.get("positive_prompt") if isinstance(prompts, dict) else None
+    if not isinstance(prompt, str):
+        return False
+    return any(is_human_race(found) for found in PROMPT_RACE.findall(prompt))
+
+
+def scale_widget(widget, scale):
+    """部品を `scale` 倍にする。足元の高さと左右の中心は変えない。
+
+    前に大きくしたままなら、覚えておいた元の大きさと位置から掛け直す（二重にかけない）。
+    """
+    size, pos = tuple(widget.size), tuple(widget.pos)
+    kept = getattr(widget, SCALED_ATTR, None)
+    if kept and kept[2] == size and kept[3] == pos:
+        size, pos = kept[0], kept[1]
+    width, height = size
+    new = (width * scale, height * scale)
+    new_pos = (pos[0] + width / 2.0 - new[0] / 2.0, pos[1])
+    widget.size = new
+    widget.pos = new_pos
+    setattr(widget, SCALED_ATTR, (size, pos, tuple(widget.size), tuple(widget.pos)))
 
 
 def quiet_tone(orig, image, args, kwargs):
@@ -319,6 +396,7 @@ def apply(ctx):
         def enemy_entry(orig, *args, **kwargs):
             _LOCAL.enemy = True
             _LOCAL.enemy_source = None
+            _LOCAL.human = name == "generate_enemy_image" and is_human_call(args, kwargs)
             try:
                 result = orig(*args, **kwargs)
                 undo_doubling(result)
@@ -326,6 +404,7 @@ def apply(ctx):
             finally:
                 _LOCAL.enemy = False
                 _LOCAL.enemy_source = None
+                _LOCAL.human = False
 
         return enemy_entry
 
@@ -361,6 +440,9 @@ def apply(ctx):
 
     @hook("apply_dark_fantasy_tone", required=False, safe=True, alias_scan=False)
     def creature_tone(orig, image, *args, **kwargs):
+        if enemy() and HUMAN_ENEMY_NO_TONE and getattr(_LOCAL, "human", False):
+            note("敵: 人間の敵なので色調を当てない {}".format(dims(image)))
+            return image
         if sharp_enemy():
             note("敵: 色調 {} 雑音を {} に".format(dims(image), TONE_QUIET))
             return quiet_tone(orig, image, args, kwargs)
@@ -373,6 +455,21 @@ def apply(ctx):
             texture = getattr(widget, "texture", None)
             if texture is not None:
                 texture.min_filter = "linear"
+        return result
+
+    @ctx.wrap(ENEMY_DISPLAY, required=False, safe=True, alias_scan=False)
+    def update_enemy_display(orig, self, *args, **kwargs):
+        result = orig(self, *args, **kwargs)
+        if HUMAN_ENEMY_SCALE <= 1.0:
+            return result
+        # ここで投げると safe の包みがゲームの関数をもう一度呼ぶので、自分で受け止める。
+        try:
+            enemies = getattr(ui.find_app(), "current_enemy_dict", None) or {}
+            for name, widget in dict(getattr(self, "enemy_images", None) or {}).items():
+                if enemy_is_human(enemies.get(name)):
+                    scale_widget(widget, HUMAN_ENEMY_SCALE)
+        except Exception:
+            ctx.log_exc("sharp portrait: scaling a human enemy failed")
         return result
 
     def background_pixel(orig, image, *args, **kwargs):

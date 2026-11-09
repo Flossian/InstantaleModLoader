@@ -118,7 +118,7 @@ check("素の宿泊は上限の30日になる", ("elapse", 30) in app.calls, app
 check("文 → 日数 → 保存の順",
       [row[0] for row in app.calls] == ["text", "elapse", "save"], app.calls)
 check("進めた後の日付を保存する", ("save", 130) in app.calls, app.calls)
-check("日数を文に出す", ("text", "帰還してから30日が過ぎた。") in app.calls, app.calls)
+check("日数を文に出す", ("text", "帰還までに30日経過した。") in app.calls, app.calls)
 
 print("宿泊期間を短くしているとき")
 durations.declare(durations.INN_STAY, lambda _app: {"months": 1, "days": 7, "length": "1週間"},

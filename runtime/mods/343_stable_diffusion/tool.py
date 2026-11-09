@@ -478,7 +478,9 @@ def build_window(rules_in=None, settings_in=None, note=""):
         for cells, row in zip(band_cells, got["rows"]):
             for cell, text in zip(cells, row):
                 cell.configure(text=text)
-        band_game.configure(text="ゲーム既定 = ゲームで選んだモデル（{}）".format(got["game"] or "読めない"))
+        band_game.configure(text="ゲーム既定 = ゲームで選んだモデル（{}）{}".format(
+            got["game"] or "読めない",
+            "／人間の敵（闘技場の相手など）は立ち絵の行のモデルで描く" if got["human"] else ""))
         band_last.configure(text="前に描いた絵（ログ）: " + "／".join(
             "{} {}".format(label, text) for label, text in got["last"]))
         band_notes.configure(text="効いていない設定: " + "／".join(got["notes"]) if got["notes"] else "")
@@ -1176,6 +1178,15 @@ def build_window(rules_in=None, settings_in=None, note=""):
                                                                       padx=(0, 8))
         ttk.Checkbutton(grid, variable=var_for(img2img.chain_auto_name(kind))).grid(
             row=index, column=4, sticky="w")
+    human_check = ttk.Checkbutton(tab, text="人間の敵（闘技場の相手など）を立ち絵の描き方で描く",
+                                  variable=var_for("HUMAN_ENEMY_AS_PORTRAIT"))
+    human_frame = ttk.LabelFrame(tab, labelwidget=human_check, padding=8)
+    human_frame.pack(fill="x", pady=(0, 12))
+    ttk.Label(human_frame, wraplength=740, justify="left", text="\n".join([
+        "入にすると、種族が人間の敵だけ、立ち絵の行（種類ごとのプリセット・img2img・txt2img→img2img）で描く。",
+        "正方形でなく同じ高さの縦長で描き、左右を埋めて正方形に戻すので、頭や足が切れにくい。",
+        "異形向けのモデルで敵を描いていると、人間の相手まで骸骨や仮面の顔になるのを避けられる。",
+        "規則と寸法の目標は敵のまま。"])).pack(anchor="w")
     advanced_note = ttk.Label(tab, text="", justify="left")
     advanced_note.pack(anchor="w")
     preset_listeners.append(advanced_lists)

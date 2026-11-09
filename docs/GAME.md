@@ -4031,10 +4031,13 @@ HUD の `toggle_setting_window_visibility` を直に呼ぶと、ゲームが `At
 | 2 | `remove_background` | 同じ |
 | 3 | `pixel_art_process(絵, 128, 128, num_colors='16')` | `(入力そのまま, 128x128)`。ゲームが使うのは2つ目 |
 | 4 | `add_border_to_image` | 128x128。白い縁を固定のピクセル数で足す |
-| 5 | `apply_dark_fantasy_tone`（引数なし） | 128x128。既定の `randomize=35` で雑音が乗る |
+| 5 | `apply_dark_fantasy_tone`（引数なし） | 128x128。既定の `color=0.3`・`contrast=1.5`・`brightness=0.8` で色を3割に落としてコントラストを上げ、`randomize=35` で雑音が乗る（彩度はどの敵でも半分ほどになる。VERIFICATION.md §3.43） |
 | 6 | `reduce_image_colors(絵, 64)` | 128x128 |
 | 7 | 2倍に伸ばして保存（包めない） | 256x256。戦闘画面が読む `pixelated_image_resized.png` |
 
+- 頼む文（`343_` のログとセーブ）: 本文は `masterpiece,high quality,full body,creature,(<種族>:1.1), <外見>,(plain background,black background:1.1), <lora:LCM_LoRA_Weights_SD15:1>`、否定は `nsfw,human,girl,women,people,(worst quality, low quality:1.4), multiple characters, (sketch, comic, anime)`。
+  否定の `human,girl,women,people` は種族が人間でも入る。
+  闘技場の相手は人間で、種族は男性が `human man`、女性が `human woman`、大きさは `medium`（女性はセーブの `current_enemy_data.<名前>.config.image_generate_prompts` に送った文が残っていた。世界によって `dark fantasy,` が `full body` の前に入る）。寸法は 512x512 の正方形
 - 戻り値は `(base_image.png のパス, pixelated_image_resized.png のパス, 正のプロンプト, 負のプロンプト)`
 - 7の2倍は入って来た絵の実寸を見る。1024x1024 を渡すと 2048x2048 を保存する
 - `generate_enemy_image_from_character(世界, 名前, 全身の絵のパス, size)` の `size` は `{"width": …, "height": …}` の辞書で、`pixel_art_process` をキーワード（`pixelation_width` / `pixelation_height`）で呼ぶ。
