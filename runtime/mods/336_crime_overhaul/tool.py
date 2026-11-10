@@ -160,8 +160,7 @@ def build_window(mod_dir=MOD_DIR):
     outer.pack(fill="both", expand=True)
     ttk.Label(outer, text=title, style="Title.TLabel").pack(anchor="w")
     ttk.Label(outer, style="Sub.TLabel", wraplength=980, justify="left",
-              text="左で機能を選ぶと、右にその機能の項目が出る。入切は右の先頭の項目で切り替える。"
-                   "どの世界でも効く"
+              text="左で機能を選ぶ。入切は右の先頭の項目"
               ).pack(anchor="w", pady=(0, 8))
 
     footer = ttk.Frame(outer)

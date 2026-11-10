@@ -233,10 +233,7 @@ def build_window(mod_dir=MOD_DIR):
     outer = ttk.Frame(root, padding=12)
     outer.pack(fill="both", expand=True)
     ttk.Label(outer, text=title, style="Title.TLabel").pack(anchor="w")
-    ttk.Label(outer, style="Sub.TLabel", wraplength=940, justify="left",
-              text="どの世界でも効く。ゲームを起動し直すと効く。\n"
-                   "様子のタブはライバルの控え（state\\rival_adventurer\\）を読むだけ。"
-              ).pack(anchor="w", pady=(0, 8))
+    ttk.Frame(outer, height=8).pack()
 
     footer = ttk.Frame(outer)
     footer.pack(side="bottom", fill="x")
@@ -306,13 +303,11 @@ def build_window(mod_dir=MOD_DIR):
     page = ttk.Frame(notebook, padding=(4, 8, 4, 4))
     notebook.add(page, text="様子")
     ttk.Label(page, style="Sub.TLabel", wraplength=920, justify="left",
-              text="ライバルの控え（世界×主人公ごとに1つ）。\n"
-                   "ゲームを起動している間は、MODが覚えている内容が次に書かれるまでファイルは古いままのことがある。\n"
-                   "「ライバルを選び直す」「控えを消す」はゲームを閉じてから使う（起動中に変えると、次の保存で書き戻される）。"
+              text="「ライバルを選び直す」「記録を消す」はゲームを閉じてから使う"
               ).pack(anchor="w", pady=(0, 6))
     picker_row = ttk.Frame(page)
     picker_row.pack(fill="x")
-    ttk.Label(picker_row, text="控え").pack(side="left", padx=(0, 8))
+    ttk.Label(picker_row, text="記録").pack(side="left", padx=(0, 8))
     picked = tk.StringVar()
     picker = ttk.Combobox(picker_row, textvariable=picked, state="readonly", width=60)
     picker.pack(side="left", fill="x", expand=True)
@@ -326,7 +321,7 @@ def build_window(mod_dir=MOD_DIR):
         view.configure(state="normal")
         view.delete("1.0", "end")
         if path is None:
-            view.insert("1.0", "控えがまだありません（ライバルが現れる抽選をした世界から作られる）。")
+            view.insert("1.0", "記録がまだありません。")
         else:
             view.insert("1.0", describe(modtool.read_json(path)) + "\n\n" + path)
         view.configure(state="disabled")
@@ -345,14 +340,13 @@ def build_window(mod_dir=MOD_DIR):
             return
         bucket = modtool.read_json(path)
         if not isinstance(bucket, dict) or not isinstance(bucket.get("rival"), dict):
-            messagebox.showinfo("ライバルを選び直す", "この控えには、まだライバルがいません。", parent=root)
+            messagebox.showinfo("ライバルを選び直す", "この記録には、まだライバルがいません。", parent=root)
             return
         name = bucket["rival"].get("name") or "今のライバル"
         if not messagebox.askyesno(
                 "ライバルを選び直す",
                 "「{}」をライバルから外し、次にこの世界を読み込んだときに別の冒険者を選びます。\n"
-                "{}は二度と選びません。勝敗・態度・取り合いの記録は最初に戻ります"
-                "（ライバルが片付けた依頼は片付いたまま）。\n"
+                "{}は二度と選びません。勝敗・態度・取り合いの記録は最初に戻ります。\n"
                 "ゲームは閉じていますか？".format(name, name), parent=root):
             return
         rivalry.decline_rival(bucket)
@@ -365,7 +359,7 @@ def build_window(mod_dir=MOD_DIR):
         if path is None:
             return
         if not messagebox.askyesno(
-                "控えを消す", "「{}」の控えを消します。\nライバル・勝敗・隠している依頼がすべて最初に戻ります。\n"
+                "記録を消す", "「{}」の記録を消しますか？\nライバル・勝敗・隠している依頼がすべて最初に戻ります。\n"
                 "ゲームは閉じていますか？".format(picked.get()), parent=root):
             return
         try:
@@ -378,7 +372,7 @@ def build_window(mod_dir=MOD_DIR):
     buttons = ttk.Frame(page)
     buttons.pack(fill="x", pady=(6, 0))
     ttk.Button(buttons, text="読み直す", command=reload_state).pack(side="left")
-    ttk.Button(buttons, text="控えを消す", command=delete_state).pack(side="right")
+    ttk.Button(buttons, text="記録を消す", command=delete_state).pack(side="right")
     ttk.Button(buttons, text="ライバルを選び直す", command=redraw_state).pack(side="right", padx=(0, 8))
     reload_state()
 

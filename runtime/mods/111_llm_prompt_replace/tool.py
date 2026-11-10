@@ -1234,7 +1234,7 @@ def build_window(model):
             return
         if not messagebox.askyesno(
                 "ルールの削除",
-                "このルールを削除します。よろしいですか？\n\n{}\n→ {}".format(
+                "このルールを削除しますか？\n\n{}\n→ {}".format(
                     cell(rule.from_text), cell(rule.to_text)), parent=root):
             return
         page["tab"].items.remove(rule)
@@ -1339,7 +1339,7 @@ def build_window(model):
         count = len(page["tab"].rules)
         if not messagebox.askyesno(
                 "タブ削除",
-                "タブ「{}」とその中のルール {} 件を削除します。よろしいですか？".format(
+                "タブ「{}」とその中のルール {} 件を削除しますか？".format(
                     page["tab"].name, count), parent=root):
             return
         at = model.doc.tabs.index(page["tab"])
@@ -1472,9 +1472,9 @@ def build_window(model):
         ttk.Label(frame, text="記録（out\\prompt_bloat.log）", style="Group.TLabel").pack(anchor="w")
         log_replace = tk.BooleanVar(value=bool(model.settings.get("LOG_REPLACE", True)))
         log_rules = tk.BooleanVar(value=bool(model.settings.get("LOG_RULES", True)))
-        ttk.Checkbutton(frame, text="置換したことを記録する（[REPLACE] / [SKIP]）",
+        ttk.Checkbutton(frame, text="置換したことを記録する",
                         variable=log_replace).pack(anchor="w", pady=(4, 0))
-        ttk.Checkbutton(frame, text="ルールの読込を記録する（[RULES]。切っても書式の誤りは残る）",
+        ttk.Checkbutton(frame, text="ルールの読込を記録する",
                         variable=log_rules).pack(anchor="w")
 
         def preview_target(*_args):
@@ -1500,7 +1500,7 @@ def build_window(model):
                     reload(confirm=False, keep_settings=True)
                 else:
                     status.configure(style="Warn.TLabel",
-                                     text="読む先が変わった。「読み直す」で読み直す（未保存の変更は消える）")
+                                     text="読む先が変わった。「読み直す」を押す（未保存の変更は消える）")
             if model.settings.get("RULES_PATH") != before.get("RULES_PATH"):
                 # 本体は置き場を注入の時点で決める（設定は apply の時点）。動いているゲームは前の置き場を読み続ける
                 messagebox.showinfo(
@@ -1568,8 +1568,8 @@ def build_window(model):
         if moving:
             messagebox.showinfo(
                 "保存しました",
-                "{}\n\nに保存しました。これから読まれるのはこのファイルです。\n\n"
-                "元のファイル（{}）は消していませんが、もう読まれません。".format(
+                "{}\n\nに保存しました。\n\n"
+                "元のファイル（{}）は残っていますが、もう読まれません。".format(
                     model.source_path, was), parent=root)
         show_warnings("保存しました。")
 

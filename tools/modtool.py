@@ -566,7 +566,7 @@ def preview_bar(parent, pick):
     stop_button = ttk.Button(bar, text="■ 停止", width=8)
     stop_button.pack(side="left", padx=(6, 10))
     label = ttk.Label(bar, style="Faint.TLabel",
-                      text="一覧で曲を選んで「▶ 試聴」（Space でも鳴らす・止める）" if preview.available
+                      text="曲を選んで「▶ 試聴」か Space" if preview.available
                       else "この環境では試聴できません（Windows の MCI が無い）")
     label.pack(side="left", fill="x", expand=True)
     poll = {"id": None, "name": ""}
@@ -1005,8 +1005,7 @@ def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None, ed
     # --- 見出し
     ttk.Label(outer, text=title, style="Title.TLabel").pack(anchor="w")
     head = ttk.Label(outer, style="Sub.TLabel", wraplength=860, justify="left",
-                     text=by_sentence(blurb) + "\n一括設定はどの世界でも効く。"
-                          "ワールド個別設定は、選んだ世界でだけ一括設定より優先される")
+                     text=by_sentence(blurb))
     head.pack(anchor="w", pady=(0, 6))
     outer.bind("<Configure>", lambda e: head.configure(wraplength=max(300, e.width - 28))
                if e.widget is outer else None, add="+")
@@ -1039,7 +1038,7 @@ def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None, ed
     per_world = ttk.Frame(tabs, padding=(6, 8, 6, 6))
     tabs.add(per_world, text="  ワールド個別設定  ")
     # 書き先のファイル名は保存の後に下の行へ出る（`saved_paths`）ので、ここには書かない。
-    ttk.Label(per_world, text="選んだ世界でだけ効く。セーブからは世界名を読むだけで、セーブには何も書かない",
+    ttk.Label(per_world, text="選んだ世界でだけ、一括設定より優先される",
               style="Sub.TLabel").pack(anchor="w", pady=(0, 4))
     picker = ttk.Frame(per_world)
     picker.pack(fill="x", pady=(0, 4))

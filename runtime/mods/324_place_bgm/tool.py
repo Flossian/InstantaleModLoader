@@ -540,9 +540,8 @@ def build_window(model):
     # --- 見出しと置き場
     ttk.Label(outer, text="街・施設BGMの選曲", style="Title.TLabel").pack(anchor="w")
     ttk.Label(outer, style="Sub.TLabel",
-              text="施設の種類と土地の種類ごとに、鳴らす曲と重みを決める。重みは比率で、"
-                   "同じ種類の合計に対する割合が確率になる。施設に候補が無ければ土地の曲、"
-                   "土地にも無ければゲームの曲").pack(anchor="w", pady=(0, 6))
+              text="施設の種類と土地の種類ごとに、鳴らす曲と重みを決める。重みが大きい曲ほどよく鳴る。"
+                   "施設に曲が無ければ土地の曲、土地にも無ければゲームの曲").pack(anchor="w", pady=(0, 6))
 
     places = ttk.Frame(outer)
     places.pack(fill="x")
@@ -1013,7 +1012,7 @@ def build_window(model):
     spin.bind("<Return>", on_weight)
 
     status = ttk.Label(footer, style="Faint.TLabel",
-                       text="保存すると次の移動から効く（ゲームを起動したままでよい）")
+                       text="保存すると次の移動から効く")
     status.pack(side="left")
 
     def rescan():

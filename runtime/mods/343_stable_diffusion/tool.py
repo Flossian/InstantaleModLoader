@@ -557,10 +557,9 @@ def build_window(rules_in=None, settings_in=None, note=""):
 
     box = group(tab, "モデルの置き場（ゲームのフォルダは触らない）")
     ttk.Label(box, style="Faint.TLabel", wraplength=740, justify="left",
-              text=("ゲーム内のモデル選択はゲームフォルダの中しか見ないので、外に置いたモデルは"
-                    "ここから指す。系統ごとに1つのフォルダへ揃えて置く"
+              text=("外に置いたモデルはここで指す。系統（SD1.5・SDXL）ごとにフォルダを分ける"
                     r"（state\stable_diffusion\models\<系統>\checkpoints / taesd / vae / lora）。"
-                    "系統が混ざるとプロセスごと落ちるので、置き場を系統ごとに分けたまま使う。")
+                    "\n系統を混ぜるとゲームが落ちる。")
               ).pack(anchor="w")
     assets_note = ttk.Label(box, text="", justify="left")
     assets_note.pack(anchor="w", pady=(6, 0))
@@ -644,12 +643,9 @@ def build_window(rules_in=None, settings_in=None, note=""):
     # 読み込むのは欄までで、反映するのは下の「保存」。
     box = group(tab, "カスタムプリセット")
     ttk.Label(box, style="Faint.TLabel", wraplength=740, justify="left",
-              text=("現在の設定（チェックポイント・TAESD・VAE・LoRA の置き場・解像度・サンプラー・"
-                    "LoRA タグの除去など）を名前を付けてプリセットとして保存し、あとで読み込める。"
-                    "SD1.5 と SDXL の切り替えなどに使う。"
-                    "読み込んだだけでは反映されない（内容を確認して下の「保存」を押す）。"
-                    "プロンプトの規則はモデル別の行で切り替わるため、プリセットには含めない。"
-                    r"保存先は state\stable_diffusion\presets.json。")).pack(anchor="w")
+              text=("今の設定に名前を付けて保存し、あとで読み込める。\n"
+                    "読み込んだ後に下の「保存」を押すと反映される。\n"
+                    "プロンプトの規則は含まない。")).pack(anchor="w")
     custom_name = tk.StringVar()
     custom_new = tk.StringVar()
     line = ttk.Frame(box)
@@ -742,7 +738,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
     ttk.Entry(line, textvariable=custom_new, width=36).pack(side="left", padx=(8, 8))
     ttk.Button(line, text="プリセットとして保存", command=keep_custom).pack(side="left")
     ttk.Label(box, style="Faint.TLabel", wraplength=740, justify="left",
-              text="プリセット名が空のときは、選択中のプリセットを上書きする。").pack(anchor="w", pady=(2, 0))
+              text="名前が空なら、選択中のプリセットを上書きする").pack(anchor="w", pady=(2, 0))
     custom_detail.pack(anchor="w", pady=(6, 0))
     custom_note.pack(anchor="w", pady=(6, 0))
     custom_name.trace_add("write", show_custom)
@@ -750,10 +746,8 @@ def build_window(rules_in=None, settings_in=None, note=""):
 
     box = group(tab, "プリセット（元 MOD のモード切替）")
     ttk.Label(box, style="Faint.TLabel", wraplength=740, justify="left",
-              text=("寸法・サンプラー・LoRA タグの除去・チェックポイント・TAESD をプリセットとして入れ替える。"
-                    "片方だけ外すと残りが噛み合わない（SDXL の寸法のまま SD1.5 に描かせるなど）ので、"
-                    "モードを移るときはここから。入れ替えただけでは保存されない。"
-                    "規則（付け替え・追加・除去・置き換え）は触らない。")
+              text=("モードを移るときに、寸法・サンプラー・LoRA タグの除去・チェックポイント・TAESD を"
+                    "まとめて入れ替える。\n入れ替えた後に下の「保存」を押すと反映される。")
               ).pack(anchor="w")
     preset_note = ttk.Label(box, text="", justify="left")
 
@@ -763,7 +757,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
             if name in entries:
                 entries[name].set(value)
         preset_note.configure(text=chr(10).join(
-            ["{} を読み込みました。内容を確認して「保存」を押してください。".format(
+            ["{} を読み込みました。「保存」を押すと反映されます。".format(
                 presets.by_key(key)["label"])] + ["※ " + note for note in notes]))
 
     row = ttk.Frame(box)
@@ -796,17 +790,12 @@ def build_window(rules_in=None, settings_in=None, note=""):
               text="立ち絵・敵・背景を、それぞれ別のカスタムプリセットで描き分ける。").pack(anchor="w")
     ttk.Label(kind_body, wraplength=740, justify="left", text="\n".join([
         "注意",
-        "・ゲームのモデルとは別に、もう1つモデルを読み込む。そのぶん VRAM を多く使う。",
-        "・VRAM が足りないと、絵の生成がとても遅くなるか、ゲームが落ちる。"
-        "ローカルの LLM を同じ GPU で動かしているときは特に気をつける。",
-        "・プリセットのチェックポイントと TAESD は同じ系統（SD1.5 同士・SDXL 同士）にしておく。違うと絵が崩れる。",
-        "・種類ごとの最初の1枚は、モデルを読み込むぶん数秒遅くなる。",
+        "・モデルをもう1つ読み込むので VRAM を多く使う。足りないと生成がとても遅くなるか、ゲームが落ちる。",
+        "・プリセットのチェックポイントと TAESD は同じ系統（SD1.5 同士・SDXL 同士）にする。違うと絵が崩れる。",
     ])).pack(anchor="w", pady=(6, 0))
     kind_confirm = "\n".join([
-        "立ち絵・敵・背景を別のプリセットで描くため、ゲームのモデルとは別にもう1つモデルを読み込みます。",
-        "",
-        "VRAM が足りないと、絵の生成がとても遅くなったり、ゲームが落ちたりします。",
-        "ローカルの LLM を同じ GPU で動かしている場合は、特にご注意ください。",
+        "モデルをもう1つ読み込むので VRAM を多く使います。",
+        "足りないと、絵の生成がとても遅くなるか、ゲームが落ちます。",
         "",
         "使いますか？",
     ])
@@ -894,10 +883,8 @@ def build_window(rules_in=None, settings_in=None, note=""):
 
     box = group(tab, "元 MOD（DLL 版）の設定を取り込む")
     ttk.Label(box, style="Faint.TLabel", wraplength=740, justify="left",
-              text=("DLL 版で使っていた sd_upscale.ini を読み、解像度・サンプラーと"
-                    "規則（付け替え・追加・除去・置き換え・スキップ）をこの画面へ流し込む。"
-                    "読み込んだだけでは保存されないので、中身を見てから「保存」を押す。"
-                    "コメントアウトされている行は元 MOD と同じく無効として扱う。")
+              text=("DLL 版の sd_upscale.ini から、解像度・サンプラー・規則をこの画面へ読み込む。\n"
+                    "読み込んだ後に下の「保存」を押すと反映される。")
               ).pack(anchor="w")
     import_note = ttk.Label(box, text="", justify="left")
     import_note.pack(anchor="w", pady=(6, 0))
@@ -1252,11 +1239,9 @@ def build_window(rules_in=None, settings_in=None, note=""):
             return
         messagebox.showinfo(
             "保存しました",
-            "次に生成される絵から効きます（注入し直しは要りません）。\n"
-            "モデルの差し替え（チェックポイント・TAESD・VAE・LoRA の置き場）だけは別です。\n"
-            "パイプラインが建つ瞬間にしか書けず、ゲームは1プロセスに1回しか建てません。\n"
-            "タイトルへ戻ってワールドを選び直しても建て直りません。\n"
-            "ゲームを起動し直してから注入してください。")
+            "次に生成される絵から効きます。\n"
+            "モデルの差し替え（チェックポイント・TAESD・VAE・LoRA の置き場）だけは、"
+            "ゲームを起動し直すと効きます。")
 
     def reset():
         for key, var in entries.items():

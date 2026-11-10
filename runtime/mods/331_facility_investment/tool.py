@@ -125,9 +125,8 @@ def build_window(mod_dir=MOD_DIR):
     outer.pack(fill="both", expand=True)
     ttk.Label(outer, text=title, style="Title.TLabel").pack(anchor="w")
     ttk.Label(outer, style="Sub.TLabel", wraplength=920, justify="left",
-              text="この画面で、種類ごとの建設費・1日の売上・建てられる最低の規模と、共通の5項目を決める。"
-                   "額は並の等級を町に建てるときのもの。等級と街の規模と倍率はこの上に掛かる"
-                   "（右の参考は都市・最上のとき）。どの世界でも効く"
+              text="額は並の等級を町に建てるときのもの。等級・街の規模・倍率が掛かる。"
+                   "右の参考は都市・最上のとき"
               ).pack(anchor="w", pady=(0, 8))
 
     footer = ttk.Frame(outer)

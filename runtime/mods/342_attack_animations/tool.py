@@ -111,9 +111,8 @@ def build_window(mod_dir=MOD_DIR):
     outer.pack(fill="both", expand=True)
     ttk.Label(outer, text=title, style="Title.TLabel").pack(anchor="w")
     ttk.Label(outer, style="Sub.TLabel", wraplength=780, justify="left",
-              text="設定はどの世界にも効く。ゲームを起動し直すと効く。\n"
-                   "見本は、描き足した絵をゲームの戦闘と同じ速さで繰り返し動かす。\n"
-                   "ゲームに入っていた絵（打撃・爆発・風・光・闇・魔力など）は見え方を選べないので出さない。"
+              text="見本は、描き足した絵をゲームの戦闘と同じ速さで動かす。\n"
+                   "ゲームに元からある絵（打撃・爆発・風・光・闇・魔力など）は見え方を選べない"
               ).pack(anchor="w", pady=(0, 8))
 
     footer = ttk.Frame(outer)

@@ -254,10 +254,7 @@ def build_window(mod_dir=MOD_DIR):
     outer = ttk.Frame(root, padding=12)
     outer.pack(fill="both", expand=True)
     ttk.Label(outer, text=title, style="Title.TLabel").pack(anchor="w")
-    ttk.Label(outer, style="Sub.TLabel", wraplength=940, justify="left",
-              text="設定はどの世界にも効く。ゲームを起動し直すと効く。\n"
-                   "記録のタブは出来事の記録（state\\town_incidents\\）を読むだけ。"
-              ).pack(anchor="w", pady=(0, 8))
+    ttk.Frame(outer, height=8).pack()
 
     footer = ttk.Frame(outer)
     footer.pack(side="bottom", fill="x")
@@ -328,9 +325,7 @@ def build_window(mod_dir=MOD_DIR):
     page = ttk.Frame(notebook, padding=(4, 8, 4, 4))
     notebook.add(page, text="記録")
     ttk.Label(page, style="Sub.TLabel", wraplength=920, justify="left",
-              text="出来事の記録（世界と主人公の組ごとに1つ）。一覧と同じ行を、日数と数字で並べる。\n"
-                   "ゲームを起動している間は、ファイルが少し古いことがある。\n"
-                   "「記録を消す」はゲームを閉じてから使う（起動中に消すと、次のセーブで書き戻される）。"
+              text="「記録を消す」はゲームを閉じてから使う"
               ).pack(anchor="w", pady=(0, 6))
     picker_row = ttk.Frame(page)
     picker_row.pack(fill="x")
@@ -365,8 +360,8 @@ def build_window(mod_dir=MOD_DIR):
         if path is None:
             return
         if not messagebox.askyesno(
-                "記録を消す", "「{}」の記録を消します。\n起きている出来事も、終わった出来事も消えます"
-                "（ゲームが作らせた依頼は掲示板に残ります）。\nゲームは閉じていますか？".format(picked.get()),
+                "記録を消す", "「{}」の記録を消しますか？\n起きている出来事も、終わった出来事も消えます。"
+                "\nゲームは閉じていますか？".format(picked.get()),
                 parent=root):
             return
         try:

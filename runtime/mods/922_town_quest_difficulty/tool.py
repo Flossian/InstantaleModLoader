@@ -196,11 +196,8 @@ def build_window(mod_dir=MOD_DIR, base=""):
     outer.pack(fill="both", expand=True)
     ttk.Label(outer, text=title, style="Title.TLabel").pack(anchor="w")
     ttk.Label(outer, style="Sub.TLabel", wraplength=1120, justify="left",
-              text="街ごとに、これから作られる依頼の難易度の範囲を決める。"
-                   "初めて訪ねたときの3件と、クエストを探したときの1件がこの範囲から引かれる。"
-                   "すでにある依頼は変わらない。"
-                   "範囲を決めていない街はゲームのまま（9番目より後の街は 1〜76 の全域）。"
-                   "上限は {}（MOD の設定「範囲の上限」）。".format(limit)
+              text="これから作られる依頼に効く。すでにある依頼は変わらない。\n"
+                   "範囲を決めていない街はゲームのまま。上限は {}（設定「範囲の上限」）".format(limit)
               ).pack(anchor="w", pady=(0, 8))
 
     top = ttk.Frame(outer)
@@ -231,9 +228,9 @@ def build_window(mod_dir=MOD_DIR, base=""):
     fit_button.pack(side="left", padx=(6, 0))
     ttk.Label(outer, style="Faint.TLabel", wraplength=1120, justify="left",
               text="なだらかにする: 固定した街と、開始の街・開始から最も遠い街を基準にして、"
-                   "ほかの街の範囲を道でつながる街の平均に寄せる。固定した街はそのまま。"
-                   "ゲームの範囲に戻す: 固定していない街をゲームの範囲に戻す。"
-                   "今の依頼に合わせる: 依頼のある街を、今の依頼の最小〜最大にする（固定した街と依頼の無い街はそのまま）。"
+                   "ほかの街の範囲を道でつながる街の平均に寄せる。\n"
+                   "今の依頼に合わせる: 依頼のある街を、今の依頼の最小〜最大にする。\n"
+                   "どのボタンも、固定した街は変えない"
               ).pack(anchor="w")
 
     over_label = ttk.Label(outer, style="Faint.TLabel", foreground="#c0392b")
@@ -301,10 +298,9 @@ def build_window(mod_dir=MOD_DIR, base=""):
         if not over:
             over_label.configure(text="")
         elif beyond:
-            over_label.configure(text="76 を超えた範囲があります。923 が入っているので、報酬と品も 76 を超えて伸びます。")
+            over_label.configure(text="76 を超えた範囲があります。報酬と品も 76 を超えて伸びます。")
         else:
-            over_label.configure(text="76 を超えた範囲があります。76 を超えた分は敵だけが強くなり、"
-                                      "報酬・才能点・店の品は 76 のときのままです（923 を入れると伸びます）。")
+            over_label.configure(text="76 を超えた分は敵だけが強くなります（923 を入れると報酬と品も伸びます）。")
 
     def set_band(area_id, band):
         widgets = current["rows"][area_id]

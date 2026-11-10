@@ -990,7 +990,7 @@ def read_mods() -> dict:
             "local": name in local,
             # MOD 同梱の道具（`323_` §4）。GUI はボタンを出して別プロセスで開くだけ。
             "tool": manifest.get("tool"),
-            # 記録の置き場所（`state/` からの相対）。行の右クリックの「state/ を開く」が開く先。
+            # 記録の置き場所（`state/` からの相対）。行の右クリックの「記録を開く」が開く先。
             "state": manifest.get("state") or [],
         })
     return {"mods": mods, "disabled": disabled, "problems": found["problems"],
@@ -1330,7 +1330,7 @@ class SettingsDialog(tk.Toplevel):
         bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(12, 0))
         # 並びと色は同梱の設定画面と揃える（書き込む操作に色を持たせ、右に寄せる）。
         ttk.Button(bar, text="既定に戻す", command=self._reset).pack(side="left")
-        ttk.Label(bar, text="保存すると、次にゲームを起動したときから効きます",
+        ttk.Label(bar, text="次にゲームを起動したときから効きます",
                   style="Faint.TLabel").pack(side="left", padx=12)
         ttk.Button(bar, text="キャンセル", command=self._close).pack(side="right")
         ttk.Button(bar, text="保存", style="Accent.TButton", command=self._ok).pack(
@@ -1664,15 +1664,13 @@ class App(ttk.Frame):
     # ― 見出しの文字数では入りきらない。
     COLUMN_HELP = {
         "on": "この MOD を適用するかどうか。クリックで切り替え（Space キーでも同じ）",
-        "order": "上から適用される順番。無効なものには番号を振りません",
+        "order": "適用される順番",
         "kind": "修正 = 本体の挙動を直す ／ 計測 = 読み取り専用の記録（開発者向け）\n"
                 "追加 = 新しい機能 ／ 取込済 = 本体か別の MOD が同じ修正を取り込んだもの\n"
                 "基盤 = 他より先に動く土台 ／ 開発中 = 未公開（手元だけ）",
         "name_ja": "行をドラッグすると適用順を変えられます",
-        "dir": "MOD の実体（runtime\\mods\\ のフォルダ名）。ログや load_order.json は\n"
-               "この名前で書かれます。行をドラッグすると適用順を変えられます",
-        "cfg": "● = 既定から変更あり ／ ○ = 既定のまま。クリックで設定を開きます\n"
-               "（印が無い MOD は、変更できる設定を持っていません）",
+        "dir": "ログに出る MOD の名前",
+        "cfg": "● 変更あり ／ ○ 既定のまま。クリックで設定を開く",
         "version": "mod.json に書かれた版",
         "author": "mod.json に書かれた作者",
         "state": "前回の注入の結果。「適用」以外だった行は赤で出ます",
@@ -1752,7 +1750,7 @@ class App(ttk.Frame):
         head.pack(fill="x")
         ttk.Label(head, text="Instantale ModLoader",
                   style="Title.TLabel").pack(side="left")
-        ttk.Label(head, text="上から順に適用されます（行をドラッグして並べ替え）",
+        ttk.Label(head, text="上から順に適用。行のドラッグで並べ替え",
                   style="Sub.TLabel").pack(side="left", padx=(12, 0))
         # 新しい版が在るときだけ pack する（`_drain_events` の "update"）。
         self.update_btn = ttk.Button(head, command=self._update)
@@ -1979,7 +1977,7 @@ class App(ttk.Frame):
         # ように見える。折返し幅は枠に追従させる（`_build_info` の外で
         # 幅が決まるので、決め打ちにすると狭いときに右端が切れる）。
         self.info_hint = ttk.Label(
-            info, text="そのほかの操作は、一覧の行を右クリック、または上のメニュー",
+            info, text="ほかの操作は行の右クリックかメニューから",
             style="Faint.TLabel", justify="left")
         self.info_hint.pack(anchor="w", fill="x", pady=(8, 0))
         info.bind("<Configure>", self._fit_hint)
@@ -2142,7 +2140,7 @@ class App(ttk.Frame):
             result = (self.status.get("mods") or {}).get(mod["dir"], "")
             return bool(result) and result != "ok"
         if mode == "設定あり":
-            return bool(mod["settings"])
+            return bool(mod["settings"] or mod.get("tool"))
         return True
 
     def _visible_mods(self) -> list[dict]:
@@ -2155,11 +2153,6 @@ class App(ttk.Frame):
     def _on_filter_change(self, *_args) -> None:
         keep = self.tree.selection()
         self._refresh(keep=keep[0] if keep else None)
-        if self._filtering():
-            self._set_status("{} 個中 {} 個を表示しています（絞り込み中）".format(
-                len(self._known_mods()), self.shown_count))
-        else:
-            self._set_status("絞り込みを解除しました")
 
     def focus_search(self) -> None:
         self.search_entry.focus_set()
@@ -2207,7 +2200,7 @@ class App(ttk.Frame):
                            command=self.add_mod)
         m_file.add_separator()
         m_file.add_command(label="保存", accelerator="Ctrl+S", command=self.save)
-        m_file.add_command(label="再読み込み", accelerator="F5",
+        m_file.add_command(label="読み直す", accelerator="F5",
                            command=self.reload_from_disk)
         m_file.add_separator()
         m_file.add_command(label="ゲームの場所を設定…", command=self.choose_game)
@@ -2221,18 +2214,18 @@ class App(ttk.Frame):
         self.mod_menu = tk.Menu(bar, tearoff=0, postcommand=self._sync_mod_menu)
         self.mod_menu.add_command(label="有効 / 無効", accelerator="Space",
                                   command=self._toggle)
-        self.mod_menu.add_command(label="全て有効にする", command=self._enable_all)
+        self.mod_menu.add_command(label="すべて有効にする", command=self._enable_all)
         self.mod_menu.add_command(label="設定…", accelerator="Enter",
                                   command=self._edit_settings)
         self.mod_menu.add_separator()
-        self.mod_menu.add_command(label="一番上へ", command=lambda: self._move_to(0))
+        self.mod_menu.add_command(label="先頭へ", command=lambda: self._move_to(0))
         self.mod_menu.add_command(label="上へ", command=lambda: self._move(-1))
         self.mod_menu.add_command(label="下へ", command=lambda: self._move(1))
-        self.mod_menu.add_command(label="一番下へ", command=lambda: self._move_to(-1))
+        self.mod_menu.add_command(label="末尾へ", command=lambda: self._move_to(-1))
         self.mod_menu.add_separator()
-        self.mod_menu.add_command(label="この MOD のフォルダを開く",
+        self.mod_menu.add_command(label="MOD のフォルダを開く",
                                   command=self.open_mod_dir)
-        self.mod_menu.add_command(label="mods/ フォルダを開く",
+        self.mod_menu.add_command(label="mods フォルダを開く",
                                   command=self.open_mods_dir)
         bar.add_cascade(label="MOD", menu=self.mod_menu)
 
@@ -2243,18 +2236,18 @@ class App(ttk.Frame):
         m_run.add_separator()
         # 失敗したときの案内文が out/bootstrap.log を指すのに、
         # そこへ行く手段がどこにも無かった。
-        m_run.add_command(label="out/ フォルダを開く（ログ。消してよい）",
+        m_run.add_command(label="ログのフォルダを開く",
                           command=self.open_out_dir)
         # 「out/ を消してください」と案内できるのは、
         # 消えては困るものが別に置いてあると示せるときだけ。
         # 開く手段もここに並べておく。
-        m_run.add_command(label="state/ フォルダを開く（MOD の記録。消すと巻き戻る）",
+        m_run.add_command(label="MOD の記録のフォルダを開く",
                           command=self.open_state_dir)
         m_run.add_separator()
         # 絞り込み（`FILTERS`）ではなくメニューに置く。
         # あちらは「表示だけ」の条件で揃えてあり、
         # 注入する中身まで変わる項目を混ぜると意味が濁る。
-        m_run.add_checkbutton(label="デバッグモード（開発者向けの MOD を使う）",
+        m_run.add_checkbutton(label="デバッグモード",
                               variable=self.debug_var,
                               command=self._toggle_debug_mode)
         # 切ると注入をまたいでログが積み上がる。
@@ -2295,26 +2288,26 @@ class App(ttk.Frame):
         self.row_menu.add_command(label="有効 / 無効", command=self._toggle)
         self.row_menu.add_command(label="設定…", command=self._edit_settings)
         self.row_menu.add_separator()
-        self.row_menu.add_command(label="一番上へ", command=lambda: self._move_to(0))
-        self.row_menu.add_command(label="一番下へ", command=lambda: self._move_to(-1))
+        self.row_menu.add_command(label="先頭へ", command=lambda: self._move_to(0))
+        self.row_menu.add_command(label="末尾へ", command=lambda: self._move_to(-1))
         self.row_menu.add_separator()
         self.row_menu.add_command(label="フォルダを開く", command=self.open_mod_dir)
         # 記録は MOD のフォルダではなく `state/` に在り、名前もフォルダ名と違う
         # （`320_guild_adventurer_recruit` → `adventurer_recruit`）。探さずに行けるように。
-        self.row_menu.add_command(label="state/ を開く", command=self.open_mod_state)
+        self.row_menu.add_command(label="記録を開く", command=self.open_mod_state)
 
     def _sync_mod_menu(self) -> None:
         """メニューバーの「MOD」を開く直前に、押せる項目だけを押せる状態にする。"""
         mod = self._selected()
         picked = "normal" if mod else "disabled"
-        for label in ("有効 / 無効", "一番上へ", "上へ", "下へ", "一番下へ",
-                      "この MOD のフォルダを開く"):
+        for label in ("有効 / 無効", "先頭へ", "上へ", "下へ", "末尾へ",
+                      "MOD のフォルダを開く"):
             self.mod_menu.entryconfigure(label, state=picked)
         self.mod_menu.entryconfigure(
             "設定…",
-            state="normal" if (mod and mod["settings"]) else "disabled")
+            state="normal" if (mod and (mod["settings"] or mod.get("tool"))) else "disabled")
         self.mod_menu.entryconfigure(
-            "全て有効にする", state="normal" if self._off_known() else "disabled")
+            "すべて有効にする", state="normal" if self._off_known() else "disabled")
 
     def _on_context(self, event: tk.Event) -> None:
         row = self.tree.identify_row(event.y)
@@ -2328,9 +2321,9 @@ class App(ttk.Frame):
         mod = self._selected()
         self.row_menu.entryconfigure(
             "設定…",
-            state="normal" if (mod and mod["settings"]) else "disabled")
+            state="normal" if (mod and (mod["settings"] or mod.get("tool"))) else "disabled")
         self.row_menu.entryconfigure(
-            "state/ を開く",
+            "記録を開く",
             state="normal" if (mod and state_targets(mod)) else "disabled")
         try:
             self.row_menu.tk_popup(event.x_root, event.y_root)
@@ -2405,7 +2398,7 @@ class App(ttk.Frame):
         self._show_warnings()
 
     def reload_from_disk(self) -> None:
-        """F5 とメニューの「再読み込み」。未保存の編集があれば先に聞く。"""
+        """F5 とメニューの「読み直す」。未保存の編集があれば先に聞く。"""
         if self._settle_unsaved("読み直します"):
             self.reload()
 
@@ -2420,8 +2413,7 @@ class App(ttk.Frame):
             return True
         answer = messagebox.askyesnocancel(
             "未保存の変更",
-            "順序と有効/無効の変更が未保存です。保存してから{}か？\n"
-            "「いいえ」を選ぶと、変更は失われます。".format(doing))
+            "未保存の変更があります。保存してから{}か？".format(doing))
         if answer is None:
             return False
         if answer:
@@ -2445,13 +2437,11 @@ class App(ttk.Frame):
             # まだ待っている対象があるうちは「途中」と言い、
             # 本当に消えた可能性の話は待ちが無くなってからにする。
             if deferred:
-                lines.append(
-                    "注入は段階適用の途中です（未 import のモジュール待ち {} 件、"
-                    "対象が見つからないフック {} 件）。"
-                    "揃うまで数十秒かかります ― 一覧を開き直すと確定した数が出ます"
-                    .format(len(deferred), len(unresolved)))
+                lines.append("注入の途中です。数十秒で揃います" + (
+                    "（未 import のモジュール待ち {} 件、対象が見つからないフック {} 件）"
+                    .format(len(deferred), len(unresolved)) if self.debug_mode else ""))
             else:
-                lines.append("前回の注入で対象が見つからなかったフック {} 件"
+                lines.append("前回の注入で効かなかった箇所 {} 件"
                              "（ゲームが更新された可能性があります）".format(len(unresolved)))
         # 名前は残っているのに効かなくなったもの（ローダの drift.py。詳しくは modloader.log の drift: の行）。
         # 確かめて直すのは作る側なので、デバッグモードのときだけ出す（普段の遊びでは不安を煽るだけ）
@@ -2584,7 +2574,7 @@ class App(ttk.Frame):
         mod = self._selected()
         if not mod:
             self.info_name.configure(text="MOD を選んでください")
-            self.info_state.configure(text="一覧の行を選ぶと、ここに出ます")
+            self.info_state.configure(text="")
             self.info_toggle.configure(text=self.TOGGLE_IDLE)
             self._set_entry(self.info_dir, "")
             for value in self.info_meta.values():
@@ -2621,17 +2611,13 @@ class App(ttk.Frame):
         # 「戻すかどうか」を判断する材料なので、取り込まれた版まで書く。
         if mod.get("superseded"):
             blocks.append(("note",
-                           "ゲーム本体が {} で同じ修正を取り込んだため降ろして"
-                           "います（デバッグモードのときだけ読み込まれます）。"
-                           "その版より古いゲームで遊ぶなら戻してください。"
+                           "ゲーム本体が {} で同じ修正を取り込みました。"
+                           "デバッグモードのときだけ読み込まれます。"
                            .format(mod["superseded"])))
         elif mod["debug"]:
-            blocks.append(("note", "開発者向けの計測 MOD です"
-                                   "（デバッグモードのときだけ読み込まれます）。"))
+            blocks.append(("note", "開発者向けの計測 MOD です。デバッグモードのときだけ読み込まれます。"))
         elif mod["wip"]:
-            blocks.append(("note", "開発中の MOD です（デバッグモードのときだけ"
-                                   "読み込まれます。配布物には入りません。"
-                                   "TECH.md §2.6）。"))
+            blocks.append(("note", "開発中の MOD です。デバッグモードのときだけ読み込まれます。"))
 
         # 一文一行で出す（mod.json の説明は1段落に続けて書いてある）。
         blocks.append(("body", modtool.by_sentence(mod["desc_ja"]) or "（説明なし）"))
@@ -2710,7 +2696,7 @@ class App(ttk.Frame):
         self.dirty = True
         self._refresh(keep=keep)
         self._update_actions()
-        self._set_status(f"{what}（未保存）")
+        self._set_status(what)
 
     # -- ドラッグでの並べ替え ------------------------------------------------
     # 行を掴んで動かす。
@@ -2803,7 +2789,7 @@ class App(ttk.Frame):
             return
         keep = self.tree.selection()
         self.disabled -= off
-        self._mark_dirty(keep[0] if keep else "", "全て有効にしました")
+        self._mark_dirty(keep[0] if keep else "", "すべて有効にしました")
 
     def _toggle_debug_mode(self) -> None:
         """デバッグモードの入切。`settings/loader.json` に書いて一覧を作り直す。
@@ -2821,8 +2807,7 @@ class App(ttk.Frame):
         # `launch()` と同じ聞き方で先に促す。
         if self.dirty and messagebox.askyesno(
                 "未保存の変更",
-                "順序と有効/無効の変更が未保存です。保存してから切り替えますか？\n"
-                "保存しない場合、変更は失われます。"):
+                "未保存の変更があります。保存してから切り替えますか？"):
             self.save()
         try:
             flags = C.load_flags(RUNTIME_DIR)
@@ -2837,12 +2822,9 @@ class App(ttk.Frame):
 
         self.reload()           # 状態表示は件数で上書きされるので、案内はこの後
         if self.debug_mode:
-            self._set_status("デバッグモードを入れました"
-                             "（計測用・取込済・開発中の MOD が一覧に出ます。"
-                             "次の注入から効きます）")
+            self._set_status("デバッグモードを入れました。次の注入から効きます")
         else:
-            self._set_status("デバッグモードを切りました"
-                             "（計測用・取込済・開発中の MOD は読み込まれません）")
+            self._set_status("デバッグモードを切りました。次の注入から効きます")
 
     def _toggle_log_rotate(self) -> None:
         """out/*.log と *.jsonl を注入のたびに新しくするかを切り替える。
@@ -2882,11 +2864,9 @@ class App(ttk.Frame):
                 .format(C.FLAGS_NAME, logrotate.ENV_VAR,
                         "ON" if actual else "OFF"))
         elif actual:
-            self._set_status("注入のたびにログを新しくします"
-                             "（前回ぶんは .1 に残ります）")
+            self._set_status("注入のたびにログを新しくします")
         else:
-            self._set_status("ログを入れ替えず追記し続けます"
-                             "（注入をまたいで比較したいときの設定です）")
+            self._set_status("ログを追記し続けます")
 
     def save(self) -> None:
         try:
@@ -2900,7 +2880,7 @@ class App(ttk.Frame):
         self.dirty = False
         self._update_actions()
         known, off = len(self._known_mods()), len(self._off_known())
-        self._set_status("load_order.json に保存しました"
+        self._set_status("保存しました"
                          f"（有効 {known - off} / 無効 {off}）")
 
     # -- MOD 同梱の道具 ----------------------------------------------------
@@ -2949,8 +2929,7 @@ class App(ttk.Frame):
         if not mod["settings"]:
             messagebox.showinfo(
                 "設定がありません",
-                "{} は GUI から変更できる設定を宣言していません。\n"
-                "コード側の定数を直接編集してください。".format(mod["name_ja"]))
+                "{} に変更できる設定はありません。".format(mod["name_ja"]))
             return
         chosen = dict(self.settings.get(mod["dir"]) or {})
         dialog = SettingsDialog(self.winfo_toplevel(), mod, chosen)
@@ -2968,8 +2947,7 @@ class App(ttk.Frame):
         self.settings = C.load_store(RUNTIME_DIR)
         self._refresh(keep=mod["dir"])
         if dialog.result:
-            self._set_status("{} の設定を保存しました（{} 件変更・次回の注入から反映）".format(
-                mod["name_ja"], len(dialog.result)))
+            self._set_status("{} の設定を保存しました".format(mod["name_ja"]))
         else:
             self._set_status("{} の設定を既定値に戻しました".format(mod["name_ja"]))
 
@@ -2998,8 +2976,7 @@ class App(ttk.Frame):
         # 置いただけで動く（順序ファイルに無い mod は末尾に回る）が、
         # 順序は保存しておかないと宣言されないままになる。
         self.save()
-        self._set_status("追加しました: {}（一覧の末尾・次回の注入から反映）".format(
-            ", ".join(added)))
+        self._set_status("追加しました: {}".format(", ".join(added)))
         if added and self.tree.exists(added[0]):
             self.tree.selection_set(added[0])
             self.tree.see(added[0])
@@ -3088,8 +3065,7 @@ class App(ttk.Frame):
             return
         if self.dirty and messagebox.askyesno(
                 "未保存の変更",
-                "順序と有効/無効の変更が未保存です。保存してから起動しますか？\n"
-                "保存しない場合、保存済みの内容が注入されます。"):
+                "未保存の変更があります。保存してから起動しますか？"):
             self.save()
 
         running = injector.find_processes(injector.TARGET_EXE)
@@ -3099,7 +3075,6 @@ class App(ttk.Frame):
             if not game_path or not os.path.isfile(game_path):
                 messagebox.showinfo(
                     "ゲームの場所が未設定",
-                    "起動するゲームの場所が未設定です。\n"
                     "instantale.exe を選択してください。")
                 game_path = self.choose_game()
                 if not game_path:
@@ -3118,9 +3093,7 @@ class App(ttk.Frame):
             return
         procs = injector.find_processes(injector.TARGET_EXE)
         if not procs:
-            messagebox.showinfo("ゲームが起動していません",
-                                "解除する対象がありません"
-                                "（MOD はプロセスの終了時に解除されます）。")
+            messagebox.showinfo("MOD を外す", "ゲームが起動していません。")
             return
         if len(procs) > 1:
             messagebox.showerror("ゲームが複数起動中",
@@ -3128,12 +3101,8 @@ class App(ttk.Frame):
             return
         if not messagebox.askyesno(
                 "MOD を外す",
-                "適用中のパッチを解除して本来の動作に戻します"
-                "（ゲームは終了しません）。\n\n"
-                "以下は元に戻りません:\n"
-                "  ・起動時に一度だけ実行された処理の結果\n"
-                "  ・MOD がセーブデータに書き込んだ値（パーティ・依頼など）\n\n"
-                "完全に素の状態で確認する場合は、注入せずに起動し直してください。"):
+                "MOD を外しますか？ ゲームは終了しません。\n"
+                "MOD がセーブに書いた内容は元に戻りません。"):
             return
         self._start(self._unload_worker, procs[0][0])
 
@@ -3200,46 +3169,47 @@ class App(ttk.Frame):
                 self.events.put(("error", "ゲームのプロセスが見つかりません"))
                 return
 
-            report(f"pid {pid}: 準備待ち（Python の初期化とウィンドウの表示）…")
+            who = f"pid {pid}: " if self.debug_mode else ""
+            report(f"{who}ゲームの準備を待っています…")
             if not watcher.wait_until_ready(pid):
-                self.events.put(("error", f"pid {pid}: 起動に失敗しました"))
+                self.events.put(("error", f"{who}起動に失敗しました"))
                 return
 
-            report(f"pid {pid}: 注入中…")
+            report(f"{who}注入中…")
             injector.rotate_logs(None, log=report)
             result = watcher.inject_pid(pid)
             if result == watcher.INJECTED:
-                self.events.put(("done", f"pid {pid} に注入しました"))
+                self.events.put(("done", f"{who}注入しました"))
             elif result == watcher.PENDING:
                 # 失敗ではない。ゲームが処理中で GIL が空くのを待っているだけで、後から完走する。
                 # 結果は status.json の追従（`_reload_while_deferred`）で拾う。
-                self.events.put(("pending", f"pid {pid}: 注入の完了待ちです"
-                                            "（ゲームが処理中のため。手が空けば自動で完了します）"))
+                self.events.put(("pending", f"{who}ゲームの処理が終わると、自動で注入が完了します"))
             else:
-                self.events.put(("error", f"pid {pid}: 注入に失敗しました"
-                                          "（out/bootstrap.log を確認してください）"))
+                self.events.put(("error", f"{who}注入に失敗しました"
+                                          "（ログのフォルダの bootstrap.log を確認してください）"))
         except Exception as exc:
             self.events.put(("error", f"{type(exc).__name__}: {exc}"))
 
     def _unload_worker(self, pid: int) -> None:
+        who = f"pid {pid}: " if self.debug_mode else ""
         try:
-            self.events.put(("status", f"pid {pid}: パッチを解除中…"))
+            self.events.put(("status", f"{who}MOD を外しています…"))
             payload = injector.make_bootstrap(
                 injector.RUNTIME_DIR, injector.OUT_DIR, injector.BOOT_LOG,
                 action="unload")
             mark = injector.boot_log_size()
             rc = injector.inject(pid, payload)
             if rc == 0 and injector.boot_failed_since(mark):
-                self.events.put(("error", f"pid {pid}: 解除に失敗しました"
-                                          "（out/bootstrap.log を確認してください）"))
+                self.events.put(("error", f"{who}MOD を外せませんでした"
+                                          "（ログのフォルダの bootstrap.log を確認してください）"))
             elif rc == 0:
-                self.events.put(("done", f"pid {pid}: MOD を外しました"))
+                self.events.put(("done", f"{who}MOD を外しました"))
             elif rc == injector.INJECT_PENDING:
-                self.events.put(("pending", f"pid {pid}: 解除の完了待ちです"
-                                            "（ゲームが処理中のため。手が空けば自動で完了します）"))
+                self.events.put(("pending", f"{who}ゲームの処理が終わると、自動で MOD が外れます"))
             else:
-                self.events.put(("error", f"pid {pid}: 解除に失敗しました"
-                                          f"（PyRun_SimpleString が {rc}）"))
+                # 戻り値は作る側が見るもの。
+                self.events.put(("error", f"{who}MOD を外せませんでした"
+                                          + (f"（PyRun_SimpleString が {rc}）" if self.debug_mode else "")))
         except Exception as exc:
             self.events.put(("error", f"{type(exc).__name__}: {exc}"))
 
@@ -3253,7 +3223,7 @@ class App(ttk.Frame):
                     self._finish(msg, reload=True)
                 elif kind == "pending":
                     self._finish(msg, reload=True)
-                    messagebox.showinfo("注入の完了待ち", msg)
+                    messagebox.showinfo("完了待ち", msg)
                 elif kind == "error":
                     self._finish(msg)
                     messagebox.showerror("エラー", msg)
@@ -3317,8 +3287,7 @@ class App(ttk.Frame):
         if waiting and remaining > 0:
             # 残りの件数を出す。
             # 減っていくのが見えれば、止まっていないと判る。
-            self._set_status("{} ｜ 段階適用の途中（未 import {} 件・あと最大 {} 回確認）"
-                             .format(self._status_text, len(waiting), remaining))
+            self._set_status("{} ｜ 注入の途中（残り {} 件）".format(self._status_text, len(waiting)))
             self.after(self._SETTLE_INTERVAL,
                        lambda: self._reload_while_deferred(remaining - 1))
             return
@@ -3393,18 +3362,10 @@ class App(ttk.Frame):
         if self.busy or not self.available_update:
             return
         ver, package = self.available_update
-        if package["kind"] == "lite":
-            what = ("絵と辞書（大きいアセット）は変わっていないので、\n"
-                    "それを除いた版（{}）を落とします。".format(_mb(package["size"])))
-        else:
-            what = "全部入りの版（{}）を落とします。".format(_mb(package["size"]))
         if not messagebox.askokcancel(
                 "更新",
-                "v{} をダウンロードしてこのフォルダへ上書きし、\n"
-                "このウィンドウを開き直します。\n{}\n\n"
-                "{} は残ります。\n"
-                "新しい版に無くなった MOD のフォルダも消しません。".format(
-                    ver, what, UPDATE_KEEPS)):
+                "v{}（{}）をダウンロードして上書きし、このウィンドウを開き直します。\n"
+                "設定・記録・手元で足した MOD は残ります。".format(ver, _mb(package["size"]))):
             return
         self._start(self._update_worker, package["url"])
 

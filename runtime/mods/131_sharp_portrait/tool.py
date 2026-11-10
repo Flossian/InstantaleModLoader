@@ -386,7 +386,7 @@ def build_window(root_dir, game_dir, base=""):
     outer.pack(fill="both", expand=True)
     ttk.Label(outer, text="立ち絵・敵・背景の高画質化、背景抜きと顔認識の精度向上", style="Title.TLabel").pack(anchor="w")
     ttk.Label(outer, style="Sub.TLabel",
-              text="上は、これから作られる絵に効く MOD の設定。下は、既に居る NPC の顔を検出し直して切り直す道具").pack(anchor="w", pady=(0, 8))
+              text="上はこれから作られる絵の設定。下は今いる NPC の顔の切り直し").pack(anchor="w", pady=(0, 8))
 
     # 下段（保存と閉じる）。ほかの設定画面と同じ並びで、中身より先に詰める（窓が低いときに押し出されないように）。
     footer = ttk.Frame(outer)
@@ -524,9 +524,9 @@ def build_window(root_dir, game_dir, base=""):
     ttk.Radiobutton(top, text="顔が見つかっていない個体だけ（全身の縮小）", variable=everyone_var, value=False).grid(row=1, column=1, sticky="w")
     ttk.Radiobutton(top, text="全員やり直す", variable=everyone_var, value=True).grid(row=2, column=1, sticky="w")
     ttk.Label(top, text="切り出し元").grid(row=0, column=2, sticky="w", padx=(16, 0))
-    ttk.Radiobutton(top, text="立ち絵（reduced_color_image.png。いまの見え方に合わせる）",
+    ttk.Radiobutton(top, text="立ち絵から切る",
                     variable=source_var, value=SOURCE_STANDING).grid(row=1, column=2, sticky="w", padx=(16, 0))
-    ttk.Radiobutton(top, text="背景を抜いた元絵（no_bg_image.png。立ち絵が荒くても顔は高画質に）",
+    ttk.Radiobutton(top, text="背景を抜いた元絵から切る（高画質）",
                     variable=source_var, value=SOURCE_NO_BG).grid(row=2, column=2, sticky="w", padx=(16, 0))
     ttk.Checkbutton(top, text="検出だけ（書かない）", variable=dry_var).grid(row=3, column=1, sticky="w")
 
@@ -640,7 +640,7 @@ def build_window(root_dir, game_dir, base=""):
         source = source_var.get()
         if source == SOURCE_NO_BG and not all(n.has_no_bg for n in picked):
             messagebox.showwarning("元絵が無い個体がある",
-                                   "no_bg_image.png が無い個体は、顔を立ち絵から切ります")
+                                   "元絵が無い個体は、顔を立ち絵から切ります")
         dry = dry_var.get()
         run_button.state(["disabled"])
         results.clear()
@@ -701,9 +701,9 @@ def build_window(root_dir, game_dir, base=""):
     def restore_all():
         picked = [n for n in npcs if n.backup and (not selected_worlds() or n.world in selected_worlds())]
         if not picked:
-            messagebox.showinfo("控えなし", "元に戻せる個体が居ません")
+            messagebox.showinfo("元に戻す", "元に戻せる個体が居ません")
             return
-        if not messagebox.askyesno("元に戻す", "{} 体の顔を控え（face_image.orig.png）に戻します。よろしいですか".format(len(picked))):
+        if not messagebox.askyesno("元に戻す", "{} 体の顔を元に戻しますか？".format(len(picked))):
             return
         for npc in picked:
             restore_face(npc)

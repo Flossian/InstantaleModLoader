@@ -251,8 +251,8 @@ def build_window(model):
     # --- 見出しと置き場
     ttk.Label(outer, text="戦闘BGMの選曲", style="Title.TLabel").pack(anchor="w")
     ttk.Label(outer, style="Sub.TLabel",
-              text="戦闘の種類ごとに、鳴らす曲と重みを決める。重みは比率で、"
-                   "同じ種類の合計に対する割合が確率になる").pack(anchor="w", pady=(0, 8))
+              text="戦闘の種類ごとに、鳴らす曲と重みを決める。重みが大きい曲ほどよく鳴る"
+              ).pack(anchor="w", pady=(0, 8))
 
     places = ttk.Frame(outer)
     places.pack(fill="x")
@@ -287,7 +287,7 @@ def build_window(model):
     default_var = tk.StringVar(value=str(model.default_weight))
     ttk.Spinbox(opts, from_=0, to=1000, width=6, textvariable=default_var).pack(
         side="left", padx=(6, 4))
-    ttk.Label(opts, text="（置いただけの曲は左の一覧に出るだけで鳴らない。右へ入れた曲がこの重みで始まる）",
+    ttk.Label(opts, text="右へ入れた曲だけ鳴る",
               style="Faint.TLabel").pack(side="left", padx=(0, 18))
     avoid_var = tk.BooleanVar(value=bool(model.settings.get("AVOID_REPEAT", True)))
     ttk.Checkbutton(opts, text="前回と同じ曲を続けて選ばない", variable=avoid_var).pack(side="left")
@@ -542,7 +542,7 @@ def build_window(model):
         refresh(key)
 
     status = ttk.Label(footer, style="Faint.TLabel",
-                       text="保存すると次の戦闘から効く（ゲームを起動したままでよい）")
+                       text="保存すると次の戦闘から効く")
     status.pack(side="left")
 
     def rescan():
