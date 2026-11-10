@@ -12,7 +12,7 @@
 - 分類ごとの元の一枚絵（`categories.json` の `sources` の `source`）が `assets/item_images/` に在る
 - 版9 までの設定名の読み替え（本体の `OLD_SETTINGS`）は、今の設定名に無い名前から今の設定名へ
 - 外した絵の付け替え先の表（`data/retired.json`）の外した鍵は今の辞書に無く、付け替え先は同じ品種の今ある絵
-- `images/` と `data/` の直下のフォルダは分類だけ（分類の外に置いた絵は探し先に入らない）
+- `images/` と `data/` の直下のフォルダは分類と描き直し（`redraw`）だけ（分類の外に置いた絵は探し先に入らない）
 - 実行時に `images/<分類>` を Kivy の探し先へ足している
 
 Pillow を使わない（CI に無い）。寸法と色の型（パレット形式）は PNG の IHDR を読む。
@@ -91,7 +91,8 @@ for e in rows:
 
 ids = {c["id"] for c in cats}
 for top in ("images", "data"):
-    extra = set(os.listdir(os.path.join(MOD, top))) - ids
+    # 描き直し（images/redraw・data/redraw）は分類ではない。探し先には足さず、本体が絶対パスで引く（test_item_image_redraw.py）
+    extra = set(os.listdir(os.path.join(MOD, top))) - ids - {"redraw"}
     if top == "data":
         extra = {n for n in extra if not n.endswith(".json")}   # 素の辞書に無かった305枚の追加辞書
     assert not extra, (top, sorted(extra))

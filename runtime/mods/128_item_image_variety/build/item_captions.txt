@@ -2859,3 +2859,223 @@ itm_i65_08	drink	A tin coffee pot.
 itm_i65_09	food	An iron skillet of cornbread.
 itm_i65_10	food	A deep dish of chicken and dumplings.
 itm_i65_11	food	A tin plate of beans and bacon.
+itm_i66_00	medicine	A small clay pot of pale green salve with a cloth cover tied with twine.
+itm_i66_01	medicine	A dark brown clay pot with a cloth cover.
+itm_i66_02	medicine	A small white ceramic jar of pale green salve with a faded cloth cover.
+itm_i66_03	medicine	A small clay jar of greenish salve sealed with a cloth cover.
+itm_i66_04	plant	A small clay pot of green salve sealed with waxed paper.
+itm_i66_05	plant	A small clay pot of salted green herbs with a cracked lid.
+itm_i66_06	medicine	A small metal tin with a hinged lid holding grey-green powder and a crude cross mark.
+itm_i66_07	medicine	A wide shallow tin with a screw lid holding dark brown salve.
+itm_i66_08	medicine	A small tin box of pale green paste.
+itm_i66_09	medicine	A small glass vial of dark purple liquid swirling with starlight specks.
+itm_i67_00	tool	A roll of clean white linen bandages.
+itm_i67_01	tool	A roll of slightly soiled white linen bandages.
+itm_i67_02	tool	A neatly rolled white bandage soaked with pale green solution.
+itm_i67_03	plant	A roll of pale linen bandage stained faintly green with herbal extract.
+itm_i67_04	plant	A roll of clean white linen bandages in a clear protective wrapper.
+itm_i67_05	medicine	A folded strip of coarse rope-fiber cloth with rust-brown stains tied with hemp.
+itm_i67_06	plant	A corked clay vial of murky green herbal tincture.
+itm_i67_07	plant	A small pile of dried grey-green wormwood leaves spilling from a paper wrap.
+itm_i67_08	medicine	A small amber glass vial sealed with wax bearing a holy symbol.
+itm_i67_09	medicine	A tiny ornate silver bottle with a white crystal stopper and a faint frosty glow.
+itm_i68_00	plant	A rough clay cup of murky green herbal tea, steaming.
+itm_i68_01	plant	A clay mug of green herbal tea with a sprig of mint.
+itm_i68_02	plant	A simple white ceramic cup of steaming herbal tea.
+itm_i68_03	plant	A clay teapot beside a cup of pale green tea with silver leaves.
+itm_i68_04	plant	A rough clay cup of steaming herbal brew with pale lilies floating.
+itm_i68_05	medicine	A clay cup of dark brown bitter brew, steaming.
+itm_i68_06	plant	A damp cloth pouch of pale glowing spores.
+itm_i68_07	plant	A small silk pouch with a soft silver glow.
+itm_i68_08	plant	A small pouch spilling shimmering multicolored pollen.
+itm_i68_09	drink	A small rustic paper pouch of dried green herbs and flower petals.
+itm_i69_00	plant	A damp clump of moss glowing pale white on a stone plate.
+itm_i69_01	plant	A bundle of dried pale green moss tied with twine, faintly glowing.
+itm_i69_02	plant	A bundle of dried dark green moss tied with twine in a paper wrapper.
+itm_i69_03	plant	A clump of moist bright green moss.
+itm_i69_04	plant	A clump of dark green moss pressed onto a flat piece of bark.
+itm_i69_05	plant	A clump of bright green moss on a piece of dark bark.
+itm_i69_06	plant	A glowing translucent sphere of violet light.
+itm_i69_07	potion	A small cloth sack of white lime powder tied with red string and stamped with a seal.
+itm_i69_08	potion	A single pearlescent drop sealed in a glass sphere.
+itm_i69_09	potion	A small wax-sealed ceramic jar with orange light glowing through its cracks.
+itm_i70_00	tool	A coarse woven hemp sieve stretched over a wooden hoop.
+itm_i70_01	tool	A wooden frame sieve with a coarse mesh.
+itm_i70_02	tool	A pair of grey whetstones wrapped in oiled cloth and tied with twine.
+itm_i70_03	tool	A coarse grey grindstone wrapped in cloth with a worn groove.
+itm_i70_04	tool	A small wooden box holding a whetstone and a corked glass bottle of oil.
+itm_i70_05	tool	A folding brass ruler with engraved marks and hinges.
+itm_i70_06	tool	A small polished brass weight on a worn wooden tray.
+itm_i70_07	tool	A small brass balance scale with two pans on a wooden case.
+itm_i70_08	tool	A small glazed ceramic ink pot with a cracked lid and dried black ink.
+itm_i70_09	tool	A small glass vial of teal ink with a wax-sealed cork.
+itm_i71_00	tool	A polished silver incense burner with engraved holy patterns and thin white smoke.
+itm_i71_01	tool	A chipped clay incense burner with a blackened bowl and a cracked lid.
+itm_i71_02	tool	A small bronze incense burner with intricate patterns.
+itm_i71_03	tool	A thin white candle wrapped in brown paper with a prayer label.
+itm_i71_04	tool	A white wax candle with embossed prayers spiraling around it.
+itm_i71_05	tool	A small polished grey stone seal with a carved gate emblem.
+itm_i71_06	tool	An old iron key crusted with pale mineral deposits and small mussel shells.
+itm_i71_07	tool	A polished silver spoon with glowing blue runes on the handle.
+itm_i71_08	relic	A tarnished bronze scale pan with a chipped rim and faint blue glowing veins.
+itm_i71_09	relic	A small heavy bundle wrapped in faded cloth.
+itm_i72_00	tool	A precise steel hand tool with brass gears and engraved patterns.
+itm_i72_01	tool	A compact wooden spool winder with brass gears and a crank handle.
+itm_i72_02	tool	A small iron winch with three gears, a crank handle and a coil of rope.
+itm_i72_03	tool	A curved brass ear trumpet with a leather strap and engraved patterns.
+itm_i72_04	other_material	A grey fragment of a fine whetstone with a guild mark.
+itm_i72_05	other_material	A pouch of coarse grey abrasive grit spilling out.
+itm_i72_06	other_material	A small glossy black chunk of charcoal with a metallic sheen.
+itm_i72_07	other_material	A coil of sticky grey-green silk threads.
+itm_i72_08	other_material	A small pile of dark grey gunpowder residue in a torn paper pouch.
+itm_i72_09	other_material	A bundle of arrows with grey fletching and wooden shafts.
+itm_i73_00	metal	A set of iron fittings with hammered ends.
+itm_i73_01	metal	A short iron fitting with a hook at one end and stamped marks.
+itm_i73_02	metal	A warped iron bucket hoop.
+itm_i73_03	metal	A small rusted iron clasp with a bent hinge and flaking orange rust.
+itm_i73_04	metal	A heavy dark iron axle ring polished on the inner edge.
+itm_i73_05	metal	A thick rusted iron chain link with dark stains.
+itm_i73_06	metal	A thin rectangular sheet of polished brass with a golden sheen.
+itm_i73_07	metal	A solid rectangular block of polished grey metal.
+itm_i73_08	metal	A dull silver-grey metal ingot with faint rune engravings and an iridescent sheen.
+itm_i73_09	metal	A small pile of bluish steel shavings.
+itm_i74_00	metal	A dark water-stained metal fragment with jagged edges and faint etched lines.
+itm_i74_01	metal	A dull grey metal fragment with faint runes wrapped in cloth with a tag.
+itm_i74_02	metal	A corroded iron fragment with uneven edges and flecks of ash.
+itm_i74_03	scrap	A small heap of dull grey metal shavings in a rough cloth bag.
+itm_i74_04	scrap	A gear-shaped plate of dull bronze with worn teeth.
+itm_i74_05	metal	A small gear of dark metallic stone with star-like flecks.
+itm_i74_06	metal	A worn bronze coin with faded relief and green patina in the grooves.
+itm_i74_07	scrap	A worn-out hunting knife covered in dried mud and grey ash.
+itm_i74_08	scrap	A round wooden lid stained white with lime and a cracked iron handle.
+itm_i74_09	scrap	A charred piece of wooden stake with blackened edges.
+itm_i75_00	relic	A massive sphere of liquid fire wrapped in rotating ancient machinery.
+itm_i75_01	relic	A complex floating fragment of a divine artifact with a soft white glow.
+itm_i75_02	relic	A dented brass cylinder with cooling vents.
+itm_i75_03	relic	A seamed heat-proof plate of dark ancient metal.
+itm_i75_04	relic	An ancient metal core glowing red that never cools.
+itm_i75_05	relic	A pulsing complex magical core radiating blue energy.
+itm_i75_06	relic	A small smooth fragment of white porcelain-like metal with a faint shimmer.
+itm_i75_07	relic	A small pale metallic fragment with faint glowing engravings.
+itm_i75_08	relic	An open small grey lead box with a mirror-polished interior.
+itm_i75_09	relic	A charred cracked metal shell fragment with burnt crystal shards.
+itm_i76_00	magical_material	A fragment of a bronze mechanical device humming with power.
+itm_i76_01	magical_material	A glowing brass mechanical component with intricate patterns.
+itm_i76_02	magical_material	A fragment of a pulsing crystal tube with soft blue light and a faint cyan glow.
+itm_i76_03	magical_material	A mysterious artifact pulsing with otherworldly violet light and a faint purple glow.
+itm_i76_04	magical_material	A small pulsing light sealed in a translucent glass sphere.
+itm_i76_05	magical_material	A lump of dark slag glowing orange that never quite cools.
+itm_i76_06	scrap	A broken metallic device engraved with geometric patterns and a warm glow.
+itm_i76_07	scrap	A small perfectly hexagonal piece of white metallic alloy.
+itm_i76_08	scrap	A small pile of metal components and glowing glass tubes.
+itm_i76_09	tool	A complex gold-etched device humming with ancient power.
+itm_i77_00	tool	A small glowing geometric object of unknown silver alloy.
+itm_i77_01	scrap	A jagged fragment of ancient metal etched with glowing lines and geometric patterns.
+itm_i77_02	document	An ancient bronze artifact pulsing with rhythmic golden light.
+itm_i77_03	scrap	A pile of small glowing metal fragments mixed with pieces of old bell bronze.
+itm_i77_04	scrap	A pile of small overheated glowing metal shards with ancient patterns.
+itm_i77_05	scrap	A jagged piece of unidentified grey alloy from an ancient ruin.
+itm_i77_06	document	A small tarnished metal box wrapped in faded cloth.
+itm_i77_07	ore	A massive pulsing hunk of dark indestructible metal.
+itm_i77_08	gem	A small vibrating clear crystal humming softly with a faint purple glow.
+itm_i77_09	metal	A glowing copper crystal cluster with faint white steam.
+itm_i78_00	creature_part	A handful of rust-stained iron-grey scales with ragged edges.
+itm_i78_01	creature_part	A few grey hard lizard scales like stone chips.
+itm_i78_02	creature_part	A single hard brown scale coated in dried mud.
+itm_i78_03	creature_part	A large iridescent scale rippling like liquid with a faint blue glow.
+itm_i78_04	creature_part	A piece of green reptilian skin with intricate floral patterns.
+itm_i78_05	creature_part	A shiny multicolored insect shell with a faint blue glow.
+itm_i78_06	creature_part	A reddish-brown insect carapace with glowing orange veins.
+itm_i78_07	creature_part	A chipped mottled brown crab shell coated in dried barnacles.
+itm_i78_08	magical_material	A heavy crab claw with a dull lead-grey metallic sheen.
+itm_i78_09	magical_material	A heavy fragment of mossy stone-like tortoise shell.
+itm_i79_00	creature_part	A glass jar of cloudy yellow eel fat.
+itm_i79_01	creature_part	A set of three short stubby brown horns joined on a patch of hide.
+itm_i79_02	creature_part	A massive pulsing organ of dark mud with glowing energy.
+itm_i79_03	creature_part	A sharp white wolf fang crusted with glowing amber crystals.
+itm_i79_04	magical_material	A massive white antler glowing faintly pale blue.
+itm_i79_05	metal	A massive silver fang with frost creeping along its edge.
+itm_i79_06	relic	A cluster of clouded crystal eyes set in dark chitin.
+itm_i79_07	ore	A curved black metal claw with dull iron veins.
+itm_i79_08	magical_material	A thick grey shell fragment fused with dried gnarled branches.
+itm_i79_09	scrap	A dried hollow husk of a small creature.
+itm_i80_00	magical_material	A fragment of swirling black smoke.
+itm_i80_01	magical_material	A black obsidian seal carved with a sun-and-chain emblem, faintly glowing.
+itm_i80_02	magical_material	A bundle of blackened wicks coated in white wax with a small blue flame and a faint blue glow.
+itm_i80_03	magical_material	A lump of pale golden wax with a soft gleam.
+itm_i80_04	magical_material	A pulsing teardrop-shaped gem emitting white light.
+itm_i80_05	magical_material	A spool of shimmering silver thread pulsing with light.
+itm_i80_06	relic	A small yellowed bone fragment wrapped in faded red velvet.
+itm_i80_07	relic	A chipped piece of glazed white ceramic with a crude engraving.
+itm_i80_08	relic	A jagged bronze shard etched with unreadable script, faintly misted.
+itm_i80_09	relic	A bronze plate engraved with patrol route lines.
+itm_i81_00	plant	A burlap sack of golden wheat grains spilling out.
+itm_i81_01	food	A cloth sack of fine pale wheat flour tied with twine.
+itm_i81_02	food	A wooden tray of dried fruit slices in neat rows.
+itm_i81_03	food	A square block of pressed grain and dried fruit wrapped in waxed paper.
+itm_i81_04	food	A bundle of wrapped steamed barley cakes tied with twine.
+itm_i81_05	food	A pair of split steamed potatoes with melting butter on a wooden tray.
+itm_i81_06	food	A large slab of raw pale boar fat.
+itm_i81_07	food	A dried ration bundle of hard bread and jerky tied with string.
+itm_i81_08	plant	A pile of small amber honey candies wrapped in waxed paper in a tin.
+itm_i81_09	plant	A handful of translucent golden ginger candies wrapped in paper.
+itm_i82_00	drink	A small clay cup of amber liquid with a faint golden shimmer.
+itm_i82_01	drink	A chipped clay jug of murky amber liquor with dried herbs.
+itm_i82_02	drink	A small glass of amber fruit liquor.
+itm_i82_03	drink	A chipped brown clay flask.
+itm_i82_04	drink	A clear glass pitcher of cold water with fresh mint leaves.
+itm_i82_05	drink	A dented tin flask of murky green tea with a soot-stained cap.
+itm_i82_06	drink	A steaming bowl of orange-red vegetable soup with a wooden spoon.
+itm_i82_07	food	A paper cone of golden fried potato sticks with coarse salt.
+itm_i82_08	drink	A wooden cup of cloudy white milk drink.
+itm_i82_09	drink	A brown leather wineskin with a wooden stopper.
+itm_i83_00	document	A written order on parchment with a red wax seal from an inquisition office.
+itm_i83_01	document	A small cloth-bound pamphlet with hand-drawn bandaging diagrams.
+itm_i83_02	document	A thin copper plate bearing a faded rubbing of ruin patterns.
+itm_i83_03	document	A faded leather-bound survey log with hand-drawn lines and ink stains.
+itm_i83_04	document	A yellowed paper rubbing of a geometric relic pattern with a red inspection stamp.
+itm_i83_05	document	A brown leather prayer book with a hand-drawn road map in the margin.
+itm_i83_06	document	A dark notebook describing how an inquisition device is used.
+itm_i83_07	document	A bundle of plain wooden tablets carved with script and tied with bright red cord.
+itm_i83_08	document	A scrap of yellowed paper with dumping instructions.
+itm_i83_09	document	A torn yellowed piece of parchment with faint ink lines of a road.
+itm_i84_00	scroll	A bundle of thin wooden prayer tablets tied with faded red cord.
+itm_i84_01	scroll	A yellowed paper talisman with faded blue runes and sea-salt crust.
+itm_i84_02	scroll	A small oval white lacquer amulet with tiny golden script on a cord.
+itm_i84_03	scroll	A small pale wooden tablet with carved script and a faded red seal.
+itm_i84_04	scroll	An old leather-bound book with glowing star charts on its open pages.
+itm_i84_05	scroll	A curved fragment of silver-lined dark metal etched with constellations.
+itm_i84_06	document	A small wooden name tag on a frayed cord.
+itm_i84_07	treasure	A split wooden tally stick with notches.
+itm_i84_08	treasure	An old bronze apprentice tag embedded in hardened slag.
+itm_i84_09	metal	A dull grey lead courier license tag with a hole and cord.
+itm_i85_00	accessory	A simple silver ring partly crusted with dried mud.
+itm_i85_01	accessory	A tarnished silver ring caked in dried mud.
+itm_i85_02	accessory	A simple dark iron band, damp and cold.
+itm_i85_03	accessory	A distorted brass ring with a swirling texture.
+itm_i85_04	accessory	A shiny solid gold crest of a border guard.
+itm_i85_05	accessory	A worn brass brooch shaped like an ancient crest.
+itm_i85_06	accessory	A delicate crown of pale blue flowers.
+itm_i85_07	accessory	A crude brown leather bracer studded with grey stones.
+itm_i85_08	accessory	A roll of worn slightly stained white linen bandages.
+itm_i85_09	accessory	A roll of soft pale blue bandages with shimmering magical dust.
+itm_i90_00	drink	A cloudy milky sake in a chipped ceramic jug.
+itm_i90_01	drink	A small ceramic sake bottle beside a porcelain cup on a wooden tray.
+itm_i90_02	drink	A small clay jug of milky white rice wine with a wooden ladle.
+itm_i90_03	drink	A warm cup of cloudy white amazake with a wooden ladle.
+itm_i90_04	tool	A long bamboo blowpipe with a soot-darkened ceramic tip.
+itm_i90_05	drink	A bamboo water canteen with a wooden stopper.
+itm_i90_06	drink	A square wooden masu cup of clear sake.
+itm_i90_07	drink	A red lacquered sake cup with a matching pouring vessel.
+itm_i90_08	drink	A ceramic tea bowl of green matcha with a bamboo whisk.
+itm_i90_09	tool	A bamboo tube holding a bundle of thin blowpipe darts.
+itm_i91_00	gauntlets	A pair of heavy iron manacles with a broken lock and a dangling rusted chain.
+itm_i91_01	headgear	A delicate golden crown-like ornament shaped from antennae, faintly glowing.
+itm_i91_02	gauntlets	A pair of rusted iron shackles with a snapped chain.
+itm_i91_03	gauntlets	A pair of dark iron wrist cuffs lined with leather.
+itm_i91_04	gauntlets	A pair of silver bracers etched with runes and hanging silver chains.
+itm_i91_05	headgear	A silver circlet shaped like butterfly wings, faintly glowing.
+itm_i91_06	headgear	A black iron crown decorated with beetle horns.
+itm_i91_07	headgear	A thin gold circlet set with a blue gem.
+itm_i91_08	headgear	A green crown woven from vines and leaves.
+itm_i91_09	gauntlets	A pair of chainmail gloves with rusted cuff marks at the wrists.

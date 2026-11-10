@@ -294,6 +294,13 @@
    "sf": 1.0,
    "cyber": 1.0,
    "postapoc": 0.8
+  },
+  "document_fantasy": {
+   "medieval": 1.0,
+   "fantasy": 1.0,
+   "darkfantasy": 0.8,
+   "highfantasy": 0.6,
+   "earlymodern": 0.5
   }
  }
 }

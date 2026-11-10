@@ -228,3 +228,23 @@ mag_xsw3_08	long_weapon	A magic katana with a green hamon and a leaf guard.
 mag_xsw3_09	long_weapon	A divine katana with a gold guard.
 mag_xsw3_11	long_weapon	A silver magic katana with a crescent guard.
 mag_xsw3_12	long_weapon	A magic katana with a blood-red base.
+mag_i89_00	large_weapon	A heavy claymore with a glowing graviton core in the hilt and a faint blue aura.
+mag_i89_01	long_weapon	A long steel lance with a brass pressure valve near the tip and a steam vent along the shaft.
+mag_i89_02	large_weapon	A greatsword with a brass-framed gravity core glowing blue in the hilt.
+mag_i89_03	large_weapon	A steam-powered war hammer with brass valves and pipes.
+mag_i89_04	long_weapon	A brass and steel steam lance with a pressure gauge.
+mag_i89_05	long_weapon	A steel halberd with a glowing energy cell in the shaft.
+mag_i89_06	medium_weapon	An axe with a humming crystal engine on the head.
+mag_i89_07	long_weapon	A steel spear with a small brass pressure gauge.
+mag_i89_08	medium_weapon	A mace wrapped in a coil crackling with electric arcs.
+mag_i89_09	medium_weapon	A sword with clockwork brass gears set into the blade.
+mag_i88_00	medium_weapon	A weathered pilgrim's staff with an iron-shod tip and a faint blue glow along its carved shaft.
+mag_i88_01	medium_weapon	A slender wooden staff emitting a faint white mist.
+mag_i88_02	medium_weapon	A slim silver rapier crackling with faint blue electric sparks.
+mag_i88_03	medium_weapon	A white oak staff with frosty mist around its tip.
+mag_i88_04	medium_weapon	A walking staff topped with a crystal and a faint blue glow.
+mag_i88_05	medium_weapon	A thin silver sabre etched with lightning runes.
+mag_i88_06	small_weapon	A short pale wooden wand emitting a faint white mist.
+mag_i88_07	medium_weapon	A slim steel rapier crackling with violet sparks.
+mag_i88_08	medium_weapon	A pilgrim's staff with an iron-shod tip and a faint golden glow.
+mag_i88_09	medium_weapon	A shepherd's crook staff with a small glowing green lantern on the hook.

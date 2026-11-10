@@ -7,10 +7,10 @@
     "ja": "アイテム画像の拡充"
   },
   "description": {
-    "en": "Spreads item icons across similar candidates instead of always the single best match, and adds weapon, armor, clothing, consumable and material images the stock assets lack. Per-category use and per-genre weights can be set for all worlds or per world, and event items are asked for English appearance text",
-    "ja": "アイテム画像を「最も似た1枚」固定でなく似た候補から散らして選び、素材に無い武器・防具・服・消耗品・素材の絵を足す。足した絵は同じ種類の元画像をまとめた分類で、使い方とジャンルの重みを一括とワールド個別で決められる。イベントで得る品の外見文を英語で頼む。"
+    "en": "Spreads item icons across similar candidates instead of always the single best match, and adds weapon, armor, clothing, consumable and material images the stock assets lack. Per-category use and per-genre weights can be set for all worlds or per world, event items are asked for English appearance text, and the stock images are shown as redrawn versions in the added images' style",
+    "ja": "アイテム画像を「最も似た1枚」固定でなく似た候補から散らして選び、素材に無い武器・防具・服・消耗品・素材の絵を足す。足した絵は同じ種類の元画像をまとめた分類で、使い方とジャンルの重みを一括とワールド個別で決められる。イベントで得る品の外見文を英語で頼む。素の絵は、足した絵の絵柄で描き直した絵で見せる。"
   },
-  "version": "11",
+  "version": "12",
   "author": "R01/Flossian",
   "state": ["item_image", "item_image_cross", "item_image_genres", "item_image_variety"],
   "settings": {
@@ -50,6 +50,42 @@
         "en": "How images are picked"
       }
     },
+    "SIM_GAP": {
+      "type": "float",
+      "default": 0.05,
+      "min": 0.0,
+      "max": 1.0,
+      "label": {
+        "ja": "候補にする類似度の差の上限",
+        "en": "Max similarity gap from top1"
+      },
+      "note": {
+        "ja": "いちばん似た絵からこれより離れた絵は候補にしない。小さいほど見た目に忠実、0 で下限の比だけで決める",
+        "en": "Images further than this from the best match are not candidates. Smaller = closer look, 0 = use only the floor ratio"
+      },
+      "group": {
+        "ja": "選び方",
+        "en": "How images are picked"
+      }
+    },
+    "TAG_PENALTY": {
+      "type": "float",
+      "default": 0.05,
+      "min": 0.0,
+      "max": 0.3,
+      "label": {
+        "ja": "色・材質が違う絵を下げる量",
+        "en": "Penalty for a different color or material"
+      },
+      "note": {
+        "ja": "外見文と絵の説明で色（材質）の語が食い違う絵の類似度から引く。色と材質の両方が違えば2回引く。0 で引かない",
+        "en": "Subtracted from the similarity of images whose color (or material) words contradict the appearance text; twice when both differ. 0 = off"
+      },
+      "group": {
+        "ja": "選び方",
+        "en": "How images are picked"
+      }
+    },
     "USE_EXTRA_DICT": {
       "type": "bool",
       "default": true,
@@ -60,6 +96,22 @@
       "note": {
         "ja": "素のゲームが一度も選ばない305枚（書類・魔物の素材・茸など）も候補にする",
         "en": "Also offer 305 stock images the game never picks (documents, creature parts, mushrooms)"
+      },
+      "group": {
+        "ja": "選び方",
+        "en": "How images are picked"
+      }
+    },
+    "USE_REDRAW": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "素の絵を描き直しで見せる",
+        "en": "Show stock images as redrawn versions"
+      },
+      "note": {
+        "ja": "素の絵を、同じ物を足した絵の絵柄で描き直した絵で表示し、選ぶときもその絵の説明で比べる。セーブの絵は素の絵のままなので、切れば元に戻る",
+        "en": "Shows stock images as redrawn versions in the added images' style, and compares by the redrawn image's description. Saves keep the stock image, so turning this off restores it"
       },
       "group": {
         "ja": "選び方",
@@ -536,8 +588,8 @@
         "en": "weapon_medieval"
       },
       "note": {
-        "ja": "252枚",
-        "en": "252 images"
+        "ja": "272枚",
+        "en": "272 images"
       }
     },
     "SET_WEAPON_MAGIC": {
@@ -562,8 +614,8 @@
         "en": "weapon_magic"
       },
       "note": {
-        "ja": "168枚",
-        "en": "168 images"
+        "ja": "178枚",
+        "en": "178 images"
       }
     },
     "SET_WEAPON_MAGIC_FUSION": {
@@ -588,8 +640,8 @@
         "en": "weapon_magic_fusion"
       },
       "note": {
-        "ja": "62枚",
-        "en": "62 images"
+        "ja": "72枚",
+        "en": "72 images"
       }
     },
     "SET_WEAPON_SF": {
@@ -744,8 +796,8 @@
         "en": "wear_fantasy"
       },
       "note": {
-        "ja": "140枚",
-        "en": "140 images"
+        "ja": "150枚",
+        "en": "150 images"
       }
     },
     "SET_WEAR_HIGHFANTASY": {
@@ -874,8 +926,8 @@
         "en": "wear_accessory"
       },
       "note": {
-        "ja": "172枚",
-        "en": "172 images"
+        "ja": "182枚",
+        "en": "182 images"
       }
     },
     "SET_WEAR_SCHOOL": {
@@ -1186,8 +1238,8 @@
         "en": "part_magitech"
       },
       "note": {
-        "ja": "84枚",
-        "en": "84 images"
+        "ja": "114枚",
+        "en": "114 images"
       }
     },
     "SET_FOOD_RATION": {
@@ -1238,8 +1290,8 @@
         "en": "food_basic"
       },
       "note": {
-        "ja": "264枚",
-        "en": "264 images"
+        "ja": "284枚",
+        "en": "284 images"
       }
     },
     "SET_FOOD_DISHES": {
@@ -1316,8 +1368,8 @@
         "en": "medic_fantasy"
       },
       "note": {
-        "ja": "146枚",
-        "en": "146 images"
+        "ja": "186枚",
+        "en": "186 images"
       }
     },
     "SET_MEDIC_MODERN": {
@@ -1368,8 +1420,8 @@
         "en": "material_magic"
       },
       "note": {
-        "ja": "180枚",
-        "en": "180 images"
+        "ja": "190枚",
+        "en": "190 images"
       }
     },
     "SET_MATERIAL_CREATURE": {
@@ -1394,8 +1446,8 @@
         "en": "material_creature"
       },
       "note": {
-        "ja": "177枚",
-        "en": "177 images"
+        "ja": "197枚",
+        "en": "197 images"
       }
     },
     "SET_MATERIAL_MODERN": {
@@ -1446,8 +1498,8 @@
         "en": "tool_fantasy"
       },
       "note": {
-        "ja": "117枚",
-        "en": "117 images"
+        "ja": "167枚",
+        "en": "167 images"
       }
     },
     "SET_TOOL_GENRE": {
@@ -1498,8 +1550,8 @@
         "en": "tool_japanese"
       },
       "note": {
-        "ja": "84枚",
-        "en": "84 images"
+        "ja": "94枚",
+        "en": "94 images"
       }
     },
     "SET_TREASURE_FANTASY": {
@@ -1578,6 +1630,32 @@
       "note": {
         "ja": "81枚",
         "en": "81 images"
+      }
+    },
+    "SET_DOCUMENT_FANTASY": {
+      "type": "choice",
+      "values": [
+        "off",
+        "mix",
+        "separate"
+      ],
+      "default": "mix",
+      "value_labels": {
+        "off": "使わない",
+        "mix": "素の絵と混ぜる",
+        "separate": "似ているときだけ使う"
+      },
+      "group": {
+        "ja": "足した絵：文書",
+        "en": "Added images: Documents"
+      },
+      "label": {
+        "ja": "中世とファンタジー",
+        "en": "document_fantasy"
+      },
+      "note": {
+        "ja": "20枚",
+        "en": "20 images"
       }
     }
   },

@@ -203,11 +203,15 @@ class FakeCtx:
 
 
 def load(cross=True):
-    """本体を読み直して当てる（注入し直しと同じ）。追加の絵の分類は全部切り、偽のゲームの辞書だけで選ぶ。"""
+    """本体を読み直して当てる（注入し直しと同じ）。追加の絵の分類は全部切り、偽のゲームの辞書だけで選ぶ。
+    描き直し・候補の幅の上限・色と材質の補正も切る（同梱の描き直しの辞書を偽の鍵に当てない。決まりの境目だけを見る）。"""
     spec = importlib.util.spec_from_file_location("iiv_cross_under_test", os.path.join(MOD_DIR, "item_image_variety.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     mod.USE_EXTRA_DICT = False
+    mod.USE_REDRAW = False
+    mod.SIM_GAP = 0.0
+    mod.TAG_PENALTY = 0.0
     mod.CROSS_SLOT = cross
     for _name, setting in mod.IMAGE_SETS:
         setattr(mod, setting, "off")

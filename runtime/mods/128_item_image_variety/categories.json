@@ -391,6 +391,16 @@
     "sheet": "msw3",
     "source": "medieval_weapons/med_daggers_types.png",
     "name": "中世武器_短剣と小剣（型の違う剣）"
+   },
+   {
+    "sheet": "i86",
+    "source": "medieval_weapons/weapon_medieval_i86.png",
+    "name": "武器_投擲武器"
+   },
+   {
+    "sheet": "i87",
+    "source": "medieval_weapons/weapon_medieval_i87.png",
+    "name": "武器_近接武器のいろいろ"
    }
   ]
  },
@@ -445,6 +455,11 @@
     "sheet": "xsw2",
     "source": "magic_weapons/mag_greatswords_refined.png",
     "name": "魔法武器_魔法の大剣と伝説の剣"
+   },
+   {
+    "sheet": "i88",
+    "source": "magic_weapons/weapon_magic_i88.png",
+    "name": "武器_魔法の杖と剣"
    }
   ]
  },
@@ -484,6 +499,11 @@
     "sheet": "xsw3",
     "source": "magic_weapons/mag_katanas.png",
     "name": "魔法武器_魔法の刀"
+   },
+   {
+    "sheet": "i89",
+    "source": "magic_weapons/weapon_magic_fusion_i89.png",
+    "name": "武器_魔法と機械の武器"
    }
   ]
  },
@@ -708,6 +728,11 @@
     "sheet": "wla2",
     "source": "wear/wear_light_magic_armor.png",
     "name": "防具類_魔法を帯びた軽い鎧"
+   },
+   {
+    "sheet": "i91",
+    "source": "wear/wear_fantasy_i91.png",
+    "name": "防具_i91"
    }
   ]
  },
@@ -798,6 +823,11 @@
     "sheet": "w01",
     "source": "wear/wear_accessory.png",
     "name": "防具類_アクセサリー"
+   },
+   {
+    "sheet": "i85",
+    "source": "wear/wear_accessory_i85.png",
+    "name": "防具_i85"
    }
   ]
  },
@@ -1116,6 +1146,21 @@
     "sheet": "i49",
     "source": "parts/part_magitech_devices.png",
     "name": "機械部品_小さな魔導の装置"
+   },
+   {
+    "sheet": "i75",
+    "source": "parts/part_magitech_i75.png",
+    "name": "機械部品_古代の光る機械（遺物）"
+   },
+   {
+    "sheet": "i76",
+    "source": "parts/part_magitech_i76.png",
+    "name": "機械部品_古代の光る機械（部品）"
+   },
+   {
+    "sheet": "i77",
+    "source": "parts/part_magitech_i77.png",
+    "name": "機械部品_古代の光る機械（欠片）"
    }
   ]
  },
@@ -1219,6 +1264,16 @@
     "sheet": "i64",
     "source": "food/meal_medieval_table.png",
     "name": "食料_中世の食卓と焼き物"
+   },
+   {
+    "sheet": "i81",
+    "source": "food/food_basic_i81.png",
+    "name": "食料_穀物と保存食"
+   },
+   {
+    "sheet": "i82",
+    "source": "food/food_basic_i82.png",
+    "name": "食料_酒と飲み物"
    }
   ]
  },
@@ -1311,6 +1366,26 @@
     "sheet": "i57",
     "source": "medical/potion_containers.png",
     "name": "医療品_大きさや入れ物の違う薬"
+   },
+   {
+    "sheet": "i66",
+    "source": "medical/medic_fantasy_i66.png",
+    "name": "医療品_軟膏の壺と缶"
+   },
+   {
+    "sheet": "i67",
+    "source": "medical/medic_fantasy_i67.png",
+    "name": "医療品_包帯と薬瓶"
+   },
+   {
+    "sheet": "i68",
+    "source": "medical/medic_fantasy_i68.png",
+    "name": "医療品_薬草茶と光る袋"
+   },
+   {
+    "sheet": "i69",
+    "source": "medical/medic_fantasy_i69.png",
+    "name": "医療品_苔と雑品"
    }
   ]
  },
@@ -1369,6 +1444,11 @@
     "sheet": "i39",
     "source": "magic_materials/magic_vessel.png",
     "name": "魔法素材_霧と粉と雫"
+   },
+   {
+    "sheet": "i80",
+    "source": "magic_materials/material_magic_i80.png",
+    "name": "素材_魔法の素材と古い欠片"
    }
   ]
  },
@@ -1393,6 +1473,16 @@
     "sheet": "i42",
     "source": "monster_materials/creature_fang.png",
     "name": "魔物素材_牙と角と鱗"
+   },
+   {
+    "sheet": "i78",
+    "source": "monster_materials/material_creature_i78.png",
+    "name": "素材_鱗と殻"
+   },
+   {
+    "sheet": "i79",
+    "source": "monster_materials/material_creature_i79.png",
+    "name": "素材_牙・角・器官"
    }
   ]
  },
@@ -1426,6 +1516,31 @@
     "sheet": "i31",
     "source": "tools/tool_oddities.png",
     "name": "道具_変わった品"
+   },
+   {
+    "sheet": "i70",
+    "source": "tools/tool_fantasy_i70.png",
+    "name": "道具_工房と計量の道具"
+   },
+   {
+    "sheet": "i71",
+    "source": "tools/tool_fantasy_i71.png",
+    "name": "道具_祈りと暮らしの小物"
+   },
+   {
+    "sheet": "i72",
+    "source": "tools/tool_fantasy_i72.png",
+    "name": "道具_真鍮の仕掛けと工房の素材"
+   },
+   {
+    "sheet": "i73",
+    "source": "tools/tool_fantasy_i73.png",
+    "name": "道具_鉄の金具と地金"
+   },
+   {
+    "sheet": "i74",
+    "source": "tools/tool_fantasy_i74.png",
+    "name": "道具_金属片と廃材"
    }
   ]
  },
@@ -1484,6 +1599,11 @@
     "sheet": "i20",
     "source": "japanese/wa_goods.png",
     "name": "和風_小物と素材"
+   },
+   {
+    "sheet": "i90",
+    "source": "japanese/tool_japanese_i90.png",
+    "name": "道具_和風の飲み物と道具"
    }
   ]
  },
@@ -1561,6 +1681,25 @@
     "sheet": "i54",
     "source": "modern_sf/documents_badges.png",
     "name": "文書_書類と証書（現代）"
+   }
+  ]
+ },
+ {
+  "id": "document_fantasy",
+  "setting": "SET_DOCUMENT_FANTASY",
+  "group": "文書",
+  "label": "文書_中世とファンタジー",
+  "default": "mix",
+  "sources": [
+   {
+    "sheet": "i83",
+    "source": "documents/document_fantasy_i83.png",
+    "name": "文書_書状と記録（中世）"
+   },
+   {
+    "sheet": "i84",
+    "source": "documents/document_fantasy_i84.png",
+    "name": "文書_札と護符（中世）"
    }
   ]
  }

@@ -187,6 +187,9 @@ def caption_item(entry, im):
 def choose(entry, im):
     if entry["pref"] in SQUARE:
         return entry["pref"]
+    # 表の keep が真の品は希望の箱のまま（横に広い錨は高さが箱に届かず、一段小さい箱に回っていた）
+    if entry.get("keep"):
+        return b.PREF[entry["pref"]]
     return b.choose_folder(entry["pref"], im)
 
 

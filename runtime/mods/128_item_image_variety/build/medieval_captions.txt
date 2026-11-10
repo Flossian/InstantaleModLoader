@@ -262,3 +262,23 @@ med_msw3_08	small_weapon	A steel saw-backed dagger with red details.
 med_msw3_09	small_weapon	A steel broad leaf-shaped dagger.
 med_msw3_10	small_weapon	A polished steel ring-pommel dagger with a leather-wrapped grip.
 med_msw3_11	small_weapon	A polished steel bone-hilted ritual dagger with a leather-wrapped grip and red details.
+med_i86_00	throwable_weapon	A short steel pick with wire wrapped around its wooden grip.
+med_i86_01	throwable_weapon	A compact throwing hatchet with an iron head and a short ash handle.
+med_i86_02	throwable_weapon	A slender dagger with a dark steel blade and a wolf-head pommel.
+med_i86_03	throwable_weapon	A short bronze blade with green patina and an engraved bell motif.
+med_i86_04	throwable_weapon	A slender iron javelin with a narrow leaf-shaped head and a wooden shaft.
+med_i86_05	throwable_weapon	A light javelin with a narrow steel tip and a shell charm tied to the shaft.
+med_i86_06	throwable_weapon	A smooth heavy grey river stone for throwing.
+med_i86_07	throwable_weapon	A soot-blackened iron throwing knife.
+med_i86_08	throwable_weapon	An iron throwing dart with a leather-wrapped grip.
+med_i86_09	throwable_weapon	A round iron throwing ring with a sharpened edge.
+med_i87_00	medium_weapon	A sturdy wooden shepherd's crook with a hooked top.
+med_i87_01	medium_weapon	A sturdy iron harpoon with a weathered wooden shaft and a salt-crusted head.
+med_i87_02	large_weapon	A massive heavy iron anchor with salt corrosion and battle scars.
+med_i87_03	long_weapon	A heavy rusted claymore caked in thick mud.
+med_i87_04	long_weapon	A flail of segmented steel plates linked by chain with a dark cord-wrapped handle.
+med_i87_05	small_weapon	A short steel blade with a silver church emblem on the grip.
+med_i87_06	medium_weapon	An ash quarterstaff with an iron ring at the tip and a leather-wrapped grip.
+med_i87_07	long_weapon	A rusted iron boat hook on a long wooden pole.
+med_i87_08	long_weapon	A salt-crusted iron fishing trident with a wooden shaft.
+med_i87_09	small_weapon	A short iron sword with a chipped blade and a mud-stained grip.

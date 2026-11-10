@@ -44,6 +44,11 @@ build/README.md）。
 素の絵も合う絵が無い外見文（top1 の類似度が低い大剣など）で、使用数最少の規則が
 未使用の銃や制服を選ぶのを防ぐため。逆に銃の外見文で、まだ使っていない剣が選ばれることも無い。
 
+素の絵は、同じ物・同じ向きのまま足した絵の絵柄で描き直した絵（`images/redraw/`）で見せる（USE_REDRAW）。
+品の絵を描く部品に渡すパスだけを替え、品の image_src は素の絵のパスのまま。選ぶときも、描き直しのある素の絵の説明を
+描き直しの一文の埋め込み（`data/redraw/`）に替える。候補は top1 から SIM_GAP より離れた絵を外し、
+外見文と色・材質の語が食い違う絵は TAG_PENALTY だけ下げてから決める（作り方は build/README.md、測った値は VERIFICATION.md §3.26）。
+
 セーブには何も足さない。選ばれた image_src がアイテムに書かれるのは素の
 ゲームと同じ。履歴を消してやり直したいときは該当世界の
 `state/item_image/<世界>.json` を消せばよい。
@@ -70,6 +75,49 @@ TOP_K = 10
 # クエリの近傍が密な品種では TOP_K 件まで開き、
 # 急落する品種（clothing 等）では自動的に絞れる。
 SIM_FLOOR = 0.8
+
+# 候補の幅の上限（類似度の差）。top1 からこれより離れた絵は、SIM_FLOOR の比の内でも候補にしない。0 なら比だけで決める。
+# 比だけだと top1 0.83 の外見文に 0.67 の絵まで候補に入り、使用数最少の規則で色や物の違う絵が付いた（VERIFICATION.md §3.26）
+SIM_GAP = 0.05
+
+# 外見文と絵の説明文で、色の語（または材質の語）が食い違う絵の類似度から引く値。0 なら引かない。
+# 埋め込みは物の名前を重く、色の語を軽く見るので、「淡い青の小瓶」に橙の小瓶が付く。説明文の分かる絵だけを比べる
+# （足した絵・追加辞書の絵・描き直した素の絵。説明文はビルドで語の組 `data/tags.json` にしておく）
+TAG_PENALTY = 0.05
+TAGS_FILE = "tags.json"
+# 語の組。1つの語が2つの組に入ってよい（teal は緑と青）。dark・pale のような明暗の語は色に数えない
+COLOR_WORDS = {
+    "red": "red crimson scarlet ruby blood-red maroon",
+    "orange": "orange amber copper rust rusty rusted",
+    "yellow": "yellow golden gold yellowed",
+    "green": "green emerald jade olive moss mossy teal",
+    "blue": "blue azure navy cyan sapphire teal turquoise",
+    "purple": "purple violet lavender magenta amethyst",
+    "pink": "pink rose rose-colored",
+    "brown": "brown tan bronze copper rust rusty rusted wooden",
+    "black": "black obsidian charcoal ebony",
+    "white": "white ivory cream milky bone-white",
+    "grey": "grey gray silver silvery iron-grey ashen steel",
+}
+MATERIAL_WORDS = {
+    "metal": "iron steel metal metallic bronze brass copper silver gold golden tin alloy chrome rusted rusty",
+    "wood": "wood wooden oak timber bark",
+    "leather": "leather hide pelt",
+    "cloth": "cloth linen silk wool fabric cotton burlap canvas",
+    "glass": "glass crystal crystalline",
+    "stone": "stone rock marble granite pebble",
+    "bone": "bone bones ivory",
+    "paper": "paper parchment",
+    "ceramic": "ceramic clay pottery porcelain earthen",
+    "plastic": "plastic",
+}
+
+# 描き直しを使うか。描き直しは素の絵を同じ物・同じ向きで、足した絵の絵柄に揃えて描き直した絵（`images/redraw/<品種>/<鍵>.png`）。
+# 使うと、素の絵を表示するときは描き直しを見せ、選ぶときの素の絵の説明も描き直しの一文の埋め込み（`data/redraw/<品種>.json`）に替える。
+# 画面に出る絵の説明で選ぶので、素の説明が絵と違う物を指していた絵も外見文に合う（VERIFICATION.md §3.26）。
+# セーブの image_src は素の絵のパスのまま。切れば素の絵と素の説明に戻る。描き直しの無い鍵は素の絵のまま
+USE_REDRAW = True
+REDRAW_DIRNAME = "redraw"
 
 # 同梱の追加辞書（素の辞書に無かった305枚。`data/<品種>.json`）を使うか。
 # 切ると素の辞書だけで均しをかける（切り分け用）。足した絵の分類（下の IMAGE_SETS）は別の設定。
@@ -103,6 +151,69 @@ SPLIT_COMPOUND = (r"\b(battle|war|great|long|short|broad|pole|hand|pick)"
 def split_compound(text):
     """埋め込む文の武器の合成語を2語に分ける（battleaxe → battle axe）。"""
     return re.sub(SPLIT_COMPOUND, r"\1 \2", text, flags=re.IGNORECASE) if isinstance(text, str) else text
+
+
+def _word_groups(table):
+    out = {}
+    for group, words in table.items():
+        for word in words.split():
+            out.setdefault(word, set()).add(group)
+    return out
+
+
+_COLOR_OF = _word_groups(COLOR_WORDS)
+_MATERIAL_OF = _word_groups(MATERIAL_WORDS)
+_WORD = re.compile(r"[a-z]+(?:-[a-z]+)?")
+
+
+def tags_of(text):
+    """文の (色の組, 材質の組)。どちらも frozenset。英語の語だけを見る（日本語の文は空）。"""
+    colors, materials = set(), set()
+    for word in _WORD.findall(text.lower()) if isinstance(text, str) else ():
+        colors |= _COLOR_OF.get(word, set())
+        materials |= _MATERIAL_OF.get(word, set())
+    return frozenset(colors), frozenset(materials)
+
+
+def tags_text(tags):
+    """`data/tags.json` に書く形（"red,white|metal"）。どちらも空なら空の文字列。"""
+    colors, materials = tags
+    return "" if not colors and not materials else "{}|{}".format(",".join(sorted(colors)), ",".join(sorted(materials)))
+
+
+def parse_tags(text):
+    """`tags_text` の逆。読めない値は空の組。"""
+    if not isinstance(text, str) or "|" not in text:
+        return frozenset(), frozenset()
+    colors, _, materials = text.partition("|")
+    return frozenset(c for c in colors.split(",") if c), frozenset(m for m in materials.split(",") if m)
+
+
+def tag_penalty(query_tags, image_tags, penalty):
+    """外見文と絵の語の組から、絵の類似度に足す値（0 か負）。色と材質を別々に見て、両方が食い違えば2回引く。
+    片方に語が無ければ食い違いとしない（説明文に色を書いていない絵は下げない）。"""
+    total = 0.0
+    for q, im in zip(query_tags, image_tags):
+        if q and im and not (q & im):
+            total -= penalty
+    return total
+
+
+def stock_key(src):
+    """素の絵の相対パスなら (品種, 鍵)。部位をまたいだ写し `xs.<元の部位>.<鍵>` は元の部位と鍵。それ以外は None。"""
+    if not isinstance(src, str):
+        return None
+    norm = src.replace("\\", "/")
+    marker = IMAGE_REL.replace(os.sep, "/") + "/"
+    at = norm.find(marker)
+    if at < 0 or not norm.endswith(".png"):
+        return None
+    slot, _, key = norm[at + len(marker):-4].partition("/")
+    if key.startswith(CROSS_PREFIX):
+        slot, _, key = key[len(CROSS_PREFIX):].partition(".")
+    if not slot or not key or "/" in key:
+        return None
+    return slot, key
 
 # 足した絵の分類ごとの使い方。分類は同じ種類の元画像をまとめた単位（`categories.json`）。
 #   off       使わない（その分類の辞書を読まない）
@@ -160,6 +271,7 @@ SET_TOOL_JAPANESE = "separate"
 SET_TREASURE_FANTASY = "mix"
 SET_TREASURE_MODERN = "separate"
 SET_DOCUMENT_MODERN = "separate"
+SET_DOCUMENT_FANTASY = "mix"
 IMAGE_SETS = (
     ("gun_cyber", "SET_GUN_CYBER"),
     ("gun_corp", "SET_GUN_CORP"),
@@ -211,6 +323,7 @@ IMAGE_SETS = (
     ("treasure_fantasy", "SET_TREASURE_FANTASY"),
     ("treasure_modern", "SET_TREASURE_MODERN"),
     ("document_modern", "SET_DOCUMENT_MODERN"),
+    ("document_fantasy", "SET_DOCUMENT_FANTASY"),
 )
 # 版10 で分類を「品の種類：ジャンル」にまとめた（元画像1枚＝1分類の119分類 → 45分類）。旧い設定名で書かれたワールド個別設定を読むための表
 OLD_SETTINGS = {
@@ -356,7 +469,7 @@ GENRE_WEIGHTS_FILE = "weights.json"
 SETTINGS_DIRNAME = "item_image_variety"
 SETTINGS_STORE_ATTR = "_iml_item_image_world_settings"
 # 世界ごとに上書きできる設定（mod.json の settings と同じ並び）
-SETTING_NAMES = (("TOP_K", "SIM_FLOOR", "USE_EXTRA_DICT", "CROSS_SLOT")
+SETTING_NAMES = (("TOP_K", "SIM_FLOOR", "SIM_GAP", "TAG_PENALTY", "USE_EXTRA_DICT", "USE_REDRAW", "CROSS_SLOT")
                  + tuple(setting for _genre, setting in GENRE_SETTINGS) + ("GENRE_BONUS",)
                  + tuple(setting for _name, setting in IMAGE_SETS))
 
@@ -499,19 +612,41 @@ def apply(ctx):
     # 読み込みが起動直後の当て直しの最中に重なると `Item.__init__` の包みが抜けていて、
     # 品は外した鍵のまま作られる（10-23 にテストワールドで白い枠が残った。VERIFICATION.md §3.26）。
     # 描く前に直せば、どの入れ物の品でも、読み込みの時刻によらず白い枠にならない。品の `image_src` も直すので次の保存で残る
+    # 描き直しの置き場（ctx.mod_dir は包みが走るときには残っていない。ここで控える）
+    redraw_root = os.path.join(ctx.mod_dir, "images", REDRAW_DIRNAME)
+    redraw_found = {}
+
+    def redrawn(src):
+        """素の絵のパスなら、描き直しの絵の絶対パス。描き直しが無い・使わない設定なら None。パスごとに1回だけ確かめる。"""
+        if not USE_REDRAW:
+            return None
+        if src not in redraw_found:
+            sk = stock_key(src)
+            path = None if sk is None else os.path.join(redraw_root, sk[0], sk[1] + ".png")
+            redraw_found[src] = path if path is not None and os.path.isfile(path) else None
+            if redraw_found[src]:
+                retire_log("redraw: shown {} -> {}/{}".format(src, sk[0], sk[1]))
+        return redraw_found[src]
+
     @ctx.wrap("scripts.hud.new_hud:InventoryItem.__init__", required=False, safe=True)
     def inventory_item_init(orig, self, *args, **kwargs):
         # InventoryItem.__init__(self, width_slots, height_slots, image_src, rarity, text, item_id, item_instance, inventory)
         src = args[2] if len(args) > 2 else kwargs.get("image_src")
         new = remapped(src, " (shown)")
         if new is not None:
-            if len(args) > 2:
-                args = args[:2] + (new,) + tuple(args[3:])
-            else:
-                kwargs = dict(kwargs, image_src=new)
             item = args[6] if len(args) > 6 else kwargs.get("item_instance")
             if item is not None and getattr(item, "image_src", None) == src:
                 item.image_src = new
+            src = new
+        # 描き直しは描く部品に渡すパスだけ替える。品の image_src（セーブに残る値）は素の絵のパスのまま
+        shown = redrawn(src)
+        if shown is not None:
+            src = shown
+        if src != (args[2] if len(args) > 2 else kwargs.get("image_src")):
+            if len(args) > 2:
+                args = args[:2] + (src,) + tuple(args[3:])
+            else:
+                kwargs = dict(kwargs, image_src=src)
         return orig(self, *args, **kwargs)
 
     # 無ければローダの保留に積んで降りる（`patch.await_module`）。来たらローダが当て直す。
@@ -538,6 +673,7 @@ def apply(ctx):
         "legacy": {},    # (sub_type, 絵) -> 旧版が数えた累計。使用数の下駄
         "usage": {},     # (sub_type, 絵) -> 使用数（images の値 + legacy から導出）
         "pools": {},     # (sub_type, 分類の使い方の署名) -> (keys, 正規化済み行列, キー集合, 側) のキャッシュ
+        "tags": None,    # data/tags.json（{"own": {品種: {鍵: 語の組}}, "redraw": {...}}）。初めて辞書を組むときに読む
     }
 
     # ワールド個別の設定。控えのある世界ではその値を、無い世界では一括設定（ローダが注入した値）を使う。
@@ -662,12 +798,13 @@ def apply(ctx):
         return bonus
 
     def load_pool(sub_type):
-        """素の辞書と同梱の追加辞書を合成して (keys, tensor, キー集合, 側, 分類, 署名) を返す。
+        """素の辞書と同梱の追加辞書を合成して (keys, tensor, キー集合, 側, 分類, 署名, 語の組) を返す。
         側は鍵ごとに、別扱い（separate）の分類ならその分類の名前、それ以外（素の絵と mix の分類）は空。
-        分類は鍵ごとの分類の名前（素の絵と同梱の追加辞書は空。ジャンルの重みを引く）。"""
+        分類は鍵ごとの分類の名前（素の絵と同梱の追加辞書は空。ジャンルの重みを引く）。
+        語の組は鍵ごとの (色, 材質)。説明文の分からない絵（描き直しの無い素の絵）は空。"""
         # 分類の使い方は世界ごとに変わりうるので、署名ごとに持つ
         modes = tuple(mode_of(setting) for _n, setting in IMAGE_SETS)
-        cache_key = (sub_type, USE_EXTRA_DICT) + modes
+        cache_key = (sub_type, USE_EXTRA_DICT, USE_REDRAW) + modes
         if cache_key in state["pools"]:
             return state["pools"][cache_key]
         import json
@@ -707,25 +844,52 @@ def apply(ctx):
                             side[key] = extra_side
                         if extra_cat:
                             category[key] = extra_cat
+        if state["tags"] is None:
+            tags_file = ctx.read_json(os.path.join(mod_dir, "data", TAGS_FILE), default=None)
+            state["tags"] = tags_file if isinstance(tags_file, dict) else {}
+        own_tags = (state["tags"].get("own") or {}).get(sub_type) or {}
+        redraw_tags = (state["tags"].get("redraw") or {}).get(sub_type) or {}
+        # 描き直しのある素の絵（素の辞書と追加辞書の鍵）は、描き直しの一文の埋め込みで選ぶ。足した絵の分類の鍵は替えない
+        redrawn_keys = set()
+        if USE_REDRAW:
+            redraw = ctx.read_json(os.path.join(mod_dir, "data", REDRAW_DIRNAME, sub_type + ".json"), default=None)
+            if isinstance(redraw, dict) and "index" in redraw and "vectors" in redraw:
+                vectors = redraw["vectors"]
+                for key, i in redraw["index"].items():
+                    vec = vectors[i] if isinstance(i, int) and 0 <= i < len(vectors) else None
+                    # 寸法の違う埋め込み（ゲームの更新で辞書の模型が変わったとき）は替えない
+                    if key in table and key not in category and isinstance(vec, list) and len(vec) == len(table[key]):
+                        table[key] = vec
+                        redrawn_keys.add(key)
         keys = list(table)
         matrix = torch.tensor([table[k] for k in keys], dtype=torch.float32)
         matrix = matrix / matrix.norm(dim=1, keepdim=True).clamp_min(1e-12)
+        tags = [parse_tags(redraw_tags.get(k) if k in redrawn_keys else own_tags.get(k)) for k in keys]
         pool = (keys, matrix, frozenset(keys), [side.get(k, "") for k in keys],
-                [category.get(k, "") for k in keys], cache_key)
+                [category.get(k, "") for k in keys], cache_key, tags)
         state["pools"][cache_key] = pool
-        log("pool {}: base={} merged={}".format(sub_type, n_base, len(keys)))
+        log("pool {}: base={} merged={} redrawn={}".format(sub_type, n_base, len(keys), len(redrawn_keys)))
         return pool
 
-    def rank(pool, query):
-        """辞書1つの中で候補を決める（別扱いの側・ジャンルの重み・候補の幅）。
-        `top` は側を決めた後のいちばん似た絵、`qualified` は使用数で選ぶ候補（`top_sim` が 0 以下なら `top` だけ）。"""
-        keys, matrix, _key_set, sides, cats, pool_key = pool
+    def rank(pool, query, query_tags=None):
+        """辞書1つの中で候補を決める（別扱いの側・ジャンルの重み・色と材質の食い違い・候補の幅）。
+        `top` は側を決めた後のいちばん似た絵、`qualified` は使用数で選ぶ候補（`top_sim` が 0 以下なら `top` だけ）。
+        `query_tags` は外見文の (色, 材質)。None か空なら食い違いを見ない。"""
+        keys, matrix, _key_set, sides, cats, pool_key, tags = pool
         sims = matrix @ query
         raw = sims
         # 世界のジャンルの重みの分を足す（重みが全部 0 なら足さない）。似ていない外見文の下限は足す前の値で見る
         bonus = genre_bonus(pool_key, cats)
         if bonus is not None:
             sims = sims + bonus
+        # 色・材質が外見文と食い違う絵を下げる（候補を決める前に引く。使用数で選ぶ段で引いても、候補に残れば選ばれる）
+        penalty = None
+        if TAG_PENALTY > 0 and query_tags is not None and (query_tags[0] or query_tags[1]):
+            values = [tag_penalty(query_tags, t, TAG_PENALTY) for t in tags]
+            if any(values):
+                import torch
+                penalty = torch.tensor(values, dtype=torch.float32)
+                sims = sims + penalty
 
         top_sim, top_idx = sims.max(dim=0)
         top_sim, top_idx = float(top_sim), int(top_idx)
@@ -745,10 +909,13 @@ def apply(ctx):
             # 候補の幅は足す前の値で決め、比べるのは足した後の値（VERIFICATION.md §3.26）。
             # 比を足した後の値に掛けると、全部の絵に同じだけ足す世界で幅が 0.2 × 加算だけ広がった
             floor = top_sim - (1.0 - SIM_FLOOR) * float(raw[top_idx])
+            if SIM_GAP > 0:
+                floor = max(floor, top_sim - SIM_GAP)
             qualified = [i for i in order if float(sims[i]) >= floor]
-        return {"keys": keys, "raw": raw, "bonus": bonus, "top": top_idx, "top_sim": top_sim, "qualified": qualified}
+        return {"keys": keys, "raw": raw, "bonus": bonus, "penalty": penalty, "top": top_idx, "top_sim": top_sim,
+                "qualified": qualified}
 
-    def best_other_slot(sub_type, query):
+    def best_other_slot(sub_type, query, query_tags=None):
         """ほかの 32x32 の部位で、いちばん似た絵（足す前の値）が最も高い部位とその候補。無ければ None。"""
         best = None
         for other in CROSS_SLOTS:
@@ -757,7 +924,7 @@ def apply(ctx):
             pool = load_pool(other)
             if pool is None:
                 continue
-            pick = rank(pool, query)
+            pick = rank(pool, query, query_tags)
             if pick["top_sim"] <= 0:
                 continue
             sim = float(pick["raw"][pick["top"]])
@@ -817,13 +984,14 @@ def apply(ctx):
         query = emb_mod.text_to_embedding(split_compound(query_text))
         query = query.detach().reshape(-1).to(dtype=pool[1].dtype)
         query = query / query.norm().clamp_min(1e-12)
-        own = rank(pool, query)
+        query_tags = tags_of(query_text) if TAG_PENALTY > 0 else None
+        own = rank(pool, query, query_tags)
         # 部位をまたぐ候補。比べる自分の値は実際に見せる絵（使用数で選ぶ）の値なので、候補の中に
         # 0.55 未満の絵があれば先に探しておく（選んだ試算と同じ比べ方。VERIFICATION.md §3.26）
         other = None
         if CROSS_SLOT and item_sub_type in CROSS_SLOTS and own["top_sim"] > 0 and min(
                 float(own["raw"][i]) for i in own["qualified"]) < CROSS_SLOT_BELOW:
-            other = best_other_slot(item_sub_type, query)
+            other = best_other_slot(item_sub_type, query, query_tags)
 
         # 選定と割り当ては1つの錠で。錠を分けると、同時に来た別の外見文が
         # 同じ最少の絵を取り、同じ外見文なら後の1本が先の対応を別の絵で上書きする。
@@ -854,17 +1022,20 @@ def apply(ctx):
             state["usage"][spot] = state["usage"].get(spot, 0) + 1
             persist()
 
-        raw, bonus, top_idx = pick["raw"], pick["bonus"], pick["top"]
-        log("{}: chose {} (rank {} of {} qualified, sim {:.3f}{}, top1 {} {:.3f}{}) "
+        raw, bonus, penalty, top_idx = pick["raw"], pick["bonus"], pick["penalty"], pick["top"]
+        log("{}: chose {} (rank {} of {} qualified, sim {:.3f}{}{}, top1 {} {:.3f}{}) "
             "for {!r}".format(
                 item_sub_type, key, pick["qualified"].index(chosen), len(pick["qualified"]),
                 float(raw[chosen]),
                 "" if bonus is None else " +genre {:.3f}".format(float(bonus[chosen])),
+                "" if penalty is None or not float(penalty[chosen]) else " tag {:.2f}".format(float(penalty[chosen])),
                 keys[top_idx], pick["top_sim"],
                 "" if slot == item_sub_type else ", from {} over own {:.3f}".format(slot, own_sim),
                 query_text[:80]))
         return key
 
-    ctx.log("item_image_variety: installed (TOP_K={}, SIM_FLOOR={}, extra dict={}, cross slot={}, image sets={})".format(
-        TOP_K, SIM_FLOOR, "on" if USE_EXTRA_DICT else "off", "on" if CROSS_SLOT else "off",
+    ctx.log("item_image_variety: installed (TOP_K={}, SIM_FLOOR={}, SIM_GAP={}, TAG_PENALTY={}, extra dict={}, redraw={}, "
+            "cross slot={}, image sets={})".format(
+        TOP_K, SIM_FLOOR, SIM_GAP, TAG_PENALTY, "on" if USE_EXTRA_DICT else "off", "on" if USE_REDRAW else "off",
+        "on" if CROSS_SLOT else "off",
         ", ".join("{} {}".format(name, mode_of(setting)) for name, setting in IMAGE_SETS)))
