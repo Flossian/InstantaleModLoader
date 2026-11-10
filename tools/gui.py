@@ -690,8 +690,11 @@ def setup_theme(root: tk.Tk) -> ttk.Style:
                     background=p["surface"], bordercolor=p["control_edge"],
                     lightcolor=p["control_edge"], darkcolor=p["control_edge"],
                     arrowcolor=p["text_sub"], padding=3)
+    # 字の色も決める。clam は読み取り専用の欄にフォーカスがある間の字を白にするので、
+    # 地だけ白へ上書きすると、選ばずに一覧を閉じたときに白い欄に白い字で描かれて値が消えて見えた。
     style.map("TCombobox",
               fieldbackground=[("readonly", p["surface"])],
+              foreground=[("disabled", p["text_faint"]), ("readonly", p["text"])],
               bordercolor=[("focus", p["accent"])],
               lightcolor=[("focus", p["accent"])],
               darkcolor=[("focus", p["accent"])])
