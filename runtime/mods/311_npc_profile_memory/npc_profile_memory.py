@@ -231,12 +231,12 @@ KEY_NEW_FACTS = "new_facts"
 # `INJECT_CHARS` から導く（設定を増やさない）。
 ABOUT_PLAYER_RATIO = 2
 
-# 抽出のときに差し戻す「判明済みの事実」の上限（件数と文字数）。
+# 抽出のときに差し戻す「判明済みの事実」の上限（件数）。
 # 設定にはしない。
 # 増やすほど落ちた事実が戻りやすいが、抽出の頼み文が伸びる。
 # 1人あたりの `facts` は数件〜20件程度なので、40件あればほぼ全部が載る。
+# 版9 で文字数の上限（1500字）は外した（1件は抽出が書く短い文。VERIFICATION.md §3.95）。
 FACT_RECALL = 40
-FACT_RECALL_CHARS = 1500
 FACTS_HEADING = "【既に記録した事実】"
 
 # 構造化出力に渡す制限時間（秒）。
@@ -251,9 +251,6 @@ EXTRACT_TIMEOUT = 120
 # 溢れたら古い方を捨てる。
 # 新しい会話ほど人物像に効くため。
 MAX_PENDING = 8
-
-# 抽出に載せる書き起こしの長さ（`306_` と同じ考え。長すぎると要点が薄まる）。
-CONVERSATION_CHARS = 2000
 
 # ワーカーと控えの置き場所。
 # **`apply()` の中で作ってはいけない**（TECH.md §3.4）。
@@ -335,7 +332,7 @@ def recent_facts(record):
     しかも既に記録した事実かどうかも判らないので同じ事実を毎ターン報告し直していた（同じ内容の言い換えが4回並ぶ）。
     ここで差し戻すと、その両方が同時に閉じる。
 
-    件数と文字数の両方で頭打ちにし、溢れたら古い方から落とす。
+    件数で頭打ちにし、溢れたら古い方から落とす。
     """
     log = record.get("facts") if isinstance(record, dict) else None
     if not isinstance(log, list):
@@ -350,14 +347,8 @@ def recent_facts(record):
             texts.append(text.strip())
         if len(texts) >= FACT_RECALL:
             break
-    kept, total = [], 0
-    for text in texts:          # 新しい方から詰める
-        total += len(text) + 2
-        if total > FACT_RECALL_CHARS:
-            break
-        kept.append(text)
-    kept.reverse()              # 書き出すのは古い順
-    return kept
+    texts.reverse()             # 書き出すのは古い順
+    return texts
 
 
 def _looks_like_json_attempt(body):
@@ -829,7 +820,7 @@ def apply(ctx):
             try:
                 text = to_text(recent, player, npc)
                 if isinstance(text, str) and text.strip():
-                    return text.strip()[-CONVERSATION_CHARS:]
+                    return text.strip()
             except Exception as exc:
                 write("conversation_history_to_text failed: {}: {}".format(
                     type(exc).__name__, exc))
@@ -838,8 +829,8 @@ def apply(ctx):
             if not isinstance(turn, dict):
                 continue
             lines.append("{}: {}".format(turn.get("role", "?"),
-                                         frames.short(turn.get("content"), 300)))
-        return "\n".join(lines)[-CONVERSATION_CHARS:]
+                                         frames.short(turn.get("content"), None)))
+        return "\n".join(lines)
 
     def finished_quests(app):
         """主人公が片付けた依頼の題。新しいものから `FINISHED_QUESTS_TOLD` 件。読めなければ空。"""
@@ -886,9 +877,10 @@ def apply(ctx):
             "npc_id": str(npc_id),
             "npc_name": name_of(app, npc_id),
             "player_name": player_name_of(app),
-            "game_profile": frames.short(getattr(npc, "profile", ""), 400),
-            "personality": frames.short(getattr(npc, "personality", ""), 300),
-            "job": frames.short(getattr(npc, "job", ""), 60),
+            # ゲームの欄は切らない（版9。VERIFICATION.md §3.95）。書き起こしの長さは `CONVERSATION_TURNS` で決まる。
+            "game_profile": frames.short(getattr(npc, "profile", ""), None),
+            "personality": frames.short(getattr(npc, "personality", ""), None),
+            "job": frames.short(getattr(npc, "job", ""), None),
             "transcript": transcript,
             # ゲーム内の日付もここで採る。
             # ワーカーは `app` を触らないので、

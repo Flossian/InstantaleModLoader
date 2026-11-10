@@ -214,9 +214,8 @@ QUEST_TYPE_FOR_CHOICE = None
 # ページ送りの挙動を実測できていない間は、1ページへ収まる範囲に抑えておく。
 MAX_LISTED = 8
 
-# 生成に使う会話の直近何発言ぶんを渡すか。
+# 生成に使う会話の直近何発言ぶんを渡すか。字数では切らない（版9。長さは発言数で決まる。VERIFICATION.md §3.95）。
 CONVERSATION_TURNS = 12
-CONVERSATION_CHARS = 2500
 
 # 生成が終わってから受注画面に入るまでの余韻（秒）。
 # テキストの流し込みを待つ。
@@ -257,9 +256,7 @@ NPC_MEMORY_DIRNAME = "npc_profiles"
 # 増えたら**ここに足すのはこちらの判断**（知らない欄を勝手に載せない）。
 NPC_MEMORY_FIELDS = (("profile", "人物像"), ("about_player", "冒険者への態度"))
 
-# 添える人物像の上限。
-# 依頼の生成には人物の輪郭があれば足りるので、会話の書き起こしより短くする。
-NPC_MEMORY_CHARS = 800
+# 添える人物像は切らない（版9）。長さは `311_` が書かせるときの目安で決まる。
 
 # ------------------------------------ 片付いた依頼を依頼人との会話に伝える
 # 会話のプロンプトに毎回載る4つの欄に、依頼の結末が入る場所は無い（GAME.md §2.25）。
@@ -305,8 +302,7 @@ TELL_TOWN_QUESTS = True
 # 一度に伝える件数。新しいものから数える。上の依頼人の分とは別に数える。
 MAX_TOWN_TOLD = 3
 
-# 依頼の要約から添える字数。題だけでは何があったのかが伝わらない。
-TOWN_SUMMARY_CHARS = 80
+# 依頼の要約は頭の1行を切らずに添える（版9）。題だけでは何があったのかが伝わらない。
 
 TOWN_HEADING = "【この街で{player}が片付けたと噂になっている依頼】"
 TOWN_ITEM = "・{title}：{summary}"
@@ -565,7 +561,7 @@ def apply(ctx):
             try:
                 text = to_text(recent, player, npc)
                 if isinstance(text, str) and text.strip():
-                    return text.strip()[:CONVERSATION_CHARS]
+                    return text.strip()
             except Exception as exc:
                 write("conversation_history_to_text failed: {}: {}".format(
                     type(exc).__name__, exc))
@@ -576,8 +572,8 @@ def apply(ctx):
             if not isinstance(message, dict):
                 continue
             speaker = player_name if message.get("role") == "user" else npc_name
-            lines.append("{}: {}".format(speaker, frames.short(message.get("content"), 400)))
-        return "\n".join(lines)[:CONVERSATION_CHARS]
+            lines.append("{}: {}".format(speaker, frames.short(message.get("content"), None)))
+        return "\n".join(lines)
 
     def talking_partner(app):
         """いま会話している相手の id。引けなければ None。
@@ -711,7 +707,7 @@ def apply(ctx):
             value = record.get(key)
             if isinstance(value, str) and value.strip():
                 lines.append("{}: {}".format(label, value.strip()))
-        return frames.short("\n".join(lines), NPC_MEMORY_CHARS)
+        return "\n".join(lines)
 
     # 控えの写し。`None` = まだ一度も読んでいない。
     # 触るのは1件ずつの `.get()` だけで、走査はしない。
@@ -1435,7 +1431,7 @@ def apply(ctx):
         while "【" in line and "】" in line[line.index("【"):]:
             start = line.index("【")
             line = line[:start] + line[line.index("】", start) + 1:]
-        return frames.short(line.strip(), TOWN_SUMMARY_CHARS)
+        return line.strip()
 
     # ------------------------------------ 依頼の終わりの控え
     # 置き場は `sys`（`apply()` は1プロセスで何度も走る。`WorldStore` の決まり。TECH.md §3.5）。

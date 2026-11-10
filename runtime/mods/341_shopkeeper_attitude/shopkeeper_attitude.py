@@ -45,9 +45,9 @@ ASK_TIMEOUT = 60.0
 ASK_MAX_TOKENS = 500
 #: 売買を押した後に判定を待つ上限（秒）。過ぎたら判定が無い扱いで開く（届いた判定は次から使う）。
 WAIT_SECONDS = 180.0
-#: 頼みに載せるプロフィールと人生の記録の上限（字）。
-PROFILE_LIMIT = 300
-LIFE_LOG_LIMIT = 1500
+#: 頼みに載せるプロフィールと人生の記録の上限（字）。None は切らない（版2。ゲームの欄と、ゲームがまとめ直す記録。VERIFICATION.md §3.95）。
+PROFILE_LIMIT = None
+LIFE_LOG_LIMIT = None
 LIFE_LOG_MODULE = "scripts.llm.context_manager"
 
 
@@ -61,7 +61,7 @@ def _store():
 
 
 def life_log_text(app, character, limit):
-    """ゲーム自身の作り方の人生の記録（`context_manager.get_life_log_text`）を、頼みに載せる文にする。読めなければ空。"""
+    """ゲーム自身の作り方の人生の記録（`context_manager.get_life_log_text`）を、頼みに載せる文にする。読めなければ空。`limit` が None なら切らない。"""
     module = sys.modules.get(LIFE_LOG_MODULE)
     build = getattr(module, "get_life_log_text", None)
     try:
@@ -71,7 +71,7 @@ def life_log_text(app, character, limit):
     if not value:
         return ""
     text = str(value)
-    return text if len(text) <= limit else text[:limit] + "…"
+    return text if limit is None or len(text) <= limit else text[:limit] + "…"
 
 
 def apply(ctx):

@@ -533,14 +533,14 @@ def apply(ctx):
         area_overview = ""
         descriptions = getattr(area, "descriptions", None)
         if isinstance(descriptions, dict):
-            area_overview = frames.short(descriptions.get("overview"), 600)
+            area_overview = frames.short(descriptions.get("overview"), None)
 
         recent = ""
         log = getattr(app, "current_narration_log", None)
         if isinstance(log, list) and log:
             last = log[-1]
             if isinstance(last, dict):
-                recent = frames.short(last.get("narration"), 300)
+                recent = frames.short(last.get("narration"), None)
 
         instruction = (
             "あなたはダークファンタジーRPGの登場人物を演じます。\n"
@@ -557,6 +557,7 @@ def apply(ctx):
                  npc_name=frames.short(getattr(npc, "name", ""), 60),
                  language=language)
 
+        # 材料は字数で切らない（v1.21.0。窓に収まる根拠は VERIFICATION.md §3.95）。名前と種別の切りは壊れた値への用心。
         context = (
             "【世界観】\n{worldview}\n\n"
             "【現在地】\n- エリア: {area_name}({area_overview})\n"
@@ -566,20 +567,20 @@ def apply(ctx):
             "- {player_name}との関係: {relationship}\n\n"
             "【{player_name}の情報】\n- プロフィール: {player_profile}\n\n"
             "【直前の情景】\n{recent}"
-        ).format(worldview=frames.short(getattr(world, "worldview", ""), 600),
+        ).format(worldview=frames.short(getattr(world, "worldview", ""), None),
                  area_name=frames.short(getattr(area, "name", ""), 60),
                  area_overview=area_overview,
                  facility_name=frames.short(getattr(facility, "name", ""), 80),
                  facility_type=frames.short(getattr(facility, "facility_type", ""), 40),
-                 facility_desc=frames.short(getattr(facility, "description", ""), 400),
+                 facility_desc=frames.short(getattr(facility, "description", ""), None),
                  npc_name=frames.short(getattr(npc, "name", ""), 60),
-                 npc_profile=frames.short(getattr(npc, "profile", ""), 400),
-                 npc_personality=frames.short(getattr(npc, "personality", ""), 300),
-                 npc_speech=frames.short(getattr(npc, "speech_style", ""), 200),
+                 npc_profile=frames.short(getattr(npc, "profile", ""), None),
+                 npc_personality=frames.short(getattr(npc, "personality", ""), None),
+                 npc_speech=frames.short(getattr(npc, "speech_style", ""), None),
                  npc_job=frames.short(getattr(npc, "job", ""), 60),
-                 relationship=frames.short(_relationship_of(npc, player), 200),
+                 relationship=frames.short(_relationship_of(npc, player), None),
                  player_name=frames.short(getattr(player, "name", "冒険者"), 60),
-                 player_profile=frames.short(getattr(player, "profile", ""), 400),
+                 player_profile=frames.short(getattr(player, "profile", ""), None),
                  recent=recent)
 
         return [{"role": "user", "content": instruction + "\n\n" + context},

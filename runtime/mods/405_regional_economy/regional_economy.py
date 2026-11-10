@@ -141,10 +141,12 @@ SPECIALTY_MANAGER_NAME = MANAGER_NAME
 STATE_STORE_ATTR = "__instantale_regional_economy_store__"
 
 # None は切らない。ゲーム自身の頼み文も世界とエリアの概要を全文で載せる。
+# 品の説明も版7 で切らなくした（ゲームが書いた欄。VERIFICATION.md §3.95）。
+# LIST_ITEM_CHARS は LLM の返す特産の1行の上限で、材料の上限ではない。
 WORLD_OVERVIEW_CHARS = None
 AREA_OVERVIEW_CHARS = None
 LIST_ITEM_CHARS = 240
-ITEM_DESCRIPTION_CHARS = 1200
+ITEM_DESCRIPTION_CHARS = None
 # 売買の窓だけに掛ける。所持品は None、402の受け渡しは "party_transfer"
 # （GAME.md §2.13）。地域の需給は交易の値段の話なので、
 # 売り買いをしない窓では触らない。

@@ -10,7 +10,7 @@
     "en": "When you enter a shop, the LLM reads the shopkeeper's personality, profile, relationship and feelings toward you, how often you have talked, and their life log, then decides how they deal with you. Normally they give you a discount, deal as usual, or overcharge you; with no grounds, as usual. In areas where you are wanted (with 336_crime_overhaul), they cower, stay unmoved, or gouge you, at the rate the crime mod sets. The judgment is made in the background on arrival and kept per shopkeeper for 30 days unless affinity (or the wanted level) changes. The first time it is decided, one line shows how they react",
     "ja": "店に入ると、店主の性格・プロフィール・主人公との関係と感情・好感度・会話した回数・人生ログを LLM が読み、どう応じるかを決める。平時は値を負ける・普段どおり・ふっかけるの3通りで、根拠が無ければ普段どおり。手配中の土地では（336_crime_overhaul が入っていれば）怯える・動じない・足元を見るの3通りで、率は犯罪の MOD の設定に従う。判定は店に着いたときに裏で頼み、店主ごとに 30 日使い回す（好感度か手配度が変われば決め直す）。初めて決まったときは店主の反応が1行出る"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "state": ["shopkeeper_attitude"],
   "settings": {

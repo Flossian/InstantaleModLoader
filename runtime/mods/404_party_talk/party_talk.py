@@ -115,10 +115,9 @@ BUSY_FLAGS = ui.BUSY_FLAGS
 BATTLE_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle")
 # 会話の状態を置く `sys` の属性名（TECH.md §3.4。apply() が走り直しても続きが分かる）。
 STORE = "__instantale_party_talk__"
-# プロンプトの上限。全体 → 人物1人ぶん・対話ログ → 属性1項目の順に細かい。
+# プロンプト全体の上限。超えたときだけ人物の塊から削る安全弁。
+# 版12 で人物1人ぶん・対話ログ・属性1項目・世界観の上限は外した（長さは参加人数と HISTORY_TURNS で決まる。VERIFICATION.md §3.95）。
 PROMPT_CHARS = 30000
-SECTION_CHARS = 7000
-FIELD_CHARS = 2200
 
 # プロンプトへ載せる人物の属性。実行時オブジェクトから読む（順は表示順）。
 RAW_FIELDS = ("name", "category", "description", "personality", "profile",
@@ -267,18 +266,13 @@ def apply(ctx):
         return "プレイヤーキャラクター"
 
     def base_info(npc):
-        """ゲーム側の人物設定を「項目: 値」で並べる。1項目 FIELD_CHARS、合計 SECTION_CHARS まで。"""
+        """ゲーム側の人物設定を「項目: 値」で並べる。"""
         lines = []
-        total = 0
         for field in RAW_FIELDS:
             value = getattr(npc, field, None)
             if value in (None, "", [], {}):
                 continue
-            line = field + ": " + frames.short(value, FIELD_CHARS)
-            if total + len(line) > SECTION_CHARS:
-                break
-            lines.append(line)
-            total += len(line) + 1
+            lines.append(field + ": " + frames.short(value, None))
         return "\n".join(lines)
 
     # 311 / 403 の控えを読むだけの窓。`own=False` なので**フォルダを作らない**
@@ -378,7 +372,7 @@ def apply(ctx):
         starts = [i for i, line in enumerate(lines) if line.startswith("user: ")]
         if len(starts) > keep:
             lines = lines[starts[-keep]:]
-        return "\n".join(lines)[-SECTION_CHARS:]
+        return "\n".join(lines)
 
     def prompt(app, worldview, anchor_id):
         """LLM へ渡す本文を1本にする。
@@ -391,7 +385,7 @@ def apply(ctx):
         anchor_name = names.get(anchor_id, "")
         index = "\n".join("- id={} / 名前={}".format(i, names[i]) for i in ids)
         # 本体の facilitator と同じ見出しで載せる（【基本情報】- 世界観:）。
-        world = "" if worldview is None else "\n\n【基本情報】\n- 世界観: " + frames.short(worldview, 5000)
+        world = "" if worldview is None else "\n\n【基本情報】\n- 世界観: " + frames.short(worldview, None)
         anchor = "\n\n【アンカーNPC】\n- id={} / 名前={}".format(anchor_id, anchor_name) if anchor_id else ""
         head = (RULES + world
                 + "\n\n【プレイヤーキャラ】\n- 名前: " + player_name(app)

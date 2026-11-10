@@ -106,7 +106,7 @@ def clamp_stance(value):
 
 def clean(text, limit):
     text = " ".join(str(text or "").split())
-    return text if len(text) <= limit else text[:limit] + "…"
+    return text if limit is None or len(text) <= limit else text[:limit] + "…"
 
 
 def parse(data):

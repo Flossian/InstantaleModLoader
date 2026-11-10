@@ -56,9 +56,8 @@ ARENA_PHASE_STEP = 2
 #: 評判に効くのは「何件片付けたか」と直近の中身の方）。
 QUEST_LIMIT = 20
 
-#: 素材の文字列を控えるときの上限。
-#: `achievements` は LLM が書いた文章なので、1件が長いことがある。
-ITEM_CHARS = 400
+#: 素材の文字列を控えるときの上限。None は切らない（版7。1件は依頼ごとの1〜2文で、ゲーム自身も土地の全件を会話に載せる。VERIFICATION.md §3.95）。
+ITEM_CHARS = None
 
 
 def player_of(app):

@@ -120,8 +120,8 @@ FACILITIES_KEY = "facilities"
 OVERVIEW_FLOOR = 100
 FACILITIES_FLOOR = 300
 
-#: 功績1件の文字列の上限。`achievements` は LLM が書いた文章なので長いことがある。
-ITEM_CHARS = 400
+#: 功績1件の文字列の上限。None は切らない（版6。1件は依頼ごとの1〜2文で、件数は `RECENT_DEEDS` で決まる。VERIFICATION.md §3.95）。
+ITEM_CHARS = None
 
 #: 土地の名前が引けなかったときの言い方。
 AREA_FALLBACK = "この土地"

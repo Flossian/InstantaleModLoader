@@ -3480,7 +3480,7 @@ ui.character_of(app, id) / ui.character_name(app, id, fallback="その仲間")
 
 ```python
 frames.text_of(obj, name)  # 文字列を期待する読み方。文字列でなければ None
-frames.short(value, limit) # 表示・ログ用の切り詰め。None は空文字
+frames.short(value, limit) # 表示・ログ用の切り詰め。None は空文字。limit=None なら切らずに整えるだけ（v1.21.0）
 frames.caller()            # 呼び出し元の連鎖。段数では数えない（wrap の層が挟まる）
 frames.owner_of(code)      # method_1 / execute の持ち主クラスを名指しする
 frames.attr(obj, name)     # hasattr を使わない存在確認

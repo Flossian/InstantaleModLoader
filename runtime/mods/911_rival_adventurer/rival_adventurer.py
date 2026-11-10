@@ -118,8 +118,8 @@ MANAGER_INTRO = "mod_rival_adventurer_intro"
 INTRO_TIMEOUT = 90                     # 秒。返らなければ文型の語りに降りる
 INTRO_CHARS = 300                      # 語りの上限（超えたら文型に降りる）
 REASON_CHARS = 80                      # 理由の上限
-DEED_CHARS = 80                        # 頼み文に渡す功績1件の上限
-PROFILE_CHARS = 300                    # 頼み文に渡す人物の素性の上限
+DEED_CHARS = None                      # 頼み文に渡す功績1件の上限（None は切らない。VERIFICATION.md §3.95）
+PROFILE_CHARS = None                   # 頼み文に渡す人物の素性の上限（同上）
 #: 語りを出すのを見送る旗（GAME.md §2.6）。戦闘・会話の最中には割り込まない。
 BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
               "in_conversation", "in_free_input", "in_action_in_conversation")

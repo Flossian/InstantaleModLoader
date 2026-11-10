@@ -900,15 +900,12 @@ def test_recalled_facts_are_capped_by_count():
           "並びが古い順でない: {}".format(kept[:3]))
 
 
-def test_recalled_facts_are_capped_by_chars():
-    """件数に収まっていても文字数で頭打ちにする"""
+def test_recalled_facts_are_not_capped_by_chars():
+    """件数に収まっていれば、長い事実も文字数では落とさない（版9）"""
     facts = _seeded_facts(10, pad="あ" * 400)
     kept = MOD.recent_facts({"facts": facts})
-    check(len(kept) < 10, "文字数の頭打ちが効かない: {}件".format(len(kept)))
-    total = sum(len(text) + 2 for text in kept)
-    check(total <= MOD.FACT_RECALL_CHARS,
-          "文字数の上限を超えた: {}字".format(total))
-    check(kept[-1] == facts[-1]["text"], "新しい方を優先していない")
+    check(kept == [f["text"] for f in facts], "長い事実が落ちた: {}件".format(len(kept)))
+    check(not hasattr(MOD, "FACT_RECALL_CHARS"), "文字数の上限が残っている")
 
 
 def test_recalled_facts_survive_a_broken_record():
@@ -1625,7 +1622,7 @@ def main():
                  test_recorded_facts_are_shown_to_the_extractor,
                  test_no_facts_means_no_block,
                  test_recalled_facts_are_capped_by_count,
-                 test_recalled_facts_are_capped_by_chars,
+                 test_recalled_facts_are_not_capped_by_chars,
                  test_recalled_facts_survive_a_broken_record,
                  test_v1_record_still_works,
                  test_elapsed_days_reads_the_world_day,

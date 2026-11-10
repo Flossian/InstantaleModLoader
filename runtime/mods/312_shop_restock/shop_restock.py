@@ -696,10 +696,10 @@ def apply(ctx):
             n=len(values), lineup=lineup,
             world=frames.short(frames.attr(getattr(app, "world", None), "name", ""), 60),
             area=frames.short(frames.attr(area, "name", ""), 60),
-            area_desc=frames.short(frames.attr(area, "description", "") or "", 600),
+            area_desc=frames.short(frames.attr(area, "description", "") or "", None),
             shop=frames.short(frames.attr(facility, "name", ""), 60),
             kind=frames.attr(facility, "facility_type", ""),
-            shop_desc=frames.short(frames.attr(facility, "description", "") or "", 400),
+            shop_desc=frames.short(frames.attr(facility, "description", "") or "", None),
             types=types, values=values, rarities="/".join(RARITIES),
             max=VALUE_MAX,
             old="、".join(old_names) or "無し")

@@ -10,7 +10,7 @@
     "en": "Builds a reputation for each land out of what the player actually did there - the deeds the game already writes into area_history, the wanted level, the quests finished, the days stayed - and hands it to the NPCs you talk to. First meetings start from 'I have heard of you'. Fame is counted from the quests and story quests you finished and your arena wins, weighted so that heavy deeds count far more than many light ones; notoriety is the running total of every rise in how heavily you are wanted, and never falls. A land where fame plus notoriety is high enough gives you a local name. The epithet is one per world, forms only once fame plus notoriety is high enough and two lands hold a reputation, and is only re-coined on qualitative shifts: the set of lands with a reputation changes, a wanted state flips, or total deeds double. Compilation runs in the background only when the material changes, so conversations are never slowed down. Fame, notoriety, local names and each land's reputation can be read in the Reputation screen from the MOD button at the bottom left. Nothing is written to the save; the compiled text lives in state/",
     "ja": "その土地で実際にやったことから土地ごとの評判を編み、会話する NPC に渡す。素材はゲーム自身が書いている成した事・手配度・完了した依頼・物語の依頼・闘技場の戦績・滞在日数で、この MOD が新しく記録するのは悪名の累計だけ。初対面の NPC が「噂は聞いている」から入る。名声は片付けた依頼・果たした物語の依頼・闘技場の勝ちから、重い行いほど大きく数える。悪名は手配が重くなった分の累計で、手配が解けても減らない。1つの土地で名声と悪名の合計が線を越えると、その土地での呼び名が付く。二つ名は世界に1つで、名声と悪名の合計が足り、評判の立つ土地が2つ以上になってから付く。評判の立つ土地の増減・手配の反転・行いの倍増という質的な変化のときだけ編み直す。名声・悪名・呼び名・各地の評判は、画面左下の MOD 用のボタンから開く「評判」の画面で見られる。編纂は素材が変わったときだけ別スレッドで LLM を回すので、会話は遅くならない。セーブには書かず、編纂した文は state\\ に置く"
   },
-  "version": "6",
+  "version": "7",
   "author": "R01/Flossian",
   "state": ["reputation"],
   "settings": {

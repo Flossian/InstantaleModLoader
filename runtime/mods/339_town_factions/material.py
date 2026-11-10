@@ -8,8 +8,12 @@
 from . import rules
 
 TOWN_SIZES = ("village", "town", "city")
-OVERVIEW_LIMIT = 6000
-LIFE_LOG_LIMIT = 4000
+#: 材料の上限（字）。None は切らない（版8。窓に収まる根拠は VERIFICATION.md §3.95）。
+#: 世界の設定・経歴はゲームの欄、人生の記録はゲームがまとめ直すので伸びすぎない。
+#: 功績だけは全部の街をつなぐうえ依頼ごとに増え続けるので、新しい方を残して切る。
+OVERVIEW_LIMIT = None
+PROFILE_LIMIT = None
+LIFE_LOG_LIMIT = None
 ACHIEVEMENT_LIMIT = 3000
 RECENT_EVENTS = 5
 
@@ -136,12 +140,12 @@ def world_data_of(save_data_dict):
 
 def _cut(text, limit):
     text = str(text or "").strip()
-    return text if len(text) <= limit else text[:limit] + "…"
+    return text if limit is None or len(text) <= limit else text[:limit] + "…"
 
 
 def _tail(text, limit):
     text = str(text or "").strip()
-    return text if len(text) <= limit else "…" + text[-limit:]
+    return text if limit is None or len(text) <= limit else "…" + text[-limit:]
 
 
 def extract_material(save_data_dict):
@@ -201,7 +205,7 @@ def standing_material(save_data_dict, ledger, *, player_name, profile, lawfulnes
     world = world_data_of(save_data_dict)
     lines = ["【世界の設定】", _cut(world.get("overview"), OVERVIEW_LIMIT), "",
              factions_block(ledger, towns), "",
-             "【主人公】{}".format(player_name), _cut(profile, 1500) or "（経歴の記述なし）"]
+             "【主人公】{}".format(player_name), _cut(profile, PROFILE_LIMIT) or "（経歴の記述なし）"]
     wanted = ["- {}: {}".format(names[t], v) for t, v in sorted(lawfulness.items())
               if t in names and isinstance(v, (int, float)) and v < 0]
     lines += ["", "【手配度が 0 未満の街】"] + (wanted or ["なし"])
@@ -227,7 +231,7 @@ def adjust_material(save_data_dict, ledger, baseline, records, *, player_name, p
     world = world_data_of(save_data_dict)
     lines = ["【世界の設定】", _cut(world.get("overview"), OVERVIEW_LIMIT), "",
              factions_block(ledger, towns), "",
-             "【主人公】{}".format(player_name), _cut(profile, 1500) or "（経歴の記述なし）", ""]
+             "【主人公】{}".format(player_name), _cut(profile, PROFILE_LIMIT) or "（経歴の記述なし）", ""]
     for faction in ledger.get("factions") or []:
         score, facts = baseline.get(faction["id"], (0, {}))
         held = [t for t, row in (ledger.get("towns") or {}).items() if row.get("faction") == faction["id"]]
@@ -277,7 +281,7 @@ open: faction が別の勢力のときだけ、その勢力の者だと周りに
 - 反感や不満が書かれていなければ dissenter にしない
 - dissenter の反感は、その街の勢力そのもの、またはその勢力の役人・教え・やり方・要求に向いたもの（態度や行いに表れていればよい）。【勢力】のどれでもない組織や個人への恨みは数えない
 - 一覧のすべての住人について1つずつ書く"""
-PERSON_PROFILE_LIMIT = 400
+PERSON_PROFILE_LIMIT = None
 
 
 def home_of(save_data_dict, npc_id):

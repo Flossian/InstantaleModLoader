@@ -2,7 +2,7 @@
   "entry": "npc_starting_equipment.py",
   "api": 1,
   "kind": "feature",
-  "version": "5",
+  "version": "6",
   "author": "MoririnJP",
   "state": ["npc_starting_equipment"],
   "name": {

@@ -10,7 +10,7 @@
     "en": "Accept quests from conversation, or generate one from what you just talked about. Finished quests are told to the NPC who asked for them, and rumored among the townsfolk",
     "ja": "会話から依頼を受注できる。いま話した内容から依頼を1件生成することもできる。片付けた依頼はその依頼人との会話に伝わり、街の住人にも噂として伝わる"
   },
-  "version": "8",
+  "version": "9",
   "author": "R01/Flossian",
   "state": ["quest_clients.json"],
   "shares": [
@@ -45,16 +45,6 @@
       "note": {
         "ja": "多いほど話の流れを汲むが、生成が長くなる",
         "en": "More context, slower generation"
-      }
-    },
-    "CONVERSATION_CHARS": {
-      "type": "int",
-      "default": 2500,
-      "min": 200,
-      "max": 20000,
-      "label": {
-        "ja": "同じく文字数の上限",
-        "en": "…and its character limit"
       }
     },
     "KEEP_TRANSCRIPT_MOVES": {

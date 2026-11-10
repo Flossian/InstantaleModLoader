@@ -38,7 +38,6 @@ LOG_BASENAME = "npc_starting_equipment.log"
 MANAGER_NAME = "mod_npc_starting_equipment"
 LLM_TIMEOUT = 120
 LLM_MAX_TOKENS = 1200
-MAX_TEXT = 600
 MAX_ITEM_RETRIES = 2
 
 # ``WorldStore`` は注入し直しを跨いで同じものを使う。
@@ -63,8 +62,12 @@ FALLBACK_SUBTYPE = {"weapon": "medium", "wearable": "body_armor"}
 TYPE_LABELS = {"weapon": "武器", "wearable": "防具"}
 
 
-def _text(value, limit=MAX_TEXT):
-    """LLMへ渡す文章を短くする。ゲーム側のオブジェクトは渡さない。"""
+def _text(value, limit=None):
+    """文章を1本の文字列に整える。`limit` があればその字数で切る。ゲーム側のオブジェクトは渡さない。
+
+    LLM へ渡す人物の欄は版6 で切らなくした（ゲームの欄。VERIFICATION.md §3.95）。
+    名前・種別の切りは壊れた値への用心、品の欄の切りは返答の上限。
+    """
     if not isinstance(value, str):
         return ""
     return frames.short(value.strip(), limit)

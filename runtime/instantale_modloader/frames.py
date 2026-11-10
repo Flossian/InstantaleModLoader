@@ -148,10 +148,11 @@ def replace_arg(args, kwargs, name, index, value, insert=False):
     return tuple(args), kwargs, False
 
 
-def short(value, limit: int = 200) -> str:
+def short(value, limit: "int | None" = 200) -> str:
     """値を「表示・ログに収まる1本の文字列」にする。None は空文字。
 
     名前やログの1項目を切り詰めるための共通形。
+    `limit` が None なら切らずに整えるだけ（v1.21.0。頼みに載せる材料を全文にした MOD が使う）。
     `_text` の名で 300 番台の mod に写しが増えていたのでここへ集めた
     （写して回るものはローダの語彙。TECH.md §3.2.3）。
     `repr_value()` とは役割が別。あちらは調査用に「形」を写し取る、
@@ -162,7 +163,7 @@ def short(value, limit: int = 200) -> str:
     if not isinstance(value, str):
         value = str(value)
     value = value.strip()
-    return value if len(value) <= limit else value[:limit] + "…"
+    return value if limit is None or len(value) <= limit else value[:limit] + "…"
 
 
 def repr_value(value) -> str:

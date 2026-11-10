@@ -68,22 +68,13 @@ STATE_DIRNAME = "npc_social_memory"
 # 311 の控え。**読むだけ**で、こちらからは書かない。
 PROFILE_STATE_DIRNAME = "npc_profiles"
 
-# 会話参加者から読むゲーム側の項目と、その長さの上限。
+# 会話参加者から読むゲーム側の項目。
+# 版10 で、材料と会話に足す文の字数の上限を外した（ゲームの欄・311 と 403 が長さの目安で書かせた記録・
+# 件数で抑えた事実と書き起こし。窓に収まる根拠は VERIFICATION.md §3.95）。
 CHARACTER_FIELDS = ("profile", "personality", "job")
-CHARACTER_FIELD_CHARS = 400
-CHARACTER_TOTAL_CHARS = 1000
 
-# 311と同じく、抽出へ差し戻す既知の事実は短く再提示する。
+# 311と同じく、抽出へ差し戻す既知の事実の件数。
 FACT_RECALL = 10
-FACT_RECALL_CHARS = 800
-
-# 311 から借りてくる本文の上限。
-PROFILE_CHARS = 600
-ABOUT_PLAYER_CHARS = 600
-
-# 会話へ注入する1項目ぶんの上限と、書き起こし1行の上限。
-INJECT_FIELD_CHARS = 500
-TRANSCRIPT_LINE_CHARS = 400
 
 # 自前の `manager_name`。
 # これを付けると自分のプロンプトも
@@ -93,9 +84,6 @@ MANAGER_EXTRACT = "mod_npc_social_memory_extract"
 # 抽出に渡す制限時間（秒）。必ず渡す。
 # 抽出は1本のワーカーで直列に回しているので、1回返らないと以後が全部止まる。
 EXTRACT_TIMEOUT = 120
-
-# 抽出に載せる書き起こしの長さ（長すぎると要点が薄まる）。
-CONVERSATION_CHARS = 2600
 
 # 待ち行列へ積んだままにする仕事の上限。
 # 溢れたら古い方を捨てる（新しい会話ほど関係に効くため）。
@@ -299,15 +287,14 @@ def apply(ctx):
         """311 が育てた人物像と、その人物から見たプレイヤー。無ければ空文字。
 
         311 の控えは `{npc_id: {"profile": ..., "about_player": ..., "facts": ...}}`。
-        ここで読むのは2欄だけで、長さも上限で切る。
+        ここで読むのは2欄だけ。
         """
         record = profile_bucket_311(key).get(str(npc_id))
         if not isinstance(record, dict):
             return {"profile": "", "about_player": ""}
         return {
-            "profile": frames.short(_field(record, "profile"), PROFILE_CHARS),
-            "about_player": frames.short(_field(record, "about_player"),
-                                         ABOUT_PLAYER_CHARS),
+            "profile": frames.short(_field(record, "profile"), None),
+            "about_player": frames.short(_field(record, "about_player"), None),
         }
 
     # ------------------------------------------------------------ 参加者を読む
@@ -318,25 +305,13 @@ def apply(ctx):
             return ""
 
         blocks = []
-        total = 0
         for field in CHARACTER_FIELDS:
             value = getattr(character, field, None)
             if value in (None, "", [], {}):
                 continue
-            text = frames.short(value, CHARACTER_FIELD_CHARS)
-            if not text:
-                continue
-            line = "{}: {}".format(field, text)
-            remain = CHARACTER_TOTAL_CHARS - total
-            if remain <= 0:
-                break
-            if len(line) > remain:
-                # 端数が短すぎると読めない断片になるだけなので、そこで打ち切る。
-                if remain > 80:
-                    blocks.append(line[:remain])
-                break
-            blocks.append(line)
-            total += len(line) + 1
+            text = frames.short(value, None)
+            if text:
+                blocks.append("{}: {}".format(field, text))
         return "\n".join(blocks)
 
     def npc_id_of(app, npc):
@@ -407,22 +382,19 @@ def apply(ctx):
         return record if isinstance(record, dict) else {}
 
     def recent_facts(record):
-        """抽出へ差し戻す既知の事実を古い順で返す。件数と文字数の両方で頭打ちにする。"""
+        """抽出へ差し戻す既知の事実を古い順で返す。件数で頭打ちにする。"""
         log = record.get("facts") if isinstance(record, dict) else None
         if not isinstance(log, list):
             return []
 
         texts = []
-        total = 0
         for item in reversed(bounded_facts(log)):
             text = item.get("text") if isinstance(item, dict) else item
             if not isinstance(text, str) or not text.strip():
                 continue
-            text = text.strip()
-            total += len(text) + 2
-            if len(texts) >= FACT_RECALL or total > FACT_RECALL_CHARS:
+            if len(texts) >= FACT_RECALL:
                 break
-            texts.append(text)
+            texts.append(text.strip())
         return list(reversed(texts))
 
     def update_relation(key, observer_id, observer_name,
@@ -519,20 +491,18 @@ def apply(ctx):
                 memory = memory_311(key, target_id)
                 raw = character_text(character)
                 if raw:
-                    lines.append("  ゲーム側の基本情報（短縮）: "
-                                 + frames.short(raw, INJECT_FIELD_CHARS))
+                    lines.append("  ゲーム側の基本情報: " + raw)
                 if memory["profile"]:
-                    lines.append("  311の人物像（短縮）: "
-                                 + frames.short(memory["profile"], INJECT_FIELD_CHARS))
+                    lines.append("  311の人物像: " + memory["profile"])
                 if memory["about_player"]:
                     lines.append("  {}から見た{}: {}".format(
                         name, player_name_of(app),
-                        frames.short(memory["about_player"], INJECT_FIELD_CHARS)))
+                        memory["about_player"]))
 
             relationship = _field(relation_record(key, observer_id, target_id),
                                   "relationship")
-            lines.append("  403が記録した関係（短縮）: " + (
-                frames.short(relationship, RELATION_CHARS) if relationship else
+            lines.append("  403が記録した関係: " + (
+                frames.short(relationship, None) if relationship else
                 "（このMODにはまだ確定した記録がない。初対面か既知かを捏造せず、"
                 "現在の会話・ゲーム側の記録から判断すること）"))
             blocks.append("\n".join(lines))
@@ -574,7 +544,7 @@ def apply(ctx):
         `app.current_conversation_history` は `[{"role": "user"|"assistant", "content": ...}]`。
         本体の `conversation_history_to_text` が使えれば、本体と同じ「名前: 台詞」の形になる
         （assistant を会話相手の名で描く）。使えなければ role のまま並べる。
-        末尾 CONVERSATION_CHARS 文字だけ残す。
+        長さは `CONVERSATION_TURNS` の発言数で決まり、字数では切らない（版10）。
         """
         history = getattr(app, "current_conversation_history", None)
         if not isinstance(history, list) or not history:
@@ -588,15 +558,15 @@ def apply(ctx):
             try:
                 text = to_text(recent, getattr(app, "player", None), npc)
                 if isinstance(text, str) and text.strip():
-                    return text.strip()[-CONVERSATION_CHARS:]
+                    return text.strip()
             except Exception as error:
                 write("conversation_history_to_text failed: {}: {}".format(
                     type(error).__name__, error))
 
         lines = ["{}: {}".format(item.get("role", "?"),
-                                 frames.short(item.get("content"), TRANSCRIPT_LINE_CHARS))
+                                 frames.short(item.get("content"), None))
                  for item in recent if isinstance(item, dict)]
-        return "\n".join(lines)[-CONVERSATION_CHARS:]
+        return "\n".join(lines)
 
     def snapshot(app, conversation_id):
         """抽出に必要なものだけを、その場で写し取る（ワーカーは app を触らない）。

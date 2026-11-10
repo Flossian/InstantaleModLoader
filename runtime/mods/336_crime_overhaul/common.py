@@ -32,7 +32,7 @@ GUARD_CHOICE_TEXT = "衛兵"
 
 
 def life_log_text(app, character, limit):
-    """ゲーム自身の作り方の人生の記録を、頼みに載せる文にする。読めなければ空。`limit` 字で切る。"""
+    """ゲーム自身の作り方の人生の記録を、頼みに載せる文にする。読めなければ空。`limit` 字で切る（None は切らない）。"""
     module = sys.modules.get(LIFE_LOG_MODULE)
     build = getattr(module, "get_life_log_text", None)
     try:
@@ -42,7 +42,7 @@ def life_log_text(app, character, limit):
     if not value:
         return ""
     text = str(value)
-    return text if len(text) <= limit else text[:limit] + "…"
+    return text if limit is None or len(text) <= limit else text[:limit] + "…"
 
 
 #: 片付いた裏の仕事と処刑場からの脱出の控え（`state\` の周回の鍵の下）。

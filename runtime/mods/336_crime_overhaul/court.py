@@ -25,8 +25,8 @@ from . import common, trial
 
 HINT_TEXT = "入力欄に書いて送った言葉が、そのまま判事への釈明になる。\nボタンを押せば、その文言が釈明になる。"
 SEND_TARGET = "scripts.llm.llm_manager:send_request"
-#: 置き換える人生の記録の上限（字）。頼みが長くなりすぎないように。
-LIFE_LOG_LIMIT = 1500
+#: 置き換える人生の記録の上限（字）。None は切らない（版6。ゲームがまとめ直して伸びすぎない。VERIFICATION.md §3.95）。
+LIFE_LOG_LIMIT = None
 
 
 def trial_args(buttons):
