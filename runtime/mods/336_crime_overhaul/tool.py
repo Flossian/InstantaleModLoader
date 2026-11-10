@@ -161,7 +161,7 @@ def build_window(mod_dir=MOD_DIR):
     ttk.Label(outer, text=title, style="Title.TLabel").pack(anchor="w")
     ttk.Label(outer, style="Sub.TLabel", wraplength=980, justify="left",
               text="左で機能を選ぶと、右にその機能の項目が出る。入切は右の先頭の項目で切り替える。"
-                   "どの世界でも効く（settings\\mod_settings.json）"
+                   "どの世界でも効く"
               ).pack(anchor="w", pady=(0, 8))
 
     footer = ttk.Frame(outer)
@@ -205,12 +205,12 @@ def build_window(mod_dir=MOD_DIR):
         frame = ttk.Frame(body, padding=(0, 0, 6, 0))
         subset = dict((key, found[key]) for key in grouped[gkey])
         forms[gkey] = modtool._Form(frame, subset,
-                                    lambda k: "既定: " + modtool.shown(found[k]["default"]))
+                                    lambda k: "既定: " + modtool.shown(found[k]["default"], found[k]))
         frames[gkey] = frame
         tree.insert("", "end", iid=gkey, text=section[1])
 
-    # 項目の説明は `_Form` が固定の幅（640px）で折り返す。右の欄はそれより狭いので、
-    # 右端で切れないよう、欄の幅から見出しの列を引いた幅で折り返し直す。
+    # 項目の説明は `_Form` が自分の枠の幅で折り返すが、枠は選んだ機能のものしか置かれていない。
+    # 機能を選び直した直後にも幅が合うよう、欄の幅から見出しの列を引いた幅でここでも折り返し直す。
     notes = dict((gkey, [w for w in frame.grid_slaves(column=1)
                          if isinstance(w, ttk.Label) and str(w.cget("style")) == "Faint.TLabel"])
                  for gkey, frame in frames.items())
@@ -297,7 +297,7 @@ def build_window(mod_dir=MOD_DIR):
     def dirty():
         return as_shown(everything()) != saved["values"]
 
-    status = ttk.Label(footer, style="Faint.TLabel", text="次の注入から効きます")
+    status = ttk.Label(footer, style="Faint.TLabel", text="ゲームを起動し直すと効きます")
     status.pack(side="left")
 
     def save():

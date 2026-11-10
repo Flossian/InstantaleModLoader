@@ -255,7 +255,7 @@ def build_window(mod_dir=MOD_DIR):
     outer.pack(fill="both", expand=True)
     ttk.Label(outer, text=title, style="Title.TLabel").pack(anchor="w")
     ttk.Label(outer, style="Sub.TLabel", wraplength=940, justify="left",
-              text="設定はどの世界にも効く（settings\\mod_settings.json）。ゲームを起動し直すと効く。\n"
+              text="設定はどの世界にも効く。ゲームを起動し直すと効く。\n"
                    "記録のタブは出来事の記録（state\\town_incidents\\）を読むだけ。"
               ).pack(anchor="w", pady=(0, 8))
 

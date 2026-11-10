@@ -45,6 +45,7 @@ r"""MOD 同梱の設定画面（`mod.json` の `"tool"`）が共有する土台�
 import io
 import json
 import os
+import re
 import sys
 
 #: 窓の大きさと位置を残す先（設定画面が自分の窓を覚えるのと同じファイル）。
@@ -659,15 +660,30 @@ def setup_theme(window, root=""):
 #  道具側は `world_settings_main(MOD_DIR)` を呼ぶだけ。
 # ==========================================================================
 
+#: 句点の後ろで行を分ける場所。閉じ括弧の前（「…。」の中）と行末では分けない。
+_SENTENCE_END = re.compile("。[ 　]*(?![」』）)\n]|$)")
+
+
+def by_sentence(text):
+    """説明の文を一文一行にする（句点の後ろで行を分ける）。
+
+    `mod.json` の説明は1段落に続けて書いてある。そのまま折り返すと文の途中で行が変わり、
+    Tk は行頭の句読点も避けないので「。」から始まる行が出る。
+    文ごとに行を分けておくと、ほとんどの文が1行に収まる。
+    """
+    return _SENTENCE_END.sub("。\n", (text or "").strip())
+
+
 def shown(value, decl=None):
     """説明に添える値の見せ方。空は（空）、真偽は ON / OFF、表示名のある選択肢は表示名、他はそのまま。
 
     空文字をそのまま出すと説明が「既定: 」で終わって、
     値が無いのか説明が切れているのか分からない。
+    未指定（`allow_null` の `None`）も同じく（空）。入力欄では空欄で表すため。
     """
     if isinstance(value, bool):
         return "ON" if value else "OFF"
-    if value == "":
+    if value is None or value == "":
         return "（空）"
     if decl is not None and decl["type"] == "choice":
         return _choice_text(decl, value)
@@ -861,6 +877,12 @@ class _Form(object):
         self.decls = found
         self.vars = {}
         editors = editors or {}
+        # 説明の折り返しは枠の幅に合わせる（入力欄の列の幅）。
+        # 幅を決め打つと、ウィンドウを広げても細く折れ、狭い枠では右端で切れる。
+        notes = []
+        parent.bind("<Configure>", lambda e: [
+            label.configure(wraplength=max(240, e.width - parent.grid_bbox(0, 0)[2] - 24))
+            for label in notes], add="+")
         # 1列目（入力欄）だけ伸ばす。0列目のラベルは字の幅のまま。
         parent.columnconfigure(1, weight=1)
         # 1項目で2行使う（入力欄の行と、その下の説明の行）。だから row は 2 ずつ進む。
@@ -893,17 +915,23 @@ class _Form(object):
             elif key in editors:
                 var = tk.StringVar()
                 editors[key](parent, var).grid(row=row, column=1, sticky="ew", pady=(6, 0))
+            elif decl["type"] in ("int", "float"):
+                # 数の欄は伸ばさない（数桁の値に横幅いっぱいの欄は、文字列の欄と見分けがつかない）。
+                var = tk.StringVar()
+                ttk.Entry(parent, textvariable=var, width=14).grid(row=row, column=1, sticky="w", pady=(6, 0))
             else:
                 var = tk.StringVar()
                 ttk.Entry(parent, textvariable=var).grid(row=row, column=1, sticky="ew", pady=(6, 0))
             self.vars[key] = var
-            # 宣言の説明と、呼び側が足す一言を1行に繋ぐ。
-            # 空の側を落としてから繋ぐので、片方だけでも余分な空白が出ない。
-            note = " ".join(t for t in (decl["note"]["ja"], note_of(key)) if t)
+            # 宣言の説明は一文一行にし、呼び側が足す一言（既定や一括設定の値）はその下の行に置く。
+            # 説明の末尾に続けると、値を探して文を読むことになる。
+            note = "\n".join(t for t in (by_sentence(decl["note"]["ja"]), note_of(key)) if t)
             if note:
-                # `wraplength` は px。折り返さないと `314_` の長い説明が窓を横に広げる。
-                ttk.Label(parent, text=note, style="Faint.TLabel", wraplength=640,
-                          justify="left").grid(row=row + 1, column=1, sticky="w", padx=(0, 8))
+                # `wraplength` は px（初めの値。枠の幅が決まれば上の `<Configure>` が合わせ直す）。
+                label = ttk.Label(parent, text=note, style="Faint.TLabel", wraplength=640,
+                                  justify="left")
+                label.grid(row=row + 1, column=1, sticky="w", padx=(0, 8), pady=(0, 6))
+                notes.append(label)
             row += 2
 
     def get(self):
@@ -976,9 +1004,12 @@ def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None, ed
 
     # --- 見出し
     ttk.Label(outer, text=title, style="Title.TLabel").pack(anchor="w")
-    ttk.Label(outer, style="Sub.TLabel", wraplength=860, justify="left",
-              text=blurb + " 設定は2段。一括設定はどの世界でも効き、"
-                   "ワールド個別設定はその世界で一括設定と違う項目だけを持つ").pack(anchor="w", pady=(0, 6))
+    head = ttk.Label(outer, style="Sub.TLabel", wraplength=860, justify="left",
+                     text=by_sentence(blurb) + "\n一括設定はどの世界でも効く。"
+                          "ワールド個別設定は、選んだ世界でだけ一括設定より優先される")
+    head.pack(anchor="w", pady=(0, 6))
+    outer.bind("<Configure>", lambda e: head.configure(wraplength=max(300, e.width - 28))
+               if e.widget is outer else None, add="+")
 
     # --- 下段のボタン。一覧より先に詰める（窓が低いときに押し出されないように）。
     footer = ttk.Frame(outer)
@@ -994,8 +1025,6 @@ def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None, ed
     # 見出しの前後に空白を入れているのはタブの幅を稼ぐため（ttk はタブに padding を持てない）。
     bulk = ttk.Frame(tabs, padding=(6, 8, 6, 6))
     tabs.add(bulk, text="  一括設定  ")
-    ttk.Label(bulk, text="どの世界でも効く。settings\\mod_settings.json に入る（他の MOD と同じ）",
-              style="Sub.TLabel").pack(anchor="w", pady=(0, 4))
     bulk_bottom = ttk.Frame(bulk)
     bulk_bottom.pack(side="bottom", fill="x", pady=(6, 0))
     body = ttk.Frame(bulk, padding=(0, 0, 6, 0))    # 入力欄は grid、外は pack。混ぜないための子枠
@@ -1009,8 +1038,8 @@ def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None, ed
     # ---- ワールド個別設定
     per_world = ttk.Frame(tabs, padding=(6, 8, 6, 6))
     tabs.add(per_world, text="  ワールド個別設定  ")
-    ttk.Label(per_world, text="その世界だけ。一括設定と違う項目だけが state\\{}\\<世界名>.json に入る。"
-              "セーブからは世界名を読むだけで、セーブには何も書かない".format(state_dirname(mod_dir)),
+    # 書き先のファイル名は保存の後に下の行へ出る（`saved_paths`）ので、ここには書かない。
+    ttk.Label(per_world, text="選んだ世界でだけ効く。セーブからは世界名を読むだけで、セーブには何も書かない",
               style="Sub.TLabel").pack(anchor="w", pady=(0, 4))
     picker = ttk.Frame(per_world)
     picker.pack(fill="x", pady=(0, 4))
@@ -1089,7 +1118,7 @@ def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None, ed
         extra_tabs(tabs, root_dir)
 
     status = ttk.Label(footer, style="Faint.TLabel",
-                       text="一括設定は次にゲームへ注入したときから、"
+                       text="一括設定は次にゲームを起動したときから、"
                             "ワールド個別設定は次にその世界を開いたときから効く")
     status.pack(side="left")
 

@@ -234,7 +234,7 @@ def build_window(mod_dir=MOD_DIR):
     outer.pack(fill="both", expand=True)
     ttk.Label(outer, text=title, style="Title.TLabel").pack(anchor="w")
     ttk.Label(outer, style="Sub.TLabel", wraplength=940, justify="left",
-              text="どの世界でも効く（settings\\mod_settings.json）。次の注入から効く。\n"
+              text="どの世界でも効く。ゲームを起動し直すと効く。\n"
                    "様子のタブはライバルの控え（state\\rival_adventurer\\）を読むだけ。"
               ).pack(anchor="w", pady=(0, 8))
 
@@ -415,7 +415,7 @@ def build_window(mod_dir=MOD_DIR):
     def dirty():
         return as_shown(dict((k, v) for k, v in everything().items() if k in found)) != saved["values"]
 
-    status = ttk.Label(footer, style="Faint.TLabel", text="次の注入から効きます"
+    status = ttk.Label(footer, style="Faint.TLabel", text="ゲームを起動し直すと効きます"
                        + ("  ※ 宣言が無い項目: " + ", ".join(missing) if missing else ""))
     status.pack(side="left")
 

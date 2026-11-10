@@ -274,8 +274,8 @@ def build_window(model):
                 os.startfile(target)
         link.bind("<Button-1>", open_folder)
 
-    place_row("ゲームBGM", model.asset_dir, os.path.isdir(model.asset_dir))
-    place_row("追加BGM", model.state_dir, os.path.isdir(model.state_dir))
+    place_row("ゲームの曲", model.asset_dir, os.path.isdir(model.asset_dir))
+    place_row("足した曲", model.state_dir, os.path.isdir(model.state_dir))
     place_row("設定ファイル", model.playlist_path, os.path.isfile(model.playlist_path))
 
     # --- MOD の設定（mod.json の "settings"）。
@@ -547,7 +547,7 @@ def build_window(model):
 
     def rescan():
         if model.dirty() and not messagebox.askyesno(
-                "再走査", "未保存の変更があります。破棄して読み直しますか？", parent=root):
+                "読み直す", "未保存の変更があります。破棄して読み直しますか？", parent=root):
             return
         model.reload()
         default_var.set(str(model.default_weight))
@@ -580,12 +580,12 @@ def build_window(model):
     ttk.Button(footer, text="閉じる", command=close).pack(side="right")
     ttk.Button(footer, text="保存", style="Accent.TButton",
                command=save).pack(side="right", padx=(0, 6))
-    ttk.Button(footer, text="再走査", command=rescan).pack(side="right", padx=(0, 6))
+    ttk.Button(footer, text="読み直す", command=rescan).pack(side="right", padx=(0, 6))
     root.protocol("WM_DELETE_WINDOW", close)
 
     if not model.rows:
         messagebox.showinfo("戦闘BGMの選曲",
-                            "曲が1つも見つかりません。\n\n{}\n{}\n\nに .mp3 / .ogg / .wav を置いて「再走査」".format(
+                            "曲が1つも見つかりません。\n\n{}\n{}\n\nに .mp3 / .ogg / .wav を置いて「読み直す」".format(
                                 model.asset_dir or "（ゲームの場所が未設定）", model.state_dir),
                             parent=root)
     return root

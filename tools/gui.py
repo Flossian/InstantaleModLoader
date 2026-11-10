@@ -61,6 +61,7 @@ sys.path.insert(0, os.path.join(ROOT, "runtime"))
 
 import injector                                  # noqa: E402
 import logrotate                                 # noqa: E402
+import modtool                                   # noqa: E402
 import watcher                                   # noqa: E402
 import instantale_modloader as ml                # noqa: E402
 from instantale_modloader import config as C     # noqa: E402
@@ -728,6 +729,21 @@ def setup_theme(root: tk.Tk) -> ttk.Style:
                     bordercolor=p["raised"], lightcolor=p["accent"],
                     darkcolor=p["accent"], borderwidth=0)
 
+    # タブ（同梱の設定画面が使う）。clam の既定は茶色がかった灰色で、他の部品の色から浮く。
+    # 選んでいるタブは中身の地と同じ色にして、つながって見えるようにする。
+    style.configure("TNotebook", background=p["bg"], bordercolor=p["border"],
+                    lightcolor=p["border"], darkcolor=p["border"],
+                    tabmargins=(2, 4, 2, 0))
+    style.configure("TNotebook.Tab", background=p["pressed"], foreground=p["text_sub"],
+                    bordercolor=p["border"], lightcolor=p["pressed"],
+                    darkcolor=p["pressed"], padding=(12, 5))
+    style.map("TNotebook.Tab",
+              background=[("selected", p["bg"]), ("active", p["raised"])],
+              foreground=[("selected", p["text"])],
+              lightcolor=[("selected", p["bg"]), ("active", p["raised"])],
+              darkcolor=[("selected", p["bg"]), ("active", p["raised"])],
+              bordercolor=[("selected", p["control_edge"])])
+
     style.configure("Vertical.TScrollbar",
                     background=p["border"], troughcolor=p["bg"],
                     bordercolor=p["bg"], arrowcolor=p["text_sub"],
@@ -1265,6 +1281,11 @@ class SettingsDialog(tk.Toplevel):
 
         row = 1
         group = ""
+        # 説明の折り返しは枠の幅に合わせる（幅を決め打つと、ウィンドウを広げても細く折れたままになる）。
+        notes = []
+        frame.bind("<Configure>", lambda e: [
+            label.configure(wraplength=max(240, e.width - frame.grid_bbox(0, 0)[2] - 24))
+            for label in notes], add="+")
         for name, decl in mod["settings"].items():
             # 見出し（`"group"`）が変わる所で区切る。同じ見出しは並んでいる間だけまとまる。
             heading = decl.get("group", {}).get("ja", "")
@@ -1282,32 +1303,35 @@ class SettingsDialog(tk.Toplevel):
             ttk.Label(frame, text=decl["label"]["ja"]).grid(
                 row=row, column=0, sticky="w", padx=(0, 10), pady=3)
             widget, var = self._field(frame, decl, value)
-            widget.grid(row=row, column=1, sticky="ew", pady=3)
+            # 伸ばすのは文字列と選択肢だけ。数の欄は短いまま左に置く。
+            widget.grid(row=row, column=1, pady=3,
+                        sticky="ew" if decl["type"] in ("str", "choice") else "w")
             self.vars[name] = (decl, var)
             row += 1
             note = decl["note"]["ja"]
             if note:
-                ttk.Label(frame, text=note, style="Sub.TLabel",
-                          wraplength=420, justify="left").grid(
-                    row=row, column=1, sticky="w", pady=(0, 6))
+                label = ttk.Label(frame, text=modtool.by_sentence(note), style="Sub.TLabel",
+                                  wraplength=420, justify="left")
+                label.grid(row=row, column=1, sticky="w", pady=(0, 2))
+                notes.append(label)
                 row += 1
             # 既定値を必ず見せる。
             # 「元に戻したい」ときに何に戻すのかが分かるように。
-            # 表示名のある選択肢は、欄と同じ表示名で見せる（値の綴りと見比べさせない）。
-            default_text = repr(decl["default"])
-            if decl["type"] == "choice" and \
-                    C.choice_text(decl, decl["default"]) != str(decl["default"]):
-                default_text = C.choice_text(decl, decl["default"])
-            ttk.Label(frame, text="既定: " + default_text,
-                      style="Faint.TLabel").grid(row=row, column=1, sticky="w")
+            # 書き方は同梱の設定画面と揃える（真偽は ON / OFF、空は（空）、選択肢は表示名）。
+            ttk.Label(frame, text="既定: " + modtool.shown(decl["default"], decl),
+                      style="Faint.TLabel").grid(row=row, column=1, sticky="w", pady=(0, 8))
             row += 1
 
         frame.columnconfigure(1, weight=1)
         bar = ttk.Frame(outer)
-        bar.grid(row=1, column=0, columnspan=2, sticky="e", pady=(12, 0))
-        ttk.Button(bar, text="既定に戻す", command=self._reset).pack(side="left", padx=4)
-        ttk.Button(bar, text="キャンセル", command=self._close).pack(side="left", padx=4)
-        ttk.Button(bar, text="OK", command=self._ok).pack(side="left")
+        bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(12, 0))
+        # 並びと色は同梱の設定画面と揃える（書き込む操作に色を持たせ、右に寄せる）。
+        ttk.Button(bar, text="既定に戻す", command=self._reset).pack(side="left")
+        ttk.Label(bar, text="保存すると、次にゲームを起動したときから効きます",
+                  style="Faint.TLabel").pack(side="left", padx=12)
+        ttk.Button(bar, text="キャンセル", command=self._close).pack(side="right")
+        ttk.Button(bar, text="保存", style="Accent.TButton", command=self._ok).pack(
+            side="right", padx=6)
 
         self.bind("<MouseWheel>", self._on_wheel)
         self.bind("<Escape>", lambda _e: self._close())
@@ -1394,6 +1418,8 @@ class SettingsDialog(tk.Toplevel):
         # int / float の空欄は「未指定」（allow_null の設定で許される）。
         # str の空欄は**空文字列という値**（`_ok` を参照）。
         var = tk.StringVar(value="" if value is None else str(value))
+        if kind in ("int", "float"):
+            return ttk.Entry(parent, textvariable=var, width=14), var
         return ttk.Entry(parent, textvariable=var), var
 
     def _reset(self) -> None:
@@ -1613,17 +1639,22 @@ class App(ttk.Frame):
     COLUMNS = (
         ("order", "順", 40, "center", False),
         ("kind", "種別", 56, "center", False),
-        ("name_ja", "Name（日本語）", 200, "w", True),
+        ("name_ja", "名前", 230, "w", True),
+        # 設定の有無と前回の結果は名前のすぐ右に置く。一覧が狭いと右の列から
+        # 枠の外へ出るので、切れてよい列（フォルダ名・版・作者）を右へ寄せる。
+        ("cfg", "設定", 44, "center", False),
+        ("state", "前回", 64, "center", False),
         # 英名（mod.json の name.en）ではなくフォルダ名を出す。ログ・
         # load_order.json・`after` の宣言はどれもフォルダ名で書かれるので、
         # 一覧と突き合わせるときはこちらのほうが役に立つ。英名は検索
         # （`_matches`）と mod.json には残っている。
-        ("dir", "フォルダ名", 200, "w", True),
-        ("cfg", "設定", 44, "center", False),
-        ("version", "Ver", 46, "center", False),
-        ("author", "Author", 120, "w", False),
-        ("state", "前回", 76, "center", False),
+        ("dir", "フォルダ名", 170, "w", True),
+        ("version", "版", 40, "center", False),
+        ("author", "作者", 110, "w", False),
     )
+
+    #: 名前の列をこれより狭くしない。一覧を狭めたときに名前が1文字幅まで潰れるのを止める。
+    NAME_MIN = 150
 
     # 列に指したときに出す説明。
     # 記号だけの列（有効・設定）は、意味と「押せる」ことの両方を書く
@@ -1779,6 +1810,7 @@ class App(ttk.Frame):
             # 列の切れ目が読めなくなる。
             self.tree.heading(key, text=title, anchor=anchor)
             self.tree.column(key, width=width, anchor=anchor, stretch=stretch)
+        self.tree.column("name_ja", minwidth=self.NAME_MIN)
         # 無効な行は灰色にする。
         # チェックだけだと、一覧を眺めたときに「効いていない
         # mod がある」ことに気付きにくい。
@@ -1875,6 +1907,7 @@ class App(ttk.Frame):
 
     # -- MOD 情報（右の枠）--------------------------------------------------
     INFO_WIDTH = 430          # 初めて開いたときの幅
+    TOGGLE_IDLE = "有効 / 無効"    # 何も選んでいないときの切り替えボタンの字
     INFO_MIN = 260            # これより狭いと中身が読めなくなる
     LIST_MIN = 420            # 一覧側にも同じだけ最低限を残す
 
@@ -1893,20 +1926,22 @@ class App(ttk.Frame):
         # 手が行き来する。
         top = ttk.Frame(info)
         top.pack(fill="x")
-        self.info_toggle = ttk.Button(top, text="有効 / 無効", width=11,
+        # 字は選んだ行に合わせて「無効にする」「有効にする」に替える（`_show_detail`）。
+        self.info_toggle = ttk.Button(top, text=self.TOGGLE_IDLE, width=11,
                                       command=self._toggle)
         self.info_toggle.pack(side="left")
         ttk.Label(top, text="位置", style="Group.TLabel").pack(
             side="left", padx=(14, 5))
         self.info_move = []
-        # 横に並べるので字は矢印だけにする。何をするかは指せば出る
-        # （`Tooltip`）。同じ操作はメニューにも語で載っている。
+        # 1つずつ動かす方は矢印だけにする。何をするかは指せば出る（`Tooltip`）。
+        # 端まで送る方は語で書く（⤒ ⤓ はこの書体だと潰れて読めなかった）。
         for label, tip, command in (
                 ("▲", "1つ上へ", lambda: self._move(-1)),
                 ("▼", "1つ下へ", lambda: self._move(1)),
-                ("⤒", "一番上へ", lambda: self._move_to(0)),
-                ("⤓", "一番下へ", lambda: self._move_to(-1))):
-            button = ttk.Button(top, text=label, width=3, command=command)
+                ("先頭へ", "一番上へ", lambda: self._move_to(0)),
+                ("末尾へ", "一番下へ", lambda: self._move_to(-1))):
+            button = ttk.Button(top, text=label, width=3 if len(label) == 1 else 6,
+                                command=command)
             button.pack(side="left", padx=1)
             Tooltip(button, tip)
             self.info_move.append(button)
@@ -1977,7 +2012,8 @@ class App(ttk.Frame):
         # 書体は明示する。tk.Text の既定は **TkFixedFont**（Windows では
         # ＭＳ ゴシック）で、窓の他の場所とは別の書体になる ― 一番よく読む
         # 場所だけ字面が変わって、読みにくさの元になっていた。
-        self.desc = tk.Text(box, wrap="word", relief="flat", bd=0,
+        # 折り返しは字の単位。語の単位だと、和文の中の英字（NPC・MOD）の前後で行が切れる。
+        self.desc = tk.Text(box, wrap="char", relief="flat", bd=0,
                             width=1, height=1, padx=8, pady=6,
                             font="TkDefaultFont",
                             background=PALETTE["surface"],
@@ -2352,12 +2388,13 @@ class App(ttk.Frame):
         # 黙って消すと、クラウド実行のときに `102_` などが何も当てていない理由が一覧から読めなくなる ― 失敗ではないので
         # ⚠ には出さない。
         skipped = (self.status.get("patches") or {}).get("skipped") or []
-        if skipped:
+        # フックの数は作る側が見るものなので、デバッグモードのときだけ出す（下の on_demand も同じ）。
+        if skipped and self.debug_mode:
             msg += " ｜ この実行では通らない経路のフック {} 件".format(len(skipped))
         # 画面を開くまで来ないモジュール宛て（ローダの `ON_DEMAND_MODULES`）。
         # 待ちの途中ではないので「段階適用の途中」にも ⚠ にも出さず、件数だけ出す。
         on_demand = (self.status.get("patches") or {}).get("on_demand") or []
-        if on_demand:
+        if on_demand and self.debug_mode:
             msg += " ｜ 画面を開いたときに当たるフック {} 件".format(len(on_demand))
         if self.dirty:
             msg += " ｜ 順序と有効/無効の変更は未保存"
@@ -2508,9 +2545,10 @@ class App(ttk.Frame):
             self.tree.insert("", "end", iid=name, tags=tuple(tags),
                              image=self.check_on if on else self.check_off,
                              values=(n if on else "-", mod["kind"] or "-",
-                                     label_ja, mod["dir"], cfg,
-                                     mod["version"] or "-", mod["author"] or "-",
-                                     RESULT_TEXT.get(result, result or "-")))
+                                     label_ja, cfg,
+                                     RESULT_TEXT.get(result, result or "-"),
+                                     mod["dir"],
+                                     mod["version"] or "-", mod["author"] or "-"))
         self.shown_count = shown
         if self._filtering():
             self.count_label.configure(
@@ -2544,6 +2582,7 @@ class App(ttk.Frame):
         if not mod:
             self.info_name.configure(text="MOD を選んでください")
             self.info_state.configure(text="一覧の行を選ぶと、ここに出ます")
+            self.info_toggle.configure(text=self.TOGGLE_IDLE)
             self._set_entry(self.info_dir, "")
             for value in self.info_meta.values():
                 value.configure(text="")
@@ -2563,12 +2602,16 @@ class App(ttk.Frame):
 
         state = "無効" if mod["dir"] in self.disabled else "有効"
         self.info_name.configure(text=mod["name_ja"] or mod["dir"])
-        self.info_state.configure(text="{} ／ {} ／ entry: {}".format(
-            mod["kind"] or "-", state, mod["entry"]))
+        # 押したらどうなるかを字にする（「有効 / 無効」では、押すとどちらになるかが読めない）。
+        self.info_toggle.configure(text="有効にする" if state == "無効" else "無効にする")
+        # 入口のファイル・API の版・当てた対象は作る側が見るものなので、デバッグモードのときだけ出す。
+        self.info_state.configure(text="{} ／ {}".format(mod["kind"] or "-", state) + (
+            " ／ entry: {}".format(mod["entry"]) if self.debug_mode else ""))
         self._set_entry(self.info_dir, mod["dir"])
         self.info_meta["author"].configure(text=mod["author"] or "-")
         self.info_meta["version"].configure(
-            text="{}　（API {}）".format(mod["version"] or "-", mod["api"]))
+            text="{}　（API {}）".format(mod["version"] or "-", mod["api"])
+            if self.debug_mode else str(mod["version"] or "-"))
 
         blocks = []
         # 伏せられている理由は行の色だけでは伝わらないので、選んだら言葉で出す。
@@ -2587,7 +2630,8 @@ class App(ttk.Frame):
                                    "読み込まれます。配布物には入りません。"
                                    "TECH.md §2.6）。"))
 
-        blocks.append(("body", mod["desc_ja"] or "（説明なし）"))
+        # 一文一行で出す（mod.json の説明は1段落に続けて書いてある）。
+        blocks.append(("body", modtool.by_sentence(mod["desc_ja"]) or "（説明なし）"))
         if (self.show_en.get() and mod["desc_en"]
                 and mod["desc_en"] != mod["desc_ja"]):
             blocks.append(("en", mod["desc_en"]))
@@ -2601,12 +2645,20 @@ class App(ttk.Frame):
         chosen = self.settings.get(mod["dir"]) or {}
         if chosen:
             blocks.append(("label", "変更済みの設定"))
-            blocks.append(("meta", "、".join(
-                "{}={!r}".format(k, v) for k, v in sorted(chosen.items()))))
+            # 設定画面と同じ項目名と値の書き方で、設定画面と同じ順に出す
+            # （キーと Python の値では読めない）。宣言から消えた項目だけ、キーのまま後ろに出す。
+            decls = mod["settings"]
+            order = list(decls)
+            blocks.append(("meta", "\n".join(
+                "{}: {}".format(C.full_label(decls[k]), modtool.shown(v, decls[k]))
+                if k in decls else "{}: {}".format(k, v)
+                for k, v in sorted(chosen.items(),
+                                   key=lambda kv: (order.index(kv[0]) if kv[0] in decls
+                                                   else len(order), kv[0])))))
         # 前回の注入で当てた対象。どこを触る mod なのかは、これが一番確か。
         by_mod = ((self.status.get("patches") or {}).get("by_mod") or {})
         targets = by_mod.get(mod["dir"]) or []
-        if targets:
+        if targets and self.debug_mode:
             blocks.append(("label", "前回適用した対象"))
             shown = "、".join(targets[:4])
             if len(targets) > 4:

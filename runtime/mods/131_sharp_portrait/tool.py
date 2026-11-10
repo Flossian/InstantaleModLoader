@@ -388,6 +388,11 @@ def build_window(root_dir, game_dir, base=""):
     ttk.Label(outer, style="Sub.TLabel",
               text="上は、これから作られる絵に効く MOD の設定。下は、既に居る NPC の顔を検出し直して切り直す道具").pack(anchor="w", pady=(0, 8))
 
+    # 下段（保存と閉じる）。ほかの設定画面と同じ並びで、中身より先に詰める（窓が低いときに押し出されないように）。
+    footer = ttk.Frame(outer)
+    footer.pack(side="bottom", fill="x")
+    ttk.Separator(outer).pack(side="bottom", fill="x", pady=8)
+
     # --- 設定
     settings = modtool.load_settings(root_dir, MOD_DIR)
     box = ttk.LabelFrame(outer, text="設定（ゲームの中で効くもの）", padding=8)
@@ -411,8 +416,8 @@ def build_window(root_dir, game_dir, base=""):
     setting_vars[SCALE_SETTING] = tk.DoubleVar(value=settings.get(SCALE_SETTING, scale_low))
     ttk.Spinbox(scale_row, textvariable=setting_vars[SCALE_SETTING], from_=scale_low, to=scale_high,
                 increment=0.05, width=6).pack(side="left", padx=(8, 0))
-    setting_status = ttk.Label(box, style="Sub.TLabel", text="")
-    setting_status.pack(side="right")
+    setting_status = ttk.Label(footer, style="Faint.TLabel", text="設定はゲームを起動し直すと効きます")
+    setting_status.pack(side="left")
 
     def save_now():
         values = {}
@@ -427,9 +432,11 @@ def build_window(root_dir, game_dir, base=""):
             values[SCALE_SETTING] = round(min(scale_high, max(scale_low, float(values[SCALE_SETTING]))), 2)
             setting_vars[SCALE_SETTING].set(values[SCALE_SETTING])
         ok = modtool.save_settings(root_dir, MOD_DIR, values)
-        setting_status.configure(text="保存しました。次の注入から効きます" if ok else "保存できませんでした（settings/mod_settings.json）")
+        setting_status.configure(text="保存しました。ゲームを起動し直すと効きます" if ok
+                                 else "保存できませんでした（settings/mod_settings.json）")
 
-    ttk.Button(box, text="設定を保存", command=save_now).pack(side="right", padx=(0, 8))
+    ttk.Button(footer, text="閉じる", command=root.destroy).pack(side="right")
+    ttk.Button(footer, text="保存", style="Accent.TButton", command=save_now).pack(side="right", padx=(0, 6))
 
     # --- 道具
     tool = ttk.LabelFrame(outer, text="既に居る NPC の顔を切り直す", padding=8)

@@ -804,8 +804,9 @@ def build_window(model):
     spin = ttk.Spinbox(bottom, from_=0, to=1000, width=6, textvariable=weight_var)
     spin.pack(side="right", padx=(6, 12))
     ttk.Label(bottom, text="選んだ曲の重み").pack(side="right")
-    summary = ttk.Label(bottom, style="Faint.TLabel")
-    summary.pack(side="left", fill="x", expand=True)
+    # 使う曲の数はボタンの段の上の行に分ける。同じ段に置くと、枠が狭いときに右の部品の下へ潜って切れる。
+    summary = ttk.Label(editor, style="Faint.TLabel")
+    summary.pack(side="bottom", fill="x", pady=(6, 0), after=bottom)
 
     # 試聴は最後に選んだ一覧の曲（左右どちらで選んでも鳴らせる）。
     last_tree = {"tree": None}
@@ -1017,7 +1018,7 @@ def build_window(model):
 
     def rescan():
         if model.dirty() and not messagebox.askyesno(
-                "再走査", "未保存の変更があります。破棄して読み直しますか？", parent=root):
+                "読み直す", "未保存の変更があります。破棄して読み直しますか？", parent=root):
             return
         model.reload()
         default_var.set(str(model.default_weight))
@@ -1055,7 +1056,7 @@ def build_window(model):
 
     ttk.Button(footer, text="閉じる", command=close).pack(side="right")
     ttk.Button(footer, text="保存", style="Accent.TButton", command=save).pack(side="right", padx=(0, 6))
-    ttk.Button(footer, text="再走査", command=rescan).pack(side="right", padx=(0, 6))
+    ttk.Button(footer, text="読み直す", command=rescan).pack(side="right", padx=(0, 6))
     root.protocol("WM_DELETE_WINDOW", close)
 
     # 最初は宿屋を出しておく（いちばん使われる種類）。
@@ -1084,7 +1085,7 @@ def build_window(model):
 
     if not model.pool:
         messagebox.showinfo("街・施設BGMの選曲",
-                            "曲が1つも見つかりません。\n\n{}\n{}\n\nに .mp3 / .ogg / .wav を置いて「再走査」".format(
+                            "曲が1つも見つかりません。\n\n{}\n{}\n\nに .mp3 / .ogg / .wav を置いて「読み直す」".format(
                                 model.asset_dir or "（ゲームの場所が未設定）", model.state_dir),
                             parent=root)
     return root

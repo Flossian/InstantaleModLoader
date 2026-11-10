@@ -1500,7 +1500,7 @@ def build_window(model):
                     reload(confirm=False, keep_settings=True)
                 else:
                     status.configure(style="Warn.TLabel",
-                                     text="読む先が変わった。「再読込」で読み直す（未保存の変更は消える）")
+                                     text="読む先が変わった。「読み直す」で読み直す（未保存の変更は消える）")
             if model.settings.get("RULES_PATH") != before.get("RULES_PATH"):
                 # 本体は置き場を注入の時点で決める（設定は apply の時点）。動いているゲームは前の置き場を読み続ける
                 messagebox.showinfo(
@@ -1575,7 +1575,7 @@ def build_window(model):
 
     def reload(confirm=True, keep_settings=False):
         if confirm and model.dirty() and not messagebox.askyesno(
-                "再読込", "未保存の変更があります。破棄して読み直しますか？", parent=root):
+                "読み直す", "未保存の変更があります。破棄して読み直しますか？", parent=root):
             return
         kept = dict(model.settings)
         model.reload()
@@ -1607,7 +1607,7 @@ def build_window(model):
     ttk.Button(footer, text="閉じる", command=close).pack(side="right")
     ttk.Button(footer, text="保存", style="Accent.TButton",
                command=save).pack(side="right", padx=(0, 6))
-    ttk.Button(footer, text="再読込", command=lambda: reload(True)).pack(side="right", padx=(0, 6))
+    ttk.Button(footer, text="読み直す", command=lambda: reload(True)).pack(side="right", padx=(0, 6))
     root.protocol("WM_DELETE_WINDOW", close)
     root.bind("<Control-s>", lambda _e: save())
 

@@ -1265,11 +1265,15 @@ def build_window(rules_in=None, settings_in=None, note=""):
 
     bar = ttk.Frame(window)
     bar.pack(fill="x", padx=12, pady=10)
-    ttk.Button(bar, text="保存", command=save).pack(side="right")
-    ttk.Button(bar, text="設定を既定に戻す", command=reset).pack(side="right", padx=(0, 8))
-    window.protocol("WM_DELETE_WINDOW",
-                    lambda: (modtool.save_window(root_dir, MOD_DIR, window),
-                             window.destroy()))
+    def close():
+        modtool.save_window(root_dir, MOD_DIR, window)
+        window.destroy()
+
+    # 並びと色はほかの設定画面と揃える（右から 閉じる・保存・既定に戻す）。
+    ttk.Button(bar, text="閉じる", command=close).pack(side="right")
+    ttk.Button(bar, text="保存", style="Accent.TButton", command=save).pack(side="right", padx=(0, 6))
+    ttk.Button(bar, text="設定を既定に戻す", command=reset).pack(side="right", padx=(0, 12))
+    window.protocol("WM_DELETE_WINDOW", close)
     return window
 
 

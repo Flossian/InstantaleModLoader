@@ -127,7 +127,7 @@ def build_window(mod_dir=MOD_DIR):
     ttk.Label(outer, style="Sub.TLabel", wraplength=920, justify="left",
               text="この画面で、種類ごとの建設費・1日の売上・建てられる最低の規模と、共通の5項目を決める。"
                    "額は並の等級を町に建てるときのもの。等級と街の規模と倍率はこの上に掛かる"
-                   "（右の参考は都市・最上のとき）。どの世界でも効く（settings\\mod_settings.json）"
+                   "（右の参考は都市・最上のとき）。どの世界でも効く"
               ).pack(anchor="w", pady=(0, 8))
 
     footer = ttk.Frame(outer)
@@ -162,7 +162,9 @@ def build_window(mod_dir=MOD_DIR):
                 ttk.Label(table, text="（宣言がありません）", style="Faint.TLabel").grid(
                     row=row, column=column, sticky="w", pady=(4, 0))
             elif decl["type"] == "choice":
-                ttk.Combobox(table, textvariable=var, values=decl["values"], width=10,
+                # 欄には表示名（`value_labels`）を出す。値との行き来は `table_get` / `table_set`。
+                ttk.Combobox(table, textvariable=var,
+                             values=[modtool._choice_text(decl, v) for v in decl["values"]], width=10,
                              state="readonly").grid(row=row, column=column, sticky="ew",
                                                     padx=(0, 8), pady=(4, 0))
             else:
@@ -182,17 +184,23 @@ def build_window(mod_dir=MOD_DIR):
     common = ttk.Frame(body, padding=(0, 4, 6, 0))
     common.grid(row=3, column=0, sticky="ew")
     general = dict((key, found[key]) for key in general_keys(found))
-    general_form = modtool._Form(common, general, lambda k: "既定: " + modtool.shown(found[k]["default"]))
+    general_form = modtool._Form(common, general,
+                                 lambda k: "既定: " + modtool.shown(found[k]["default"], found[k]))
 
     def as_shown(values):
         return dict((k, v if isinstance(v, bool) else str(v)) for k, v in values.items())
 
+    def is_choice(key):
+        return key in found and found[key]["type"] == "choice"
+
     def table_get():
-        return dict((key, var.get()) for key, var in table_vars.items())
+        return dict((key, modtool._choice_value(found[key], var.get()) if is_choice(key) else var.get())
+                    for key, var in table_vars.items())
 
     def table_set(values):
         for key, var in table_vars.items():
-            var.set(str(values.get(key, "")))
+            value = values.get(key, "")
+            var.set(modtool._choice_text(found[key], value) if is_choice(key) else str(value))
 
     def everything():
         return merge(table_get(), general_form.get())
@@ -221,7 +229,7 @@ def build_window(mod_dir=MOD_DIR):
     def dirty():
         return as_shown(everything()) != saved["values"]
 
-    status = ttk.Label(footer, style="Faint.TLabel", text="次の注入から効きます"
+    status = ttk.Label(footer, style="Faint.TLabel", text="ゲームを起動し直すと効きます"
                        + ("  ※ 宣言が無い項目: " + ", ".join(missing) if missing else ""))
     status.pack(side="left")
 
