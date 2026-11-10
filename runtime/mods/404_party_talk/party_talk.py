@@ -116,8 +116,10 @@ BATTLE_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle")
 # 会話の状態を置く `sys` の属性名（TECH.md §3.4。apply() が走り直しても続きが分かる）。
 STORE = "__instantale_party_talk__"
 # プロンプト全体の上限。超えたときだけ人物の塊から削る安全弁。
+# 版12 で 30000 から 20000 に下げた。30000字は約 15,800 トークンで、同梱の llama-server の窓（16,384）を守れなかった。
+# 20000字は約 10,500 トークン（1.9字で1トークン。VERIFICATION.md §3.95 の数え）で、出力と会話の余りを残す。
 # 版12 で人物1人ぶん・対話ログ・属性1項目・世界観の上限は外した（長さは参加人数と HISTORY_TURNS で決まる。VERIFICATION.md §3.95）。
-PROMPT_CHARS = 30000
+PROMPT_CHARS = 20000
 
 # プロンプトへ載せる人物の属性。実行時オブジェクトから読む（順は表示順）。
 RAW_FIELDS = ("name", "category", "description", "personality", "profile",
