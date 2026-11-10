@@ -1032,6 +1032,63 @@ def main():
     same = modfacility.spawn(town, two, "1")
     ok &= check("中に居るなら建て直さない", same is moved)
     town.player.location = entrance2
+
+    print("ノードが2つある街: 読み込みの間はセーブの言うノードに建てる")
+    inside_save = {"location": two, "current_area": "1", "current_node": "20"}
+
+    def reload_town(old_player, player_data):
+        """読み直しの形。世界の実体は新しく、主人公はまだ前のもの（または無い）。"""
+        fresh, fresh_area, fresh_a, fresh_b, _e1, fresh_e2 = make_two_node_town()
+        fresh.save_data_dict["player_data"] = dict(player_data)
+        fresh.player = old_player
+        modfacility.note_loading(fresh, fresh.save_data_dict)
+        return fresh, fresh_area, fresh_a, fresh_b, fresh_e2
+
+    fresh, fresh_area, fresh_a, fresh_b, fresh_e2 = reload_town(None, inside_save)
+    loaded = modfacility.spawn(fresh, two, "1", world=fresh.world)
+    ok &= check("主人公がまだ居なくても、セーブのノードに建つ",
+                fresh_b.facilities.get(two) is loaded and two not in fresh_a.facilities)
+    ok &= check("読み込みの間は建て直さない",
+                modfacility.spawn(fresh, two, "1", world=fresh.world) is loaded)
+    fresh.player = types.SimpleNamespace(location=loaded, current_area=fresh_area)
+    ok &= check("主人公が作り直されたら控えは効かない",
+                modfacility.loading_node(fresh, fresh_area) is None)
+    ok &= check("作り直された後も建て直さない",
+                modfacility.spawn(fresh, two, "1", world=fresh.world) is loaded)
+
+    # 同じ世界をゲームの中から読み直す形。前の主人公は別のノードの施設（同じ id）に立っている。
+    stale = types.SimpleNamespace(location=entrance1, current_area=town_area)
+    fresh, fresh_area, fresh_a, fresh_b, fresh_e2 = reload_town(stale, inside_save)
+    loaded = modfacility.spawn(fresh, two, "1", world=fresh.world)
+    ok &= check("前の主人公の立ち位置に引かれない", fresh_b.facilities.get(two) is loaded)
+    ok &= check("建っているものを前の主人公のノードへ移さない",
+                modfacility.spawn(fresh, two, "1", world=fresh.world) is loaded
+                and two not in fresh_a.facilities)
+
+    # 先頭のノードに建ってしまっていたら、読み込みの間にセーブのノードへ移す。
+    fresh, fresh_area, fresh_a, fresh_b, fresh_e2 = reload_town(None, inside_save)
+    modfacility.forget_loading()
+    early_built = modfacility.spawn(fresh, two, "1", world=fresh.world)
+    ok &= check("控えが無ければ先頭のノードに建つ（今までの決め方）",
+                fresh_a.facilities.get(two) is early_built)
+    modfacility.note_loading(fresh, fresh.save_data_dict)
+    shifted = modfacility.spawn(fresh, two, "1", world=fresh.world)
+    ok &= check("読み込みの間にセーブのノードへ移る",
+                fresh_b.facilities.get(two) is shifted and two not in fresh_a.facilities)
+
+    fresh, fresh_area, fresh_a, fresh_b, fresh_e2 = reload_town(
+        None, {"location": "900", "current_area": "9", "current_node": "20"})
+    ok &= check("別の土地に居るセーブは拠り所にしない",
+                modfacility.loading_node(fresh, fresh_area) is None)
+    fresh, fresh_area, fresh_a, fresh_b, fresh_e2 = reload_town(
+        None, {"location": "50", "current_area": "1", "current_node": "99"})
+    ok &= check("引けないノードは拠り所にしない",
+                modfacility.loading_node(fresh, fresh_area) is None)
+    fresh, fresh_area, fresh_a, fresh_b, fresh_e2 = reload_town(None, inside_save)
+    ok &= check("読み込みの間は控えが引ける",
+                modfacility.loading_node(fresh, fresh_area) is fresh_b)
+    modfacility.forget_loading()
+    ok &= check("捨てたら引けない", modfacility.loading_node(fresh, fresh_area) is None)
     modfacility.unregister("914_home", app=town)
 
     print("順: 持ち主が控えを読む前に建てても、次の保存で config を失わない")

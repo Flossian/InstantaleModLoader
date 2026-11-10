@@ -480,6 +480,50 @@ def node_with(area, facility_id):
     return None
 
 
+def note_loading(app, save_data_dict):
+    """読み込んでいるセーブの立ち位置（土地とノード）を控える。控えたものを返す。
+
+    世界を組み立てている間、`app.player` は前の周回の主人公か None で、立ち位置の拠り所にならない。
+    そこで建てると土地の先頭のノードに落ち、セーブの `current_node` と食い違った
+    （ゲームは `current_node` で施設を引くので、出た先の店の売買が `KeyError` で落ちた）。
+    控えは `app.player` が入れ替わるまで効く（ゲームは世界を組んだ直後に主人公を作り直す）。
+    最初の保存でも捨てる（`forget_loading`）。
+    """
+    player = save_data_dict.get("player_data") if isinstance(save_data_dict, dict) else None
+    hint = None
+    if isinstance(player, dict):
+        area_id, node_id = player.get("current_area"), player.get("current_node")
+        if area_id not in (None, "") and node_id not in (None, ""):
+            hint = {"area": str(area_id), "node": str(node_id),
+                    "player": getattr(app, "player", None)}
+    _state()["loading"] = hint
+    return hint
+
+
+def forget_loading():
+    """読み込み中の立ち位置の控えを捨てる。"""
+    _state()["loading"] = None
+
+
+def loading_node(app, area):
+    """読み込んでいるセーブが主人公の居場所だと言うノード。
+
+    読み込み中でない・別の土地・そのノードが引けないときは None（呼ぶ側は今までの決め方に落ちる）。
+    """
+    hint = _state().get("loading")
+    if not hint or app is None or area is None:
+        return None
+    if getattr(app, "player", None) is not hint["player"]:
+        forget_loading()        # 主人公が作り直された。ここからは実体の立ち位置が拠り所
+        return None
+    if ui.area_id_of(area) != hint["area"]:
+        return None
+    for node in ui.nodes_of(area):
+        if node_id_of(node) == hint["node"]:
+            return node
+    return None
+
+
 def node_here(app, area, node_id=None):
     """いま拠り所にすべきノード。読めなければ None。
 
@@ -492,6 +536,7 @@ def node_here(app, area, node_id=None):
     プレイヤーがいま立っている施設が在るノード。
     **`current_area` は見ない** ― ロードの途中では前の世界のプレイヤーが
     残っていることがあり、そこから当てると別の街のノードを選びうる。
+    同じ理由で、読み込みの間はセーブの言うノードを主人公より先に見る（`loading_node`）。
     """
     if area is None:
         return None
@@ -499,6 +544,9 @@ def node_here(app, area, node_id=None):
         for node in ui.nodes_of(area):
             if node_id_of(node) == str(node_id):
                 return node
+    loading = loading_node(app, area)
+    if loading is not None:
+        return loading
     return node_with(area, player_facility_id(app)) if app is not None else None
 
 
@@ -624,7 +672,12 @@ def misplaced(app, area, node, facility_id):
     （実機。ノードが2つあるカスティアで、買った家へ入る道がどこにも出なかった）。
     居場所が読めないときは動かさない（読めないことを理由に壊さない）。
     中に立っているときも動かさない（足元を崩さない）。
+    読み込みの間はセーブの言うノードで決める（主人公はまだ前の周回のもので、足元もまだ無い）。
     """
+    loading = loading_node(app, area)
+    if loading is not None:
+        return node is not None and node_id_of(loading) != node_id_of(node) \
+            and hub_in_node(loading)[1] is not None
     here = player_facility_id(app)
     if not here or str(here) == str(facility_id):
         return False
@@ -2679,6 +2732,7 @@ def _install(ctx, write):
         # 控えは先に作って `hide` に埋めさせる。途中で投げても、そこまでに
         # 外したもの（選択肢・写し・立ち位置）は後ろの `restore` が戻す。
         hidden = {}
+        forget_loading()          # 保存まで来たら読み込みは済んでいる
         try:
             fire_all("save", self, args={"phase": "hide"}, write=write)
             snapshot_all(self, write=write)   # ゲームの保存と同じ時点で素データを写す
@@ -2711,7 +2765,14 @@ def _install(ctx, write):
         **立ち位置を検めるのは建て直した後**。
         戻ってきた建物の中に居るぶんには何もせず、
         街に無い施設を指しているときだけ入口へ直す（そのままではロードで落ちる）。
+
+        セーブの立ち位置は `orig` の前に控える。ほかの MOD が `World.__init__` の後で建てるのが
+        この関数の内側でも外側でも、同じノードに建つ（`note_loading`）。
         """
+        try:
+            note_loading(app, save_data_dict)
+        except Exception:
+            log_exc("modfacility: cannot note where the save stands")
         result = orig(self, save_data_dict, app, *args, **kwargs)
         key = state.playthrough_key_of_dict(save_data_dict, None)
         with keyed(key):
