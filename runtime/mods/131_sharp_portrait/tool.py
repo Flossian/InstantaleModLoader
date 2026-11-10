@@ -74,6 +74,9 @@ SETTING_DEFAULTS = modtool.defaults(MOD_DIR)
 CUTOUT_SETTING = "CUTOUT_MODEL"
 CUTOUT_CHOICES = ("game", "isnet-anime")
 
+#: 数の設定。上下限は `mod.json` の宣言から引く（写しを持たない）。
+SCALE_SETTING = "HUMAN_ENEMY_SCALE"
+
 #: 設定の欄に並べる入切の項目（名前と画面の文）。
 SETTING_LABELS = (
     ("SHARP_PORTRAIT", "立ち絵を荒くしない（縮小と減色を通さず、顔もそこから切り直す）"),
@@ -81,6 +84,7 @@ SETTING_LABELS = (
     ("ENEMY_BORDER", "敵の絵に縁を付ける（「敵の絵を荒くしない」が入のときだけ効く）"),
     ("SHARP_BACKGROUND", "背景を荒くしない（縮小と減色を通さず、雑音を落とす。色調は残す）"),
     ("ENEMY_CUTOUT_MERGE", "敵の背景抜きを2つのモデルで合わせる（本体が消えたり透けたりしにくい。黒い地は残ることがある）"),
+    ("HUMAN_ENEMY_NO_TONE", "人間の敵（闘技場の相手など）に暗い色調を当てない（これから描く絵に効く）"),
     ("FACE_YUNET", "顔の検出に YuNet を使う（ゲームの検出より先に探す）"),
     ("FACE_RETRY", "顔の検出をやり直す（YuNet もゲームも見つけられなかった回だけ）"),
 )
@@ -399,12 +403,30 @@ def build_window(root_dir, game_dir, base=""):
     setting_vars[CUTOUT_SETTING] = tk.StringVar(value=settings[CUTOUT_SETTING])
     ttk.Combobox(cutout_row, textvariable=setting_vars[CUTOUT_SETTING], state="readonly", width=14,
                  values=CUTOUT_CHOICES).pack(side="left", padx=(8, 0))
+    scale_decl = modtool.decls(MOD_DIR).get(SCALE_SETTING) or {}
+    scale_low, scale_high = scale_decl.get("min", 1.0), scale_decl.get("max", 2.0)
+    scale_row = ttk.Frame(box)
+    scale_row.pack(anchor="w", pady=(4, 0))
+    ttk.Label(scale_row, text="人間の敵を戦闘画面で大きく見せる倍率（1.0 でゲームのまま）").pack(side="left")
+    setting_vars[SCALE_SETTING] = tk.DoubleVar(value=settings.get(SCALE_SETTING, scale_low))
+    ttk.Spinbox(scale_row, textvariable=setting_vars[SCALE_SETTING], from_=scale_low, to=scale_high,
+                increment=0.05, width=6).pack(side="left", padx=(8, 0))
     setting_status = ttk.Label(box, style="Sub.TLabel", text="")
     setting_status.pack(side="right")
 
     def save_now():
-        ok = modtool.save_settings(root_dir, MOD_DIR,
-                                   {name: var.get() for name, var in setting_vars.items()})
+        values = {}
+        for name, var in setting_vars.items():
+            try:
+                values[name] = var.get()
+            except tk.TclError:
+                # 数の欄に数でない字が入っている。保存せずに知らせる（既定へ黙って戻さない）
+                setting_status.configure(text="倍率は {}〜{} の数で入れてください".format(scale_low, scale_high))
+                return
+        if SCALE_SETTING in values:
+            values[SCALE_SETTING] = round(min(scale_high, max(scale_low, float(values[SCALE_SETTING]))), 2)
+            setting_vars[SCALE_SETTING].set(values[SCALE_SETTING])
+        ok = modtool.save_settings(root_dir, MOD_DIR, values)
         setting_status.configure(text="保存しました。次の注入から効きます" if ok else "保存できませんでした（settings/mod_settings.json）")
 
     ttk.Button(box, text="設定を保存", command=save_now).pack(side="right", padx=(0, 8))

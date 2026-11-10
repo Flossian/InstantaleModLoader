@@ -100,10 +100,11 @@ try:
     os.makedirs(os.path.join(tmp, "settings"), exist_ok=True)
     # 設定の読み書きは共有の土台（`tools/modtool.py`）。道具はそれを借りる。
     defaults = {"SHARP_PORTRAIT": False, "SHARP_ENEMY": False, "ENEMY_BORDER": False, "SHARP_BACKGROUND": False,
-                "CUTOUT_MODEL": "game", "ENEMY_CUTOUT_MERGE": False, "FACE_YUNET": True, "FACE_RETRY": True}
+                "CUTOUT_MODEL": "game", "ENEMY_CUTOUT_MERGE": False, "HUMAN_ENEMY_SCALE": 1.0,
+                "HUMAN_ENEMY_NO_TONE": False, "FACE_YUNET": True, "FACE_RETRY": True}
     check("既定は mod.json の宣言から", tool.SETTING_DEFAULTS == defaults, tool.SETTING_DEFAULTS)
     check("画面に宣言した設定が全部ある（保存は渡さなかった項目を消す）",
-          sorted([name for name, _ in tool.SETTING_LABELS] + [tool.CUTOUT_SETTING]) == sorted(defaults),
+          sorted([name for name, _ in tool.SETTING_LABELS] + [tool.CUTOUT_SETTING, tool.SCALE_SETTING]) == sorted(defaults),
           tool.SETTING_LABELS)
     check("読めなければ既定",
           tool.modtool.load_settings(tmp, tool.MOD_DIR) == tool.SETTING_DEFAULTS)
