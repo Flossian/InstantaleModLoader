@@ -606,9 +606,19 @@ def names_own_color(name):
 PAIRED = {"gloves", "gauntlets", "boots", "shoes", "sandals", "slippers", "greaves", "sabatons", "bracers", "vambraces", "cuisses", "chausses",
           "trousers", "pants", "breeches", "leggings", "shorts", "tights", "earrings", "glasses", "goggles", "spectacles", "binoculars",
           "scissors", "tongs", "pliers", "knuckles", "manacles", "guards", "socks", "stockings", "chopsticks",
-          "headphones", "earmuffs", "earphones"}
+          "headphones", "earmuffs", "earphones",
+          "jeans", "slacks", "sweatpants", "chaps", "loafers", "sneakers", "sunglasses", "covers", "tweezers", "forceps", "cutters"}
 # 冠詞を付けない複数の品（「Patched peasant clothes.」）
 UNCOUNTED = {"clothes", "robes", "garments", "rags"}
+# 複数形の品（名前の主語の最後の語）。冠詞を付けない（「A grilled sausages」にせず「Grilled sausages」）。
+# 語尾の s では決めない（lens・abacus・octopus や、「a core inside brass rings」の rings を複数の品と読まないため）
+PLURAL = {"bananas", "banknotes", "beads", "bells", "biscuits", "blueberries", "chops", "clams", "crackers", "croquettes", "crystals",
+          "cubes", "cucumbers", "cutlets", "drumsticks", "dumplings", "eggs", "escargots", "feathers", "fillets", "fragments", "keys",
+          "leaves", "legs", "letters", "lumps", "meatballs", "mushrooms", "mussels", "needles", "noodles", "oysters", "pads", "pastries",
+          "pickles", "pills", "potatoes", "pretzels", "prawns", "ribs", "rolls", "sardines", "sausages", "scales", "shards", "skewers",
+          "slices", "stalks", "strips", "tags", "thighs", "tokens", "tomatoes", "wedges"}
+# 数で始まる名前（「three macarons」）も冠詞を付けない
+COUNT_WORDS = ("two ", "three ", "four ", "five ", "six ", "several ")
 # 母音字で始まっても子音で読む語（「A one-piece axe」）
 CONSONANT_SOUND = ("one", "uni", "use", "usu", "eu", "ure", "ura")
 
@@ -622,9 +632,21 @@ def sentence(text):
             return "A pair of " + text
         if words[-1] in UNCOUNTED:
             return text[0].upper() + text[1:]
+        # 主語は「of / on / in / and」の前まで（「slices of rye bread」「cherry tomatoes on the vine」「pickles and cheese」）
+        subject = re.split(r" (?:of|on|in|and) ", head)[0].split()
+        if subject and subject[-1] in PLURAL:
+            return text[0].upper() + text[1:]
+    if head.startswith(COUNT_WORDS):
+        return text[0].upper() + text[1:]
     low = text.lower()
     vowel = low[0] in "aeiou" and not low.startswith(CONSONANT_SOUND)
     return ("An " if vowel else "A ") + text
+
+
+def fixed_caption(entry, made):
+    """表の `caption_fixed`（絵を目で見て書いた一文）があればそれ、無ければ組んだ一文 made。
+    組む一文の色は画素の数で決めるので、陰の多いドット絵では見た目と違う色になることがある（VERIFICATION.md §3.26）。"""
+    return entry.get("caption_fixed") or made
 
 
 def add_with(text, phrase):
@@ -680,7 +702,7 @@ def build_sheet_entry(entry, folder_dir):
         # 銃口の広がったラッパ銃を逆さにする
         im = im.crop(im.getbbox())
     entry["folder"] = choose_folder(entry["pref"], im)
-    entry["caption"] = caption_for(entry, im)
+    entry["caption"] = fixed_caption(entry, caption_for(entry, im))
     box_w, box_h = SIZES[entry["folder"]]
     if entry.get("halo", True):
         im = peel_glow(im, min((box_w - 2) / im.width, (box_h - 2) / im.height), strong=bool(entry.get("glow")))

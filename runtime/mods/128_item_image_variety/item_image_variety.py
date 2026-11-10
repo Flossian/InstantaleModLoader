@@ -14,7 +14,8 @@
 これを1つの表で達成する。**「外見文 → 絵」の対応を世界ごとに
 `state/item_image/<世界>.json` へ永続化**し、
 
-- 対応表にある外見文 → その絵を返す（ログは `kept`）。
+- 対応表にある外見文 → その絵を返す（ログは `kept`）。その絵が今の辞書と設定で候補から外れていれば、
+  捨てて選び直す（ログは `dropped`。描き直しや足した絵で辞書の説明が替わった後に、前の版の選択を引きずらない）。
   ドロップの定義（名前と外見文）はクエスト生成時に作られてセーブに保存される
   ので、同じドロップは必ず同じ外見文で来る ― 名前の解決は要らない
 - 初めての外見文 → 類似度が top1 の SIM_FLOOR 倍以上の候補を最大 TOP_K 件とり、
@@ -674,6 +675,7 @@ def apply(ctx):
         "usage": {},     # (sub_type, 絵) -> 使用数（images の値 + legacy から導出）
         "pools": {},     # (sub_type, 分類の使い方の署名) -> (keys, 正規化済み行列, キー集合, 側) のキャッシュ
         "tags": None,    # data/tags.json（{"own": {品種: {鍵: 語の組}}, "redraw": {...}}）。初めて辞書を組むときに読む
+        "checked": set(),  # (世界, 辞書の署名, 外見文, 絵)。覚えている絵が今も候補に入ると確かめた組
     }
 
     # ワールド個別の設定。控えのある世界ではその値を、無い世界では一括設定（ローダが注入した値）を使う。
@@ -958,9 +960,20 @@ def apply(ctx):
         """対応表にある絵（今も出せるものだけ）。部位をまたいだ絵は写しを確かめる。錠の中で呼ぶ。"""
         kept = state["images"].get((sub_type, query_text))
         if kept is not None and (kept in key_set or (kept.startswith(CROSS_PREFIX) and place_cross(sub_type, kept))):
-            log("{}: kept {} for {!r}".format(sub_type, kept, query_text[:80]))
             return kept
         return None
+
+    def still_candidate(kept, own, query, query_tags):
+        """覚えている絵が、今の辞書と設定でもその外見文の候補（`rank` の qualified）に入っているか。
+        部位をまたいだ絵は元の部位の候補で見る。"""
+        pick = own
+        if kept.startswith(CROSS_PREFIX):
+            slot, _, kept = kept[len(CROSS_PREFIX):].partition(".")
+            other_pool = load_pool(slot)
+            if other_pool is None:
+                return False
+            pick = rank(other_pool, query, query_tags)
+        return any(pick["keys"][i] == kept for i in pick["qualified"])
 
     @ctx.wrap("Embedding.get_similar_id:get_similar_embedding_id", safe=True)
     def get_similar_embedding_id(orig, query_text, item_sub_type, *args, **kwargs):
@@ -977,15 +990,24 @@ def apply(ctx):
             # 表の差し替えも錠の中で。外で2本が同時に読み直すと、
             # 片方が足した対応を、もう片方が読み直した表で上書きして失う。
             ensure_world()
-            kept = kept_image(item_sub_type, query_text, key_set)
-            if kept is not None:
-                return kept
+            stale = kept_image(item_sub_type, query_text, key_set)
+            checked = (state["world"], pool[5], TOP_K, SIM_FLOOR, SIM_GAP, TAG_PENALTY, query_text, stale)
+            if stale is not None and checked in state["checked"]:
+                log("{}: kept {} for {!r}".format(item_sub_type, stale, query_text[:80]))
+                return stale
 
         query = emb_mod.text_to_embedding(split_compound(query_text))
         query = query.detach().reshape(-1).to(dtype=pool[1].dtype)
         query = query / query.norm().clamp_min(1e-12)
         query_tags = tags_of(query_text) if TAG_PENALTY > 0 else None
         own = rank(pool, query, query_tags)
+        # 覚えている絵は、今の辞書と設定でも候補に入っているときだけ使い続ける。辞書の説明が替わって
+        # （描き直し・足した絵）候補から外れた絵は捨てて選び直す。確かめるのは外見文ごとに1回（VERIFICATION.md §3.26）
+        if stale is not None and still_candidate(stale, own, query, query_tags):
+            with lock:
+                state["checked"].add(checked)
+            log("{}: kept {} for {!r}".format(item_sub_type, stale, query_text[:80]))
+            return stale
         # 部位をまたぐ候補。比べる自分の値は実際に見せる絵（使用数で選ぶ）の値なので、候補の中に
         # 0.55 未満の絵があれば先に探しておく（選んだ試算と同じ比べ方。VERIFICATION.md §3.26）
         other = None
@@ -999,8 +1021,14 @@ def apply(ctx):
         with lock:
             ensure_world()
             kept = kept_image(item_sub_type, query_text, key_set)
-            if kept is not None:
+            if kept is not None and kept != stale:
+                log("{}: kept {} for {!r}".format(item_sub_type, kept, query_text[:80]))
                 return kept
+            if kept is not None:
+                # 候補から外れた前の絵。使用数から抜いて選び直す（対応は下で上書きする）
+                spot = (item_sub_type, kept)
+                state["usage"][spot] = max(0, state["usage"].get(spot, 0) - 1)
+                log("{}: dropped {} (no longer a candidate) for {!r}".format(item_sub_type, kept, query_text[:80]))
             # 先に試す順（部位をまたいだ候補が決まりを満たせば先頭。写しを置けなければ自分の部位へ戻る）
             own_pick = min(own["qualified"], key=lambda i: state["usage"].get((item_sub_type, own["keys"][i]), 0))
             own_sim = float(own["raw"][own_pick])

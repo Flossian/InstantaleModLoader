@@ -1,22 +1,22 @@
-itm_i1_r0_00	scrap	A black circuit board.
-itm_i1_r0_01	scrap	A black circuit board.
+itm_i1_r0_00	scrap	A dark green circuit board.
+itm_i1_r0_01	scrap	A green circuit board.
 itm_i1_r0_02	scrap	A blue circuit board.
-itm_i1_r0_03	scrap	A black circuit board.
+itm_i1_r0_03	scrap	A blue circuit board.
 itm_i1_r0_04	scrap	A black circuit board.
-itm_i1_r0_05	scrap	A black circuit board.
+itm_i1_r0_05	scrap	A green circuit board.
 itm_i1_r0_06	scrap	A black circuit board.
 itm_i1_r0_07	scrap	A black circuit board.
-itm_i1_r0_08	scrap	A black circuit board.
+itm_i1_r0_08	scrap	A green circuit board.
 itm_i1_r0_09	scrap	A blue circuit board.
 itm_i1_r0_10	scrap	A black circuit board.
 itm_i1_r0_11	scrap	A black circuit board.
 itm_i1_r0_12	scrap	A black circuit board with a cooling fan.
 itm_i1_r0_13	scrap	A black burnt circuit board.
-itm_i1_r1_00	magical_material	A black energy cell.
-itm_i1_r1_01	magical_material	A black energy cell.
+itm_i1_r1_00	magical_material	A silver energy cell.
+itm_i1_r1_01	magical_material	An orange energy cell.
 itm_i1_r1_02	magical_material	A blue energy cell.
 itm_i1_r1_03	magical_material	A black energy cell.
-itm_i1_r1_04	magical_material	A black energy cell.
+itm_i1_r1_04	magical_material	A green energy cell.
 itm_i1_r1_05	magical_material	A black energy cell.
 itm_i1_r1_06	magical_material	A blue energy cell with a faint blue glow.
 itm_i1_r1_07	magical_material	A black power core canister.
@@ -65,7 +65,7 @@ itm_i1_r4_02	other_material	A black electric motor.
 itm_i1_r4_03	other_material	A black electric motor.
 itm_i1_r4_04	other_material	A black cooling fan.
 itm_i1_r4_05	other_material	A brown filter cartridge.
-itm_i1_r4_06	other_material	A black filter cartridge.
+itm_i1_r4_06	other_material	A light grey filter cartridge.
 itm_i1_r4_07	other_material	A grey filter cartridge.
 itm_i1_r4_08	other_material	A black compact engine module.
 itm_i1_r4_09	other_material	A black power module.
@@ -166,7 +166,7 @@ itm_i3_r0_01	food	A brown nutrition bar.
 itm_i3_r0_02	food	A blue nutrition bar with a faint blue glow.
 itm_i3_r0_03	food	A brown nutrition bar.
 itm_i3_r0_04	food	A red nutrition bar.
-itm_i3_r0_05	food	A black nutrition bar.
+itm_i3_r0_05	food	An olive green nutrition bar.
 itm_i3_r0_06	food	A pink nutrition bar.
 itm_i3_r0_07	food	A brown chocolate bar.
 itm_i3_r0_08	food	A white nutrition bar.
@@ -182,43 +182,43 @@ itm_i3_r1_01	food	A beige tube of nutrient paste.
 itm_i3_r1_02	food	A grey tube of nutrient paste.
 itm_i3_r1_03	food	A brown tube of nutrient paste.
 itm_i3_r1_04	food	A brown tube of nutrient paste.
-itm_i3_r1_05	food	A brown food pouch with a spout.
+itm_i3_r1_05	food	A yellow food pouch with a spout.
 itm_i3_r1_06	food	A brown food pouch with a spout.
 itm_i3_r1_07	food	A grey food pouch with a spout.
 itm_i3_r1_08	food	A red food pouch with a spout.
 itm_i3_r1_09	food	A white food pouch with a spout.
-itm_i3_r1_10	food	A grey food pouch with a spout.
-itm_i3_r1_11	food	A grey food pouch with a spout.
+itm_i3_r1_10	food	An orange food pouch with a spout.
+itm_i3_r1_11	food	A yellow food pouch with a spout.
 itm_i3_r1_12	food	A pink food pouch with a spout.
 itm_i3_r1_13	food	A white food pouch with a spout.
-itm_i3_r1_14	food	A grey food pouch with a spout.
+itm_i3_r1_14	food	An orange food pouch with a spout.
 itm_i3_r1_15	food	A grey food pouch with a spout.
-itm_i3_r2_00	food	A black canned food.
+itm_i3_r2_00	food	A silver canned food.
 itm_i3_r2_01	food	A red canned food.
-itm_i3_r2_02	food	A black canned food.
+itm_i3_r2_02	food	An olive green canned food.
 itm_i3_r2_03	food	A brown open can of sardines.
 itm_i3_r2_04	food	A brown canned food.
 itm_i3_r2_05	food	A grey canned food.
-itm_i3_r2_06	food	A black open can of stew.
-itm_i3_r2_07	food	A black open can of stew.
-itm_i3_r2_08	food	A black open can of stew.
+itm_i3_r2_06	food	A silver open can of stew.
+itm_i3_r2_07	food	A silver open can of stew.
+itm_i3_r2_08	food	A silver open can of stew.
 itm_i3_r2_09	food	A brown canned food.
-itm_i3_r2_10	food	A black open can of sardines.
-itm_i3_r2_11	food	A black open can of sardines.
+itm_i3_r2_10	food	A silver open can of sardines.
+itm_i3_r2_11	food	A silver open can of sardines.
 itm_i3_r2_12	food	A brown canned food.
 itm_i3_r2_13	food	A grey canned meat tin.
-itm_i3_r3_00	drink	A black military canteen.
+itm_i3_r3_00	drink	A silver military canteen.
 itm_i3_r3_01	drink	A green canteen.
-itm_i3_r3_02	drink	A black metal canteen.
+itm_i3_r3_02	drink	A silver metal canteen.
 itm_i3_r3_03	drink	A blue plastic water bottle.
 itm_i3_r3_04	drink	A blue plastic water bottle.
-itm_i3_r3_05	drink	A black canteen in a canvas cover.
-itm_i3_r3_06	drink	A black metal hip flask.
-itm_i3_r3_07	drink	A black thermos flask.
-itm_i3_r3_08	drink	A black thermos flask.
-itm_i3_r3_09	drink	A black thermos flask.
+itm_i3_r3_05	drink	An olive green canteen in a canvas cover.
+itm_i3_r3_06	drink	A silver metal hip flask.
+itm_i3_r3_07	drink	An olive green thermos flask.
+itm_i3_r3_08	drink	A silver thermos flask.
+itm_i3_r3_09	drink	A silver thermos flask.
 itm_i3_r3_10	drink	A black thermos flask.
-itm_i3_r3_11	drink	A black thermos flask.
+itm_i3_r3_11	drink	An olive thermos flask.
 itm_i3_r3_12	drink	A red thermos flask.
 itm_i3_r4_00	food	A golden military ration pack.
 itm_i3_r4_01	food	A brown military ration pack.
@@ -226,7 +226,7 @@ itm_i3_r4_02	food	A grey military ration pack.
 itm_i3_r4_03	food	A beige vacuum-sealed food pack.
 itm_i3_r4_04	food	A black military ration pack.
 itm_i3_r4_05	food	A grey vacuum-sealed food pack.
-itm_i3_r4_06	food	A brown compressed food cubes.
+itm_i3_r4_06	food	Brown compressed food cubes.
 itm_i3_r4_07	food	A white vacuum-sealed food pack.
 itm_i3_r4_08	food	A grey vacuum-sealed food pack.
 itm_i3_r4_09	food	A grey vacuum-sealed food pack.
@@ -241,9 +241,9 @@ itm_i3_r5_02	food	A grey jar of nutrition tablets.
 itm_i3_r5_03	food	A white jar of nutrition tablets.
 itm_i3_r5_04	food	A white jar of nutrition tablets.
 itm_i3_r5_05	food	A brown jar of nutrition tablets.
-itm_i3_r5_06	food	A black capsule of nutrition pills.
+itm_i3_r5_06	food	A silver capsule of nutrition pills.
 itm_i3_r5_07	food	A brown capsule of nutrition pills.
-itm_i3_r5_08	food	A black capsule of nutrition pills.
+itm_i3_r5_08	food	A silver capsule of nutrition pills.
 itm_i3_r5_09	food	A blue capsule of nutrition pills with a faint blue glow.
 itm_i3_r5_10	food	A grey capsule of nutrition pills.
 itm_i3_r5_11	drink	A golden drink cartridge.
@@ -255,7 +255,7 @@ itm_i3_r5_16	drink	A green drink cartridge.
 itm_i3_r5_17	drink	A brown drink cartridge.
 itm_i3_r5_18	drink	A red drink cartridge.
 itm_i5_r0_00	medicine	A white rolled linen bandage.
-itm_i5_r0_01	medicine	A black rolled linen bandage.
+itm_i5_r0_01	medicine	An olive rolled linen bandage.
 itm_i5_r0_02	medicine	A brown rolled linen bandage.
 itm_i5_r0_03	medicine	A brown rolled linen bandage.
 itm_i5_r0_04	medicine	A brown rolled linen bandage.
@@ -287,7 +287,7 @@ itm_i5_r2_01	medicine	A brown cloth pouch of medicine.
 itm_i5_r2_02	medicine	A brown paper packet of pills.
 itm_i5_r2_03	medicine	A brown wooden box of pills.
 itm_i5_r2_04	medicine	A brown cloth pouch of pills.
-itm_i5_r2_05	medicine	A brown paper-wrapped pills.
+itm_i5_r2_05	medicine	Brown paper-wrapped pills.
 itm_i5_r2_06	medicine	A brown wooden box of pills.
 itm_i5_r2_07	medicine	A brown paper twist of powder medicine.
 itm_i5_r2_08	medicine	A red cloth pouch of pills.
@@ -329,10 +329,10 @@ itm_i5_r4_13	plant	A golden bundle of dried herbs.
 itm_i5_r5_00	small_weapon	A brown surgical scalpel.
 itm_i5_r5_01	small_weapon	A brown surgical scalpel.
 itm_i5_r5_02	tool	A pair of brown surgical scissors.
-itm_i5_r5_03	tool	A black tweezers.
+itm_i5_r5_03	tool	A pair of silver tweezers.
 itm_i5_r5_04	tool	A brown bone saw.
-itm_i5_r5_05	tool	A black surgical forceps.
-itm_i5_r5_06	tool	A black suture needles.
+itm_i5_r5_05	tool	A pair of black surgical forceps.
+itm_i5_r5_06	tool	Silver suture needles.
 itm_i5_r5_07	tool	A brown spool of suture thread.
 itm_i5_r5_08	tool	A black metal mortar and pestle.
 itm_i5_r5_09	tool	A black stone mortar and pestle.
@@ -340,7 +340,7 @@ itm_i5_r5_10	tool	A black metal medicine scoop.
 itm_i5_r5_11	tool	A brown leather instrument roll.
 itm_i5_r5_12	tool	A brown surgical chain hook.
 itm_i5_r5_13	tool	A brass syringe.
-itm_i6_r0_00	medicine	A black first aid kit.
+itm_i6_r0_00	medicine	A white first aid kit.
 itm_i6_r0_01	medicine	A red first aid kit.
 itm_i6_r0_02	medicine	A brown first aid kit.
 itm_i6_r0_03	medicine	A black first aid kit.
@@ -352,7 +352,7 @@ itm_i6_r0_08	medicine	A black first aid kit.
 itm_i6_r0_09	medicine	A brown first aid kit.
 itm_i6_r0_10	medicine	A black first aid kit.
 itm_i6_r0_11	medicine	A grey first aid kit.
-itm_i6_r1_00	medicine	A grey pill bottle.
+itm_i6_r1_00	medicine	A brown pill bottle.
 itm_i6_r1_01	medicine	A grey blister pack of pills.
 itm_i6_r1_02	medicine	A white pill bottle.
 itm_i6_r1_03	medicine	A white blister pack of pills.
@@ -375,8 +375,8 @@ itm_i6_r2_01	medicine	A grey syringe.
 itm_i6_r2_02	medicine	A brown syringe.
 itm_i6_r2_03	medicine	A white auto-injector pen.
 itm_i6_r2_04	medicine	A white auto-injector pen.
-itm_i6_r2_05	medicine	A black auto-injector pen.
-itm_i6_r2_06	medicine	A black syringe.
+itm_i6_r2_05	medicine	A white auto-injector pen.
+itm_i6_r2_06	medicine	A silver syringe.
 itm_i6_r2_07	medicine	A blue high-tech injector.
 itm_i6_r2_08	medicine	A black auto-injector pen.
 itm_i6_r2_09	medicine	A grey high-tech injector.
@@ -390,10 +390,10 @@ itm_i6_r3_03	medicine	A white folded bandage.
 itm_i6_r3_04	medicine	A white elastic bandage roll.
 itm_i6_r3_05	medicine	A white roll of bandage.
 itm_i6_r3_06	medicine	A white roll of medical tape.
-itm_i6_r3_07	medicine	A white gauze pads.
+itm_i6_r3_07	medicine	White gauze pads.
 itm_i6_r3_08	medicine	A white sealed sterile gauze pack.
 itm_i6_r3_09	medicine	A white roll of bandage.
-itm_i6_r3_10	medicine	A white folded gauze pads.
+itm_i6_r3_10	medicine	White folded gauze pads.
 itm_i6_r3_11	medicine	A white bandage roll and gauze pad.
 itm_i6_r3_12	medicine	A beige roll of medical tape.
 itm_i6_r3_13	medicine	A grey sealed sterile gauze pack.
@@ -402,7 +402,7 @@ itm_i6_r4_01	medicine	A grey glass ampoule.
 itm_i6_r4_02	medicine	A blue glass ampoule.
 itm_i6_r4_03	medicine	A brown glass ampoule.
 itm_i6_r4_04	medicine	A blue medicine vial.
-itm_i6_r4_05	medicine	A black medicine cartridge.
+itm_i6_r4_05	medicine	An orange medicine cartridge.
 itm_i6_r4_06	medicine	A blue medicine cartridge with a faint cyan glow.
 itm_i6_r4_07	medicine	A green medicine vial.
 itm_i6_r4_08	medicine	A brown glass ampoule.
@@ -442,19 +442,19 @@ itm_i7_r0_11	food	A brown bundle of jerky sticks.
 itm_i7_r0_12	food	A brown smoked fish on leaves.
 itm_i7_r0_13	food	A brown wrapped cured sausage.
 itm_i7_r1_00	food	A brown stack of hardtack.
-itm_i7_r1_01	food	A brown hardtack biscuits.
+itm_i7_r1_01	food	Brown hardtack biscuits.
 itm_i7_r1_02	food	A brown stack of crackers.
 itm_i7_r1_03	food	A brown bundle of hardtack tied with twine.
-itm_i7_r1_04	food	A brown slices of rye bread.
+itm_i7_r1_04	food	Brown slices of rye bread.
 itm_i7_r1_05	food	A white wheel of cheese.
-itm_i7_r1_06	food	A brown cheese wedge wrapped in cloth.
-itm_i7_r1_07	food	A brown cheese and blue cheese.
-itm_i7_r1_08	food	A brown cheese wedges.
-itm_i7_r1_09	food	A brown cloth-wrapped cheese.
+itm_i7_r1_06	food	A pale yellow cheese wedge wrapped in cloth.
+itm_i7_r1_07	food	A pale yellow cheese and blue cheese.
+itm_i7_r1_08	food	Pale yellow cheese wedges.
+itm_i7_r1_09	food	A white cloth-wrapped cheese.
 itm_i7_r1_10	food	A brown dark bread and hardtack.
 itm_i7_r1_11	food	A brown biscuit.
 itm_i7_r1_12	food	A brown stack of crackers.
-itm_i7_r1_13	food	A brown crackers.
+itm_i7_r1_13	food	Brown crackers.
 itm_i7_r2_00	food	A brown sack of oats.
 itm_i7_r2_01	food	A brown sack of grain.
 itm_i7_r2_02	food	A brown sack of oats.
@@ -484,10 +484,10 @@ itm_i7_r3_11	drink	A brown metal flask.
 itm_i7_r3_12	drink	A brown leather gourd flask.
 itm_i7_r4_00	drink	A brown wooden tankard.
 itm_i7_r4_01	drink	A brown ceramic mug of milk.
-itm_i7_r4_02	drink	A black metal cup.
+itm_i7_r4_02	drink	A silver metal cup.
 itm_i7_r4_03	drink	A brown cup of tea.
 itm_i7_r4_04	drink	A brown wooden cup.
-itm_i7_r4_05	drink	A brown mug of milk.
+itm_i7_r4_05	drink	A white mug of milk.
 itm_i7_r4_06	drink	A brown wooden bowl of broth.
 itm_i7_r4_07	food	A brown bowl of cream soup.
 itm_i7_r4_08	drink	A glass of red wine.
@@ -543,7 +543,7 @@ itm_i27_r1_09	gauntlets	A red clawed prosthetic arm.
 itm_i27_r2_00	body_armor	A black composite armor vest.
 itm_i27_r2_01	body_armor	A white armor vest with blue lights.
 itm_i27_r2_02	body_armor	An olive tactical armor vest.
-itm_i27_r2_03	body_armor	A brown hazard striped armor vest.
+itm_i27_r2_03	body_armor	A yellow hazard striped armor vest.
 itm_i27_r2_04	body_armor	A brown scratched composite armor vest.
 itm_i27_r2_05	body_armor	A red hexagonal armor vest.
 itm_i27_r2_06	body_armor	A blue hexagonal armor vest.
@@ -561,20 +561,20 @@ itm_i27_r4_07	headgear	A brown hooded mask with yellow goggles.
 itm_i27_r4_08	headgear	A black helmet with green night vision lenses.
 itm_i27_r4_09	headgear	A white helmet with gold visor.
 itm_i28_r3_00	tool	A brown bunch of keys.
-itm_i28_r3_01	tool	A black keys with tags.
+itm_i28_r3_01	tool	Black keys with tags.
 itm_i28_r3_02	tool	A brown bunch of keys with tags.
 itm_i28_r3_03	tool	A grey single key.
-itm_i28_r3_04	tool	A brown keys with tags.
+itm_i28_r3_04	tool	Brown keys with tags.
 itm_i28_r3_05	tool	A brown car key.
 itm_i28_r3_06	tool	A brown bunch of keys.
 itm_i28_r3_07	tool	A blue key card.
-itm_i28_r3_08	tool	A brown keys on a carabiner.
+itm_i28_r3_08	tool	Brown keys on a carabiner.
 itm_i28_r3_09	tool	A brown padlock.
-itm_i28_r3_10	tool	A keys with a red tag.
+itm_i28_r3_10	tool	Keys with a red tag.
 itm_i28_r3_11	tool	A yellow key tag.
-itm_i28_r3_12	tool	A keys with a blue tag.
+itm_i28_r3_12	tool	Keys with a blue tag.
 itm_i28_r3_13	tool	A brass padlock.
-itm_i28_r3_14	tool	A brown keys on a chain.
+itm_i28_r3_14	tool	Brown keys on a chain.
 itm_i28_r3_15	tool	A brown steel padlock.
 itm_i28_r4_00	tool	A brown flashlight.
 itm_i28_r4_01	tool	An olive flashlight.
@@ -673,7 +673,7 @@ itm_i29_r5_01	creature_part	A jar of blue scale dust with a faint blue glow.
 itm_i29_r5_02	creature_part	A brown iridescent shell shard.
 itm_i29_r5_03	creature_part	A brown iridescent shell fragment.
 itm_i29_r5_04	creature_part	A brown jar of glowing amber dust.
-itm_i29_r5_05	creature_part	A purple iridescent scales with a faint blue glow.
+itm_i29_r5_05	creature_part	Purple iridescent scales with a faint blue glow.
 itm_i29_r5_06	creature_part	A golden shell shard.
 itm_i29_r5_07	creature_part	A blue jar of teal scale dust with a faint cyan glow.
 itm_i29_r5_08	creature_part	A blue shell shard with a faint blue glow.
@@ -694,7 +694,7 @@ itm_i30_r0_06	headgear	A brown ash-covered crown.
 itm_i30_r0_07	headgear	A purple dark amethyst crown.
 itm_i30_r0_08	headgear	A golden crown.
 itm_i30_r0_09	headgear	A brown broken stone crown.
-itm_i30_r1_00	headgear	A brown royal crown.
+itm_i30_r1_00	headgear	A red royal crown.
 itm_i30_r1_01	headgear	A golden laurel wreath.
 itm_i30_r1_02	headgear	A golden circlet.
 itm_i30_r1_03	headgear	A silver moon circlet.
@@ -752,7 +752,7 @@ itm_i31_r3_08	tool	A brown cluster of bells.
 itm_i31_r3_09	tool	A brass bell.
 itm_i31_r3_10	tool	A brown drum.
 itm_i31_r3_11	tool	A brown string of bells.
-itm_i31_r3_12	tool	A brown bells with tassels.
+itm_i31_r3_12	tool	Brown bells with tassels.
 itm_i31_r3_13	tool	A brown hurdy-gurdy.
 itm_i31_r3_14	tool	A brown pan flute.
 itm_i31_r3_15	tool	A beige tambourine drum.
@@ -779,7 +779,7 @@ itm_i31_r5_05	relic	A purple orb in a cage.
 itm_i31_r5_06	relic	A blue orbiting crystal core.
 itm_i31_r5_07	relic	A black orb with rings.
 itm_i31_r5_08	relic	A brown carved divine fragment.
-itm_i31_r5_09	relic	A blue floating crystal fragments.
+itm_i31_r5_09	relic	Blue floating crystal fragments.
 itm_i31_r5_10	relic	A blue machine core.
 itm_i31_r5_11	tool	A brown training mannequin head.
 itm_i31_r5_12	tool	A white training mannequin head.
@@ -906,16 +906,16 @@ itm_i9_r1_08	food	A sliced glazed ham.
 itm_i9_r1_09	food	A roast turkey.
 itm_i9_r1_10	food	A roast meatloaf.
 itm_i9_r2_00	food	A hamburger patty.
-itm_i9_r2_01	food	A meatballs.
-itm_i9_r2_02	food	A barbecue ribs.
-itm_i9_r2_03	food	A barbecue ribs.
+itm_i9_r2_01	food	Meatballs.
+itm_i9_r2_02	food	Barbecue ribs.
+itm_i9_r2_03	food	Barbecue ribs.
 itm_i9_r2_04	food	A braised pork belly.
-itm_i9_r2_05	food	A meat skewers.
-itm_i9_r2_06	food	A chicken skewers.
-itm_i9_r2_07	food	A beef skewers.
+itm_i9_r2_05	food	Meat skewers.
+itm_i9_r2_06	food	Chicken skewers.
+itm_i9_r2_07	food	Beef skewers.
 itm_i9_r2_08	food	A meat and vegetable skewers.
-itm_i9_r2_09	food	A grilled sausages.
-itm_i9_r2_10	food	A white sausages.
+itm_i9_r2_09	food	Grilled sausages.
+itm_i9_r2_10	food	White sausages.
 itm_i9_r3_00	food	A sliced ham.
 itm_i9_r3_01	food	A ham steak.
 itm_i9_r3_02	food	A prosciutto.
@@ -924,8 +924,8 @@ itm_i9_r3_04	food	A sliced salami.
 itm_i9_r3_05	food	A meat terrine.
 itm_i9_r3_06	food	A pate.
 itm_i9_r3_07	food	A meatloaf.
-itm_i9_r3_08	food	A bacon strips.
-itm_i9_r3_09	food	A grilled sausages.
+itm_i9_r3_08	food	Bacon strips.
+itm_i9_r3_09	food	Grilled sausages.
 itm_i9_r3_10	food	A bowl of beef stew.
 itm_i9_r4_00	food	A bowl of beef stew.
 itm_i9_r4_01	food	A bowl of cream stew.
@@ -940,7 +940,7 @@ itm_i9_r4_09	food	A bowl of chili con carne.
 itm_i9_r5_00	food	A pork cutlet.
 itm_i9_r5_01	food	A fried chicken.
 itm_i9_r5_02	food	A fried chicken leg.
-itm_i9_r5_03	food	A croquettes.
+itm_i9_r5_03	food	Croquettes.
 itm_i9_r5_04	food	A plate of pork cutlet.
 itm_i9_r5_05	food	A plate of meat-filled bread.
 itm_i9_r5_06	food	A plate of fried chicken.
@@ -958,8 +958,8 @@ itm_i9_r6_07	food	A burrito.
 itm_i9_r6_08	food	A meat wrap.
 itm_i9_r6_09	food	A meat-filled bun.
 itm_i9_r7_00	food	A meat pie.
-itm_i9_r7_01	food	A meat pastries.
-itm_i9_r7_02	food	A meat dumplings.
+itm_i9_r7_01	food	Meat pastries.
+itm_i9_r7_02	food	Meat dumplings.
 itm_i9_r7_03	food	A steamed meat bun.
 itm_i9_r7_04	food	A rice bowl with egg.
 itm_i9_r7_05	food	A bowl of minced meat.
@@ -991,13 +991,13 @@ itm_i10_r1_08	food	A bowl of fish soup.
 itm_i10_r1_09	food	A bowl of fish soup.
 itm_i10_r2_00	food	A grilled salmon with lemon.
 itm_i10_r2_01	food	A fish baked in foil.
-itm_i10_r2_02	food	A grilled fish fillets.
+itm_i10_r2_02	food	Grilled fish fillets.
 itm_i10_r2_03	food	A grilled whole fish.
 itm_i10_r2_04	food	A seafood carpaccio.
 itm_i10_r2_05	food	A marinated mackerel.
 itm_i10_r2_06	food	A fish sashimi platter.
-itm_i10_r2_07	food	A grilled fish skewers.
-itm_i10_r2_08	food	A grilled eel skewers.
+itm_i10_r2_07	food	Grilled fish skewers.
+itm_i10_r2_08	food	Grilled eel skewers.
 itm_i10_r2_09	food	A sliced marinated fish.
 itm_i10_r3_00	food	A plate of sashimi.
 itm_i10_r3_01	food	A plate of sashimi.
@@ -1011,13 +1011,13 @@ itm_i10_r3_08	food	A dried fish.
 itm_i10_r3_09	food	A fish head.
 itm_i10_r3_10	food	A bowl of seafood salad.
 itm_i10_r4_00	food	A fried fish.
-itm_i10_r4_01	food	A fried oysters.
-itm_i10_r4_02	food	A fried fish cutlets.
+itm_i10_r4_01	food	Fried oysters.
+itm_i10_r4_02	food	Fried fish cutlets.
 itm_i10_r4_03	food	An oyster on the shell.
 itm_i10_r4_04	food	A shrimp tempura.
 itm_i10_r4_05	food	A baked scallop.
 itm_i10_r4_06	food	A baked scallop.
-itm_i10_r4_07	food	A baked mussels.
+itm_i10_r4_07	food	Baked mussels.
 itm_i10_r4_08	food	A seafood gratin.
 itm_i10_r4_09	food	A grilled fish.
 itm_i10_r4_10	food	A bowl of clam soup.
@@ -1030,7 +1030,7 @@ itm_i10_r5_05	food	A bowl of mussels.
 itm_i10_r5_06	food	A seafood salad.
 itm_i10_r5_07	food	A fried shrimp.
 itm_i10_r5_08	food	A fried fish.
-itm_i10_r5_09	food	A boiled crab legs.
+itm_i10_r5_09	food	Boiled crab legs.
 itm_i10_r5_10	food	A tin of fish soup.
 itm_i10_r6_00	food	A bowl of fish chowder.
 itm_i10_r6_01	food	A bowl of fish soup.
@@ -1045,22 +1045,22 @@ itm_i10_r6_09	food	A fried tofu with seafood.
 itm_i10_r6_10	food	A fried tofu with shrimp.
 itm_i10_r7_00	food	A bowl of fish roe.
 itm_i10_r7_01	food	A bowl of simmered fish.
-itm_i10_r7_02	food	A sardines in sauce.
+itm_i10_r7_02	food	Sardines in sauce.
 itm_i10_r7_03	food	A seafood salad.
 itm_i10_r7_04	food	A seafood gratin.
 itm_i10_r7_05	food	A simmered fish with lemon.
 itm_i10_r7_06	food	A bowl of tuna.
 itm_i10_r7_07	food	A seafood risotto.
 itm_i10_r7_08	food	A boiled crayfish.
-itm_i10_r7_09	food	A grilled clams.
+itm_i10_r7_09	food	Grilled clams.
 itm_i10_r8_00	food	A grilled salmon fillet.
-itm_i10_r8_01	food	A grilled fish skewers.
+itm_i10_r8_01	food	Grilled fish skewers.
 itm_i10_r8_02	food	A grilled whole fish.
 itm_i10_r8_03	food	A grilled fish with tofu.
 itm_i10_r8_04	food	A grilled eel.
 itm_i10_r8_05	food	A grilled fish.
 itm_i10_r8_06	food	A sliced raw fish.
-itm_i10_r8_07	food	A grilled sardines.
+itm_i10_r8_07	food	Grilled sardines.
 itm_i10_r8_08	food	A tin of sardines.
 itm_i10_r8_09	food	A plate of shredded fish.
 itm_i11_r0_00	food	A plate of pad thai.
@@ -1084,18 +1084,18 @@ itm_i11_r1_07	food	A bowl of chicken soup.
 itm_i11_r1_08	food	A bowl of meatball soup.
 itm_i11_r1_09	food	A bowl of noodles.
 itm_i11_r2_00	food	A chicken satay with peanut sauce.
-itm_i11_r2_01	food	A grilled pork skewers.
-itm_i11_r2_02	food	A grilled prawns.
+itm_i11_r2_01	food	Grilled pork skewers.
+itm_i11_r2_02	food	Grilled prawns.
 itm_i11_r2_03	food	A grilled fish with sauce.
 itm_i11_r2_04	food	A leaf-wrapped grilled fish.
 itm_i11_r2_05	food	A grilled sausage plate.
-itm_i11_r2_06	food	A fresh spring rolls.
-itm_i11_r2_07	food	A fresh spring rolls.
-itm_i11_r2_08	food	A fried spring rolls.
-itm_i11_r2_09	food	A fried spring rolls.
-itm_i11_r3_00	food	A noodles with roast pork.
+itm_i11_r2_06	food	Fresh spring rolls.
+itm_i11_r2_07	food	Fresh spring rolls.
+itm_i11_r2_08	food	Fried spring rolls.
+itm_i11_r2_09	food	Fried spring rolls.
+itm_i11_r3_00	food	Noodles with roast pork.
 itm_i11_r3_01	food	A bowl of shrimp noodles.
-itm_i11_r3_02	food	A crispy noodles with pork.
+itm_i11_r3_02	food	Crispy noodles with pork.
 itm_i11_r3_03	food	A bowl of beef noodles.
 itm_i11_r3_04	food	A bowl of curry noodles.
 itm_i11_r3_05	food	A bowl of rice noodles with pork.
@@ -1110,12 +1110,12 @@ itm_i11_r4_04	food	A fried rice with egg.
 itm_i11_r4_05	food	A yellow rice with chicken.
 itm_i11_r4_06	food	A rice with beef rendang.
 itm_i11_r4_07	food	A rice with roast chicken.
-itm_i11_r4_08	food	A grilled meat skewers.
+itm_i11_r4_08	food	Grilled meat skewers.
 itm_i11_r5_00	food	A roti with curry.
 itm_i11_r5_01	food	A leaf-wrapped sticky rice.
 itm_i11_r5_02	food	A leaf-wrapped rice.
 itm_i11_r5_03	food	A layered jelly cake with a faint magenta glow.
-itm_i11_r5_04	food	A leaf-wrapped dumplings.
+itm_i11_r5_04	food	Leaf-wrapped dumplings.
 itm_i11_r5_05	food	A mango sticky rice.
 itm_i11_r5_06	food	A basket of steamed buns.
 itm_i11_r5_07	food	A bowl of mung bean dessert.
@@ -1133,7 +1133,7 @@ itm_i11_r6_06	food	A longan.
 itm_i11_r6_07	food	A salak fruit.
 itm_i11_r6_08	food	A jackfruit.
 itm_i11_r6_09	food	A star fruit.
-itm_i11_r6_10	food	A bananas.
+itm_i11_r6_10	food	Bananas.
 itm_i11_r6_11	food	A papaya.
 itm_i11_r6_12	food	A lime and lychees.
 itm_i11_r7_00	drink	A glass of thai iced tea.
@@ -1150,7 +1150,7 @@ itm_i11_r7_10	drink	A glass of lemon iced tea.
 itm_i11_r7_11	drink	A glass of beer.
 itm_i11_r7_12	drink	A glass of beer.
 itm_i11_r7_13	drink	A glass of sugarcane juice.
-itm_i11_r7_14	food	A sugarcane stalks.
+itm_i11_r7_14	food	Sugarcane stalks.
 itm_i12_r0_00	food	A plate of steak with butter.
 itm_i12_r0_01	food	A plate of lamb chops.
 itm_i12_r0_02	food	A plate of grilled steak.
@@ -1185,10 +1185,10 @@ itm_i12_r2_10	food	A melon with ham.
 itm_i12_r3_00	food	A baguette.
 itm_i12_r3_01	food	A round loaf of bread.
 itm_i12_r3_02	food	A sliced rye bread.
-itm_i12_r3_03	food	A pretzels.
+itm_i12_r3_03	food	Pretzels.
 itm_i12_r3_04	food	A pain au chocolat.
 itm_i12_r3_05	food	A loaf of bread.
-itm_i12_r3_06	food	A bread rolls.
+itm_i12_r3_06	food	Bread rolls.
 itm_i12_r3_07	food	A ham baguette sandwich.
 itm_i12_r3_08	food	A sandwich.
 itm_i12_r3_09	food	A croque monsieur.
@@ -1210,8 +1210,8 @@ itm_i12_r5_03	food	A grilled salmon with asparagus.
 itm_i12_r5_04	food	A pot of mussels.
 itm_i12_r5_05	food	A beef stroganoff.
 itm_i12_r5_06	food	A schnitzel.
-itm_i12_r5_07	food	A meatballs.
-itm_i12_r5_08	food	A sausages with sauerkraut.
+itm_i12_r5_07	food	Meatballs.
+itm_i12_r5_08	food	Sausages with sauerkraut.
 itm_i12_r5_09	food	A roast pork with cabbage.
 itm_i12_r6_00	food	A quiche.
 itm_i12_r6_01	food	A slice of quiche.
@@ -1219,7 +1219,7 @@ itm_i12_r6_02	food	A meat pie.
 itm_i12_r6_03	food	A chicken pot pie.
 itm_i12_r6_04	food	A pot of ratatouille.
 itm_i12_r6_05	food	A baked casserole.
-itm_i12_r6_06	food	A cabbage rolls.
+itm_i12_r6_06	food	Cabbage rolls.
 itm_i12_r6_07	food	A coq au vin.
 itm_i12_r6_08	food	A beef stew.
 itm_i12_r6_09	food	A ratatouille.
@@ -1228,12 +1228,12 @@ itm_i12_r7_01	food	A charcuterie plate.
 itm_i12_r7_02	food	A bowl of olives.
 itm_i12_r7_03	food	A terrine with pickles.
 itm_i12_r7_04	food	A smoked salmon.
-itm_i12_r7_05	food	An escargots.
+itm_i12_r7_05	food	Escargots.
 itm_i12_r7_06	food	A bruschetta.
 itm_i12_r7_07	food	A bowl of marinated vegetables.
-itm_i12_r7_08	food	A pickles and cheese.
+itm_i12_r7_08	food	Pickles and cheese.
 itm_i12_r7_09	food	A bowl of mustard.
-itm_i12_r7_10	food	A pickled cucumbers.
+itm_i12_r7_10	food	Pickled cucumbers.
 itm_i12_r8_00	food	An apple pie.
 itm_i12_r8_01	food	A berry tart.
 itm_i12_r8_02	food	A creme brulee.
@@ -1303,7 +1303,7 @@ itm_i13_r4_04	magical_material	A pouch of purple glowing dust.
 itm_i13_r4_05	magical_material	A brown pouch of black ash.
 itm_i13_r4_06	magical_material	A pouch of golden dust.
 itm_i13_r4_07	magical_material	A red pouch of crimson dust.
-itm_i13_r4_08	magical_material	A black pouch of pale green dust.
+itm_i13_r4_08	magical_material	A pale grey pouch of pale green dust.
 itm_i13_r4_09	magical_material	A purple pouch of violet dust with a faint purple glow.
 itm_i13_r4_10	magical_material	A brown pouch of orange dust.
 itm_i13_r4_11	magical_material	A black pouch of pale blue dust.
@@ -1330,7 +1330,7 @@ itm_i14_r0_07	relic	A dark grey crystal shard.
 itm_i14_r0_08	relic	A teal crystal shard with a faint cyan glow.
 itm_i14_r0_09	relic	A white clear crystal with a light inside.
 itm_i14_r0_10	relic	A golden crystal cluster.
-itm_i14_r0_11	relic	A white iridescent crystal shard with a faint blue glow.
+itm_i14_r0_11	relic	A violet iridescent crystal shard with a faint blue glow.
 itm_i14_r1_00	relic	A white marble fragment glowing blue.
 itm_i14_r1_01	relic	A purple glowing stone fragment.
 itm_i14_r1_02	relic	A red stone fragment.
@@ -1355,12 +1355,12 @@ itm_i14_r2_08	relic	A teal crystal in a brass frame.
 itm_i14_r2_09	relic	A red crystal heart in brass.
 itm_i14_r2_10	relic	A blue glowing brass organ.
 itm_i14_r2_11	relic	A green crystal heart in brass.
-itm_i14_r3_00	relic	A golden divine crystal fragments.
+itm_i14_r3_00	relic	Golden divine crystal fragments.
 itm_i14_r3_01	relic	A broken golden sword with divine engravings.
 itm_i14_r3_02	relic	A silver shield fragment with a holy emblem.
 itm_i14_r3_03	relic	A broken golden sun wheel.
 itm_i14_r3_04	relic	A golden light fragment.
-itm_i14_r3_05	relic	A golden divine shards.
+itm_i14_r3_05	relic	Golden divine shards.
 itm_i14_r3_06	relic	A golden ancient dial fragment.
 itm_i14_r3_07	relic	A broken golden arc relic.
 itm_i14_r3_08	relic	A golden cross-shaped sword fragment.
@@ -1425,7 +1425,7 @@ itm_i15_r2_04	relic	A golden star emblem.
 itm_i15_r2_05	relic	A black iron shield emblem with a tower.
 itm_i15_r2_06	relic	A bronze lion head emblem.
 itm_i15_r2_07	relic	A silver crescent moon emblem.
-itm_i15_r2_08	relic	A silver star emblem with a blue gem.
+itm_i15_r2_08	relic	A golden star emblem with a blue gem.
 itm_i15_r2_09	relic	A golden winged emblem with a red gem.
 itm_i15_r2_10	relic	A bronze stag head emblem.
 itm_i15_r2_11	relic	A silver cross shield emblem.
@@ -1580,7 +1580,7 @@ itm_i17_r3_00	creature_part	A brown spool of spider silk.
 itm_i17_r3_01	creature_part	A grey bundle of white silk threads.
 itm_i17_r3_02	creature_part	A lock of red hair.
 itm_i17_r3_03	creature_part	A patch of brown fur.
-itm_i17_r3_04	creature_part	A blue feathers with a faint blue glow.
+itm_i17_r3_04	creature_part	Blue feathers with a faint blue glow.
 itm_i17_r3_05	creature_part	A brown patch of cream fur.
 itm_i17_r3_06	creature_part	A red fur.
 itm_i17_r3_07	creature_part	A purple fur.
@@ -1658,17 +1658,17 @@ itm_i20_r0_03	accessory	A white paper talisman with a bell.
 itm_i20_r0_04	accessory	A brown paper talisman with a bell.
 itm_i20_r0_05	accessory	A brown wooden talisman plaque.
 itm_i20_r0_06	accessory	A brown paper ofuda talisman.
-itm_i20_r0_07	accessory	A brown omamori charm bag.
+itm_i20_r0_07	accessory	A navy omamori charm bag.
 itm_i20_r0_08	accessory	A brown paper ofuda talisman.
 itm_i20_r0_09	accessory	A pink omamori charm bag.
 itm_i20_r0_10	accessory	A golden omamori charm bag.
 itm_i20_r0_11	accessory	A brown paper ofuda talisman.
 itm_i20_r0_12	accessory	A brown omamori charm bag.
-itm_i20_r1_00	accessory	A brown wooden prayer beads.
-itm_i20_r1_01	accessory	A grey crystal prayer beads.
-itm_i20_r1_02	accessory	A green jade prayer beads.
-itm_i20_r1_03	accessory	A purple prayer beads.
-itm_i20_r1_04	accessory	A black prayer beads with a skull.
+itm_i20_r1_00	accessory	Brown wooden prayer beads.
+itm_i20_r1_01	accessory	Grey crystal prayer beads.
+itm_i20_r1_02	accessory	Green jade prayer beads.
+itm_i20_r1_03	accessory	Purple prayer beads.
+itm_i20_r1_04	accessory	Black prayer beads with a skull.
 itm_i20_r1_05	accessory	A grey jade magatama.
 itm_i20_r1_06	accessory	A red magatama.
 itm_i20_r1_07	accessory	A white magatama.
@@ -1680,7 +1680,7 @@ itm_i20_r1_12	accessory	A brown dark magatama.
 itm_i20_r2_00	scroll	A brown japanese handscroll.
 itm_i20_r2_01	scroll	A brown japanese scroll with a tassel.
 itm_i20_r2_02	scroll	A brown letter tied with red cord.
-itm_i20_r2_03	scroll	A brown rolled letters.
+itm_i20_r2_03	scroll	Brown rolled letters.
 itm_i20_r2_04	scroll	A blue japanese handscroll.
 itm_i20_r2_05	scroll	A green japanese handscroll.
 itm_i20_r2_06	scroll	A brown scroll and letter tied with red cord.
@@ -1714,23 +1714,23 @@ itm_i20_r4_06	creature_part	A red tengu feather.
 itm_i20_r4_07	creature_part	A blue tengu feather.
 itm_i20_r4_08	creature_part	A brown fox tail fur.
 itm_i20_r4_09	creature_part	A black fox tail fur.
-itm_i20_r4_10	creature_part	A black serpent scales.
-itm_i20_r4_11	creature_part	A blue serpent scales.
-itm_i20_r4_12	creature_part	A red serpent scales.
+itm_i20_r4_10	creature_part	Olive green serpent scales.
+itm_i20_r4_11	creature_part	Blue serpent scales.
+itm_i20_r4_12	creature_part	Red serpent scales.
 itm_i20_r4_13	creature_part	A brown kappa plate.
 itm_i20_r4_14	creature_part	A brown broken blue scale.
 itm_i20_r4_15	creature_part	A brown woven straw bundle.
-itm_i20_r5_00	medicine	A brown small pot of pills.
-itm_i20_r5_01	medicine	A brown small pot of pills.
+itm_i20_r5_00	medicine	A cream small pot of pills.
+itm_i20_r5_01	medicine	A cream small pot of pills.
 itm_i20_r5_02	medicine	A brown bowl of round pills.
 itm_i20_r5_03	plant	A brown herbs wrapped in washi paper.
-itm_i20_r5_04	drink	A golden bamboo water canteen.
-itm_i20_r5_05	drink	A brown bamboo water canteen.
+itm_i20_r5_04	drink	A green bamboo water canteen.
+itm_i20_r5_05	drink	A green bamboo water canteen.
 itm_i20_r5_06	drink	A brown gourd canteen.
 itm_i20_r5_07	drink	A brown bamboo canteen.
-itm_i20_r5_08	food	A brown rice ball wrapped in bamboo leaf.
-itm_i20_r5_09	food	A brown rice ball.
-itm_i20_r5_10	food	A brown rice ball wrapped in bamboo leaf.
+itm_i20_r5_08	food	A white rice ball wrapped in bamboo leaf.
+itm_i20_r5_09	food	A white rice ball.
+itm_i20_r5_10	food	A green bamboo leaf bundle.
 itm_i20_r5_11	food	A brown dried persimmon skewer.
 itm_i20_r5_12	food	A brown dried fish skewer.
 itm_i20_r5_13	food	A brown dried persimmon skewer.
@@ -1760,8 +1760,8 @@ itm_i21_r2_00	shield	A brown rusted car door shield.
 itm_i21_r2_01	shield	A brown corrugated metal shield.
 itm_i21_r2_02	shield	A brown wooden plank shield.
 itm_i21_r2_03	shield	A brown tire shield.
-itm_i21_r2_04	shield	A brown stop sign shield.
-itm_i21_r2_05	shield	A brown hazard stripe shield.
+itm_i21_r2_04	shield	A red stop sign shield.
+itm_i21_r2_05	shield	A yellow hazard stripe shield.
 itm_i21_r2_06	shield	A brown scrap metal shield.
 itm_i21_r2_07	shield	A brown pot lid shield.
 itm_i21_r2_08	shield	A brown riveted scrap shield.
@@ -1779,11 +1779,11 @@ itm_i21_r3_09	small_weapon	A black police baton.
 itm_i21_r3_10	small_weapon	A black side-handle baton.
 itm_i21_r3_11	small_weapon	A red stun baton.
 itm_i21_r4_00	small_weapon	A black taser with a faint blue glow.
-itm_i21_r4_01	small_weapon	A brown taser.
+itm_i21_r4_01	small_weapon	A black taser with yellow details.
 itm_i21_r4_02	small_weapon	A black taser.
 itm_i21_r4_03	small_weapon	A black taser with a faint blue glow.
-itm_i21_r4_04	small_weapon	A brown stun gun.
-itm_i21_r4_05	small_weapon	A black pepper spray.
+itm_i21_r4_04	small_weapon	A black stun gun with yellow details.
+itm_i21_r4_05	small_weapon	A white pepper spray.
 itm_i21_r4_06	small_weapon	A red pepper spray.
 itm_i21_r4_07	small_weapon	A brown pepper spray.
 itm_i21_r4_08	small_weapon	A brown pepper spray.
@@ -1875,7 +1875,7 @@ itm_i23_r0_00	medicine	A red syringe.
 itm_i23_r0_01	medicine	A brown auto-injector.
 itm_i23_r0_02	medicine	A brown syringe.
 itm_i23_r0_03	medicine	A blue syringe with a faint blue glow.
-itm_i23_r0_04	medicine	A black syringe.
+itm_i23_r0_04	medicine	A green syringe.
 itm_i23_r0_05	medicine	A brown auto-injector pen.
 itm_i23_r0_06	medicine	A grey auto-injector pen.
 itm_i23_r0_07	medicine	A brown syringe.
@@ -1899,7 +1899,7 @@ itm_i23_r1_10	medicine	A blue spray can of medicine.
 itm_i23_r1_11	medicine	A red spray can of medicine.
 itm_i23_r1_12	medicine	A brown small spray bottle.
 itm_i23_r1_13	medicine	A white spray can of medicine.
-itm_i23_r1_14	medicine	A white spray can with a trigger.
+itm_i23_r1_14	medicine	An olive green spray can with a trigger.
 itm_i23_r1_15	medicine	A white spray can of medicine.
 itm_i23_r2_00	drink	A red can of energy drink.
 itm_i23_r2_01	drink	A blue can of energy drink with a faint blue glow.
@@ -1957,7 +1957,7 @@ itm_i23_r5_04	liquid_material	A white glowing fluid cartridge.
 itm_i23_r5_05	other_material	A red coolant canister.
 itm_i23_r5_06	other_material	A green fuel jerrycan.
 itm_i23_r5_07	other_material	A brown hazard fuel jerrycan.
-itm_i23_r5_08	other_material	A grey fuel jerrycan.
+itm_i23_r5_08	other_material	A brown fuel jerrycan.
 itm_i23_r5_09	other_material	A golden glowing fuel cell.
 itm_i23_r5_10	other_material	A red fuel jerrycan.
 itm_i23_r5_11	other_material	An olive fuel jerrycan.
@@ -1965,14 +1965,14 @@ itm_i23_r5_12	other_material	A red fuel canister.
 itm_i23_r5_13	other_material	A yellow fuel jerrycan.
 itm_i23_r5_14	other_material	A brown fuel canister.
 itm_i24_r0_00	treasure	A brown stack of banknotes.
-itm_i24_r0_01	treasure	A brown rolled banknotes.
-itm_i24_r0_02	treasure	A brown rolled banknotes.
+itm_i24_r0_01	treasure	Brown rolled banknotes.
+itm_i24_r0_02	treasure	Brown rolled banknotes.
 itm_i24_r0_03	treasure	A brown roll of coins.
-itm_i24_r0_04	treasure	A brown rolled banknotes.
+itm_i24_r0_04	treasure	Brown rolled banknotes.
 itm_i24_r0_05	treasure	A bag of gold coins.
 itm_i24_r0_06	treasure	A brown bundle of banknotes.
 itm_i24_r0_07	treasure	A brown bundle of banknotes.
-itm_i24_r0_08	treasure	A brown rolled banknotes.
+itm_i24_r0_08	treasure	Brown rolled banknotes.
 itm_i24_r0_09	treasure	A brown roll of coins.
 itm_i24_r0_10	treasure	A brown bag of coins.
 itm_i24_r0_11	treasure	A brown stack of banknotes.
@@ -1982,15 +1982,15 @@ itm_i24_r1_00	treasure	A blue credit chip card.
 itm_i24_r1_01	treasure	A blue credit chip card with a faint blue glow.
 itm_i24_r1_02	treasure	A black data vault with a faint blue glow.
 itm_i24_r1_03	treasure	A red credit card.
-itm_i24_r1_04	treasure	A brown hexagonal tokens.
+itm_i24_r1_04	treasure	Brown hexagonal tokens.
 itm_i24_r1_05	treasure	A brown data safe cube.
 itm_i24_r1_06	treasure	A golden credit card.
 itm_i24_r1_07	treasure	A blue glowing credit card.
-itm_i24_r1_08	treasure	A brown hexagonal tokens.
+itm_i24_r1_08	treasure	Brown hexagonal tokens.
 itm_i24_r1_09	treasure	A brown credit vault with a faint blue glow.
 itm_i24_r1_10	treasure	A blue glowing credit card.
 itm_i24_r1_11	treasure	A brown credit vault with a faint blue glow.
-itm_i24_r1_12	treasure	A red hexagonal tokens.
+itm_i24_r1_12	treasure	Red hexagonal tokens.
 itm_i24_r2_00	treasure	A gold bar.
 itm_i24_r2_01	treasure	A bag of gold dust.
 itm_i24_r2_02	treasure	A gold nugget.
@@ -2152,10 +2152,10 @@ itm_i32_r0_02	tool	A brass compass with cracked glass.
 itm_i32_r0_03	tool	A black flashlight.
 itm_i32_r0_04	tool	A black handheld radio with an antenna.
 itm_i32_r0_05	tool	A grey adjustable wrench.
-itm_i32_r0_06	tool	A brown wire cutters.
+itm_i32_r0_06	tool	A pair of brown wire cutters.
 itm_i32_r0_07	tool	A grey multi-blade folding knife.
 itm_i32_r0_08	tool	A grey roll of cloth tape.
-itm_i32_r0_09	tool	A black metal lighter.
+itm_i32_r0_09	tool	A silver metal lighter.
 itm_i32_r0_10	tool	A brown padlock with keys.
 itm_i32_r0_11	tool	A black smartphone with a dark screen.
 itm_i33_r0_00	tool	A pair of brown rusty binoculars with cracked lenses.
@@ -2175,7 +2175,7 @@ itm_i34_r0_01	tool	A black data tablet.
 itm_i34_r0_02	tool	A black magnetic grip tool.
 itm_i34_r0_03	tool	A black hacking device with exposed wiring.
 itm_i34_r0_04	tool	A grey holo projector disc.
-itm_i34_r0_05	accessory	A black cybernetic eye.
+itm_i34_r0_05	accessory	A white cybernetic eye.
 itm_i34_r0_06	accessory	A blue circuit chip implant.
 itm_i34_r0_07	tool	A black neural link cable with plugs.
 itm_i34_r0_08	accessory	A black metal prosthetic finger.
@@ -2455,7 +2455,7 @@ itm_ifd2_09	food	A peach.
 itm_ifd2_10	food	A pear.
 itm_ifd2_11	food	A split pomegranate.
 itm_ifd3_00	food	A tomato.
-itm_ifd3_01	food	A cherry tomatoes on the vine.
+itm_ifd3_01	food	Cherry tomatoes on the vine.
 itm_ifd3_02	food	An onion.
 itm_ifd3_03	food	A red onion with a faint magenta glow.
 itm_ifd3_04	food	A garlic bulb.
@@ -2475,19 +2475,19 @@ itm_ifd4_05	food	An ear of corn in its husk.
 itm_ifd4_06	food	A leek.
 itm_ifd4_07	food	A ginger root.
 itm_ifd4_08	mushroom	A cluster of brown mushrooms.
-itm_ifd4_09	mushroom	A white button mushrooms.
-itm_ifd4_10	mushroom	An oyster mushrooms.
+itm_ifd4_09	mushroom	White button mushrooms.
+itm_ifd4_10	mushroom	Oyster mushrooms.
 itm_ifd4_11	mushroom	A bunch of enoki mushrooms.
 itm_ifd5_00	food	A raw beef steak.
 itm_ifd5_01	food	A raw marbled beef.
 itm_ifd5_02	food	A raw pork shoulder.
-itm_ifd5_03	food	A raw chicken thighs.
+itm_ifd5_03	food	Raw chicken thighs.
 itm_ifd5_04	food	A raw whole chicken.
 itm_ifd5_05	food	A plate of ground meat.
 itm_ifd5_06	food	A ring sausage.
 itm_ifd5_07	food	A bunch of sausages.
-itm_ifd5_08	food	A raw bacon strips.
-itm_ifd5_09	food	A raw lamb chops.
+itm_ifd5_08	food	Raw bacon strips.
+itm_ifd5_09	food	Raw lamb chops.
 itm_ifd5_10	food	A raw beef slab.
 itm_ifd5_11	food	A large meat on the bone.
 itm_ifd6_00	food	A raw mackerel.
@@ -2524,7 +2524,7 @@ itm_ifd8_06	food	A sack of soybeans.
 itm_ifd8_07	food	A dish of lentils.
 itm_ifd8_08	food	A jar of peppercorns.
 itm_ifd8_09	food	A salt pot.
-itm_ifd8_10	food	A lumps of brown sugar.
+itm_ifd8_10	food	Lumps of brown sugar.
 itm_ifd8_11	food	A bowl of green olives.
 itm_ifd9_00	food	A bowl of salad.
 itm_ifd9_01	food	A stew in a clay pot.
@@ -2545,18 +2545,18 @@ itm_ifd10_03	food	A slice of chocolate cake.
 itm_ifd10_04	food	A cream puff.
 itm_ifd10_05	food	A pink frosted donut.
 itm_ifd10_06	food	A pile of chocolate chip cookies.
-itm_ifd10_07	food	A three macarons.
+itm_ifd10_07	food	Three macarons.
 itm_ifd10_08	food	A strawberry parfait.
 itm_ifd10_09	food	An ice cream sundae.
-itm_ifd10_10	food	A skewered dumplings.
+itm_ifd10_10	food	Skewered dumplings.
 itm_ifd10_11	food	A chocolate bar.
 itm_ifd11_00	drink	A cup of coffee.
 itm_ifd11_01	drink	A cup of tea.
 itm_ifd11_02	drink	A mug of beer.
 itm_ifd11_03	drink	A glass of red wine.
 itm_ifd11_04	plant	A sprig of parsley.
-itm_ifd11_05	plant	A basil leaves.
-itm_ifd11_06	plant	A mint leaves.
+itm_ifd11_05	plant	Basil leaves.
+itm_ifd11_06	plant	Mint leaves.
 itm_ifd11_07	food	A bowl of black olives.
 itm_i26_r0_00	body_armor	A red lacquered samurai do armor.
 itm_i26_r0_01	body_armor	A black lamellar samurai do armor.
@@ -2591,7 +2591,7 @@ itm_i26_r2_08	headgear	A red oni mask.
 itm_i26_r2_09	headgear	A white fox mask.
 itm_i26_r2_10	headgear	A brown jingasa conical helmet.
 itm_i31_r0_00	body_armor	A brown glowing ember breastplate.
-itm_i31_r0_01	body_armor	A brown star-studded breastplate.
+itm_i31_r0_01	body_armor	A navy star-studded breastplate.
 itm_i31_r0_02	body_armor	A holy silver breastplate.
 itm_i31_r0_03	body_armor	A grey fish scale breastplate.
 itm_i31_r0_04	body_armor	A brass gear breastplate.
@@ -2604,10 +2604,10 @@ itm_i31_r0_10	body_armor	A brown bone breastplate.
 itm_i31_r0_11	body_armor	A purple gravity void breastplate.
 itm_i4_r0_11	food	A quiche.
 itm_i4_r1_04	food	A lime.
-itm_i4_r1_09	food	A blueberries.
+itm_i4_r1_09	food	Blueberries.
 itm_i4_r3_08	food	A celery.
-itm_i4_r4_03	food	A raw chicken drumsticks.
-itm_i4_r5_11	food	A clams.
+itm_i4_r4_03	food	Raw chicken drumsticks.
+itm_i4_r5_11	food	Clams.
 itm_i4_r6_07	food	A bowl of cream.
 itm_i27_r3_00	clothing	An orange jumpsuit with utility harness.
 itm_i27_r3_01	clothing	A navy crew jumpsuit.
@@ -2759,10 +2759,10 @@ itm_i57_04	potion	A stoppered medicine gourd.
 itm_i57_05	potion	A ceramic medicine flask.
 itm_i57_06	potion	A glass potion pourer with a spout and a faint cyan glow.
 itm_i57_07	potion	A round-bottomed flask of purple potion on a stand with a faint purple glow.
-itm_i57_08	medicine	A two small glass ampoules with a faint cyan glow.
+itm_i57_08	medicine	Two small glass ampoules with a faint cyan glow.
 itm_i57_09	medicine	A lidded tin of ointment.
 itm_i57_10	potion	A small dropper bottle of purple liquid with a faint purple glow.
-itm_i57_11	medicine	A three small wax-sealed medicine jars.
+itm_i57_11	medicine	Three small wax-sealed medicine jars.
 itm_i58_00	gem	A round brilliant-cut clear diamond.
 itm_i58_01	gem	A square step-cut aquamarine with a faint cyan glow.
 itm_i58_02	gem	A heart-shaped red garnet.
@@ -2783,7 +2783,7 @@ itm_i59_04	ore	A sharp obsidian shard.
 itm_i59_05	ore	A banded green malachite stone with a faint green glow.
 itm_i59_06	ore	A rock with red crystals.
 itm_i59_07	gem	A turquoise stone with a faint cyan glow.
-itm_i59_08	ore	A golden cubic pyrite crystals.
+itm_i59_08	ore	Golden cubic pyrite crystals.
 itm_i59_09	ore	An iridescent stepped bismuth crystal with a faint cyan glow.
 itm_i59_10	ore	A rough lapis lazuli with a faint blue glow.
 itm_i59_11	gem	A round dark green jade stone.
@@ -2841,13 +2841,13 @@ itm_i64_02	food	A roast venison joint.
 itm_i64_03	food	A roasted turkey leg.
 itm_i64_04	food	A large pie topped with a bird ornament.
 itm_i64_05	food	A farmer's platter of cheese, bread and apples.
-itm_i64_06	food	A grilled sausages and mustard on a board.
-itm_i64_07	food	A boiled eggs and black bread on a plate.
+itm_i64_06	food	Grilled sausages and mustard on a board.
+itm_i64_07	food	Boiled eggs and black bread on a plate.
 itm_i64_08	food	A small barrel of salted herring.
 itm_i64_09	food	A ham joint with a dagger.
 itm_i64_10	food	A baked apple.
-itm_i64_11	food	A honey-glazed hard pastries.
-itm_i65_00	food	A boiled potatoes and sausages.
+itm_i64_11	food	Honey-glazed hard pastries.
+itm_i65_00	food	Boiled potatoes and sausages.
 itm_i65_01	food	A roast beef with yorkshire pudding.
 itm_i65_02	food	A fish and potato pie.
 itm_i65_03	food	A roast pork leg with baked apples.

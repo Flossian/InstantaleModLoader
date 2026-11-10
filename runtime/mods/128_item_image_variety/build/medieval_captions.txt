@@ -14,7 +14,7 @@ med_m1_r0_12	medium_weapon	A blackened iron longsword with a cross guard and red
 med_m1_r0_13	medium_weapon	A polished steel longsword with a cross guard and a leather-wrapped grip.
 med_m1_r1_00	medium_weapon	A polished steel curved sabre with a knuckle guard.
 med_m1_r1_01	medium_weapon	A blackened iron curved sabre with a knuckle guard.
-med_m1_r1_02	medium_weapon	A blackened iron curved sabre with a knuckle guard and a leather-wrapped grip.
+med_m1_r1_02	medium_weapon	A bronze curved sabre with a knuckle guard and a leather-wrapped grip.
 med_m1_r1_03	medium_weapon	A blackened iron curved sabre with a knuckle guard, a leather-wrapped grip and red details.
 med_m1_r1_04	medium_weapon	A steel curved sabre with a knuckle guard and a leather-wrapped grip.
 med_m1_r1_05	medium_weapon	A blackened iron curved sabre with a knuckle guard and a leather-wrapped grip.
@@ -95,8 +95,8 @@ med_m7_r2_07	body_armor	A black chainmail with a plate breastplate.
 med_m7_r3_00	body_armor	A blackened iron scale armor with leather straps.
 med_m7_r3_01	body_armor	A blackened iron studded brigandine with leather straps and red details.
 med_m7_r3_02	body_armor	A blackened iron plate cuirass with leather straps.
-med_m7_r3_03	body_armor	A blackened iron plate cuirass with leather straps.
-med_m7_r3_04	body_armor	A blackened iron plate cuirass.
+med_m7_r3_03	body_armor	A polished steel plate cuirass with leather straps and gold trim.
+med_m7_r3_04	body_armor	A polished steel plate cuirass.
 med_m7_r3_05	body_armor	A blackened iron plate cuirass with leather straps.
 med_m7_r3_06	body_armor	A blackened iron plate cuirass with leather straps.
 med_m7_r3_07	body_armor	A blackened iron plate cuirass with leather straps.
@@ -141,7 +141,7 @@ med_m5_r3_03	throwable_weapon	A black pile of iron balls.
 med_m5_r3_04	throwable_weapon	A brown pile of iron balls.
 med_m5_r3_05	throwable_weapon	A black pile of iron balls.
 med_m5_r3_06	throwable_weapon	A brown clay powder pot bomb with a fuse.
-med_m5_r3_07	throwable_weapon	A brown clay powder pot bomb with a fuse.
+med_m5_r3_07	throwable_weapon	A red clay powder pot bomb with a fuse.
 med_m5_r3_08	throwable_weapon	A brown clay powder pot bomb with a fuse.
 med_m5_r3_09	throwable_weapon	A black clay powder pot bomb with a fuse.
 med_m5_r3_10	throwable_weapon	A brown cloth smoke bomb pouch.

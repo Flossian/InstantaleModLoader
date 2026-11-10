@@ -131,7 +131,9 @@ def redo_prompts(path, per_sheet=10):
         groups.setdefault(tuple(rules_for(sk.split("/", 1)[0])), []).append(sk)
     folder = os.path.join(WORK, "refs", "redo")
     os.makedirs(folder, exist_ok=True)
-    out, n = [], 0
+    # 番号は前に頼んだ分の続きから（1 から振ると、取り込み済みの redo_01 の並びと一枚絵を上書きする）
+    taken = [int(f[5:-5]) for f in os.listdir(folder) if f.startswith("redo_") and f.endswith(".json") and f[5:-5].isdigit()]
+    out, n = [], max(taken, default=0)
     for rules, keys in groups.items():
         count = -(-len(keys) // per_sheet)
         size = -(-len(keys) // count)

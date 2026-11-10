@@ -99,7 +99,7 @@ def make_entry(e, sheets, sheet_files):
         _cut_cache[src_key] = cut(sheets, sheet_files, e["src"], e.get("rect"))
     im = _cut_cache[src_key]
     w, h = SIZE
-    return b.shrink(im, w, h, 255), caption_for(e, im)
+    return b.shrink(im, w, h, 255), b.fixed_caption(e, caption_for(e, im))
 
 
 def main():

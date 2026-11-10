@@ -21,7 +21,7 @@ wbd_w24_000	body_armor	A black bulletproof vest.
 wbd_w24_001	body_armor	A brown plate carrier with magazine pouches.
 wbd_w24_002	clothing	An orange reflective safety vest with brown details.
 wbd_w24_003	body_armor	A black leather motorcycle jacket with shoulder armor and brown details.
-wbd_w24_004	body_armor	A brown work coveralls jacket with elbow pads and orange details.
+wbd_w24_004	body_armor	An orange work coveralls jacket with elbow pads.
 wbd_w24_005	clothing	An oilskin coat with brass buttons.
 wbd_w24_006	clothing	A green puffy down jacket with gold details.
 wbd_w24_007	body_armor	A black stab-proof vest.
@@ -30,11 +30,11 @@ wbd_w24_009	clothing	A brown thick hooded sweatshirt.
 wbd_w25_000	body_armor	A brown scrap chest plate of corrugated tin sheets tied with wire.
 wbd_w25_001	body_armor	A brown rusted iron chest plate with bolt holes and dents.
 wbd_w25_002	body_armor	A black scrap chest armor of cut tire rubber with brown details.
-wbd_w25_003	body_armor	A brown scrap chest plate bent from a road sign with white details.
-wbd_w25_004	body_armor	A brown football shoulder pads with scrap iron plates and white details.
+wbd_w25_003	body_armor	A red scrap chest plate bent from a road sign with white details.
+wbd_w25_004	body_armor	Brown football shoulder pads with scrap iron plates and white details.
 wbd_w25_005	body_armor	A brown scrap chest armor hung with chains.
 wbd_w25_006	body_armor	A brown patched leather vest with bolts.
-wbd_w25_007	clothing	A brown patched military canvas hooded jacket with green details.
+wbd_w25_007	clothing	An olive green patched military canvas hooded jacket.
 wbd_w25_008	body_armor	A brown cracked hazmat suit jacket with beige details.
 wbd_w25_009	body_armor	A brown chest armor of bound bones with white details.
 wbd_w26_000	body_armor	A white sci-fi armor plate with orange hazard stripes.
@@ -45,7 +45,7 @@ wbd_w26_004	body_armor	A black bulletproof fiber jacket.
 wbd_w26_005	clothing	A black leather jacket with neon lines and blue details.
 wbd_w26_006	body_armor	A black sci-fi chest plate with a glowing power core and brown details.
 wbd_w26_007	body_armor	A black scratched composite chest plate.
-wbd_w26_008	body_armor	A black spacesuit torso with white details.
+wbd_w26_008	body_armor	A white spacesuit torso.
 wbd_w26_009	body_armor	A black corporate security body armor with white details.
 wrf_ws1_000	headgear	A navy beret.
 wrf_ws1_001	headgear	A white beret with a small headset.
@@ -88,7 +88,7 @@ wrf_ws4_003	accessory	A red necktie with magenta details.
 wrf_ws4_004	accessory	A red large chest ribbon with magenta details.
 wrf_ws4_005	accessory	A blue school bag.
 wrf_ws4_006	accessory	A white small school backpack.
-wrf_ws4_007	accessory	A white dog tags.
+wrf_ws4_007	accessory	White dog tags.
 wrf_ws4_008	accessory	A white omamori charm pouch with magenta details.
 wrf_ws4_009	accessory	A grey small radio with blue details.
 wrf_ws4_010	accessory	A white scarf.
@@ -104,7 +104,7 @@ wrf_ws5_007	legwear	A pale pink pleated skirt with magenta details.
 wrf_ws5_008	legwear	A navy pleated skirt with a thigh holster.
 wrf_ws5_009	legwear	A white pleated skirt with a belt pouch.
 wrf_ws6_000	legwear	A pair of navy school trousers.
-wrf_ws6_001	legwear	A grey slacks.
+wrf_ws6_001	legwear	A pair of grey slacks.
 wrf_ws6_002	legwear	A pair of white track pants.
 wrf_ws6_003	legwear	A pair of blue plaid school trousers.
 wrf_ws6_004	legwear	A pair of beige trousers.
@@ -113,11 +113,11 @@ wrf_ws6_006	legwear	A pair of blue shorts.
 wrf_ws6_007	legwear	A pair of blue shorts with tights.
 wrf_ws6_008	legwear	A pair of navy trousers with knee pads.
 wrf_ws6_009	legwear	A pair of black trousers with a thigh pouch and blue details.
-wrf_ws7_000	legwear	A black loafers.
-wrf_ws7_001	legwear	A brown loafers with red details.
-wrf_ws7_002	legwear	A white sneakers.
-wrf_ws7_003	legwear	A pale pink sneakers.
-wrf_ws7_004	legwear	A pair of black laced ankle boots with brown details.
+wrf_ws7_000	legwear	A pair of black loafers.
+wrf_ws7_001	legwear	A pair of brown loafers with red details.
+wrf_ws7_002	legwear	A pair of white sneakers.
+wrf_ws7_003	legwear	A pair of pale pink sneakers.
+wrf_ws7_004	legwear	A pair of brown laced ankle boots.
 wrf_ws7_005	legwear	A pair of black combat boots with blue details.
 wrf_ws7_006	legwear	A pair of white school indoor shoes with red toes.
 wrf_ws7_007	legwear	A pair of white knee socks.
@@ -134,7 +134,7 @@ wrf_ws8_005	gauntlets	A pair of white gloves with wrist ribbons and blue details
 wrf_ws8_006	gauntlets	A pair of black shooting gloves with blue details.
 wrf_ws8_007	gauntlets	A pair of grey gloves with white details.
 wrf_ws8_008	gauntlets	A pair of white medical gloves.
-wrf_ws8_009	gauntlets	A long black arm covers with blue details.
+wrf_ws8_009	gauntlets	A pair of long black arm covers with blue details.
 wsc_w12_000	headgear	A white school sailor cap.
 wsc_w12_001	headgear	A maroon school beret.
 wsc_w12_002	headgear	A black school peaked cap with gold trim.
@@ -201,7 +201,7 @@ wsc_w12_062	clothing	A black school uniform blazer with white details.
 wsc_w12_063	clothing	A white school uniform blazer.
 wsc_w12_064	clothing	A white school uniform blazer.
 wsc_w12_065	clothing	A white school uniform blazer with blue details.
-wsc_w12_066	clothing	A white school uniform blazer with red details.
+wsc_w12_066	clothing	A tan school uniform blazer with red details.
 wsc_w12_067	clothing	A white school uniform blazer.
 wsc_w12_068	clothing	A beige school uniform blazer with white details.
 wsc_w12_069	clothing	A white school uniform blazer with red details.
@@ -269,7 +269,7 @@ wsc_w12_130	legwear	A pair of white school shoes with red details.
 wsc_w12_131	legwear	A pair of black school shoes.
 wsc_w12_132	legwear	A pair of white school shoes with brown details.
 wsc_w12_133	legwear	A pair of black school shoes with blue details.
-wsc_w12_134	legwear	A pair of white school shoes.
+wsc_w12_134	legwear	A pair of navy school shoes.
 wsc_w12_135	legwear	A pair of black school shoes with white details.
 wsc_w12_136	legwear	A pair of black school shoes with red details.
 wsc_w12_137	legwear	A pair of black school shoes.
@@ -529,7 +529,7 @@ wfa_w07_000	headgear	A purple hood with gold embroidery.
 wfa_w07_001	headgear	A green hood with gold embroidery.
 wfa_w07_002	headgear	A white hood with gold trim.
 wfa_w07_003	headgear	A silver knight helmet with a visor.
-wfa_w07_004	headgear	A dark hood with gold trim.
+wfa_w07_004	headgear	A white hood with gold trim.
 wfa_w07_005	headgear	A white silk head veil.
 wfa_w07_006	headgear	A gold-trimmed knight helmet.
 wfa_w07_007	headgear	A blue and silver helmet with feathers.
@@ -559,7 +559,7 @@ wfa_w07_030	clothing	A red adventurer's outfit with white details.
 wfa_w07_031	clothing	A white adventurer's outfit with blue details.
 wfa_w07_032	clothing	A red adventurer's outfit with white details.
 wfa_w07_033	clothing	A red adventurer's outfit with brown details.
-wfa_w07_034	clothing	A black adventurer's outfit with brown details.
+wfa_w07_034	clothing	An olive green adventurer's outfit with brown details.
 wfa_w07_035	clothing	A white adventurer's outfit with brown details.
 wfa_w07_036	clothing	A black adventurer's outfit with white details.
 wfa_w07_037	clothing	A white adventurer's outfit with brown details.
@@ -585,7 +585,7 @@ wfa_w07_055	gauntlets	A pair of brown gloves with beige details.
 wfa_w07_056	gauntlets	A pair of white gloves with brown details.
 wfa_w07_057	gauntlets	A pair of black gloves.
 wfa_w07_058	gauntlets	A pair of black gloves with white details.
-wfa_w07_059	gauntlets	A pair of black gloves with brown details.
+wfa_w07_059	gauntlets	A pair of dark green gloves with brown details.
 wfa_w07_060	gauntlets	A pair of red gloves.
 wfa_w07_061	gauntlets	A pair of brown gloves with beige details.
 wfa_w07_062	legwear	A pair of brown leather shorts with belts.
@@ -627,13 +627,13 @@ wfa_w07_097	legwear	A pair of brown adventurer's boots with beige details.
 wfa_w07_098	legwear	A pair of brown adventurer's boots with beige details.
 wfa_w07_099	legwear	A pair of black adventurer's boots with blue details.
 wfa_w07_100	legwear	A pair of black adventurer's boots.
-wfa_w07_101	legwear	A pair of black adventurer's boots with brown details.
+wfa_w07_101	legwear	A pair of dark green adventurer's boots with brown details.
 wfa_w07_102	legwear	A pair of black adventurer's boots with brown details.
 wfa_w07_103	legwear	A pair of red adventurer's boots with brown details.
 wfa_w07_104	legwear	A pair of white adventurer's boots.
 wfa_w07_105	legwear	A pair of black adventurer's boots with brown details.
 wfa_w07_106	legwear	A pair of brown adventurer's boots with red details.
-wfa_w07_107	legwear	A pair of black adventurer's boots with brown details.
+wfa_w07_107	legwear	A pair of navy adventurer's boots with brown details.
 wfa_w07_108	legwear	A pair of black adventurer's boots with brown details.
 wfa_w07_109	legwear	A pair of brown adventurer's boots with beige details.
 wfa_w07_110	legwear	A pair of black adventurer's boots with white details.
@@ -723,7 +723,7 @@ wsf_w00_078	gauntlets	A pair of blue sci-fi gloves with white details.
 wsf_w00_079	gauntlets	A pair of white sci-fi gloves.
 wsf_w00_080	gauntlets	A pair of black sci-fi gloves with white details.
 wsf_w00_081	gauntlets	A pair of red sci-fi gloves.
-wsf_w00_082	gauntlets	A pair of black sci-fi gloves.
+wsf_w00_082	gauntlets	A pair of olive sci-fi gloves.
 wsf_w00_083	gauntlets	A pair of black sci-fi gloves.
 wsf_w00_084	gauntlets	A pair of black sci-fi gloves.
 wsf_w00_085	gauntlets	A pair of black sci-fi gloves with blue details.
@@ -745,7 +745,7 @@ wsf_w00_100	legwear	A pair of black sci-fi trousers.
 wsf_w00_101	legwear	A pair of black sci-fi trousers with red details.
 wsf_w00_102	legwear	A pair of black sci-fi trousers with white details.
 wsf_w00_103	legwear	A pair of black sci-fi trousers with white details.
-wsf_w00_104	legwear	A pair of black sci-fi trousers.
+wsf_w00_104	legwear	A pair of olive green sci-fi trousers.
 wsf_w00_105	legwear	A pair of black sci-fi trousers with white details.
 wsf_w00_106	legwear	A pair of black sci-fi boots.
 wsf_w00_107	legwear	A pair of white sci-fi boots.
@@ -807,7 +807,7 @@ wcy_w02_039	clothing	A purple cyberpunk jacket with white details.
 wcy_w02_040	clothing	A red cyberpunk jacket with white details.
 wcy_w02_041	body_armor	A black cyberpunk tactical vest with white details.
 wcy_w02_042	clothing	A black cyberpunk jacket with white details.
-wcy_w02_043	clothing	A black cyberpunk jacket with brown details.
+wcy_w02_043	clothing	A black cyberpunk jacket with yellow details.
 wcy_w02_044	body_armor	A white cyberpunk tactical vest.
 wcy_w02_045	clothing	A black cyberpunk jacket with white details.
 wcy_w02_046	clothing	A white cyberpunk jacket.
@@ -857,7 +857,7 @@ wcy_w02_088	gauntlets	A pair of blue cyberpunk gloves with purple details.
 wcy_w02_089	legwear	A pair of black cyberpunk trousers.
 wcy_w02_090	legwear	A pair of black cyberpunk trousers with red details.
 wcy_w02_091	legwear	A pair of black cyberpunk trousers.
-wcy_w02_092	legwear	A pair of black cyberpunk trousers.
+wcy_w02_092	legwear	A pair of olive green cyberpunk trousers.
 wcy_w02_093	legwear	A pair of black cyberpunk trousers.
 wcy_w02_094	legwear	A pair of black cyberpunk trousers with red details.
 wcy_w02_095	legwear	A pair of black cyberpunk trousers.
@@ -974,7 +974,7 @@ wcy_w03_083	gauntlets	A pair of black cyberpunk gloves.
 wcy_w03_084	gauntlets	A pair of black cyberpunk gloves with white details.
 wcy_w03_085	gauntlets	A pair of black cyberpunk gloves with white details.
 wcy_w03_086	gauntlets	A pair of black cyberpunk gloves with white details.
-wcy_w03_087	legwear	A pair of black cyberpunk trousers.
+wcy_w03_087	legwear	A pair of khaki cyberpunk trousers.
 wcy_w03_088	legwear	A pair of grey cyberpunk trousers with white details.
 wcy_w03_089	legwear	A pair of black cyberpunk trousers.
 wcy_w03_090	legwear	A pair of black cyberpunk trousers.
@@ -1001,7 +1001,7 @@ wcy_w03_110	legwear	A pair of black cyberpunk boots with blue details.
 wcy_w03_111	legwear	A pair of black cyberpunk boots.
 wcy_w03_112	legwear	A pair of black cyberpunk boots with brown details.
 wcy_w03_113	legwear	A pair of black cyberpunk boots with white details.
-wcy_w03_114	legwear	A pair of black cyberpunk boots with brown details.
+wcy_w03_114	legwear	A pair of black cyberpunk boots with yellow details.
 wcy_w03_115	legwear	A pair of black cyberpunk boots with blue details.
 wcy_w03_116	legwear	A pair of black cyberpunk boots with red details.
 wcy_w03_117	legwear	A pair of black cyberpunk boots.
@@ -1016,7 +1016,7 @@ wsp_w04_006	headgear	A black steampunk hat with goggles and brown details.
 wsp_w04_007	headgear	A red steampunk hat with goggles and brown details.
 wsp_w04_008	headgear	A red steampunk hat with goggles.
 wsp_w04_009	headgear	A grey steampunk hat with goggles.
-wsp_w04_010	headgear	A black steampunk hat with goggles and brown details.
+wsp_w04_010	headgear	An olive green steampunk hat with goggles and brown details.
 wsp_w04_011	headgear	A brown steampunk hat with goggles and beige details.
 wsp_w04_012	headgear	A black steampunk hat with goggles and brown details.
 wsp_w04_013	headgear	A pair of brass steampunk goggles.
@@ -1055,7 +1055,7 @@ wsp_w04_045	clothing	A brown steampunk coat with beige details.
 wsp_w04_046	clothing	A red steampunk coat with white details.
 wsp_w04_047	clothing	A black steampunk coat.
 wsp_w04_048	clothing	A brown steampunk coat with red details.
-wsp_w04_049	clothing	A black steampunk coat.
+wsp_w04_049	clothing	A dark green steampunk coat.
 wsp_w04_050	clothing	A white steampunk coat with brown details.
 wsp_w04_051	clothing	A black steampunk coat.
 wsp_w04_052	clothing	A black steampunk coat with brown details.
@@ -1068,7 +1068,7 @@ wsp_w04_058	legwear	A pair of black steampunk trousers with brown details.
 wsp_w04_059	legwear	A pair of red steampunk trousers with brown details.
 wsp_w04_060	legwear	A pair of black steampunk trousers with brown details.
 wsp_w04_061	legwear	A pair of black steampunk trousers with brown details.
-wsp_w04_062	legwear	A pair of black steampunk trousers with brown details.
+wsp_w04_062	legwear	A pair of green steampunk trousers with brown details.
 wsp_w04_063	legwear	A pair of brown steampunk trousers with red details.
 wsp_w04_064	legwear	A pair of white steampunk trousers with brown details.
 wsp_w04_065	legwear	A pair of black steampunk trousers with brown details.
@@ -1116,10 +1116,10 @@ wsp_w04_106	legwear	A pair of brown steampunk boots with white details.
 wsp_w04_107	legwear	A pair of brown steampunk boots with white details.
 wsp_w04_108	legwear	A pair of black steampunk boots with brown details.
 wfa_w09_000	headgear	A brown medieval feathered cap.
-wfa_w09_001	headgear	A black medieval beret.
+wfa_w09_001	headgear	A dark green medieval beret.
 wfa_w09_002	headgear	A blue medieval feathered bicorne hat with brown details.
 wfa_w09_003	headgear	A red medieval feathered beret.
-wfa_w09_004	headgear	A black medieval wizard hat with purple details.
+wfa_w09_004	headgear	A purple medieval wizard hat.
 wfa_w09_005	headgear	A white medieval wizard hat.
 wfa_w09_006	headgear	A brown medieval hood.
 wfa_w09_007	headgear	A black medieval embroidered hood.
@@ -1130,10 +1130,10 @@ wfa_w09_011	clothing	A white medieval linen shirt.
 wfa_w09_012	clothing	A white medieval lace-up shirt.
 wfa_w09_013	clothing	A black medieval shirt with a vest and white details.
 wfa_w09_014	clothing	A white medieval blouse with a ribbon.
-wfa_w09_015	clothing	A black medieval tunic.
+wfa_w09_015	clothing	A green medieval tunic.
 wfa_w09_016	clothing	A brown medieval tunic.
 wfa_w09_017	clothing	A white medieval blouse with a ribbon and brown details.
-wfa_w09_018	clothing	A grey medieval tunic with blue details.
+wfa_w09_018	clothing	A blue medieval tunic.
 wfa_w09_019	clothing	A red medieval tunic.
 wfa_w09_020	clothing	A black medieval tunic.
 wfa_w09_021	clothing	A black medieval tunic.
@@ -1141,54 +1141,54 @@ wfa_w09_022	clothing	A white medieval knit sweater.
 wfa_w09_023	clothing	A black medieval turtleneck top.
 wfa_w09_024	clothing	A red medieval cloak.
 wfa_w09_025	clothing	A blue medieval cloak with purple details.
-wfa_w09_026	clothing	A black medieval cloak.
+wfa_w09_026	clothing	A dark green medieval cloak.
 wfa_w09_027	clothing	A grey medieval fur-trimmed cloak with white details.
 wfa_w09_028	clothing	A brown medieval cloak.
 wfa_w09_029	clothing	A black medieval cloak.
 wfa_w09_030	clothing	A black medieval cloak with a scarf and red details.
 wfa_w09_031	clothing	A red medieval fur-trimmed cloak with white details.
 wfa_w09_032	clothing	A white medieval cloak.
-wfa_w09_033	clothing	A black medieval cloak with blue details.
-wfa_w09_034	clothing	A black medieval hooded coat.
+wfa_w09_033	clothing	A navy medieval cloak with blue details.
+wfa_w09_034	clothing	A green medieval hooded coat.
 wfa_w09_035	clothing	A brown medieval layered coat.
 wfa_w09_036	clothing	A black medieval hooded cloak.
 wfa_w09_037	clothing	A brown medieval leather doublet.
 wfa_w09_038	clothing	A black medieval studded doublet.
 wfa_w09_039	clothing	A red medieval doublet with white details.
-wfa_w09_040	clothing	A black medieval hooded coat.
+wfa_w09_040	clothing	A green medieval hooded coat.
 wfa_w09_041	clothing	A brown medieval fur-collared coat.
 wfa_w09_042	clothing	A black medieval coat with a scarf and red details.
-wfa_w09_043	clothing	A black medieval fur-collared coat with blue details.
+wfa_w09_043	clothing	A navy medieval fur-collared coat with blue details.
 wfa_w09_044	clothing	A white medieval coat.
 wfa_w09_045	clothing	A red medieval coat.
 wfa_w09_046	clothing	A black medieval coat with brown details.
-wfa_w09_047	clothing	A black medieval coat.
+wfa_w09_047	clothing	A dark green medieval coat.
 wfa_w09_048	clothing	A black medieval coat.
-wfa_w09_049	clothing	A black medieval long coat with white details.
+wfa_w09_049	clothing	A cream medieval long coat with white details.
 wfa_w09_050	legwear	A pair of brown medieval baggy breeches with beige details.
 wfa_w09_051	legwear	A pair of black medieval breeches.
-wfa_w09_052	legwear	A pair of black medieval breeches with brown details.
-wfa_w09_053	legwear	A pair of black medieval breeches with blue details.
+wfa_w09_052	legwear	A pair of olive green medieval breeches with brown details.
+wfa_w09_053	legwear	A pair of blue medieval breeches.
 wfa_w09_054	legwear	A pair of black medieval breeches.
 wfa_w09_055	legwear	A pair of white medieval breeches with brown details.
 wfa_w09_056	legwear	A pair of black medieval striped breeches.
 wfa_w09_057	legwear	A pair of black medieval breeches with brown details.
 wfa_w09_058	legwear	A pair of black medieval leather breeches with brown details.
 wfa_w09_059	legwear	A pair of white medieval breeches with a strap.
-wfa_w09_060	legwear	A pair of black medieval breeches.
+wfa_w09_060	legwear	A pair of olive green medieval breeches.
 wfa_w09_061	legwear	A pair of black medieval breeches with brown details.
 wfa_w09_062	legwear	A pair of grey medieval breeches with brown details.
 wfa_w09_063	legwear	A pair of black medieval breeches with a sash and red details.
-wfa_w09_064	legwear	A black medieval long skirt with blue details.
+wfa_w09_064	legwear	A navy medieval long skirt with blue details.
 wfa_w09_065	legwear	A red medieval long skirt.
 wfa_w09_066	legwear	A white medieval long skirt.
-wfa_w09_067	legwear	A black medieval long skirt.
-wfa_w09_068	legwear	A black medieval long skirt.
+wfa_w09_067	legwear	A purple medieval long skirt.
+wfa_w09_068	legwear	A dark green medieval long skirt.
 wfa_w09_069	legwear	A red medieval long skirt.
 wfa_w09_070	clothing	A white medieval gown.
 wfa_w09_071	clothing	A blue medieval gown.
 wfa_w09_072	clothing	A red medieval gown with magenta details.
-wfa_w09_073	clothing	A black medieval gown.
+wfa_w09_073	clothing	A green medieval gown.
 wfa_w09_074	clothing	A black medieval gown.
 wfa_w09_075	clothing	A black medieval gown.
 wfa_w09_076	clothing	A white medieval gown.
@@ -1198,12 +1198,12 @@ wfa_w09_079	legwear	A pair of black medieval leather boots with brown details.
 wfa_w09_080	legwear	A pair of black medieval leather boots with brown details.
 wfa_w09_081	legwear	A pair of brown medieval fur-trimmed boots.
 wfa_w09_082	legwear	A pair of black medieval leather boots with brown details.
-wfa_w09_083	legwear	A pair of black medieval leather boots.
+wfa_w09_083	legwear	A pair of navy medieval leather boots.
 wfa_w09_084	legwear	A pair of grey medieval tall boots with white details.
 wfa_w09_085	legwear	A pair of red medieval tall boots with brown details.
 wfa_w09_086	legwear	A pair of black medieval cuffed boots with brown details.
 wfa_w09_087	legwear	A pair of brown medieval cuffed boots.
-wfa_w09_088	legwear	A pair of black medieval leather boots with brown details.
+wfa_w09_088	legwear	A pair of dark green medieval leather boots with brown details.
 wfa_w09_089	legwear	A pair of black medieval leather boots.
 wfa_w09_090	legwear	A pair of black medieval leather boots.
 wfa_w09_091	legwear	A pair of grey medieval tall boots with white details.
@@ -1222,17 +1222,17 @@ wfa_w09_103	gauntlets	A pair of grey medieval fur-cuffed gloves with white detai
 wfa_w10_000	headgear	A grey medieval helmet with white details.
 wfa_w10_001	headgear	A grey medieval helmet with white details.
 wfa_w10_002	headgear	A grey medieval helmet with white details.
-wfa_w10_003	headgear	A black medieval helmet with white details.
+wfa_w10_003	headgear	A bright silver medieval helmet with white details.
 wfa_w10_004	headgear	A grey medieval helmet with white details.
 wfa_w10_005	headgear	A grey medieval helmet with white details.
 wfa_w10_006	headgear	A grey medieval helmet with white details.
 wfa_w10_007	headgear	A grey medieval helmet with white details.
-wfa_w10_008	headgear	A black medieval helmet with white details.
+wfa_w10_008	headgear	A silver medieval helmet with white details.
 wfa_w10_009	headgear	A black medieval helmet with brown details.
 wfa_w10_010	headgear	A grey medieval helmet with white details.
-wfa_w10_011	headgear	A black medieval helmet with white details.
-wfa_w10_012	headgear	A black medieval helmet with white details.
-wfa_w10_013	headgear	A black medieval helmet with white details.
+wfa_w10_011	headgear	A silver medieval helmet with white details.
+wfa_w10_012	headgear	A silver medieval helmet with white details.
+wfa_w10_013	headgear	A bright silver medieval helmet with white details.
 wfa_w10_014	headgear	A grey medieval helmet with white details.
 wfa_w10_015	headgear	A dark green felt hat.
 wfa_w10_016	headgear	A brown wide-brimmed leather hat.
@@ -1271,9 +1271,9 @@ wfa_w10_048	body_armor	A black plate armor.
 wfa_w10_049	body_armor	A grey plate armor with white details.
 wfa_w10_050	body_armor	A black plate armor with red details.
 wfa_w10_051	body_armor	A red plate armor with brown details.
-wfa_w10_052	body_armor	A black plate armor with white details.
+wfa_w10_052	body_armor	A bright silver plate armor.
 wfa_w10_053	clothing	A white tabard with a red cross.
-wfa_w10_054	body_armor	A black plate armor with white details.
+wfa_w10_054	body_armor	A bright silver plate armor.
 wfa_w10_055	body_armor	A black plate armor with a cloak.
 wfa_w10_056	body_armor	A brown plate armor with a cloak.
 wfa_w10_057	body_armor	A black plate armor with a cloak.
@@ -1376,7 +1376,7 @@ wjp_w11_043	clothing	A black samurai kimono jacket with white details.
 wjp_w11_044	clothing	A black samurai kimono jacket.
 wjp_w11_045	clothing	A beige samurai kimono with brown details.
 wjp_w11_900	headgear	A black samurai zukin hood.
-wjp_w11_046	clothing	A black samurai kimono.
+wjp_w11_046	clothing	An olive green samurai kimono.
 wjp_w11_901	accessory	A beige straw mino cape with brown details.
 wjp_w11_047	clothing	A blue samurai kimono.
 wjp_w11_048	clothing	A beige samurai kimono with brown details.
@@ -1404,7 +1404,7 @@ wjp_w11_069	clothing	A white samurai kimono with red details.
 wjp_w11_070	clothing	A black samurai kimono.
 wjp_w11_071	accessory	A red kimono obi sash.
 wjp_w11_072	accessory	A brown kimono obi sash with beige details.
-wjp_w11_073	accessory	A black kimono obi sash with brown details.
+wjp_w11_073	accessory	A dark green kimono obi sash with brown details.
 wjp_w11_074	accessory	A brown kimono obi sash with beige details.
 wjp_w11_075	accessory	A white kimono obi sash with red details.
 wjp_w11_076	accessory	A brown kimono obi sash.
@@ -1417,8 +1417,8 @@ wjp_w11_082	accessory	A black kimono obi sash with brown details.
 wjp_w11_083	accessory	A grey kimono obi sash with purple details.
 wjp_w11_084	accessory	A black kimono obi sash.
 wjp_w11_085	accessory	A white kimono obi sash.
-wjp_w11_086	legwear	A pair of black samurai hakama trousers.
-wjp_w11_087	legwear	A pair of black samurai hakama trousers.
+wjp_w11_086	legwear	A pair of olive samurai hakama trousers.
+wjp_w11_087	legwear	A pair of dark green samurai hakama trousers.
 wjp_w11_088	legwear	A pair of blue samurai hakama trousers.
 wjp_w11_089	legwear	A pair of black samurai hakama trousers.
 wjp_w11_090	legwear	A pair of grey samurai hakama trousers.
@@ -1426,7 +1426,7 @@ wjp_w11_091	legwear	A pair of grey samurai hakama trousers with blue details.
 wjp_w11_092	legwear	A pair of black samurai hakama trousers.
 wjp_w11_093	legwear	A pair of grey samurai hakama trousers.
 wjp_w11_094	legwear	A pair of brown samurai hakama trousers.
-wjp_w11_095	legwear	A pair of black samurai hakama trousers.
+wjp_w11_095	legwear	A pair of grey samurai hakama trousers.
 wjp_w11_096	legwear	A pair of black samurai hakama trousers with red details.
 wjp_w11_097	legwear	A pair of brown samurai hakama trousers.
 wjp_w11_098	legwear	A pair of black samurai hakama trousers.
@@ -1478,7 +1478,7 @@ wjp_w11_143	legwear	A pair of dark tabi boots with brown laces.
 wmo_w15_000	headgear	A black modern baseball cap.
 wmo_w15_001	headgear	A white modern baseball cap.
 wmo_w15_002	headgear	A blue modern baseball cap.
-wmo_w15_003	headgear	A black modern baseball cap.
+wmo_w15_003	headgear	An olive green modern baseball cap.
 wmo_w15_004	headgear	A red modern baseball cap.
 wmo_w15_005	headgear	A grey modern knit beanie with white details.
 wmo_w15_006	headgear	A black modern knit beanie.
@@ -1506,7 +1506,7 @@ wmo_w15_027	clothing	A red modern hoodie.
 wmo_w15_028	clothing	A blue modern hoodie.
 wmo_w15_029	clothing	A white modern hoodie.
 wmo_w15_030	clothing	A white modern button-up shirt.
-wmo_w15_031	clothing	A white modern button-up shirt with blue details.
+wmo_w15_031	clothing	A light blue modern button-up shirt.
 wmo_w15_032	clothing	A black modern button-up shirt.
 wmo_w15_033	clothing	A grey modern button-up shirt.
 wmo_w15_034	clothing	A red modern plaid flannel shirt with magenta details.
@@ -1524,13 +1524,13 @@ wmo_w15_045	clothing	A white modern turtleneck top.
 wmo_w15_046	clothing	A black modern turtleneck top.
 wmo_w15_047	clothing	A white modern turtleneck top with beige details.
 wmo_w15_048	clothing	A blue modern denim jacket.
-wmo_w15_049	clothing	A black modern field jacket.
+wmo_w15_049	clothing	An olive green modern field jacket.
 wmo_w15_050	clothing	A black modern bomber jacket.
-wmo_w15_051	clothing	A black modern bomber jacket with green details.
+wmo_w15_051	clothing	An olive green modern bomber jacket.
 wmo_w15_052	clothing	A black modern leather jacket.
 wmo_w15_053	clothing	A brown modern leather jacket.
 wmo_w15_054	clothing	A red modern varsity jacket.
-wmo_w15_055	clothing	A black modern hooded parka.
+wmo_w15_055	clothing	An olive green modern hooded parka.
 wmo_w15_056	clothing	A brown modern hooded parka with beige details.
 wmo_w15_057	clothing	A white modern hooded parka.
 wmo_w15_058	clothing	A blue modern wool coat.
@@ -1538,22 +1538,22 @@ wmo_w15_059	clothing	A beige modern trench coat with brown details.
 wmo_w15_060	clothing	A black modern pea coat.
 wmo_w15_061	clothing	A purple modern pea coat with blue details.
 wmo_w15_062	clothing	A grey modern long coat.
-wmo_w15_063	legwear	A blue modern jeans.
-wmo_w15_064	legwear	A black modern jeans.
-wmo_w15_065	legwear	A blue modern jeans with white details.
-wmo_w15_066	legwear	A pair of black modern cargo pants.
+wmo_w15_063	legwear	A pair of blue modern jeans.
+wmo_w15_064	legwear	A pair of black modern jeans.
+wmo_w15_065	legwear	A pair of blue modern jeans with white details.
+wmo_w15_066	legwear	A pair of olive green modern cargo pants.
 wmo_w15_067	legwear	A pair of beige modern cargo pants with white details.
-wmo_w15_068	legwear	A blue modern jeans.
-wmo_w15_069	legwear	A white modern sweatpants.
-wmo_w15_070	legwear	A black modern sweatpants.
+wmo_w15_068	legwear	A pair of blue modern jeans.
+wmo_w15_069	legwear	A pair of white modern sweatpants.
+wmo_w15_070	legwear	A pair of black modern sweatpants.
 wmo_w15_071	legwear	A pair of white modern shorts with beige details.
 wmo_w15_072	legwear	A pair of black modern shorts.
 wmo_w15_073	legwear	A pair of blue modern shorts.
 wmo_w15_074	legwear	A pair of grey modern shorts.
-wmo_w15_075	legwear	A blue modern slacks.
-wmo_w15_076	legwear	A grey modern slacks.
-wmo_w15_077	legwear	A grey modern slacks.
-wmo_w15_078	legwear	A white modern slacks with beige details.
+wmo_w15_075	legwear	A pair of blue modern slacks.
+wmo_w15_076	legwear	A pair of grey modern slacks.
+wmo_w15_077	legwear	A pair of grey modern slacks.
+wmo_w15_078	legwear	A pair of white modern slacks with beige details.
 wmo_w15_079	legwear	A red modern plaid pleated skirt with magenta details.
 wmo_w15_080	legwear	A blue modern plaid pleated skirt.
 wmo_w15_081	legwear	A black modern pleated skirt.
@@ -1567,15 +1567,15 @@ wmo_w15_088	clothing	A black modern dress.
 wmo_w15_089	clothing	A black modern dress.
 wmo_w15_090	clothing	A grey modern dress.
 wmo_w15_091	clothing	A beige modern dress with brown details.
-wmo_w15_092	legwear	A white modern sneakers.
-wmo_w15_093	legwear	A white modern high-top sneakers.
-wmo_w15_094	legwear	A white modern sneakers.
-wmo_w15_095	legwear	A white modern sneakers with brown details.
+wmo_w15_092	legwear	A pair of white modern sneakers.
+wmo_w15_093	legwear	A pair of black modern high-top sneakers.
+wmo_w15_094	legwear	A pair of white modern sneakers.
+wmo_w15_095	legwear	A pair of white modern sneakers with brown details.
 wmo_w15_096	legwear	A pair of black modern leather shoes.
 wmo_w15_097	legwear	A pair of brown modern ankle boots with red details.
 wmo_w15_098	legwear	A pair of black modern slip-on shoes with purple details.
-wmo_w15_099	legwear	A white modern sneakers with beige details.
-wmo_w15_100	legwear	A black modern loafers.
+wmo_w15_099	legwear	A pair of white modern sneakers with beige details.
+wmo_w15_100	legwear	A pair of black modern loafers.
 wmo_w15_101	legwear	A pair of black modern leather shoes with brown details.
 wmo_w15_102	legwear	A pair of brown modern sandals with beige details.
 wmo_w15_103	legwear	A pair of black modern leather shoes.
@@ -1588,15 +1588,15 @@ wmo_w15_109	gauntlets	A pair of black modern knit gloves.
 wmo_w15_110	gauntlets	A pair of white modern knit gloves with beige details.
 wmo_w15_111	gauntlets	A pair of blue modern knit gloves with a snowflake pattern and purple details.
 wmo_w15_112	gauntlets	A pair of red modern knit gloves with a snowflake pattern.
-wmo_w15_113	gauntlets	A pair of black modern knit gloves.
+wmo_w15_113	gauntlets	A pair of olive green modern knit gloves.
 wmo_w15_114	gauntlets	A pair of black modern fingerless gloves.
 wmo_w15_115	gauntlets	A pair of brown modern fingerless gloves.
 wmo_w15_116	gauntlets	A pair of white modern fingerless gloves.
 wmo_w15_117	gauntlets	A pair of black modern fingerless gloves.
 wmo_w15_118	gauntlets	A pair of beige modern fingerless gloves with brown details.
 wmo_w15_119	gauntlets	A pair of blue modern fingerless gloves.
-wmo_w15_120	gauntlets	A pair of black modern fingerless gloves.
-wmo_w15_121	gauntlets	A pair of black modern fingerless gloves.
+wmo_w15_120	gauntlets	A pair of olive green modern fingerless gloves.
+wmo_w15_121	gauntlets	A pair of olive green modern fingerless gloves.
 wmo_w15_122	gauntlets	A pair of black modern tactical gloves.
 wmo_w16_000	headgear	A tan tactical baseball cap.
 wmo_w16_001	headgear	A navy tactical baseball cap.
@@ -1699,7 +1699,7 @@ wmo_w16_096	legwear	A pair of black modern tactical cargo trousers.
 wmo_w16_097	legwear	A pair of black modern tactical cargo trousers.
 wmo_w16_098	legwear	A pair of black modern tactical cargo trousers with blue details.
 wmo_w16_099	legwear	A pair of black modern tactical cargo trousers.
-wmo_w16_100	legwear	A pair of black modern tactical cargo trousers.
+wmo_w16_100	legwear	A pair of olive green modern tactical cargo trousers.
 wmo_w16_101	legwear	A pair of brown modern tactical cargo trousers with beige details.
 wmo_w16_102	legwear	A pair of black modern tactical cargo trousers.
 wmo_w16_103	legwear	A pair of black modern tactical cargo trousers.
@@ -1720,7 +1720,7 @@ wmo_w16_117	legwear	A pair of black modern combat boots.
 wmo_w16_118	legwear	A pair of brown modern combat boots with beige details.
 wmo_w16_119	legwear	A pair of black modern combat boots.
 wmo_w16_120	legwear	A pair of black modern combat boots.
-wmo_w16_121	legwear	A pair of black modern combat boots.
+wmo_w16_121	legwear	A pair of dark olive green modern combat boots.
 wmo_w16_122	legwear	A pair of black modern combat boots with white details.
 wmo_w16_123	legwear	A pair of brown modern combat boots.
 wmo_w16_124	legwear	A pair of black modern combat boots.
@@ -1730,14 +1730,14 @@ wmo_w16_127	legwear	A pair of black modern combat boots.
 wmo_w16_128	legwear	A pair of black modern combat boots.
 wmo_w16_129	legwear	A pair of black modern combat boots.
 wfa_w21_000	headgear	A purple wizard hat with brown details.
-wfa_w21_001	headgear	A black wizard hat with brown details.
+wfa_w21_001	headgear	A dark green wizard hat with brown details.
 wfa_w21_002	headgear	A black wizard hat with purple details.
 wfa_w21_003	headgear	A blue wizard hat.
 wfa_w21_004	headgear	A red wizard hat with magenta details.
 wfa_w21_005	headgear	A black wizard hat with purple details.
 wfa_w21_006	headgear	A white wizard hat.
 wfa_w21_007	headgear	A black wizard hat with brown details.
-wfa_w21_008	headgear	A black wizard hat.
+wfa_w21_008	headgear	A dark green wizard hat.
 wfa_w21_009	headgear	A black wizard hat with brown details.
 wfa_w21_010	headgear	A purple wizard hat.
 wfa_w21_011	headgear	A purple wizard hat.
@@ -1749,7 +1749,7 @@ wfa_w21_016	headgear	A purple wizard hood.
 wfa_w21_017	headgear	A purple wizard hood.
 wfa_w21_018	headgear	A red wizard hood with magenta details.
 wfa_w21_019	headgear	A blue wizard hood.
-wfa_w21_020	headgear	A black wizard hood.
+wfa_w21_020	headgear	A dark green wizard hood.
 wfa_w21_021	headgear	A purple wizard hood with magenta details.
 wfa_w21_022	headgear	A white wizard hood.
 wfa_w21_023	headgear	A white wizard hood with red details.
@@ -1765,7 +1765,7 @@ wfa_w21_032	clothing	A red wizard robe.
 wfa_w21_033	clothing	A blue wizard robe with white details.
 wfa_w21_034	clothing	A black wizard robe with white details.
 wfa_w21_035	clothing	A black wizard robe with purple details.
-wfa_w21_036	clothing	A black wizard robe with brown details.
+wfa_w21_036	clothing	A dark green wizard robe with brown details.
 wfa_w21_037	clothing	A black wizard robe with brown details.
 wfa_w21_038	clothing	A white wizard robe.
 wfa_w21_039	clothing	A white long wizard robe with blue details.
@@ -1779,7 +1779,7 @@ wfa_w21_046	clothing	A black long wizard robe with white details.
 wfa_w21_047	clothing	A purple long wizard robe.
 wfa_w21_048	clothing	A white long wizard robe with purple details.
 wfa_w21_049	clothing	A white long wizard robe.
-wfa_w21_050	clothing	A black long wizard robe with white details.
+wfa_w21_050	clothing	A green long wizard robe with white details.
 wfa_w21_051	clothing	A red long wizard robe.
 wfa_w21_052	accessory	A black wizard capelet with purple details.
 wfa_w21_053	accessory	A red wizard capelet with magenta details.
@@ -1790,12 +1790,12 @@ wfa_w21_057	accessory	A white wizard capelet.
 wfa_w21_058	accessory	A white wizard capelet.
 wfa_w21_059	accessory	A purple wizard capelet.
 wfa_w21_060	accessory	A blue wizard capelet with white details.
-wfa_w21_061	accessory	A black wizard capelet with brown details.
+wfa_w21_061	accessory	A dark green wizard capelet with brown details.
 wfa_w21_062	accessory	A blue wizard capelet.
 wfa_w21_063	accessory	A red wizard capelet with magenta details.
 wfa_w21_064	accessory	A white wizard capelet.
 wfa_w21_065	accessory	A red jeweled sash belt with brown details.
-wfa_w21_066	accessory	A black jeweled sash belt with brown details.
+wfa_w21_066	accessory	A dark green jeweled sash belt with brown details.
 wfa_w21_067	accessory	A blue jeweled sash belt.
 wfa_w21_068	accessory	A blue jeweled sash belt.
 wfa_w21_069	accessory	A black jeweled sash belt with brown details.
@@ -1804,7 +1804,7 @@ wfa_w21_071	accessory	A white jeweled sash belt with brown details.
 wfa_w21_072	accessory	A red jeweled sash belt.
 wfa_w21_073	accessory	A red jeweled sash belt with brown details.
 wfa_w21_074	accessory	A red jeweled sash belt with brown details.
-wfa_w21_075	accessory	A black jeweled sash belt with brown details.
+wfa_w21_075	accessory	A dark green jeweled sash belt with brown details.
 wfa_w21_076	accessory	A purple jeweled sash belt.
 wfa_w21_077	accessory	A blue jeweled sash belt.
 wfa_w21_078	gauntlets	A pair of black wizard gloves with blue details.
@@ -1812,7 +1812,7 @@ wfa_w21_079	gauntlets	A pair of brown wizard gloves with red details.
 wfa_w21_080	gauntlets	A pair of purple wizard gloves with blue details.
 wfa_w21_081	gauntlets	A pair of black wizard gloves with purple details.
 wfa_w21_082	gauntlets	A pair of black wizard gloves with purple details.
-wfa_w21_083	gauntlets	A pair of black wizard gloves.
+wfa_w21_083	gauntlets	A pair of dark green wizard gloves.
 wfa_w21_084	gauntlets	A pair of red wizard gloves with brown details.
 wfa_w21_085	gauntlets	A pair of blue wizard gloves with purple details.
 wfa_w21_086	gauntlets	A pair of blue wizard gloves with white details.
@@ -1971,14 +1971,14 @@ wfa_w01_126	accessory	A red rose brooch with a pearl.
 wfa_w01_127	accessory	A gold safety pin brooch with a chain.
 wfa_w01_128	accessory	A gold sun brooch with a blue gem.
 wfa_w01_129	accessory	A red scarf.
-wfa_w01_130	accessory	A black scarf.
-wfa_w01_131	accessory	A black scarf with red details.
+wfa_w01_130	accessory	A dark brown ribbon bow with a pearl.
+wfa_w01_131	accessory	A black ribbon bow with red jewels.
 wfa_w01_132	accessory	A blue scarf.
 wfa_w01_133	accessory	A brown scarf with beige details.
 wfa_w01_134	accessory	A blue scarf with purple details.
 wfa_w01_135	accessory	A black scarf with white details.
-wfa_w01_136	accessory	A white scarf with brown details.
-wfa_w01_137	accessory	A black scarf.
+wfa_w01_136	accessory	A hair comb with a white lace veil.
+wfa_w01_137	accessory	A dark green scarf.
 wfa_w01_138	accessory	A purple scarf with blue details.
 wfa_w01_139	accessory	A purple scarf.
 wfa_w01_140	accessory	A red scarf.
@@ -2139,16 +2139,16 @@ wpa_w08_120	legwear	A pair of black patched wasteland boots with white details.
 wpa_w08_121	legwear	A pair of black patched wasteland boots with brown details.
 wpa_w08_122	legwear	A pair of brown patched wasteland boots.
 wwe_w17_000	headgear	A black western cowboy hat.
-wwe_w17_001	headgear	A black western cowboy hat.
+wwe_w17_001	headgear	A black top hat.
 wwe_w17_002	headgear	A black western cowboy hat with brown details.
 wwe_w17_003	headgear	A black western cowboy hat with brown details.
 wwe_w17_004	headgear	A black western cowboy hat.
-wwe_w17_005	headgear	A black western cowboy hat with brown details.
+wwe_w17_005	headgear	An olive leather aviator cap with goggles.
 wwe_w17_006	accessory	A pair of western leather goggles.
 wwe_w17_007	accessory	A pair of western brass goggles.
 wwe_w17_008	accessory	A red western bandana.
 wwe_w17_009	accessory	A pair of western dark goggles.
-wwe_w17_010	accessory	A western black sunglasses.
+wwe_w17_010	accessory	A pair of western black sunglasses.
 wwe_w17_011	accessory	A red patterned western bandana with fringe.
 wwe_w17_012	accessory	A western leather half mask.
 wwe_w17_013	accessory	A pair of western red-lensed goggles.
@@ -2199,17 +2199,17 @@ wwe_w17_058	accessory	A brown western gun belt with a holster.
 wwe_w17_059	accessory	A brown western gun belt with a holster.
 wwe_w17_060	legwear	A pair of olive western trousers.
 wwe_w17_061	legwear	A pair of dark western trousers with chaps.
-wwe_w17_062	legwear	A dark blue western jeans.
+wwe_w17_062	legwear	A pair of dark blue western jeans.
 wwe_w17_063	legwear	A pair of dark western trousers with a holster.
-wwe_w17_064	legwear	A tan western fringed chaps.
+wwe_w17_064	legwear	A pair of tan western fringed chaps.
 wwe_w17_065	legwear	A pair of brown western trousers.
-wwe_w17_066	legwear	A dark western jeans.
+wwe_w17_066	legwear	A pair of dark western jeans.
 wwe_w17_067	legwear	A pair of tan western trousers.
-wwe_w17_068	legwear	A brown western chaps with buckles.
+wwe_w17_068	legwear	A pair of brown western chaps with buckles.
 wwe_w17_069	legwear	A pair of tan western trousers with chaps.
 wwe_w17_070	legwear	A pair of dark western trousers with a gun belt.
 wwe_w17_071	legwear	A pair of brown western trousers with straps.
-wwe_w17_072	legwear	A tan fringed western chaps.
+wwe_w17_072	legwear	A pair of tan fringed western chaps.
 wwe_w17_073	legwear	A pair of dark olive western trousers.
 wwe_w17_074	legwear	A pair of black western cowboy boots with spurs.
 wwe_w17_075	legwear	A pair of brown western cowboy boots with spurs.
@@ -2259,7 +2259,7 @@ wml_w18_026	clothing	A black military dress uniform jacket with brown details.
 wml_w18_027	clothing	A red military dress uniform jacket.
 wml_w18_028	clothing	A white military dress uniform jacket.
 wml_w18_029	clothing	A blue military dress uniform jacket.
-wml_w18_030	clothing	A black military dress uniform jacket with brown details.
+wml_w18_030	clothing	A dark green military dress uniform jacket with brown details.
 wml_w18_031	clothing	A black military dress uniform jacket with brown details.
 wml_w18_032	clothing	A black military dress uniform jacket with white details.
 wml_w18_033	clothing	A white military dress uniform jacket with brown details.
@@ -2287,24 +2287,24 @@ wml_w18_054	accessory	A red military medal.
 wml_w18_055	accessory	A grey military medal with white details.
 wml_w18_056	clothing	A black military greatcoat with red details.
 wml_w18_057	clothing	A black military greatcoat with brown details.
-wml_w18_058	clothing	A black military greatcoat.
+wml_w18_058	clothing	A grey military greatcoat.
 wml_w18_059	clothing	A white military greatcoat.
 wml_w18_060	clothing	A black military greatcoat with white details.
 wml_w18_061	clothing	A black military greatcoat.
-wml_w18_062	clothing	A black military greatcoat with white details.
+wml_w18_062	clothing	A dark green military greatcoat with white details.
 wml_w18_063	clothing	A white military greatcoat.
-wml_w18_064	clothing	A black military greatcoat with brown details.
+wml_w18_064	clothing	A dark green military greatcoat with brown details.
 wml_w18_065	legwear	A pair of black military dress trousers.
 wml_w18_066	legwear	A pair of white military dress trousers.
 wml_w18_067	legwear	A pair of black military dress trousers with red details.
-wml_w18_068	legwear	A pair of black military dress trousers.
+wml_w18_068	legwear	A pair of olive green military dress trousers.
 wml_w18_069	legwear	A pair of black military dress trousers with purple details.
 wml_w18_070	legwear	A pair of black military dress trousers with blue details.
 wml_w18_071	legwear	A pair of white military dress trousers.
 wml_w18_072	legwear	A pair of black military dress trousers.
 wml_w18_073	legwear	A pair of white military dress trousers.
 wml_w18_074	legwear	A pair of black military dress trousers.
-wml_w18_075	legwear	A pair of black military dress trousers.
+wml_w18_075	legwear	A pair of olive green military dress trousers.
 wml_w18_076	legwear	A pair of black military dress trousers.
 wml_w18_077	legwear	A pair of white military dress trousers.
 wml_w18_078	accessory	A brown military belt.
@@ -2396,7 +2396,7 @@ wfa_w19_042	clothing	A brown doublet with a white cravat.
 wfa_w19_043	clothing	A red doublet with a white cravat.
 wfa_w19_044	clothing	A dark green doublet.
 wfa_w19_045	clothing	A dark green frock coat.
-wfa_w19_046	clothing	A navy frock coat with a white cravat.
+wfa_w19_046	clothing	A dark brown frock coat with a white cravat.
 wfa_w19_047	clothing	A cream frock coat.
 wfa_w19_048	clothing	A red frock coat with a black vest.
 wfa_w19_049	clothing	A navy frock coat with a lace jabot.
@@ -2428,7 +2428,7 @@ wfa_w19_074	legwear	A pair of black breeches with brown details.
 wfa_w19_075	legwear	A pair of red breeches.
 wfa_w19_076	legwear	A pair of red breeches.
 wfa_w19_077	legwear	A pair of brown breeches.
-wfa_w19_078	legwear	A pair of black breeches.
+wfa_w19_078	legwear	A pair of brown breeches.
 wfa_w19_079	legwear	A pair of purple breeches.
 wfa_w19_080	legwear	A pair of black breeches.
 wfa_w19_081	legwear	A pair of brown breeches.

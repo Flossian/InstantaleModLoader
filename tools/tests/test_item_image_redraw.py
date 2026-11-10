@@ -8,7 +8,8 @@
 - 素の絵のパスの読み方（区切りが / でも \\ でも。写し `xs.<元の部位>.<鍵>` は元の部位へ）と語の組の決まり
 - 偽のゲームと偽の 128 のフォルダで選定の関数を呼び、
   描き直しのある素の絵は描き直しの埋め込みで選ばれること・切れば素の埋め込みに戻ること・
-  候補の幅の上限（SIM_GAP）で外れた絵が使われないこと・色が食い違う絵が下がること
+  候補の幅の上限（SIM_GAP）で外れた絵が使われないこと・色が食い違う絵が下がること・
+  対応表の前の絵は今の候補に入っていれば使い続け、外れていれば選び直すこと
 - 品の絵を描く所で、描き直しのある素の絵だけ描く部品に渡すパスを替え、品の image_src（セーブに残る値）は変えないこと
 
 torch と numpy は使わない（CI に無い）。本体が使う演算だけ素の Python で真似る。
@@ -231,9 +232,10 @@ class FakeCtx:
         return decorator
 
 
-def load(**settings):
-    """本体を読み直して当てる。対応表（使用数）は毎回空から（世界を替える）。"""
-    shutil.rmtree(os.path.join(STATE, "item_image"), ignore_errors=True)
+def load(keep_state=False, **settings):
+    """本体を読み直して当てる。対応表（使用数）は毎回空から（keep_state なら前の対応表を残す）。"""
+    if not keep_state:
+        shutil.rmtree(os.path.join(STATE, "item_image"), ignore_errors=True)
     spec = importlib.util.spec_from_file_location("iiv_redraw_under_test", os.path.join(FAKE_MOD, "item_image_variety.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -286,6 +288,26 @@ check("合う絵が無ければ下げた絵でも選ぶ", pick("a deep blue flas
 log = io.open(os.path.join(OUT, "item_image.log"), encoding="utf-8").read().splitlines()
 line = next((l for l in log if "a deep blue flask" in l and " chose " in l), "")
 check("下げた絵を選んだら記録に残す", " tag -0.05" in line, line)
+
+# 覚えている絵: 今の候補に入っていれば使い続け、外れていれば捨てて選び直す
+def seed(table):
+    """対応表を前の選択で置く（置き場の名前は本体が書いたものに合わせる）。"""
+    folder = os.path.join(STATE, "item_image")
+    name = next(n for n in os.listdir(folder) if n.endswith(".json"))
+    json.dump({"images": table}, io.open(os.path.join(folder, name), "w", encoding="utf-8"), ensure_ascii=False)
+    return os.path.join(folder, name)
+
+
+_ctx, pick = load(SIM_GAP=0.05, TAG_PENALTY=0.0)
+pick("near-a")
+path = seed({"tool/near-a": "3", "tool/redraw-like": "2"})
+_ctx, pick = load(keep_state=True, SIM_GAP=0.05, TAG_PENALTY=0.0)
+check("候補に入っている前の絵は使い続ける", pick("near-a") == "3")
+check("候補から外れた前の絵は選び直す", pick("redraw-like") == "1")
+check("選び直した絵を対応表に書く", json.load(io.open(path, encoding="utf-8"))["images"] == {"tool/near-a": "3", "tool/redraw-like": "1"})
+check("選び直した後は同じ絵", pick("redraw-like") == "1" and pick("near-a") == "3")
+log = io.open(os.path.join(OUT, "item_image.log"), encoding="utf-8").read().splitlines()
+check("捨てた絵を記録に残す", any("dropped 2 " in l and "redraw-like" in l for l in log))
 
 # 品の絵を描く所: 描き直しのある素の絵だけ、描く部品に渡すパスを替える。品の image_src は変えない
 for flag in (True, False):

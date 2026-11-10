@@ -99,6 +99,9 @@ SF武器は `python build_medieval.py --set sf` で、`sf_weapons/` の一枚絵
 分類（`part_*`・`food_*`・`medic_*`・`magic_materials`・`treasure`・`tool_*`・`creature`・`wa`・`modern_sf`）を書く。表は `items.json`（鍵は `itm_`）。
 部位（食べ物・飲み物・薬・薬瓶・植物・きのこ・道具・遺物・くず・魔法の素材・その他の素材・魔物の素材・宝石・鉱石・金属・文書・装身具）は素材がどれも 32x32 で、装身具を除く消耗品と素材は `build_guns.ITEM_SCALE`（1.5。試し）倍の 48x48 で作る。装身具は防具類と同じ 64x64（`build_medieval.ITEM_WEAR`。中世の組の矢筒も同じ）。32x32 だと1マスの品を 64px に描く画面で2倍に引き伸ばされ、粗く見えた。表の `pref` のとおりに入れる。手術用のメスだけは小型の武器。
 キャプションは「色 + 種類の名前」。表の `plain` が真の品（食材や真鍮の機械のように名前に色や材質が入っている）は種類の名前だけ。ほかの品も、名前に入っている色は前に重ねない。名前に金属の色の語（gold・silver・brass・bronze・copper など）がある品と、名前が色の語で始まる品（`red lacquered`・`navy laced` など）も、測った色を前に付けない（`build_guns.names_own_color`。金は茶色、銀は黒や白に測られる）。光る部分があれば `with a faint <色> glow` を足す。
+測った色は画素の数で決めるので、陰の多いドット絵では見た目と違う色になることがある（銀や白の品・暗い緑や紺の品が black、白い陶器が brown）。
+どの表の品も、`caption_fixed` に絵を見て書いた一文があれば、組んだキャプションの代わりにそれを使う（`build_guns.fixed_caption`。版12 で目視で食い違いを見つけた 226 品）。
+冠詞は `build_guns.sentence` が付ける。対の品（`PAIRED`）は `A pair of`、複数形の品（`PLURAL`。名前の主語の最後の語）と数で始まる名前は冠詞なし（「Grilled sausages.」「Three macarons.」）。複数形の品を足すときは `PLURAL` に語を足す。
 組んだキャプションは `item_captions.txt` に書く。
 表は塊を行ごとに並べて作る。ほかの塊の左右の幅の中に中心がある小さな塊（こぼれた丸薬・鉗子の片側）は品の一部として表に載せない。
 横に2つ繋がった塊は、表の行を決めるときに絵の画素が最も少ない列で割る（SF部品のくず鉄・旅の食料の堅パンの行）。

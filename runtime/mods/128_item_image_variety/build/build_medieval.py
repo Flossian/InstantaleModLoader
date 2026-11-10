@@ -209,7 +209,7 @@ def make_entry(e, sheets, kind):
     elif sf and e["pref"] != "throwable":
         im = b.stand_up(im, 0)
     e["folder"] = choose(e, im)
-    e["caption"] = caption_item(e, im) if item else caption_sf(e, im) if sf else caption_for(e, im, magic)
+    e["caption"] = b.fixed_caption(e, caption_item(e, im) if item else caption_sf(e, im) if sf else caption_for(e, im, magic))
     box_w, box_h = (ITEM_WEAR.get(e["folder"]) if item or e["folder"] == "accessory" else None) or b.game_size(e["folder"])
     if e["folder"] in b.SIZES and e.get("halo", True):
         # 武器だけ（結晶や薬瓶は色の付いた暗い面が多く、はがすと削れる）

@@ -82,7 +82,7 @@ gun_corpheavy_006	long_weapon	A black heavy anti-materiel rifle with a bipod, a 
 gun_corpheavy_007	large_weapon	A black non-lethal heavy shock maul with hazard stripes.
 gun_corpheavy_008	large_weapon	A black heavy light machine gun with an ammo box, a gun.
 gun_corpheavy_009	large_weapon	A black heavy grenade launcher with a thick tube, a gun.
-gun_corpcheap_000	small_weapon	A black cheap plastic pistol, a gun.
+gun_corpcheap_000	small_weapon	A tan cheap plastic pistol, a gun.
 gun_corpcheap_001	small_weapon	A white cheap disposable single-shot pistol with tape on the grip, a gun.
 gun_corpcheap_002	small_weapon	A black cheap revolver, a gun.
 gun_corpcheap_003	medium_weapon	A black cheap stamped sheet-metal submachine gun with a folding stock, a gun.
@@ -117,15 +117,15 @@ gun_corpmilitary_005	large_weapon	A black military shotgun with a magazine tube 
 gun_corpmilitary_006	long_weapon	A black old military sniper rifle with a scope and a sling and tan details, a gun.
 gun_corpmilitary_008	large_weapon	A black military squad automatic weapon with a bipod and an ammo box, a gun.
 gun_corpmilitary_009	long_weapon	A black military rifle with a fixed bayonet and a wooden stock, a gun.
-gun_corprail_000	small_weapon	A black twin-rail railgun pistol with white details, a gun.
-gun_corprail_001	small_weapon	A black coilgun pistol with copper coils and white details, a gun.
-gun_corprail_002	medium_weapon	A black railgun submachine gun with white details, a gun.
-gun_corprail_003	medium_weapon	A black coilgun PDW with a battery and white details, a gun.
-gun_corprail_004	large_weapon	A black railgun assault rifle with white details and glowing cyan lights, a gun.
-gun_corprail_005	large_weapon	A black four-rail railgun shotgun with white details and glowing cyan lights, a gun.
-gun_corprail_006	long_weapon	A black long twin-rail railgun sniper rifle with a scope, white details and glowing cyan lights, a gun.
+gun_corprail_000	small_weapon	A white twin-rail railgun pistol, a gun.
+gun_corprail_001	small_weapon	A white coilgun pistol with copper coils, a gun.
+gun_corprail_002	medium_weapon	A white railgun submachine gun, a gun.
+gun_corprail_003	medium_weapon	A white coilgun PDW with a battery, a gun.
+gun_corprail_004	large_weapon	A white railgun assault rifle with glowing cyan lights, a gun.
+gun_corprail_005	large_weapon	A white four-rail railgun shotgun with glowing cyan lights, a gun.
+gun_corprail_006	long_weapon	A white long twin-rail railgun sniper rifle with a scope and glowing cyan lights, a gun.
 gun_corprail_008	large_weapon	A black large coil cannon with copper coils, a gun.
-gun_corprail_009	medium_weapon	A black magnetic nail gun with a spike, a gun.
+gun_corprail_009	medium_weapon	A white magnetic nail gun with a spike, a gun.
 gun_corpbio_000	small_weapon	A black carapace-covered organic pistol with red details, a gun.
 gun_corpbio_001	small_weapon	A white bone-barreled organic pistol with tan details, a gun.
 gun_corpbio_002	medium_weapon	A red organic submachine gun with pulsing tubes, a gun.
@@ -140,21 +140,21 @@ gun_corpluxury_001	small_weapon	A white compact pistol with a pearl grip, a gun.
 gun_corpluxury_002	small_weapon	A black inlaid luxury revolver with an amethyst, a gun.
 gun_corpluxury_003	medium_weapon	A black luxury submachine gun with an ebony stock and gold inlay, a gun.
 gun_corpluxury_004	medium_weapon	A black gold-trimmed luxury PDW with an emerald, a gun.
-gun_corpluxury_005	large_weapon	A black engraved luxury assault rifle with a wooden stock, a gun.
-gun_corpluxury_006	large_weapon	A black engraved side-by-side double-barreled shotgun, a gun.
+gun_corpluxury_005	large_weapon	A brown engraved luxury assault rifle with a wooden stock, a gun.
+gun_corpluxury_006	large_weapon	A brown engraved side-by-side double-barreled shotgun, a gun.
 gun_corpluxury_007	long_weapon	A black luxury sniper rifle with gold inlay and a scope, a gun.
 gun_corpspace_000	small_weapon	A white space pistol with orange hazard stripes, a gun.
 gun_corpspace_001	small_weapon	A white space distress flare pistol, a gun.
 gun_corpspace_002	medium_weapon	A white sealed space submachine gun with orange stripes, a gun.
-gun_corpspace_003	medium_weapon	A black compact shipboard PDW with white details, a gun.
+gun_corpspace_003	medium_weapon	A white compact shipboard PDW, a gun.
 gun_corpspace_004	large_weapon	A white space military assault rifle with orange stripes, a gun.
-gun_corpspace_005	large_weapon	A black low-velocity shipboard shotgun with white details, a gun.
+gun_corpspace_005	large_weapon	A white low-velocity shipboard shotgun, a gun.
 gun_corpspace_006	long_weapon	A white space sniper rifle with a scope, a gun.
 gun_corpspace_008	medium_weapon	A white EVA cutting torch.
-gun_corpspace_009	small_weapon	A black grappling hook gun with a cable and white details, a gun.
+gun_corpspace_009	small_weapon	A white grappling hook gun with a cable, a gun.
 gun_corpprint_000	small_weapon	An olive green neon 3D-printed plastic pistol, a gun.
 gun_corpprint_001	small_weapon	An orange small 3D-printed single-shot pistol, a gun.
-gun_corpprint_002	small_weapon	A black neon 3D-printed revolver with magenta details and glowing magenta lights, a gun.
+gun_corpprint_002	small_weapon	A magenta neon 3D-printed revolver with glowing magenta lights, a gun.
 gun_corpprint_003	medium_weapon	An olive green neon 3D-printed submachine gun, a gun.
 gun_corpprint_004	medium_weapon	An orange boxy 3D-printed PDW, a gun.
 gun_corpprint_005	large_weapon	A magenta neon 3D-printed assault rifle with glowing magenta lights, a gun.
@@ -186,29 +186,29 @@ gun_corpmelee_010	medium_weapon	A black non-lethal jeweled cane stun baton with 
 gun_corpmelee_011	medium_weapon	A white sword cane with a ruby handle.
 gun_corpmelee_012	medium_weapon	A white non-lethal space stun baton with a glowing tip and orange stripes and glowing blue lights.
 gun_corpmelee_013	medium_weapon	A red non-lethal lacquered jitte stun baton with a tassel and orange details.
-gun_explosive_000	throwable_weapon	A grey frag hand grenade with a pull pin and a safety lever and brass details, an explosive.
+gun_explosive_000	throwable_weapon	An olive green frag hand grenade with a pull pin and a safety lever and brass details, an explosive.
 gun_explosive_001	throwable_weapon	A black frag hand grenade with a pull pin and a safety lever, an explosive.
-gun_explosive_002	throwable_weapon	A grey frag hand grenade with a pull pin and a safety lever and olive green details, an explosive.
+gun_explosive_002	throwable_weapon	An olive green frag hand grenade with a pull pin and a safety lever, an explosive.
 gun_explosive_003	throwable_weapon	A black frag hand grenade with a pull pin and a safety lever, an explosive.
-gun_explosive_004	throwable_weapon	A white frag hand grenade with a pull pin and a safety lever, an explosive.
+gun_explosive_004	throwable_weapon	A copper frag hand grenade with a pull pin and a safety lever, an explosive.
 gun_explosive_005	throwable_weapon	A black frag hand grenade with a pull pin and a safety lever, an explosive.
 gun_explosive_006	throwable_weapon	A brass frag hand grenade with a pull pin and a safety lever, an explosive.
-gun_explosive_007	throwable_weapon	A black frag hand grenade with a pull pin and a safety lever, an explosive.
+gun_explosive_007	throwable_weapon	A tan frag hand grenade with a pull pin and a safety lever, an explosive.
 gun_explosive_008	throwable_weapon	A red frag hand grenade with a pull pin and a safety lever, an explosive.
 gun_explosive_009	throwable_weapon	A black frag hand grenade with a pull pin and a safety lever, an explosive.
 gun_explosive_010	throwable_weapon	A red molotov cocktail, a glass bottle with a burning rag and orange details, an explosive.
-gun_explosive_011	throwable_weapon	A black molotov cocktail, a glass bottle with a burning rag, an explosive.
+gun_explosive_011	throwable_weapon	A green molotov cocktail, a glass bottle with a burning rag, an explosive.
 gun_explosive_012	throwable_weapon	A black molotov cocktail, a glass bottle with a burning rag, an explosive.
 gun_explosive_013	throwable_weapon	A red molotov cocktail, a glass bottle with a burning rag and orange details, an explosive.
-gun_explosive_014	throwable_weapon	A black molotov cocktail, a glass bottle with a burning rag, an explosive.
+gun_explosive_014	throwable_weapon	A green molotov cocktail, a glass bottle with a burning rag, an explosive.
 gun_explosive_015	throwable_weapon	A red molotov cocktail, a glass bottle with a burning rag, an explosive.
 gun_explosive_016	throwable_weapon	A red molotov cocktail, a glass bottle with a burning rag and orange details, an explosive.
 gun_explosive_017	throwable_weapon	A white molotov cocktail, a glass bottle with a burning rag and blue details, an explosive.
 gun_explosive_018	throwable_weapon	A red stick of dynamite with a lit fuse, an explosive.
 gun_explosive_019	throwable_weapon	A tan stick of dynamite with a lit fuse, an explosive.
 gun_explosive_020	throwable_weapon	A red bundle of dynamite sticks with a lit fuse, an explosive.
-gun_explosive_021	throwable_weapon	A black bundle of dynamite sticks with a lit fuse, an explosive.
-gun_explosive_022	throwable_weapon	A black bundle of dynamite sticks with a lit fuse and red details, an explosive.
+gun_explosive_021	throwable_weapon	A tan bundle of dynamite sticks with a lit fuse, an explosive.
+gun_explosive_022	throwable_weapon	An olive green bundle of dynamite sticks with a lit fuse and red details, an explosive.
 gun_explosive_023	throwable_weapon	A red bundle of dynamite sticks with a lit fuse and magenta details, an explosive.
 gun_explosive_024	throwable_weapon	A red bundle of dynamite sticks with a lit fuse, an explosive.
 gun_explosive_025	throwable_weapon	A black satchel bomb with a lit fuse, an explosive.
@@ -216,12 +216,12 @@ gun_explosive_030	throwable_weapon	A black flashbang stun grenade with a pull pi
 gun_explosive_031	throwable_weapon	A black flashbang stun grenade with a pull pin, an explosive.
 gun_explosive_032	throwable_weapon	A white flashbang stun grenade with a pull pin and red details, an explosive.
 gun_explosive_033	throwable_weapon	A black flashbang stun grenade with a pull pin, blue details and glowing blue lights, an explosive.
-gun_explosive_026	throwable_weapon	A black smoke grenade with a pull pin and colored smoke, an explosive.
+gun_explosive_026	throwable_weapon	An olive green smoke grenade with a pull pin and colored smoke, an explosive.
 gun_explosive_027	throwable_weapon	A red smoke grenade with a pull pin and colored smoke and magenta details, an explosive.
-gun_explosive_028	throwable_weapon	A black smoke grenade with a pull pin and colored smoke and white details, an explosive.
+gun_explosive_028	throwable_weapon	A cream smoke grenade with a pull pin and colored smoke and white details, an explosive.
 gun_explosive_029	throwable_weapon	A purple smoke grenade with a pull pin and colored smoke and glowing purple lights, an explosive.
 gun_explosive_034	throwable_weapon	A black canister grenade with a pull pin and blue details, an explosive.
-gun_explosive_035	throwable_weapon	A black canister grenade with a pull pin, an explosive.
+gun_explosive_035	throwable_weapon	An orange canister grenade with a pull pin, an explosive.
 gun_gmod1_000	small_weapon	A black angular polymer semi-automatic pistol, a gun.
 gun_gmod1_001	small_weapon	A black semi-automatic pistol with a weapon light, a gun.
 gun_gmod1_002	small_weapon	A black long-slide competition pistol with a compensator, a gun.
@@ -247,7 +247,7 @@ gun_gmod2_009	medium_weapon	A black submachine gun with a folding stock and a lo
 gun_gmod3_000	large_weapon	A black assault rifle with a curved magazine and wooden furniture and a wooden stock, a gun.
 gun_gmod3_001	large_weapon	A black polymer assault rifle with rails, a gun.
 gun_gmod3_002	large_weapon	A black short carbine with a collapsible stock, a gun.
-gun_gmod3_003	large_weapon	A black bullpup assault rifle, a gun.
+gun_gmod3_003	large_weapon	An olive bullpup assault rifle, a gun.
 gun_gmod3_004	large_weapon	A black assault rifle with an underbarrel grenade launcher, a gun.
 gun_gmod3_005	large_weapon	A black assault rifle with a carry handle, a gun.
 gun_gmod3_006	large_weapon	A black designated marksman rifle with a large scope and a wooden stock, a gun.
@@ -262,7 +262,7 @@ gun_gmod4_004	large_weapon	A black six-barreled rotary minigun with a carry hand
 gun_gmod4_005	large_weapon	A black revolver-cylinder grenade launcher, a gun.
 gun_gmod4_006	large_weapon	A black single-shot break-action grenade launcher with a wooden stock, a gun.
 gun_gmod4_007	large_weapon	A black pump-action grenade launcher, a gun.
-gun_gmod4_008	large_weapon	A black recoilless rifle tube, a gun.
+gun_gmod4_008	large_weapon	An olive green recoilless rifle tube, a gun.
 gun_gmod4_009	large_weapon	A black short heavy anti-materiel rifle, a gun.
 gun_gmod5_000	long_weapon	A black bolt-action sniper rifle with a large scope, a gun.
 gun_gmod5_001	long_weapon	A black anti-materiel rifle with a bipod, a gun.
@@ -271,8 +271,8 @@ gun_gmod5_003	long_weapon	A black suppressed sniper rifle, a gun.
 gun_gmod5_004	long_weapon	A black bullpup sniper rifle, a gun.
 gun_gmod5_005	long_weapon	A black semi-automatic marksman rifle with a wooden stock, a gun.
 gun_gmod5_006	long_weapon	A black anti-tank rocket launcher with a warhead and a wooden stock, a gun.
-gun_gmod5_007	large_weapon	A black rocket launcher tube with a sight, a gun.
-gun_gmod5_008	long_weapon	A black disposable rocket launcher tube with brass details, a gun.
+gun_gmod5_007	large_weapon	An olive rocket launcher tube with a sight, a gun.
+gun_gmod5_008	long_weapon	An olive green disposable rocket launcher tube with brass details, a gun.
 gun_gmod5_009	long_weapon	A black long-range sniper rifle with two scopes and a wooden stock, a gun.
 gun_gfut1_000	small_weapon	A white armored ray gun with blue details, a gun.
 gun_gfut1_001	small_weapon	A black forked-muzzle shock pistol, a gun.
@@ -280,42 +280,42 @@ gun_gfut1_002	small_weapon	A white heat ray pistol with a disc battery, a gun.
 gun_gfut1_003	small_weapon	A black slim precision laser pistol with white details, a gun.
 gun_gfut1_004	small_weapon	A white round compact ray gun, a gun.
 gun_gfut1_005	small_weapon	A white large long-barreled ray gun, a gun.
-gun_gfut1_006	small_weapon	A black pistol with rings around the barrel, white details and glowing cyan lights, a gun.
-gun_gfut1_007	small_weapon	A black military laser pistol with a small scope and white details, a gun.
-gun_gfut1_008	small_weapon	A black pistol with a glowing tube inside and white details, a gun.
+gun_gfut1_006	small_weapon	A white pistol with rings around the barrel and glowing cyan lights, a gun.
+gun_gfut1_007	small_weapon	A white military laser pistol with a small scope, a gun.
+gun_gfut1_008	small_weapon	A white pistol with a glowing tube inside, a gun.
 gun_gfut1_009	small_weapon	A white flat compact defense pistol, a gun.
 gun_gfut1_010	small_weapon	A black futuristic revolver, a gun.
 gun_gfut1_011	small_weapon	A white pistol with a blade under the barrel, blue details and glowing cyan lights, a gun.
 gun_gfut2_000	medium_weapon	A white streamlined futuristic submachine gun with glowing cyan lights, a gun.
-gun_gfut2_001	medium_weapon	A black submachine gun with a glowing battery on top, a gun.
+gun_gfut2_001	medium_weapon	A white submachine gun with a glowing battery on top, a gun.
 gun_gfut2_002	medium_weapon	A white compact bullpup ray gun, a gun.
-gun_gfut2_003	medium_weapon	A black triple-barreled futuristic submachine gun with white details, a gun.
-gun_gfut2_004	medium_weapon	A black boxy heat ray gun with a vertical foregrip and white details, a gun.
+gun_gfut2_003	medium_weapon	A white triple-barreled futuristic submachine gun, a gun.
+gun_gfut2_004	medium_weapon	A white boxy heat ray gun with a vertical foregrip, a gun.
 gun_gfut2_005	medium_weapon	A black futuristic submachine gun with cooling fins, a gun.
-gun_gfut2_006	medium_weapon	A black futuristic submachine gun with a side cylinder magazine and white details, a gun.
-gun_gfut2_007	medium_weapon	A black light futuristic submachine gun with a ring stock and white details, a gun.
-gun_gfut2_008	medium_weapon	A black flared-muzzle scatter ray gun, a gun.
+gun_gfut2_006	medium_weapon	A white futuristic submachine gun with a side cylinder magazine, a gun.
+gun_gfut2_007	medium_weapon	A white light futuristic submachine gun with a ring stock, a gun.
+gun_gfut2_008	medium_weapon	A white flared-muzzle scatter ray gun, a gun.
 gun_gfut2_009	medium_weapon	A white folding flat futuristic submachine gun, a gun.
 gun_gfut3_000	large_weapon	A white armored space marine rifle with white details, a gun.
-gun_gfut3_001	large_weapon	A black bullpup heat ray rifle, a gun.
-gun_gfut3_002	large_weapon	A black rifle with batteries above and below the barrel and white details, a gun.
-gun_gfut3_003	large_weapon	A black forked-barrel futuristic rifle, a gun.
-gun_gfut3_004	large_weapon	A black energy rifle with a long cooling shroud and white details, a gun.
-gun_gfut3_005	large_weapon	A black futuristic rifle with an underbarrel launcher and white details, a gun.
-gun_gfut3_006	large_weapon	A black futuristic rifle with a sensor cluster sight, a gun.
-gun_gfut3_007	large_weapon	A black rifle with a translucent shroud over glowing tubes, a gun.
-gun_gfut3_008	large_weapon	A black light skeletal futuristic rifle, a gun.
-gun_gfut3_009	large_weapon	A black futuristic rifle with a large battery pack in the stock, a gun.
-gun_gfut4_000	large_weapon	A black six-barreled rotary energy machine gun, a gun.
-gun_gfut4_001	large_weapon	A black thick plasma cannon with white details, a gun.
-gun_gfut4_002	large_weapon	A black quad rocket launcher with white details, a gun.
+gun_gfut3_001	large_weapon	A white bullpup heat ray rifle, a gun.
+gun_gfut3_002	large_weapon	A white rifle with batteries above and below the barrel, a gun.
+gun_gfut3_003	large_weapon	A white forked-barrel futuristic rifle, a gun.
+gun_gfut3_004	large_weapon	A white energy rifle with a long cooling shroud, a gun.
+gun_gfut3_005	large_weapon	A white futuristic rifle with an underbarrel launcher, a gun.
+gun_gfut3_006	large_weapon	A white futuristic rifle with a sensor cluster sight, a gun.
+gun_gfut3_007	large_weapon	A white rifle with a translucent shroud over glowing tubes, a gun.
+gun_gfut3_008	large_weapon	A white light skeletal futuristic rifle, a gun.
+gun_gfut3_009	large_weapon	A white futuristic rifle with a large battery pack in the stock, a gun.
+gun_gfut4_000	large_weapon	A white six-barreled rotary energy machine gun, a gun.
+gun_gfut4_001	large_weapon	A white thick plasma cannon, a gun.
+gun_gfut4_002	large_weapon	A white quad rocket launcher, a gun.
 gun_gfut4_003	large_weapon	A black machine gun with a disc magazine on top, a gun.
-gun_gfut4_004	large_weapon	A black electromagnetic coil cannon with blue details, a gun.
+gun_gfut4_004	large_weapon	A white electromagnetic coil cannon with blue details, a gun.
 gun_gfut4_005	large_weapon	A black futuristic flamethrower with a fuel tank, a gun.
 gun_gfut4_006	medium_weapon	A black support laser gun with a heavy bipod, blue details and glowing cyan lights, a gun.
-gun_gfut4_007	large_weapon	A black energy cannon with twin batteries, a gun.
+gun_gfut4_007	large_weapon	A white energy cannon with twin batteries, a gun.
 gun_gfut5_000	long_weapon	A slim white laser sniper rifle with blue details, a gun.
-gun_gfut5_001	long_weapon	A black twin-rail railgun, a gun.
+gun_gfut5_001	long_weapon	A white twin-rail railgun, a gun.
 gun_gfut5_002	long_weapon	A black gauss rifle with coils along the barrel, a gun.
 gun_gfut5_003	long_weapon	A black precision laser sniper rifle with a large scope and white details, a gun.
 gun_gfut5_004	long_weapon	A white futuristic bullpup sniper rifle, a gun.
@@ -328,7 +328,7 @@ gun_gsnp1_002	long_weapon	A black sniper rifle with a skeleton stock, a gun.
 gun_gsnp1_003	long_weapon	A black bullpup sniper rifle, a gun.
 gun_gsnp1_004	long_weapon	A black semi-automatic marksman rifle, a gun.
 gun_gsnp1_005	long_weapon	A black desert-camo sniper rifle with a wooden stock and tan details, a gun.
-gun_gsnp1_006	long_weapon	A black competition sniper rifle with an adjustable cheek rest and white details, a gun.
+gun_gsnp1_006	long_weapon	A white competition sniper rifle with an adjustable cheek rest, a gun.
 gun_gsnp1_007	long_weapon	A black camouflage-wrapped sniper rifle with a wooden stock, a gun.
 gun_gsnp1_008	long_weapon	A black folding-stock sniper rifle, a gun.
 gun_gsnp1_009	long_weapon	A black long-range sniper rifle with stacked scopes, a gun.
@@ -421,21 +421,21 @@ gun_gfan2_003	small_weapon	A silver revolver with holy patterns, a gun.
 gun_gfan2_004	small_weapon	A black eerie revolver with a black bone grip and a wooden grip, a gun.
 gun_gfan2_005	small_weapon	A black revolver with glowing crystals in the cylinder, a wooden grip and blue details, a gun.
 gun_gfan2_006	small_weapon	A black revolver wrapped in a carved snake with a wooden grip, a gun.
-gun_gfan2_007	small_weapon	A white revolver with a red lacquered grip and a wooden grip, a gun.
+gun_gfan2_007	small_weapon	A black revolver with a red lacquered grip and a wooden grip, a gun.
 gun_gfan2_008	small_weapon	A white revolver with wing ornaments and a wooden grip, a gun.
 gun_gfan2_009	small_weapon	A silver revolver with a moon ornament, a gun.
 gun_gfan2_010	small_weapon	A black revolver with thorn carvings and a wooden grip, a gun.
 gun_gfan2_011	small_weapon	A gold and black noble revolver with a wooden grip, a gun.
 gun_gfan3_000	small_weapon	A steampunk pistol wrapped in brass pipes with a wooden grip, a gun.
-gun_gfan3_001	small_weapon	A white steampunk pistol with a pressure gauge and a wooden grip, a gun.
+gun_gfan3_001	small_weapon	A brass steampunk pistol with a pressure gauge and a wooden grip, a gun.
 gun_gfan3_002	small_weapon	A tan steampunk pistol with exposed gears and a wooden grip, a gun.
-gun_gfan3_003	small_weapon	A white steampunk pistol with a small boiler and a wooden grip, a gun.
-gun_gfan3_004	small_weapon	A white steampunk pistol with three copper barrels and a wooden grip, a gun.
+gun_gfan3_003	small_weapon	A brass steampunk pistol with a small boiler and a wooden grip, a gun.
+gun_gfan3_004	small_weapon	A copper steampunk pistol with three copper barrels and a wooden grip, a gun.
 gun_gfan3_005	small_weapon	A black steampunk pistol with steam tubes and a wooden grip, a gun.
 gun_gfan3_006	small_weapon	A black spring-loaded repeating steampunk pistol with a wooden grip, a gun.
 gun_gfan3_007	small_weapon	A brass steampunk pistol with a telescope and a wooden grip, a gun.
 gun_gfan3_008	small_weapon	A black steampunk pistol with a top cylinder magazine and a wooden grip, a gun.
-gun_gfan3_009	small_weapon	A white steampunk pistol with a leather grip and a brass box and a wooden grip, a gun.
+gun_gfan3_009	small_weapon	A brass steampunk pistol with a leather grip and a brass box and a wooden grip, a gun.
 gun_gfan4_000	long_weapon	A black lever-action rifle with a wooden stock and a wooden stock, a gun.
 gun_gfan4_001	long_weapon	A black lever-action rifle with brass fittings and a wooden stock, a gun.
 gun_gfan4_002	long_weapon	A black short lever-action carbine with a wooden stock, a gun.
@@ -448,7 +448,7 @@ gun_gfan4_008	long_weapon	A grey noble hunting rifle with silver ornaments and a
 gun_gfan4_009	long_weapon	A black leather-wrapped frontier hunting rifle with a wooden stock, a gun.
 gun_gfan5_000	large_weapon	A black steampunk rifle with brass pipes and a wooden stock, a gun.
 gun_gfan5_001	large_weapon	A tan steampunk rifle with pressure gauges and a wooden stock, a gun.
-gun_gfan5_002	large_weapon	A white hand-cranked multi-barrel machine gun with a wooden stock, a gun.
+gun_gfan5_002	large_weapon	A brass hand-cranked multi-barrel machine gun with a wooden stock, a gun.
 gun_gfan5_003	large_weapon	A black steampunk machine gun with a cylinder magazine and a wooden stock, a gun.
 gun_gfan5_004	large_weapon	A tan flared-muzzle steampunk blunderbuss with a wooden stock, a gun.
 gun_gfan5_005	large_weapon	A black scoped steampunk sniper rifle with a wooden stock, a gun.
@@ -456,7 +456,7 @@ gun_gfan5_006	large_weapon	A black steampunk rifle with a small boiler and a woo
 gun_gfan5_007	large_weapon	A black steampunk carbine with a gearbox under the barrel and a wooden stock, a gun.
 gun_gsht1_000	large_weapon	A black side-by-side double-barreled shotgun with a wooden stock and a wooden stock, a gun.
 gun_gsht1_001	large_weapon	A black over-under shotgun with a wooden stock, a gun.
-gun_gsht1_002	large_weapon	A white engraved luxury double-barreled shotgun with a wooden stock, a gun.
+gun_gsht1_002	large_weapon	A black engraved luxury double-barreled shotgun with a wooden stock, a gun.
 gun_gsht1_003	large_weapon	A black long-barreled bird-hunting shotgun with a wooden stock, a gun.
 gun_gsht1_004	large_weapon	A black polymer double-barreled shotgun, a gun.
 gun_gsht1_005	large_weapon	A black old hammer double-barreled shotgun with a wooden stock, a gun.

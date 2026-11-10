@@ -157,8 +157,8 @@ sf_stw1_02	large_weapon	A broad-bladed futuristic energy greatsword with a glowi
 sf_stw1_03	large_weapon	A long-hilted futuristic energy greatsword with a glowing purple blade.
 sf_stw1_04	large_weapon	A metal-edged futuristic energy greatsword with a glowing orange blade and yellow details.
 sf_stw1_05	large_weapon	A twin-bladed futuristic energy greatsword with a glowing cyan blade.
-sf_stw1_06	large_weapon	A slim futuristic energy greatsword with a glowing blue blade.
-sf_stw1_07	large_weapon	A cooling-finned futuristic energy greatsword with a glowing blue blade and yellow details.
+sf_stw1_06	large_weapon	A slim futuristic energy greatsword with a glowing white blade.
+sf_stw1_07	large_weapon	A cooling-finned futuristic energy greatsword with a glowing yellow blade.
 sf_stw1_08	large_weapon	A glow-lined futuristic metal greatsword with a glowing blue blade.
 sf_stw1_09	large_weapon	A serrated futuristic energy greatsword with a glowing red blade.
 sf_stw2_00	large_weapon	A futuristic heavy alloy greatsword with a black alloy blade.

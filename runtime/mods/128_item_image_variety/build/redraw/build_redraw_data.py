@@ -66,7 +66,10 @@ def main():
             if not name.endswith(".png"):
                 continue
             key = name[:-4]
-            text = captions.get((slot, key)) or captions.get(reused.get((slot, key), (None, None)))
+            # 写した絵は写しの元の一文で引く。手本の一文の表には、頼んだのに描かれなかった品
+            # （同じ絵の片方だけを頼んだ残り）の一文も残っていて、写した絵と食い違う
+            source = reused.get((slot, key))
+            text = (captions.get(source) if source else None) or captions.get((slot, key))
             if text:
                 used.setdefault(slot, {})[key] = text
             else:
