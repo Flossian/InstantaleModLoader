@@ -708,8 +708,24 @@ def set_attr(target: str, value: Any, *, alias_scan: Any = True,
     return original
 
 
+def _stale_caller(target: str, kind: str, generation: str | None) -> bool:
+    """呼んだ側の世代（`generation`）が今の世代でなければ真。包まずに降りる。
+
+    `ctx.wrap` / `ctx.patch` は ctx が作られた boot の世代を渡す。
+    MOD が import の見張りや別スレッドから遅れて包むと、その間に次の boot が世代を切り替えていることがある。
+    そのまま包むと、古い世代の MOD の層に**今の世代の印**が付き、次の boot の `unwrap_ours` も
+    `drop_stale_layers` も剥がさないので、同じ MOD の層が2段に重なる（TECH.md §3.5）。
+    次の boot がその MOD を当て直すので、ここで包まなくても欠けない。
+    """
+    if generation is None or generation == _generation:
+        return False
+    log_unrepeated("skip {} {} from a superseded boot (gen={}, now {})".format(
+        kind, target, generation, _generation))
+    return True
+
+
 def patch(target: str, *, alias_scan: Any = True, required: bool = True,
-          safe: bool = False) -> Callable:
+          safe: bool = False, generation: str | None = None) -> Callable:
     """対象を丸ごと差し替える。
 
     差し替えた関数には __original__ が付くので、中から元の実装を呼べる。
@@ -723,8 +739,12 @@ def patch(target: str, *, alias_scan: Any = True, required: bool = True,
 
     safe=True にすると、差し替えた関数が例外を投げてもゲームへ流さず、
     元の実装を呼んだ結果を返す（`_guard` を参照）。
+
+    `generation` は呼んだ側の boot の世代（`ctx.patch` が渡す）。今の世代と違えば差し替えない（`_stale_caller`）。
     """
     def decorator(func: Callable) -> Callable:
+        if _stale_caller(target, "patch", generation):
+            return func
         if _defer_if_not_imported(target, "patch"):
             return func
         try:
@@ -775,7 +795,8 @@ def patch(target: str, *, alias_scan: Any = True, required: bool = True,
             except Exception:
                 pass
         setattr(installed, PATCH_MARK, target)
-        setattr(installed, GENERATION_MARK, _generation)
+        # 印は呼んだ側の世代。上で降りなかった後に世代が替わっても、古い層として次の boot が剥がす。
+        setattr(installed, GENERATION_MARK, generation or _generation)
         setattr(installed, HOOK_MODULE_MARK, hook_module)
         setattr(installed, SELF_MARK, installed)
         _place(target, installed, func, "patch", safe=safe, alias_scan=alias_scan,
@@ -927,7 +948,7 @@ def _short_exc(exc: BaseException, limit: int = 160) -> str:
 
 
 def wrap(target: str, *, alias_scan: Any = True, required: bool = True,
-         safe: bool = False) -> Callable:
+         safe: bool = False, generation: str | None = None) -> Callable:
     """対象を包む。元の関数が第1引数として渡ってくる。
 
         @wrap("llama_cpp_runtime_completion:start")
@@ -944,8 +965,12 @@ def wrap(target: str, *, alias_scan: Any = True, required: bool = True,
     safe=True にすると、この関数が投げた例外をゲームへ流さず、
     元の動作に落とす（`_guard` を参照）。
     ゲームを落としたくないだけの `try`/`except` を毎回書く代わりに使える。
+
+    `generation` は呼んだ側の boot の世代（`ctx.wrap` が渡す）。今の世代と違えば包まない（`_stale_caller`）。
     """
     def decorator(func: Callable) -> Callable:
+        if _stale_caller(target, "wrap", generation):
+            return func
         if _defer_if_not_imported(target, "wrap"):
             return func
         try:
@@ -999,7 +1024,8 @@ def wrap(target: str, *, alias_scan: Any = True, required: bool = True,
         wrapper.__original__ = old
         wrapper.__wrapper_of__ = target
         setattr(wrapper, PATCH_MARK, target)
-        setattr(wrapper, GENERATION_MARK, _generation)
+        # 印は呼んだ側の世代（`patch` と同じ理由）。
+        setattr(wrapper, GENERATION_MARK, generation or _generation)
         setattr(wrapper, HOOK_MODULE_MARK, getattr(func, "__module__", None))
         setattr(wrapper, SELF_MARK, wrapper)
         _place(target, wrapper, func, "wrap", safe=safe, alias_scan=alias_scan,

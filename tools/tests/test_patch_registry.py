@@ -1762,6 +1762,55 @@ def main():
         else:
             ml._state["generation"] = saved_generation
 
+    print("=== 用済みの boot の ctx は包まない（層が2段に重ならない）===")
+    # 古い boot の MOD が import の見張りや別スレッドから遅れて包むと、その間に次の boot が
+    # 世代を切り替えていることがある。そのまま包むと古い層に今の世代の印が付き、
+    # 次の boot の当て直しで剥がされずに同じ MOD の層が2段に残っていた。
+    saved_generation = ml._state.get("generation")
+    stale_game = types.ModuleType("fakegame_stale")
+    stale_game.draw = lambda x: x
+    sys.modules["fakegame_stale"] = stale_game
+    try:
+        ml._state["generation"] = "gen-old"
+        P.set_generation("gen-old")
+        old_ctx = ml.ModContext(out_dir, os.path.join(_ROOT, "runtime"))
+        ml._state["generation"] = "gen-new"
+        P.set_generation("gen-new")
+        new_ctx = ml.ModContext(out_dir, os.path.join(_ROOT, "runtime"))
+
+        @new_ctx.wrap("fakegame_stale:draw")
+        def _new_layer(orig, x):
+            return orig(x) + 1
+
+        @old_ctx.wrap("fakegame_stale:draw")      # 切り替わった後に古い boot が包みに来た
+        def _old_layer(orig, x):
+            return orig(x) + 100
+
+        check(stale_game.draw(0) == 1,
+              "古い boot の ctx の wrap は包まない（今の世代の層だけが効く）: {}".format(stale_game.draw(0)))
+
+        @old_ctx.patch("fakegame_stale:draw", required=False)
+        def _old_patch(x):
+            return -1
+
+        check(stale_game.draw(0) == 1, "古い boot の ctx の patch も差し替えない")
+        check(getattr(stale_game.draw, P.GENERATION_MARK, None) == "gen-new",
+              "今の世代の層には今の世代の印")
+
+        # 世代を渡さない呼び方（ローダの当て直し `reapply`）は今まで通り今の世代で包む。
+        @P.wrap("fakegame_stale:draw")
+        def _loader_layer(orig, x):
+            return orig(x) + 10
+
+        check(stale_game.draw(0) == 11, "世代を渡さない wrap は今の世代として重ねる")
+    finally:
+        sys.modules.pop("fakegame_stale", None)
+        if saved_generation is None:
+            ml._state.pop("generation", None)
+        else:
+            ml._state["generation"] = saved_generation
+        P.set_generation("gen1")
+
     print("=== 書き込み先（out/ と state/） ===")
     # 役割で場所を分けているので、混ざっていないことと、
     # 置き場所を分ける前の `out/` に在るものを1度だけ引き取れることの2つを見る。

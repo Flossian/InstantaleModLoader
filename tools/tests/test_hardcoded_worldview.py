@@ -402,11 +402,23 @@ def main():
         loaded_name = mod.imagegen.CREATURE_FORMAT.format("sdcppcuda")
         loaded = types.ModuleType(loaded_name)
         loaded.generate_image_anime = lambda positive, negative, **k: None
+        # 人物と背景のモジュールは同じ関数の写しを持つ（`from manager import generate_image_real_lcm`）
+        shared_lcm = lambda positive, negative, **k: None
+        loaded.generate_image_real_lcm = shared_lcm
+        loaded_bg_name = mod.BACKGROUND_MODULE.format("sdcppcuda")
+        loaded_bg = types.ModuleType(loaded_bg_name)
+        loaded_bg.generate_image_real_lcm = shared_lcm
+        loaded_bg.generate_and_save_background = lambda *a, **k: None
         sys.modules[loaded_name] = loaded
+        sys.modules[loaded_bg_name] = loaded_bg
         try:
             mod.apply(ctx)
         finally:
             sys.modules.pop(loaded_name, None)
+            sys.modules.pop(loaded_bg_name, None)
+        check("同じ関数の写しは1回だけ包む（ローダが写しを張り替えるので2段に重なっていた）",
+              (loaded_name + ":generate_image_real_lcm" in ctx.hooks)
+              != (loaded_bg_name + ":generate_image_real_lcm" in ctx.hooks), sorted(ctx.hooks))
         check("読み込まれた方式に無い関数は包まない（台帳の「見つからない」に載せない）",
               loaded_name + ":generate_upscaled_image_anime" not in ctx.hooks
               and loaded_name + ":generate_image_anime" in ctx.hooks, sorted(ctx.hooks))

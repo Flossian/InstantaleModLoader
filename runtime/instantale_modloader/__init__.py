@@ -551,12 +551,16 @@ class ModContext:
     # -- patch モジュールへの入口 -------------------------------------------
     # ここで遅延 import しているのは循環 import を避けるため。
     # patch.py はこのモジュールから log / log_exc を import している。
+    # どちらも、この ctx を作った boot の世代を渡す。用済みの apply() が import の見張りや
+    # 別スレッドから遅れて包んでも、今の世代の層として重ならない（`patch._stale_caller`）。
     def patch(self, target: str, **kw):
         from . import patch as _patch
+        kw.setdefault("generation", self.generation)
         return _patch.patch(target, **kw)
 
     def wrap(self, target: str, **kw):
         from . import patch as _patch
+        kw.setdefault("generation", self.generation)
         return _patch.wrap(target, **kw)
 
     def resolve(self, target: str):

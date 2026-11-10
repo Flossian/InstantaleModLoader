@@ -282,6 +282,11 @@ def apply(ctx):
     # 掛け直しの時点はローダが `modloader.log` に `late-armed on` で残す（こちらの記録へは写さない）。
     hooks = wrap_outgoing(ctx, run, label="hardcoded worldview")
 
+    #: この apply() で包んだ素の関数（id）。人物と背景のモジュールは同じ関数の写し
+    #: （`generate_image_real_lcm`）を持ち、ローダは包むと写しを全部張り替えるので、
+    #: 2つ目を包むと同じ関数に層が2段重なっていた。
+    wrapped_raw = set()
+
     def strip_hook(target, positive_at, negative_at, kind):
         # 方式によって無い関数がある（sdcppcuda の `generate_upscaled_image_anime` は main_023 から無い）。
         # 読み込まれた方式に名前が無ければ包まない。包もうとすると台帳の「対象が見つからない」に載り、
@@ -291,6 +296,12 @@ def apply(ctx):
         if module is not None and getattr(module, func, None) is None and \
                 not patch.still_loading(module_name):
             return
+        current = getattr(module, func, None) if module is not None else None
+        if current is not None:
+            raw = id(patch.unwrap(current)[0])
+            if raw in wrapped_raw:
+                return
+            wrapped_raw.add(raw)
 
         @ctx.wrap(target, required=False, safe=True)
         def strip(orig, *args, **kwargs):
