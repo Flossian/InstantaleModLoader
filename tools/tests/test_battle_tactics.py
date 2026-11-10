@@ -15,6 +15,9 @@ VERIFICATION.md の 3xx の表）。フック越しに通すのは、後始末�
   復元     … 審判の生の戻り（辞書でもオブジェクトでも）から
              text_status の毎ターン効果と AttributeEffect を抜き出せる
   倍率     … AttributeEffect が (状態異常名, 説明, 倍率の帳簿) になる
+  対象     … 味方側の手の効果の対象を target_type に合う側へ揃える。敵向けで敵が居なければ
+             地の文に名前が出た敵か先頭の敵（全体なら敵全員）、味方向けの敵は落として手番の者か味方全員。
+             表に無いスキル・敵の手番は触らない
 """
 import importlib.util
 import io
@@ -730,6 +733,164 @@ check("basic attack: other referees and other text are untouched",
 _ctx = _fresh()
 check("basic attack: the outgoing text passes through the loader's hook",
       _ml.llm.CHAT_TARGET in _ctx.hooks, sorted(_ctx.hooks))
+
+# ---------------------------------------------------------------- 攻撃とスキルの対象
+# 味方側の手の効果の対象を、効果の向きに合う側へ揃える。純関数の側。
+# 敵は (辞書の鍵, 表示名)。審判の対象は鍵で書く（同じ名前の敵が並ぶと連番付き。GAME.md §2.10.1）。
+_bt = mod.enemy_targets
+_king, _gob1, _gob2 = ("灰の王", "灰の王"), ("ゴブリン1", "ゴブリン"), ("ゴブリン2", "ゴブリン")
+check("target: an enemy target is left alone",
+      _bt(["ゴブリン1"], [_gob1], "エリスがゴブリンを斬る") is None)
+check("target: an ally-only target moves to the key of the enemy named in the narration",
+      _bt(["メイ"], [_king, _gob1], "エリスの刃がゴブリンを裂く") == ["ゴブリン1"])
+check("target: the earliest name wins, then the longer word, then the earlier enemy",
+      _bt(["メイ"], [_gob1, ("ゴブリン王", "ゴブリン王"), _king], "灰の王の前でゴブリン王が倒れる") == ["灰の王"]
+      and _bt(["メイ"], [_gob1, ("ゴブリン王", "ゴブリン王")], "ゴブリン王が倒れる") == ["ゴブリン王"]
+      and _bt(["メイ"], [_gob1, _gob2], "ゴブリンが倒れる") == ["ゴブリン1"]
+      and _bt(["メイ"], [_gob1, _gob2], "ゴブリン2が倒れる") == ["ゴブリン2"])
+check("target: with no name in the narration, the first enemy",
+      _bt(["エリス"], [_king, _gob1], "刃が空を切る") == ["灰の王"])
+check("target: allies mixed with an enemy are dropped",
+      _bt(["メイ", "ゴブリン1"], [_gob1]) == ["ゴブリン1"])
+check("target: the enemy's display name also counts as the enemy",
+      _bt(["ゴブリン"], [_gob1]) is None)
+check("target: an empty target and no enemies are left alone",
+      _bt([], [_gob1]) is None and _bt(["メイ"], []) is None and _bt(None, [_gob1]) is None)
+check("target: a bare string target is read as one name",
+      _bt("メイ", [_gob1]) == ["ゴブリン1"])
+check("target: an area attack on allies only moves to every enemy",
+      _bt(["メイ"], [_gob1, _gob2], "ゴブリン2が倒れる", everyone=True) == ["ゴブリン1", "ゴブリン2"])
+
+_at = mod.ally_targets
+check("target: an ally effect without enemies is left alone",
+      _at(["メイ", "エリス"], [_gob1], ["エリス"]) is None and _at([], [_gob1], ["エリス"]) is None)
+check("target: enemies are dropped from an ally effect",
+      _at(["エリス", "ゴブリン1"], [_gob1], ["メイ"]) == ["エリス"])
+check("target: an ally effect on enemies only goes to the fallback",
+      _at(["ゴブリン"], [_gob1], ["メイ"]) == ["メイ"])
+check("target: with no fallback the effect loses its target rather than buff the enemy",
+      _at(["ゴブリン1"], [_gob1], []) == [])
+
+_et = mod.effect_targets
+check("target: effects are sorted by target_type",
+      _et(["メイ"], "single_enemy", [_gob1]) == ["ゴブリン1"]
+      and _et(["メイ"], "all_enemies", [_gob1, _gob2]) == ["ゴブリン1", "ゴブリン2"]
+      and _et(["ゴブリン1"], "self", [_gob1], actor_name="メイ") == ["メイ"]
+      and _et(["ゴブリン1"], "single_ally", [_gob1], actor_name="メイ") == ["メイ"]
+      and _et(["ゴブリン1"], "all_allies", [_gob1], actor_name="メイ", allies=["エリス", "メイ"])
+      == ["エリス", "メイ"])
+check("target: a heal on allies and an unknown target_type are left alone",
+      _et(["エリス"], "all_allies", [_gob1], actor_name="メイ", allies=["エリス", "メイ"]) is None
+      and _et(["エリス"], "single_enemy_or_ally", [_gob1]) is None
+      and _et(["エリス"], None, [_gob1]) is None)
+
+# フック越し。主人公の通常攻撃（戻りは pydantic のモデル相当）と、仲間の手（辞書）。
+_ctx = _fresh()
+_hero = types.SimpleNamespace(name="エリス", max_hp=300, current_hp=300, experience_level=20, status={})
+_mei = types.SimpleNamespace(name="メイ", max_hp=300, current_hp=300, experience_level=20, status={})
+_goblin = types.SimpleNamespace(name="ゴブリン", max_hp=200, current_hp=200, experience_level=20, status={})
+_fallen = types.SimpleNamespace(name="灰の王", max_hp=200, current_hp=0, experience_level=20, status={})
+_enemies = {"灰の王1": _fallen, "ゴブリン1": _goblin}
+_effect = types.SimpleNamespace(effect_id=1, targets=["メイ"], modifications=[])
+_reply = types.SimpleNamespace(narration="エリスの刃が空を切る", skill_effects=[_effect],
+                               additional_effects=[])
+_got = _ctx.hooks["scripts.llm.llm_manager_battle:referee_player_attack_new_new"](
+    lambda *a, **k: _reply, "log", _hero, {}, _enemies)
+check("target hook: the hero's attack on an ally moves to a standing enemy's key",
+      _got is _reply and _effect.targets == ["ゴブリン1"], repr(_effect.targets))
+check("target hook: logged",
+      "target fixed: エリス's 通常攻撃 #1 (single_enemy) at ['メイ'] moved to ['ゴブリン1']" in _log(), _log())
+
+_npc_reply = {"narration": "メイがゴブリンへ斬りかかる", "skill": "通常攻撃",
+              "skill_effects": [{"effect_id": 1, "targets": ["エリス"], "modifications": []}]}
+_ctx.hooks["scripts.llm.llm_manager_battle:referee_npc"](
+    lambda *a, **k: _npc_reply, _hero, "log", "メイ", _mei, "味方陣営", {}, _enemies)
+check("target hook: an ally's basic attack on the hero moves to the enemy",
+      _npc_reply["skill_effects"][0]["targets"] == ["ゴブリン1"], repr(_npc_reply))
+
+# 仲間のスキルは本人の `skills` の表で効果の向きを引く。
+_mei.skills = {
+    "癒しの祈り": {"effects": [{"type": "instant_heal", "power": "normal", "target_type": "all_allies"}]},
+    "見切りの構え": {"effects": [{"type": "buff", "power": "normal", "target_type": "self",
+                                  "attribute_type": "dex", "duration": 2},
+                                 {"type": "debuff", "power": "normal", "target_type": "single_enemy",
+                                  "attribute_type": "dex", "duration": 2}]},
+}
+_skill_reply = {"narration": "メイが祈る", "skill": "癒しの祈り",
+                "skill_effects": [{"effect_id": 1, "targets": ["エリス"], "modifications": []}]}
+_ctx.hooks["scripts.llm.llm_manager_battle:referee_npc"](
+    lambda *a, **k: _skill_reply, _hero, "log", "メイ", _mei, "味方陣営", {}, _enemies)
+check("target hook: an ally's heal on the hero is untouched",
+      _skill_reply["skill_effects"][0]["targets"] == ["エリス"], repr(_skill_reply))
+
+_buff_reply = {"narration": "メイがゴブリンの動きを読む", "skill": "見切りの構え",
+               "skill_effects": [{"effect_id": 1, "targets": ["ゴブリン1"], "modifications": []},
+                                 {"effect_id": 2, "targets": ["エリス"], "modifications": []}]}
+_ctx.hooks["scripts.llm.llm_manager_battle:referee_npc"](
+    lambda *a, **k: _buff_reply, _hero, "log", "メイ", _mei, "味方陣営", {}, _enemies)
+check("target hook: an ally's self buff on the enemy goes back to the ally, the debuff to the enemy",
+      [e["targets"] for e in _buff_reply["skill_effects"]] == [["メイ"], ["ゴブリン1"]], repr(_buff_reply))
+
+_heal_reply = {"narration": "メイが祈る", "skill": "癒しの祈り",
+               "skill_effects": [{"effect_id": 1, "targets": ["ゴブリン1"], "modifications": []}]}
+_saved_find_app = _ui.find_app
+_ui.find_app = lambda: types.SimpleNamespace(current_enemy_dict=_enemies, player=_hero)
+_saved_members = _ui.party_member_ids, _ui.character_of
+_ui.party_member_ids = lambda app: ["7"]
+_ui.character_of = lambda app, member_id: _mei
+try:
+    _ctx.hooks["scripts.llm.llm_manager_battle:referee_npc"](
+        lambda *a, **k: _heal_reply, _hero, "log", "メイ", _mei, "味方陣営", {}, _enemies)
+finally:
+    _ui.find_app = _saved_find_app
+    _ui.party_member_ids, _ui.character_of = _saved_members
+check("target hook: an ally's party heal on the enemy goes to the whole party",
+      _heal_reply["skill_effects"][0]["targets"] == ["エリス", "メイ"], repr(_heal_reply))
+
+_unknown_reply = {"narration": "メイが何かをする", "skill": "知らない技",
+                  "skill_effects": [{"effect_id": 1, "targets": ["エリス"], "modifications": []}]}
+_ctx.hooks["scripts.llm.llm_manager_battle:referee_npc"](
+    lambda *a, **k: _unknown_reply, _hero, "log", "メイ", _mei, "味方陣営", {}, _enemies)
+_noskill_reply = {"narration": "メイが動く",
+                  "skill_effects": [{"effect_id": 1, "targets": ["エリス"], "modifications": []}]}
+_ctx.hooks["scripts.llm.llm_manager_battle:referee_npc"](
+    lambda *a, **k: _noskill_reply, _hero, "log", "メイ", _mei, "味方陣営", {}, _enemies)
+check("target hook: a skill missing from the table, or no skill at all, is untouched",
+      _unknown_reply["skill_effects"][0]["targets"] == ["エリス"]
+      and _noskill_reply["skill_effects"][0]["targets"] == ["エリス"], repr((_unknown_reply, _noskill_reply)))
+
+# 主人公のスキルは審判の引数で来る（名前でも、表の1件でも読む）。
+_hero.skills = {"雷鳴": {"effects": [{"type": "instant_damage", "power": "strong",
+                                      "target_type": "all_enemies"}]}}
+_hero_skill = types.SimpleNamespace(effect_id=1, targets=["メイ"], modifications=[])
+_ctx.hooks["scripts.llm.llm_manager_battle:referee_player_skill_new_new"](
+    lambda *a, **k: types.SimpleNamespace(narration="雷が落ちる", skill_effects=[_hero_skill]),
+    "log", _hero, "雷鳴", {}, {"ゴブリン1": _goblin, "ゴブリン2": _goblin})
+check("target hook: the hero's area skill on an ally hits every enemy (skill by name)",
+      _hero_skill.targets == ["ゴブリン1", "ゴブリン2"], repr(_hero_skill.targets))
+_hero_skill2 = {"effect_id": 1, "targets": ["エリス"], "modifications": []}
+_ctx.hooks["scripts.llm.llm_manager_battle:referee_player_skill_new_new"](
+    lambda *a, **k: {"narration": "x", "skill_effects": [_hero_skill2]},
+    "log", _hero, {"name": "斬撃", "effects": [{"type": "instant_damage", "target_type": "single_enemy"}]},
+    {}, _enemies)
+check("target hook: the hero's skill handed as a table entry is read too",
+      _hero_skill2["targets"] == ["ゴブリン1"], repr(_hero_skill2))
+
+_enemy_reply = {"narration": "ゴブリンが棍棒を振るう", "skill": "通常攻撃",
+                "skill_effects": [{"effect_id": 1, "targets": ["ゴブリン1"], "modifications": []}]}
+_ctx.hooks["scripts.llm.llm_manager_battle:referee_npc"](
+    lambda *a, **k: _enemy_reply, _hero, "log", "ゴブリン1", _goblin, "敵側", {}, _enemies)
+check("target hook: the enemy's turn is untouched",
+      _enemy_reply["skill_effects"][0]["targets"] == ["ゴブリン1"], repr(_enemy_reply))
+
+_kw_reply = {"narration": "メイがゴブリンへ", "skill": "通常攻撃",
+             "skill_effects": [{"effect_id": 1, "targets": ["メイ"], "modifications": []}]}
+_ctx.hooks["scripts.llm.llm_manager_battle:referee_npc"](
+    lambda *a, **k: _kw_reply, player=_hero, combat_log="log", actor_name="メイ", actor=_mei,
+    side="味方陣営", party={}, current_enemy_dict=_enemies)
+check("target hook: keyword arguments are read too",
+      _kw_reply["skill_effects"][0]["targets"] == ["ゴブリン1"], repr(_kw_reply))
+check("target hook: nothing was swallowed", not _ctx.errors, _ctx.errors)
 
 print()
 if failures:

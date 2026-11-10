@@ -106,7 +106,7 @@
 | `316_bounty_hunter` | 成立（[§2.58](verification/2.58.md) / [§2.60](verification/2.60.md)、前金も [§3.35](verification/3.35.md)）。残るのは既定の設定での出方（#8）と、移動で読み込みが延びた回の重なり（#9）（[§3.35](verification/3.35.md)）。版4 の右の欄は成立（[§3.91](verification/3.91.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `317_reputation` | オフラインと偏り 240 回は済（[§2.63](verification/2.63.md)）、人物欄は決着。版6の名声・悪名・呼び名・評判の画面は終盤のセーブの写しで実機成立。闘技場の勝ちが名声に入るのも成立（読み込みの後の試合の鍵の取り違えを直した。[§3.126](verification/3.126.md)）。残るのは編纂の質・据え置き（[§3.36](verification/3.36.md)）。前後の処理をローダの窓口へ移した（[§3.113](verification/3.113.md)） |
 | `318_area_difficulty_growth` | 成立（版2。[§2.67](verification/2.67.md)）。版4 は未（[§3.78](verification/3.78.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
-| `319_battle_tactics` | 版18 の式・回避・見切りは成立。レベル相応の装備での釣り合いは未（[§3.77](verification/3.77.md)）。版17 までの経緯は [§2.69](verification/2.69.md)〜[§2.71](verification/2.71.md) / [§3.45](verification/3.45.md)。版20 の防御のボタンは実機で成立。最初はその手番の審判が `342_`（当時 920）の足した演出の値で落ちたが、その版2 で直した後は手番が進んで戦闘が終わった。防御の次の手番の一覧も成立（[§3.109](verification/3.109.md)） |
+| `319_battle_tactics` | 版18 の式・回避・見切りは成立。レベル相応の装備での釣り合いは未（[§3.77](verification/3.77.md)）。版17 までの経緯は [§2.69](verification/2.69.md)〜[§2.71](verification/2.71.md) / [§3.45](verification/3.45.md)。版20 の防御のボタンは実機で成立。最初はその手番の審判が `342_`（当時 920）の足した演出の値で落ちたが、その版2 で直した後は手番が進んで戦闘が終わった。防御の次の手番の一覧も成立（[§3.109](verification/3.109.md)）。版22 の攻撃とスキルの対象の向け直しはオフラインまで（[§3.127](verification/3.127.md)） |
 | `320_guild_adventurer_recruit` | 決着（[§2.73](verification/2.73.md) / [§2.74](verification/2.74.md)）。採番の衝突の直しは未（[§3.39](verification/3.39.md)）。版5 の宣言型の口への乗せ替えは実機で成立（出る・保存と読み直し）。押す（生成）も成立（[§3.109](verification/3.109.md)） |
 | `321_area_chronicle` | 成立（[§2.75](verification/2.75.md) / [§2.76](verification/2.76.md)）。残るのは言及率の前後比較（[§3.40](verification/3.40.md)）。前後の処理をローダの窓口へ移した。実機は未（[§3.113](verification/3.113.md)） |
 | `322_battle_bgm` | 成立（[§2.79](verification/2.79.md)）。残るのはロード直後（[§3.42](verification/3.42.md)） |
@@ -361,6 +361,7 @@ crash_log.txt の 114 件のうち、35件が `llama-server` 起動失敗、40�
 - [3.124 依頼から帰還すると日付が進む（`344_quest_return_days`）: 攻略・放棄・道中の依頼で実機成立](verification/3.124.md)
 - [3.125 現在地の下に日付を表示する（`345_date_display`）: 表示・はみ出しの対策・日数の更新・ロード・設定の反映は実機で成立](verification/3.125.md)
 - [3.126 v1.20.0 のリリース前の動作確認: 見つけた不具合6件を直し、実機で成立](verification/3.126.md)
+- [3.127 攻撃やスキルで仲間を斬る（`319_battle_tactics` 版22）: 原因は審判が選ぶ対象・味方側の手の効果を向きに合う側へ揃える・オフラインで通過・実機は未](verification/3.127.md)
 <!-- verification-index: end -->
 
 ---

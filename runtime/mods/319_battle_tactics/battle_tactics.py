@@ -93,6 +93,21 @@ k は審判の power で決まる（weak 1.0 〜 extreme 約 2.45）。
 その手のダメージは同じ判定で 0 か半分にし、地の文の後ろに「（〇〇は攻撃をかわした）」を出す。
 味方側が全部かわした手では、被弾の画面の揺れ（`InstanTaleHUD.shake_window`）も止める。
 
+## 5. 攻撃とスキルの対象
+
+審判が選べる対象には手番の側の名前も入っていて、地の文では敵を斬りながら、
+対象だけ仲間や自分にした戻りがある。そのまま仲間が斬られる（GAME.md §2.10.1）。
+スキルでも、全体攻撃が仲間に当たる戻りと、自分や味方への強化が敵に掛かる戻りがある。
+主人公の通常攻撃とスキル、仲間の手の戻りで、`skill_effects` の対象を効果の `target_type` に合う側へ、
+ゲームが変換する前に揃える:
+
+  * 敵向け（`single_enemy` / `all_enemies`）で敵が居なければ、1体なら地の文に名前が出た敵か先頭の敵、
+    全体なら敵全員にする。書くのは敵の辞書の鍵
+  * 味方向け（`self` / `single_ally` / `all_allies`）に敵が入っていれば落とし、誰も残らなければ
+    手番の者（全体なら味方全員）にする
+
+`additional_effects`（反撃や武器の反動の描写が多い）、自由入力の手、敵の手番は触らない。
+
 ## 触らないもの
 
 即時回復・逃走・`physical_integrity`・経験値・戦利品はゲームのまま。
@@ -283,6 +298,99 @@ def steady_basic_attack(text):
             or BASIC_ATTACK_RULE in text:
         return text
     return text.replace(BASIC_ATTACK_LINE, BASIC_ATTACK_LINE + BASIC_ATTACK_RULE, 1)
+
+
+# 通常攻撃のスキル名（セーブのスキル表と、仲間の審判の戻りの `skill`）。
+BASIC_ATTACK_SKILL = "通常攻撃"
+# 審判 `referee_npc` の `side` と 1手の `character_side` で、敵の手番を表す語（GAME.md §2.10）。
+GAME_ENEMY_SIDE = "敵側"
+
+
+def write_field(holder, name, value):
+    """`read_field` の書く側。辞書でも pydantic のモデルでも同じように書く。"""
+    if isinstance(holder, dict):
+        holder[name] = value
+    else:
+        setattr(holder, name, value)
+
+
+# 効果の `target_type`（スキルの表の値）→ 対象が居るべき側。表に無い語の効果は触らない。
+ENEMY_TARGET_TYPES = {"single_enemy": "one", "all_enemies": "all"}
+ALLY_TARGET_TYPES = {"self": "self", "single_ally": "one", "all_allies": "all"}
+
+
+def _target_list(targets):
+    if isinstance(targets, str):
+        targets = [targets]
+    return [str(t) for t in (targets or [])]
+
+
+def _opponent_pairs(opponents):
+    return [(str(key), str(name or key)) for key, name in opponents if key]
+
+
+def enemy_targets(targets, opponents, narration="", everyone=False):
+    """敵向けの効果の対象を敵へ寄せた列。直さなくてよければ None。
+
+    審判が選べる対象には手番の側の名前も入っていて、地の文では敵を斬りながら
+    対象だけ仲間や自分にした戻りがある（GAME.md §2.10.1）。
+    `opponents` は敵の `[(鍵, 表示名)]`（生きている者が先）。審判の対象は敵の辞書の鍵
+    （同じ名前の敵が並ぶと `<名前>2` のような連番付き）で書くので、寄せ先も鍵にする。
+    敵が1人でも入っていれば、味方の名前だけを落とす。
+    1人も入っていなければ、`everyone`（全体の効果）なら先頭から並べた敵全員にする。
+    1体の効果なら、地の文に鍵か表示名が出た敵（先に出た者、同じ位置なら長い語、
+    それも同じなら並びの先）、出ていなければ先頭の敵1人にする。
+    対象が空の戻りは触らない（効果を外した手）。
+    """
+    targets = _target_list(targets)
+    opponents = _opponent_pairs(opponents)
+    if not targets or not opponents:
+        return None
+    accepted = set(key for key, _name in opponents) | set(name for _key, name in opponents)
+    kept = [t for t in targets if t in accepted]
+    if kept:
+        return kept if len(kept) != len(targets) else None
+    if everyone:
+        return [key for key, _name in opponents]
+    text = narration if isinstance(narration, str) else ""
+    named = sorted((text.find(word), -len(word), index, key)
+                   for index, (key, name) in enumerate(opponents)
+                   for word in set((key, name)) if word in text)
+    return [named[0][3] if named else opponents[0][0]]
+
+
+def ally_targets(targets, opponents, fallback=()):
+    """味方向けの効果（強化・回復・逃走）の対象から敵を落とした列。直さなくてよければ None。
+
+    敵を落として誰も残らなければ `fallback`（自分向けなら手番の者、全体なら味方全員）にする。
+    `fallback` も空なら空の列を返す（敵を強化するよりは効果を外すほうがまし）。
+    """
+    targets = _target_list(targets)
+    opponents = _opponent_pairs(opponents)
+    enemy_words = set(key for key, _name in opponents) | set(name for _key, name in opponents)
+    if not targets or not any(t in enemy_words for t in targets):
+        return None
+    kept = [t for t in targets if t not in enemy_words]
+    return kept or [str(name) for name in fallback if name]
+
+
+def effect_targets(targets, target_type, opponents, narration="", actor_name=None, allies=()):
+    """味方側の手の効果1件の対象を、効果の `target_type` に合う側へ揃える。直さなくてよければ None。
+
+    敵向け（`single_enemy` / `all_enemies`）は `enemy_targets`、味方向け（`self` / `single_ally` /
+    `all_allies`）は `ally_targets`。`allies` は味方の表示名（主人公と仲間）。表に無い語は触らない。
+    """
+    reach = ENEMY_TARGET_TYPES.get(target_type)
+    if reach is not None:
+        return enemy_targets(targets, opponents, narration, everyone=(reach == "all"))
+    reach = ALLY_TARGET_TYPES.get(target_type)
+    if reach is None:
+        return None
+    if reach == "all":
+        fallback = list(allies)
+    else:
+        fallback = [actor_name] if actor_name else []
+    return ally_targets(targets, opponents, fallback)
 
 
 def game_k(power):
@@ -1231,12 +1339,75 @@ def apply(ctx):
         say(app, "（{}は防御の構えを取った。次の行動まで受けるダメージが減る）"
             .format(name))
 
-    def watch_referee(target, actor_index, command_index=None, name_index=None):
+    def skill_record(skill, actor):
+        """スキル（名前か表の1件）→ 表の1件（`effects` を持つ辞書）。読めなければ None。"""
+        if isinstance(skill, dict) and isinstance(skill.get("effects"), list):
+            return skill
+        name = read_field(skill, "name", None) if not isinstance(skill, str) else skill
+        skills = frames.attr(actor, "skills", None)
+        if not isinstance(name, str) or not isinstance(skills, dict):
+            return None
+        found = skills.get(name)
+        return found if isinstance(found, dict) and isinstance(found.get("effects"), list) else None
+
+    def target_type_of(record, effect_id):
+        """表の1件と `effect_id`（1 始まり）→ その効果の `target_type`。読めなければ None。"""
+        try:
+            effect = record["effects"][int(effect_id) - 1]
+        except (TypeError, ValueError, IndexError, KeyError):
+            return None
+        return effect.get("target_type") if isinstance(effect, dict) else None
+
+    def keep_targets_on_side(result, actor, actor_name, enemies, side, skill):
+        """味方側の手の効果の対象を、効果の `target_type` に合う側へ揃える。
+
+        ゲームが審判の戻りを変換する前に書き換える。`skill` はスキルの名前か表の1件。
+        通常攻撃はどの効果も `single_enemy` として扱い、ほかは表の `target_type` を引く。
+        スキルが読めなければ触らない。
+        敵の手番は触らない（地の文が敵の被弾を語る戻りもあり、味方へ移すと食い違う。GAME.md §2.10.1）。
+        """
+        if result is None or skill is None or not isinstance(enemies, dict) or not enemies:
+            return
+        if side == GAME_ENEMY_SIDE or any(holder is actor for holder in enemies.values()):
+            return
+        skill_name = skill if isinstance(skill, str) else read_field(skill, "name", "?")
+        record = None
+        if skill_name != BASIC_ATTACK_SKILL:
+            record = skill_record(skill, actor)
+            if record is None:
+                return
+        alive, fallen = [], []
+        for key, holder in list(enemies.items()):
+            hp = frames.attr(holder, "current_hp", None)
+            down = isinstance(hp, (int, float)) and hp <= 0
+            (fallen if down else alive).append((str(key), name_of(holder, key)))
+        actor_name = actor_name or name_of(actor)
+        narration = read_field(result, "narration", "")
+        allies = None
+        for entry in read_field(result, "skill_effects") or []:
+            effect_id = read_field(entry, "effect_id")
+            target_type = "single_enemy" if record is None else target_type_of(record, effect_id)
+            if target_type == "all_allies" and allies is None:
+                allies = [name for team, _key, name, _holder in combatants(ui.find_app())
+                          if team == ALLY_SIDE]
+            before = read_field(entry, "targets")
+            after = effect_targets(before, target_type, alive + fallen, narration,
+                                   actor_name, allies or ())
+            if after is None:
+                continue
+            write_field(entry, "targets", after)
+            write("target fixed: {}'s {} #{} ({}) at {} moved to {}".format(
+                actor_name, skill_name, effect_id, target_type, list(before or []), after))
+
+    def watch_referee(target, actor_index, command_index=None, name_index=None,
+                      enemies_index=None, side_index=None, skill_index=None):
         """審判の呼び出しを包む。呼ぶ前に回避を振って頼み文へ足し、自由入力なら防御の言葉を拾う。
 
         引数は名前を付け替えずにそのまま渡す（キーワードで呼ばれても二重にならない）。
         頼み文の目印は、NPC なら「である'<actor_name>'の行動ターン」、主人公なら
         「今、プレイヤーである<名前>は」（`output_data` の実記録の文面）。
+        `enemies_index` を渡した審判は、戻りの効果の対象を効果の向きに合う側へ揃える
+        （`keep_targets_on_side`。スキルは `skill_index` の引数、仲間の手は戻りの `skill` で引く）。
         """
         def pick(args, kwargs, index, name):
             return args[index] if len(args) > index else kwargs.get(name)
@@ -1257,6 +1428,22 @@ def apply(ctx):
                 result = orig(*args, **kwargs)
             finally:
                 state["hints"].pop(marker, None)
+            if enemies_index is not None:
+                try:
+                    if name_index is not None:
+                        skill = read_field(result, "skill")          # 仲間の手: 戻りの選んだスキル
+                    elif skill_index is not None:
+                        skill = pick(args, kwargs, skill_index, "skill")
+                    else:
+                        skill = BASIC_ATTACK_SKILL                    # 主人公の通常攻撃
+                    keep_targets_on_side(
+                        result, actor,
+                        pick(args, kwargs, name_index, "actor_name") if name_index is not None else None,
+                        pick(args, kwargs, enemies_index, "current_enemy_dict"),
+                        pick(args, kwargs, side_index, "side") if side_index is not None else None,
+                        skill)
+                except Exception:
+                    ctx.log_exc("battle tactics: cannot check the targets")
             if command_index is not None:
                 command = pick(args, kwargs, command_index, "command")
                 if isinstance(command, str) and command.strip() == GUARD_COMMAND and actor is not None:
@@ -1271,9 +1458,13 @@ def apply(ctx):
         return referee
 
     # 審判の入口（GAME.md §2.10.1）。仲間と敵は referee_npc、主人公は通常攻撃・スキル・自由入力
-    watch_referee("referee_npc", 3, name_index=2)
-    watch_referee("referee_player_attack_new_new", 1)
-    watch_referee("referee_player_skill_new_new", 1)
+    # 署名は recon の値: referee_npc (player, combat_log, actor_name, actor, side, party, current_enemy_dict)、
+    # referee_player_attack_new_new (combat_log, actor, party, current_enemy_dict)、
+    # referee_player_skill_new_new (combat_log, actor, skill, party, current_enemy_dict)。
+    # 自由入力の審判は対象を揃えない（味方へ向ける手をプレイヤーが書くことがある）
+    watch_referee("referee_npc", 3, name_index=2, enemies_index=6, side_index=4)
+    watch_referee("referee_player_attack_new_new", 1, enemies_index=3)
+    watch_referee("referee_player_skill_new_new", 1, enemies_index=4, skill_index=2)
     watch_referee("referee_player_any_input_new_new", 1, command_index=2)
     watch_referee("referee_player_any_input_new_new_with_skill", 1, command_index=2)
 
