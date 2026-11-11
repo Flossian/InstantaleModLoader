@@ -651,6 +651,11 @@
     "sheet": "i21",
     "source": "modern_sf/modern_gear.png",
     "name": "現代とSF_小型武器"
+   },
+   {
+    "sheet": "i111",
+    "source": "modern_sf/weapon_modern_i111.png",
+    "name": "武器_道具とスポーツ用品（現代）"
    }
   ]
  },
@@ -675,6 +680,34 @@
     "sheet": "ipa3",
     "source": "modern_sf/wasteland_clubs.png",
     "name": "現代とSF_荒野の手製の棍棒と手斧（描き直し）"
+   }
+  ]
+ },
+ {
+  "id": "weapon_highfantasy",
+  "setting": "SET_WEAPON_HIGHFANTASY",
+  "group": "武器",
+  "label": "武器_ハイファンタジー",
+  "default": "mix",
+  "sources": [
+   {
+    "sheet": "i105",
+    "source": "medieval_weapons/weapon_highfantasy_i105.png",
+    "name": "武器_白銀と金の武器"
+   }
+  ]
+ },
+ {
+  "id": "weapon_darkfantasy",
+  "setting": "SET_WEAPON_DARKFANTASY",
+  "group": "武器",
+  "label": "武器_ダークファンタジー",
+  "default": "mix",
+  "sources": [
+   {
+    "sheet": "i106",
+    "source": "medieval_weapons/weapon_darkfantasy_i106.png",
+    "name": "武器_黒鉄と骨の武器"
    }
   ]
  },
@@ -704,6 +737,16 @@
     "sheet": "wmd1",
     "source": "wear/wear_medical_medieval.png",
     "name": "防具類_中世とファンタジーの医療の装い"
+   },
+   {
+    "sheet": "wlv1",
+    "source": "wear/wear_leather_vest.png",
+    "name": "防具類_袖の無い革の胴"
+   },
+   {
+    "sheet": "wlc1",
+    "source": "wear/wear_leather_chest.png",
+    "name": "防具類_革の胸当て"
    }
   ]
  },
@@ -752,6 +795,11 @@
     "sheet": "wla1",
     "source": "wear/wear_light_armor.png",
     "name": "防具類_軽い鎧"
+   },
+   {
+    "sheet": "wha1",
+    "source": "wear/wear_highfantasy_accessory.png",
+    "name": "防具類_ハイファンタジーの装身具"
    }
   ]
  },
@@ -926,6 +974,11 @@
     "sheet": "wmd2",
     "source": "wear/wear_medical_modern.png",
     "name": "防具類_現代とSFの医療の装い"
+   },
+   {
+    "sheet": "wma1",
+    "source": "wear/wear_modern_accessory.png",
+    "name": "防具類_現代の装身具"
    }
   ]
  },
@@ -950,6 +1003,11 @@
     "sheet": "wch1",
     "source": "wear/wear_cyber_headgear_redo.png",
     "name": "防具類_サイバーパンクの頭（描き直し）"
+   },
+   {
+    "sheet": "wca1",
+    "source": "wear/wear_cyber_armor.png",
+    "name": "防具類_サイバーパンクの胴"
    }
   ]
  },
@@ -974,6 +1032,11 @@
     "sheet": "w00",
     "source": "wear/wear_sf.png",
     "name": "防具類_SF"
+   },
+   {
+    "sheet": "i109",
+    "source": "wear/wear_sf_shield_i109.png",
+    "name": "防具類_SFの盾"
    }
   ]
  },
@@ -988,6 +1051,11 @@
     "sheet": "w04",
     "source": "wear/wear_steampunk.png",
     "name": "防具類_スチームパンク"
+   },
+   {
+    "sheet": "wsa1",
+    "source": "wear/wear_steampunk_armor_shields.png",
+    "name": "防具類_スチームパンクの胴と盾"
    }
   ]
  },
@@ -1026,6 +1094,11 @@
     "sheet": "w17",
     "source": "wear/wear_western.png",
     "name": "防具類_西部劇"
+   },
+   {
+    "sheet": "wwa1",
+    "source": "wear/wear_western_armor_hats.png",
+    "name": "防具類_西部劇の胴と帽子"
    }
   ]
  },
@@ -1274,6 +1347,11 @@
     "sheet": "i82",
     "source": "food/food_basic_i82.png",
     "name": "食料_酒と飲み物"
+   },
+   {
+    "sheet": "i92",
+    "source": "food/drink_vials_mead.png",
+    "name": "食料_飲み物の小瓶と蜂蜜酒"
    }
   ]
  },
@@ -1327,6 +1405,11 @@
     "sheet": "i65",
     "source": "food/meal_earlymodern.png",
     "name": "食料_近世の食事"
+   },
+   {
+    "sheet": "i97",
+    "source": "food/food_earlymodern_i97.png",
+    "name": "食料_近世の保存食と飲み物"
    }
   ]
  },
@@ -1414,6 +1497,20 @@
   ]
  },
  {
+  "id": "medic_earlymodern",
+  "setting": "SET_MEDIC_EARLYMODERN",
+  "group": "医療品",
+  "label": "医療品_近世",
+  "default": "separate",
+  "sources": [
+   {
+    "sheet": "i98",
+    "source": "medical/medic_earlymodern_i98.png",
+    "name": "医療品_近世の薬と医療品"
+   }
+  ]
+ },
+ {
   "id": "material_magic",
   "setting": "SET_MATERIAL_MAGIC",
   "group": "素材",
@@ -1483,6 +1580,11 @@
     "sheet": "i79",
     "source": "monster_materials/material_creature_i79.png",
     "name": "素材_牙・角・器官"
+   },
+   {
+    "sheet": "i101",
+    "source": "monster_materials/material_creature_i101.png",
+    "name": "素材_獣の皮と骨"
    }
   ]
  },
@@ -1497,6 +1599,16 @@
     "sheet": "i25",
     "source": "modern_sf/modern_industrial.png",
     "name": "現代とSF_工業素材と金属"
+   },
+   {
+    "sheet": "i102",
+    "source": "modern_sf/material_modern_i102.png",
+    "name": "素材_異星の生体素材"
+   },
+   {
+    "sheet": "i103",
+    "source": "modern_sf/material_modern_i103.png",
+    "name": "素材_人工の結晶と鉱石"
    }
   ]
  },
@@ -1604,6 +1716,26 @@
     "sheet": "i90",
     "source": "japanese/tool_japanese_i90.png",
     "name": "道具_和風の飲み物と道具"
+   },
+   {
+    "sheet": "i93",
+    "source": "japanese/tool_japanese_i93.png",
+    "name": "道具_和風の食べ物"
+   },
+   {
+    "sheet": "i94",
+    "source": "japanese/tool_japanese_i94.png",
+    "name": "道具_和風の薬"
+   },
+   {
+    "sheet": "i95",
+    "source": "japanese/tool_japanese_i95.png",
+    "name": "道具_和風の宝物と素材"
+   },
+   {
+    "sheet": "i96",
+    "source": "japanese/tool_japanese_i96.png",
+    "name": "道具_和風の文書"
    }
   ]
  },
@@ -1662,6 +1794,53 @@
     "sheet": "i24",
     "source": "modern_sf/modern_treasure.png",
     "name": "現代とSF_宝物"
+   },
+   {
+    "sheet": "i104",
+    "source": "modern_sf/treasure_modern_i104.png",
+    "name": "宝物_異星と旧文明の遺物"
+   }
+  ]
+ },
+ {
+  "id": "treasure_highfantasy",
+  "setting": "SET_TREASURE_HIGHFANTASY",
+  "group": "宝物",
+  "label": "宝物_ハイファンタジー",
+  "default": "mix",
+  "sources": [
+   {
+    "sheet": "i107",
+    "source": "treasure/treasure_highfantasy_i107.png",
+    "name": "宝物_聖堂と王家の宝物"
+   }
+  ]
+ },
+ {
+  "id": "treasure_darkfantasy",
+  "setting": "SET_TREASURE_DARKFANTASY",
+  "group": "宝物",
+  "label": "宝物_ダークファンタジー",
+  "default": "mix",
+  "sources": [
+   {
+    "sheet": "i108",
+    "source": "treasure/treasure_darkfantasy_i108.png",
+    "name": "宝物_呪われた王家の宝物"
+   }
+  ]
+ },
+ {
+  "id": "treasure_earlymodern",
+  "setting": "SET_TREASURE_EARLYMODERN",
+  "group": "宝物",
+  "label": "宝物_近世",
+  "default": "separate",
+  "sources": [
+   {
+    "sheet": "i99",
+    "source": "treasure/treasure_earlymodern_i99.png",
+    "name": "宝物_近世の宝飾品"
    }
   ]
  },
@@ -1700,6 +1879,25 @@
     "sheet": "i84",
     "source": "documents/document_fantasy_i84.png",
     "name": "文書_札と護符（中世）"
+   },
+   {
+    "sheet": "i110",
+    "source": "documents/document_fantasy_i110.png",
+    "name": "文書_本と地図と告知（中世）"
+   }
+  ]
+ },
+ {
+  "id": "document_earlymodern",
+  "setting": "SET_DOCUMENT_EARLYMODERN",
+  "group": "文書",
+  "label": "文書_近世",
+  "default": "separate",
+  "sources": [
+   {
+    "sheet": "i100",
+    "source": "documents/document_earlymodern_i100.png",
+    "name": "文書_近世の書類と証書"
    }
   ]
  }

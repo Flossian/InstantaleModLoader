@@ -238,6 +238,8 @@ SET_WEAPON_SF = "separate"
 SET_WEAPON_WA = "separate"
 SET_WEAPON_MODERN = "separate"
 SET_WEAPON_POSTAPOC = "separate"
+SET_WEAPON_HIGHFANTASY = "mix"
+SET_WEAPON_DARKFANTASY = "mix"
 SET_WEAR_MEDIEVAL = "mix"
 SET_WEAR_FANTASY = "mix"
 SET_WEAR_HIGHFANTASY = "mix"
@@ -263,6 +265,7 @@ SET_FOOD_DISHES = "separate"
 SET_FOOD_EARLYMODERN = "separate"
 SET_MEDIC_FANTASY = "mix"
 SET_MEDIC_MODERN = "separate"
+SET_MEDIC_EARLYMODERN = "separate"
 SET_MATERIAL_MAGIC = "mix"
 SET_MATERIAL_CREATURE = "mix"
 SET_MATERIAL_MODERN = "separate"
@@ -271,8 +274,12 @@ SET_TOOL_GENRE = "separate"
 SET_TOOL_JAPANESE = "separate"
 SET_TREASURE_FANTASY = "mix"
 SET_TREASURE_MODERN = "separate"
+SET_TREASURE_HIGHFANTASY = "mix"
+SET_TREASURE_DARKFANTASY = "mix"
+SET_TREASURE_EARLYMODERN = "separate"
 SET_DOCUMENT_MODERN = "separate"
 SET_DOCUMENT_FANTASY = "mix"
+SET_DOCUMENT_EARLYMODERN = "separate"
 IMAGE_SETS = (
     ("gun_cyber", "SET_GUN_CYBER"),
     ("gun_corp", "SET_GUN_CORP"),
@@ -290,6 +297,8 @@ IMAGE_SETS = (
     ("weapon_wa", "SET_WEAPON_WA"),
     ("weapon_modern", "SET_WEAPON_MODERN"),
     ("weapon_postapoc", "SET_WEAPON_POSTAPOC"),
+    ("weapon_highfantasy", "SET_WEAPON_HIGHFANTASY"),
+    ("weapon_darkfantasy", "SET_WEAPON_DARKFANTASY"),
     ("wear_medieval", "SET_WEAR_MEDIEVAL"),
     ("wear_fantasy", "SET_WEAR_FANTASY"),
     ("wear_highfantasy", "SET_WEAR_HIGHFANTASY"),
@@ -315,6 +324,7 @@ IMAGE_SETS = (
     ("food_earlymodern", "SET_FOOD_EARLYMODERN"),
     ("medic_fantasy", "SET_MEDIC_FANTASY"),
     ("medic_modern", "SET_MEDIC_MODERN"),
+    ("medic_earlymodern", "SET_MEDIC_EARLYMODERN"),
     ("material_magic", "SET_MATERIAL_MAGIC"),
     ("material_creature", "SET_MATERIAL_CREATURE"),
     ("material_modern", "SET_MATERIAL_MODERN"),
@@ -323,8 +333,12 @@ IMAGE_SETS = (
     ("tool_japanese", "SET_TOOL_JAPANESE"),
     ("treasure_fantasy", "SET_TREASURE_FANTASY"),
     ("treasure_modern", "SET_TREASURE_MODERN"),
+    ("treasure_highfantasy", "SET_TREASURE_HIGHFANTASY"),
+    ("treasure_darkfantasy", "SET_TREASURE_DARKFANTASY"),
+    ("treasure_earlymodern", "SET_TREASURE_EARLYMODERN"),
     ("document_modern", "SET_DOCUMENT_MODERN"),
     ("document_fantasy", "SET_DOCUMENT_FANTASY"),
+    ("document_earlymodern", "SET_DOCUMENT_EARLYMODERN"),
 )
 # 版10 で分類を「品の種類：ジャンル」にまとめた（元画像1枚＝1分類の119分類 → 45分類）。旧い設定名で書かれたワールド個別設定を読むための表
 OLD_SETTINGS = {

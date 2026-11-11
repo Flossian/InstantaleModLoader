@@ -140,6 +140,14 @@
    "modern": 0.8,
    "postapoc": 1.0
   },
+  "weapon_highfantasy": {
+   "highfantasy": 1.0,
+   "fantasy": 0.5
+  },
+  "weapon_darkfantasy": {
+   "darkfantasy": 1.0,
+   "fantasy": 0.5
+  },
   "wear_medieval": {
    "medieval": 1.0,
    "fantasy": 1.0,
@@ -251,6 +259,9 @@
    "cyber": 1.0,
    "postapoc": 1.0
   },
+  "medic_earlymodern": {
+   "earlymodern": 1.0
+  },
   "material_magic": {
    "fantasy": 1.0
   },
@@ -289,6 +300,17 @@
    "cyber": 0.8,
    "postapoc": 0.8
   },
+  "treasure_highfantasy": {
+   "highfantasy": 1.0,
+   "fantasy": 0.5
+  },
+  "treasure_darkfantasy": {
+   "darkfantasy": 1.0,
+   "fantasy": 0.5
+  },
+  "treasure_earlymodern": {
+   "earlymodern": 1.0
+  },
   "document_modern": {
    "modern": 1.0,
    "sf": 1.0,
@@ -301,6 +323,9 @@
    "darkfantasy": 0.8,
    "highfantasy": 0.6,
    "earlymodern": 0.5
+  },
+  "document_earlymodern": {
+   "earlymodern": 1.0
   }
  }
 }

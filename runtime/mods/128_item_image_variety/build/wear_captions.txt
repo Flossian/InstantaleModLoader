@@ -2681,3 +2681,115 @@ wrf_wch1_012	headgear	A black cyberpunk knit cap with a camera lens.
 wrf_wch1_013	headgear	A cyberpunk work helmet with an orange visor.
 wrf_wch1_014	headgear	A cyberpunk headband with a glowing light strip.
 wrf_wch1_015	headgear	A white cyberpunk helmet with winged heat sinks.
+wrf_wlv1_000	body_armor	A worn brown sleeveless leather armor with shoulder straps.
+wrf_wlv1_001	body_armor	A dark brown sleeveless boiled-leather cuirass.
+wrf_wlv1_002	body_armor	A tan riveted sleeveless leather armor.
+wrf_wlv1_003	body_armor	A black sleeveless leather armor with brass buckles.
+wrf_wlv1_004	body_armor	A reddish-brown patched sleeveless leather armor.
+wrf_wlv1_005	body_armor	A brown sleeveless leather armor with one shoulder guard.
+wrf_wlv1_006	body_armor	A dark brown sleeveless leather cuirass with small plates.
+wrf_wlv1_007	body_armor	An ochre tooled sleeveless leather armor.
+wrf_wlv1_008	body_armor	A grey-brown soot-stained sleeveless leather vest.
+wrf_wlv1_009	body_armor	A brown cracked sleeveless leather vest.
+wrf_wlv1_010	body_armor	A light brown sleeveless leather armor laced at the sides.
+wrf_wlv1_011	body_armor	A dark brown high-collared sleeveless leather armor.
+wrf_wlv1_012	body_armor	A dark brown fur-trimmed sleeveless hide armor.
+wrf_wlv1_013	body_armor	A brown sleeveless leather armor with a belt and a pouch.
+wrf_wlv1_014	body_armor	A dark brown quilted sleeveless leather armor.
+wrf_wlv1_015	body_armor	A faded tan sleeveless leather vest.
+wrf_wlc1_000	body_armor	A brown one-sided leather chest guard with a diagonal strap.
+wrf_wlc1_001	body_armor	A tan leather chest piece with two front pockets.
+wrf_wlc1_002	body_armor	A dark brown banded leather chest guard.
+wrf_wlc1_003	body_armor	A brown leather chest piece of two rounded plates joined by a strap.
+wrf_wlc1_004	body_armor	A black leather chest piece with crossed straps.
+wrf_wlc1_005	body_armor	A reddish-brown leather chest guard with a strap of glass vials.
+wrf_wlc1_006	body_armor	A dark brown leather chest piece with a round brass disc.
+wrf_wlc1_007	body_armor	A brown one-sided archer's leather chest guard with a laced edge.
+wrf_wlc1_008	body_armor	A brown woven leather chest piece.
+wrf_wlc1_009	body_armor	A dark brown leather chest guard of overlapping scales.
+wrf_wlc1_010	body_armor	A tan leather chest piece laced up the front.
+wrf_wlc1_011	body_armor	A dark brown one-sided leather chest guard with a high collar.
+wrf_wlc1_012	body_armor	A dark brown leather chest piece with a flap pouch and tool loops.
+wrf_wlc1_013	body_armor	A beige rawhide chest guard with ragged edges.
+wrf_wlc1_014	body_armor	An ochre tooled leather chest piece with a fringe.
+wrf_wlc1_015	body_armor	A dark brown leather chest guard with a padded top edge and side buckles.
+wrf_wca1_000	body_armor	A black cyberpunk armored vest with neon pink trim and a high collar.
+wrf_wca1_001	body_armor	A grey cyberpunk bulletproof vest with cyan glowing strips.
+wrf_wca1_002	body_armor	A black and yellow cyberpunk harness vest with straps and pouches.
+wrf_wca1_003	body_armor	A black carbon-fiber cyberpunk chest plate with a glowing red core.
+wrf_wca1_004	body_armor	A sleeveless black leather cyberpunk jacket with metal shoulder plates and red neon piping.
+wrf_wca1_005	body_armor	A white cyberpunk security armor vest with a blue glowing emblem.
+wrf_wca1_006	body_armor	A red lacquered cyberpunk chest armor with black cables.
+wrf_wca1_007	body_armor	A clear plastic cyberpunk vest over dark mesh armor.
+wrf_wca1_008	body_armor	A grey hooded cyberpunk armor vest with glowing green drawstrings.
+wrf_wca1_009	body_armor	A chrome cyberpunk exoskeleton chest frame with blue pistons.
+wrf_wca1_010	body_armor	A purple quilted cyberpunk armored vest with a holographic panel.
+wrf_wca1_011	body_armor	An orange cyberpunk courier armor vest with reflective strips.
+wrf_wca1_012	body_armor	A black cyberpunk stealth armor vest with hexagonal plates and blue lines.
+wrf_wca1_013	body_armor	A dark blue cyberpunk riot armor vest with yellow glowing stripes.
+wrf_wca1_014	body_armor	A cyberpunk armor vest patched with a road sign and neon tape.
+wrf_wca1_015	body_armor	A black and gold cyberpunk armored waistcoat with glowing gems.
+wrf_wwa1_000	body_armor	A western leather vest with an iron plate bolted on the front.
+wrf_wwa1_001	body_armor	A shaggy brown western buffalo-fur vest laced at the sides.
+wrf_wwa1_002	clothing	A blue western cavalry tunic with brass buttons and a leather cross-belt.
+wrf_wwa1_003	body_armor	A brown western leather work vest with riveted metal pads.
+wrf_wwa1_004	body_armor	A tan quilted western canvas vest with leather shoulder patches.
+wrf_wwa1_005	clothing	A fringed western rawhide vest with round silver conchos.
+wrf_wwa1_006	clothing	A western rattlesnake-skin vest with bone buttons.
+wrf_wwa1_007	body_armor	A dark western leather chest harness with crossed straps and a brass plate.
+wrf_wwa1_008	headgear	A tall black western stovepipe hat.
+wrf_wwa1_009	headgear	A brown western bowler hat.
+wrf_wwa1_010	headgear	A western straw sombrero with a colorful woven band.
+wrf_wwa1_011	headgear	A grey western cavalry campaign hat with a crossed sabers badge.
+wrf_wwa1_012	headgear	A western raccoon-skin cap with a striped tail.
+wrf_wwa1_013	headgear	A grey western wool flat cap.
+wrf_wwa1_014	headgear	A black flat-brimmed western preacher hat.
+wrf_wwa1_015	headgear	A western leather miner's helmet with an oil lamp.
+wrf_wsa1_000	body_armor	A brass steampunk breastplate with a pressure gauge.
+wrf_wsa1_001	body_armor	A brown leather steampunk corset armor with brass gear buckles.
+wrf_wsa1_002	body_armor	A copper steampunk chest plate with a glowing amber core.
+wrf_wsa1_003	body_armor	A dark leather steampunk vest of overlapping brass scales.
+wrf_wsa1_004	body_armor	A leather steampunk chest harness with brass steam canisters at the sides.
+wrf_wsa1_005	body_armor	A riveted iron steampunk chest piece with round porthole plates.
+wrf_wsa1_006	clothing	A pinstriped steampunk waistcoat with a pocket watch chain.
+wrf_wsa1_007	body_armor	A steampunk chest armor with brass gears behind a glass panel.
+wrf_wsa1_008	shield	A round brass steampunk shield with a gear-shaped rim.
+wrf_wsa1_009	shield	A riveted iron steampunk kite shield with copper pipes and a gauge.
+wrf_wsa1_010	shield	A small brass steampunk buckler with a red valve wheel.
+wrf_wsa1_011	shield	A dark wood and brass steampunk shield with a porthole window.
+wrf_wsa1_012	shield	A copper steampunk heater shield engraved with a cog emblem.
+wrf_wsa1_013	shield	A fan-shaped steampunk shield of brass plates.
+wrf_wsa1_014	shield	An iron steampunk tower shield with a chimney vent and a glowing grate.
+wrf_wsa1_015	shield	A round leather steampunk shield with brass studs and a clock face.
+wrf_wma1_000	accessory	A silver ball-chain necklace with two dog tags.
+wrf_wma1_001	accessory	A black digital sports watch.
+wrf_wma1_002	accessory	A pair of black wireless earbuds in a grey charging case.
+wrf_wma1_003	accessory	A bracelet of black stone and wooden beads.
+wrf_wma1_004	accessory	A pair of large silver hoop earrings.
+wrf_wma1_005	accessory	A thin gold chain bracelet with a small heart charm.
+wrf_wma1_006	accessory	A braided brown leather bracelet with a metal clasp.
+wrf_wma1_007	accessory	A matte black titanium ring.
+wrf_wma1_008	accessory	A pair of small diamond stud earrings.
+wrf_wma1_009	accessory	A blue lanyard with a blank plastic ID badge.
+wrf_wma1_010	accessory	A woven friendship bracelet in red, yellow and green.
+wrf_wma1_011	accessory	A chunky silver signet ring with an engraved fleur-de-lis.
+wrf_wma1_012	accessory	A black velvet choker with a small silver pendant.
+wrf_wma1_013	accessory	A black fitness tracker wristband with a glowing display.
+wrf_wma1_014	accessory	A key ring with a car key and a metal tag.
+wrf_wma1_015	accessory	A silver crescent moon pendant on a fine chain.
+wrf_wha1_000	accessory	A white-gold necklace with a large teardrop sapphire.
+wrf_wha1_001	accessory	A silver bracelet wrapped with gold leaf vines and small pearls.
+wrf_wha1_002	accessory	A gold ring with a winged setting holding a white diamond.
+wrf_wha1_003	accessory	A pair of long silver earrings with blue crystal drops.
+wrf_wha1_004	accessory	A silver star-shaped brooch with a white gem in the center.
+wrf_wha1_005	accessory	A wide gold arm cuff engraved with feathers.
+wrf_wha1_006	accessory	A silver amulet shaped like a winged sword with a red gem.
+wrf_wha1_007	accessory	A pearl and gold choker with an opal in the center.
+wrf_wha1_008	accessory	A silver anklet with tiny bells and blue beads.
+wrf_wha1_009	accessory	A gold and white medallion with a sun face on a blue ribbon.
+wrf_wha1_010	accessory	A silver ring set with blue, white and red gems.
+wrf_wha1_011	accessory	A gold hairpin topped with a white lily ornament.
+wrf_wha1_012	accessory	A silver cloak clasp of two round discs joined by a gold chain.
+wrf_wha1_013	accessory	A rose-shaped gold pendant with a ruby in the center.
+wrf_wha1_014	accessory	A silver torc necklace with gold dragon-head ends.
+wrf_wha1_015	accessory	An ornate silver belt buckle set with blue gems.
