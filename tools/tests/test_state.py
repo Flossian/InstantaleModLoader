@@ -184,7 +184,7 @@ def test_world_filename_is_injective():
 def test_plain_names_keep_their_file():
     """普通の世界名には印が付かない。**置き場所を分ける前のファイルを引くため。**"""
     print("=== world_filename: 普通の名前は印が付かない ===")
-    for name in ("灰の街", "Ashfall", "テストワールド", "灰の街_東", "第2世界",
+    for name in ("灰の街", "Ashfall", "世界F", "灰の街_東", "第2世界",
                  "Ash Fall", "世界(2)"):
         made = st.world_filename(name)
         check(made == name + ".json",

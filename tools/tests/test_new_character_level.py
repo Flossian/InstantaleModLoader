@@ -346,7 +346,7 @@ check("理由を残して降りる",
 print("\n-- 二段目（開始処理の後の確認）--")
 mod, ctx, Char, App = setup()
 app = App()
-app.start_game("テストワールド")
+app.start_game("世界F")
 check("新規開始でプレイヤーが直る", app.player.experience_level == 1,
       app.player.experience_level)
 check("開始処理の後の様子が残る", "after start_game: level=1" in log_text(ctx),
@@ -355,7 +355,7 @@ check("開始処理の後の様子が残る", "after start_game: level=1" in log
 mod, ctx, Char, App = setup()
 app = App()
 app.after_start_level = 60          # `__init__` の後で戻される経路の再現
-app.start_game("テストワールド")
+app.start_game("世界F")
 check("戻されたら警告する",
       "after start_game the player is still level 60" in log_text(ctx),
       log_text(ctx)[-300:])

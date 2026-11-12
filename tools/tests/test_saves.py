@@ -76,7 +76,7 @@ try:
     check("鍵と同じバイト列は全部 0 になり、長さは縮まない",
           saves.xor(saves.SAVE_KEY * 2) == b"\x00" * 48)
     check("鍵は 24 バイト", len(saves.SAVE_KEY) == 24, len(saves.SAVE_KEY))
-    body = {"world_data": {"world_name": "ヴェスティア"}}
+    body = {"world_data": {"world_name": "世界H"}}
     raw = json.dumps(body, ensure_ascii=False).encode("utf-8")
     check("素の JSON を読む", saves.decode(raw) == body)
     check("XOR を読む", saves.decode(saves.xor(raw)) == body)
@@ -84,7 +84,7 @@ try:
     check("JSON だが辞書でないものは None", saves.decode(b"[1, 2]") is None)
 
     print("[一覧]")
-    put(tmp, "slot_xor", {"world_data": {"world_name": "ヴェスティア"}}, True)
+    put(tmp, "slot_xor", {"world_data": {"world_name": "世界H"}}, True)
     put(tmp, "slot_plain", {"world_data": {"title": "アルカディア"}}, False)
     put(tmp, "slot_noname", {"world_data": {}}, True)
     put(tmp, "slot_broken", None, False)                      # フォルダだけ
@@ -101,7 +101,7 @@ try:
     check("savedata.json の無いフォルダは入らない", "slot_empty" not in listed)
 
     named = dict((folder, name) for name, folder in saves.world_names())
-    check("world_name を採る", named.get("slot_xor") == "ヴェスティア", named.get("slot_xor"))
+    check("world_name を採る", named.get("slot_xor") == "世界H", named.get("slot_xor"))
     check("title も採る（name が無いとき）",
           named.get("slot_plain") == "アルカディア", named.get("slot_plain"))
     check("世界名が読めなければフォルダ名",
@@ -114,7 +114,7 @@ try:
 
     print("[読み]")
     check("XOR のセーブを読む",
-          saves.read_save("slot_xor") == {"world_data": {"world_name": "ヴェスティア"}})
+          saves.read_save("slot_xor") == {"world_data": {"world_name": "世界H"}})
     check("素のセーブを読む",
           saves.read_save("slot_plain") == {"world_data": {"title": "アルカディア"}})
     check("無いセーブは None", saves.read_save("nope") is None)

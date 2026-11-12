@@ -1148,8 +1148,8 @@ writer: fact 2 does not mention '黒髪':   '暗闇の中で、黒い髪が揺�
 台帳に**片付け前の NPC が2世界ぶん（4体ずつ）残っていた**ので、
 そのまま置いていくと誰を消してよいか分からなくなる。
 
-    state\city_case_cast.json  ->  state\city_case\テストワールド.cast.json
-                                   state\city_case\ドスケベフェスティバル.cast.json
+    state\city_case_cast.json  ->  state\city_case\世界F.cast.json
+                                   state\city_case\世界P.cast.json
 
 `state\city_case.json` は `stage=none`（進行中の事件なし）だったので移していない。
 古い2枚は読む側が居なくなっただけで残してある。

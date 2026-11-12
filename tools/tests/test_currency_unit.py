@@ -215,7 +215,7 @@ class FakeManager(object):
 
 #: 実機で観測した能力欄の形（`206_probe_quest_flow` の 40 文字＋ビルド内の定数）。
 STATUS_TEXT = ("Atk:432(+500)\nDef:0(+500)\nExp:1675/3237\n"
-               "Gold:1116472\nAge:31\nSta:88/100\nLocation:ヴェスティア")
+               "Gold:1116472\nAge:31\nSta:88/100\nLocation:世界H")
 
 
 class FakeLabel(object):
@@ -522,7 +522,7 @@ def test_hud_format():
         check("素の見出しは消える", "Gold:" not in fixed, repr(fixed))
         check("他の欄はそのまま",
               "Atk:432(+500)" in fixed and "Age:31" in fixed
-              and "Location:ヴェスティア" in fixed, repr(fixed))
+              and "Location:世界H" in fixed, repr(fixed))
 
         # 見出しの `Gold` は呼び名と同じもの。書式を触らなくても付け替わる。
         M.HUD_GOLD_FORMAT = M.GAME_HUD_GOLD

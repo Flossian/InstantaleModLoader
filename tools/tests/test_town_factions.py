@@ -143,16 +143,16 @@ check("街の勢力（知らない街・知らない勢力・根拠の無い街�
                           "7": {"faction": "f1", "evidence": "白の教団は遺物を罪"}}, ledger["towns"])
 check("勢力の名前の無い根拠の街は捨てる", any(d.startswith("town 0:") and "does not name" in d
                                             for d in dropped), dropped)
-NAMED = MATERIAL + "\nカスティアとヴァルガルドを治める「灰の結社」は、秩序を重んじる。\n東の港町ミストルは霧に包まれている。"
+NAMED = MATERIAL + "\n土地F2と土地F3を治める「灰の結社」は、秩序を重んじる。\n東の港町土地F7は霧に包まれている。"
 by_town = dict(EXTRACTED, towns=[
-    {"town_id": "2", "faction": "灰の結社", "evidence": "東の港町ミストルは霧に包まれている"},
-    {"town_id": "3", "faction": "灰の結社", "evidence": "東の港町ミストルは霧に包まれている"},
-    {"town_id": "5", "faction": "白の教団", "evidence": "東の港町ミストルは霧に包まれている"}])
+    {"town_id": "2", "faction": "灰の結社", "evidence": "東の港町土地F7は霧に包まれている"},
+    {"town_id": "3", "faction": "灰の結社", "evidence": "東の港町土地F7は霧に包まれている"},
+    {"town_id": "5", "faction": "白の教団", "evidence": "東の港町土地F7は霧に包まれている"}])
 named, dropped4 = rules.build_ledger(by_town, NAMED, ["2", "3", "5"], day=1,
-                                     town_names={"2": "カスティア", "3": "ヴァルガルド", "5": "ミストル"})
+                                     town_names={"2": "土地F2", "3": "土地F3", "5": "土地F7"})
 check("根拠に勢力の名前が無くても、設定に勢力と街を1文で結ぶ文があればそれを根拠にする",
       named["towns"].get("2") == {"faction": "f2",
-                                  "evidence": "カスティアとヴァルガルドを治める「灰の結社」は、秩序を重んじる"}
+                                  "evidence": "土地F2と土地F3を治める「灰の結社」は、秩序を重んじる"}
       and named["towns"].get("3", {}).get("faction") == "f2", (named["towns"], dropped4))
 check("勢力と街を結ぶ文が無ければ、今までどおり捨てる",
       "5" not in named["towns"] and any(d.startswith("town 5:") and "does not name" in d
@@ -161,10 +161,10 @@ check("街の名前が渡されなければ救わない（今までの形）",
       rules.build_ledger(by_town, NAMED, ["2", "3", "5"], day=1)[0]["towns"] == {})
 check("1字の名前では文を探さない", rules.sentence_naming(NAMED, "灰の結社", "カ") is None)
 reworded = dict(EXTRACTED, towns=[
-    {"town_id": "2", "faction": "灰の結社", "evidence": "カスティアは結社の支配下にある"},
-    {"town_id": "5", "faction": "灰の結社", "evidence": "ミストルは結社の支配下にある"}])
+    {"town_id": "2", "faction": "灰の結社", "evidence": "土地F2は結社の支配下にある"},
+    {"town_id": "5", "faction": "灰の結社", "evidence": "土地F7は結社の支配下にある"}])
 named2, dropped5 = rules.build_ledger(reworded, NAMED, ["2", "5"], day=1,
-                                      town_names={"2": "カスティア", "5": "ミストル"})
+                                      town_names={"2": "土地F2", "5": "土地F7"})
 check("言い換えた根拠でも、勢力と街を1文で結ぶ文があれば救う",
       named2["towns"].get("2", {}).get("faction") == "f2" and "5" not in named2["towns"]
       and any(d == "town 5: evidence not found" for d in dropped5), (named2["towns"], dropped5))
@@ -658,9 +658,9 @@ written, changed = rules.record_moves(
 check("段階が変わらない動きは changed にならない", (written, changed) == (2, False))
 book = {"history": []}
 written, changed = rules.record_moves(book, [("f2", 50, 62, "gain"), ("f2", 62, 62, "capped")], day=3,
-                                      kind="incident", incident="ゼニスの疫病")
+                                      kind="incident", incident="土地F6の疫病")
 check("段階が変わる動きと、動かなかった回を書かないこと", (written, changed) == (1, True)
-      and book["history"][0]["incident"] == "ゼニスの疫病")
+      and book["history"][0]["incident"] == "土地F6の疫病")
 book = {"history": []}
 for i in range(rules.HISTORY_LIMIT + 5):
     rules.add_history(book, {"day": i})
@@ -680,16 +680,16 @@ LEDGER = {
         {"day": 50, "a": "f2", "b": "f3", "direction": 1, "before": -1, "after": -1, "rumor": "歩み寄ったらしい"},
         {"day": 60, "a": "f1", "b": "f2", "direction": 1, "before": 0, "after": 1, "rumor": "援護したらしい"}],
     "history": [
-        {"day": 40, "faction": "f2", "before": 15, "after": 25, "kind": "incident", "incident": "オーラムの疫病"},
+        {"day": 40, "faction": "f2", "before": 15, "after": 25, "kind": "incident", "incident": "土地F5の疫病"},
         {"day": 40, "faction": "f3", "before": -60, "after": -65, "kind": "echo", "by": "f2"},
         {"day": 97, "faction": "f3", "before": -45, "after": -85, "kind": "talk", "reason": "掟を嘲った"},
         {"day": 98, "faction": "f3", "before": -85, "after": -85, "kind": "reconcile"}]}
-model = view.build(LEDGER, day=100, here="0", area_names={"0": "ヴァルガルド", "1": "オーラム", "2": "ミストル"},
+model = view.build(LEDGER, day=100, here="0", area_names={"0": "土地F3", "1": "土地F5", "2": "土地F7"},
                    laws={"0": -5})
 cards = {c["name"]: c for c in model["cards"]}
-check("現在地と影響下の勢力", model["here"] == "ヴァルガルド（白翼騎士団の影響下）", model["here"])
+check("現在地と影響下の勢力", model["here"] == "土地F3（白翼騎士団の影響下）", model["here"])
 check("札の段階・影響下の街・他勢力との関係（悪い順）", cards["白翼騎士団"]["stage"] == -1
-      and cards["白翼騎士団"]["towns"] == ["ヴァルガルド"]
+      and cards["白翼騎士団"]["towns"] == ["土地F3"]
       and cards["白翼騎士団"]["relations"] == [("霧の船団", -2), ("黄金商会", 1)], cards["白翼騎士団"])
 check("手配の上限に届いていれば手配の行", cards["白翼騎士団"]["cautions"] == [view.WANTED_TEXT])
 check("縛りの行。呼び名は付けた段階と違えば出さない", cards["霧の船団"]["cautions"] == [view.LOCKED_TEXT]
@@ -715,7 +715,7 @@ check("会話で段階が変わった来歴は前と後の段階を段階の色�
 check("響きの来歴", history[2]["pieces"] == [("黄金商会への働きが伝わり、霧の船団の態度は", None), ("緊張", -1),
                                             ("から", None), ("敵対", -2), ("となった。", None)], history[2])
 check("出来事の来歴（段階が変わったとき）", history[3]["pieces"]
-      == [("オーラムの疫病を解決したことで、黄金商会の態度は", None), ("中立", 0), ("から", None), ("友好", 1),
+      == [("土地F5の疫病を解決したことで、黄金商会の態度は", None), ("中立", 0), ("から", None), ("友好", 1),
           ("となった。", None)], history[3])
 check("段階が変わらなければ評価が上がった・下がったと、今の段階",
       view.pieces_of(LEDGER, {"faction": "f2", "before": 40, "after": 45, "kind": "talk"})

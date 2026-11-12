@@ -155,8 +155,8 @@ for name, buttons in (
                      button("やめる", "JustSetButtonToNormalPhase", [])]),
         ("活動", [button("休養をとる", "VacationRestManager", [1, "bunk"]),
                  button("宿泊を終える", "VacationEndManager", [])]),
-        ("街", [button("カレーム - 入口", "MovePhaseManager", ["1", "2", "3"]),
-               button("霧隠れの宿", "MovePhaseManager", ["1", "2", "4"])]),
+        ("街", [button("土地J8 - 入口", "MovePhaseManager", ["1", "2", "3"]),
+               button("宿J255", "MovePhaseManager", ["1", "2", "4"])]),
         ("空", [])):
     before = names(buttons)
     texts, result = run(buttons)

@@ -10,7 +10,7 @@
 
     {"status": "ready" | "building" | "none" | "failed",
      "message": 窓に1文だけ出すとき（ready 以外）,
-     "here": "ヴァルガルド（白翼騎士団の影響下）" / "",
+     "here": "土地F3（白翼騎士団の影響下）" / "",
      "cards": [{"name", "kind", "stage", "title", "note", "towns", "relations": [(相手, 段)], "cautions"}],
      "rumors": [{"when", "text", "follow": [(文, 段 or None)]}],
      "history": [{"when", "pieces": [(文, 段 or None)], "reason"}]}

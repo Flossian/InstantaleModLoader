@@ -79,10 +79,10 @@ def world(name, areas):
 
 #: 実セーブを復号して確かめた形（3世界とも街9件、残りは全部 dungeon）。
 AREAS = {
-    "0": {"name": "エテルナ", "size": "city", "connections": ["1", "4"]},
-    "1": {"name": "リヴェール", "size": "town", "connections": ["0"]},
-    "4": {"name": "ソラリス", "size": "village", "connections": ["0"]},
-    "9": {"name": "下層区の迷路路地", "size": "dungeon", "connections": []},
+    "0": {"name": "土地F0", "size": "city", "connections": ["1", "4"]},
+    "1": {"name": "土地F1", "size": "town", "connections": ["0"]},
+    "4": {"name": "土地F4", "size": "village", "connections": ["0"]},
+    "9": {"name": "土地F9", "size": "dungeon", "connections": []},
 }
 
 
@@ -236,7 +236,7 @@ def main():
 
     print("[検品のプロンプトと突き合わせ]")
     # 固定の指示だけを system に置く。街や棚が変わっても前半が変わらない形。
-    snap = {"world_key": "W", "area_id": "5", "area_name": "オーラム",
+    snap = {"world_key": "W", "area_id": "5", "area_name": "土地F5",
             "world_overview": "概要", "area_overview": "説明"}
     econ = {"regional_economy_summary": "鉱山の町。",
             "major_industries": ["採掘"], "major_products": ["魔導鋼"],
@@ -249,9 +249,9 @@ def main():
     head = next(x["content"] for x in msgs if x["role"] == "system")
     body = next(x["content"] for x in msgs if x["role"] == "user")
     check("system は街や棚の中身を含まない",
-          all(word not in head for word in ("オーラム", "鉄鉱石", "鉱山の町")), head[-80:])
+          all(word not in head for word in ("土地F5", "鉄鉱石", "鉱山の町")), head[-80:])
     check("街も棚も user にある",
-          all(word in body for word in ("オーラム", "鉄鉱石", "鉱山の町")))
+          all(word in body for word in ("土地F5", "鉄鉱石", "鉱山の町")))
     other = mod._build_classification_messages(
         {"world_key": "W2", "area_id": "9", "area_name": "別の街",
          "world_overview": "", "area_overview": ""}, econ, goods)
@@ -484,7 +484,7 @@ def main():
         def superseded(self):
             return self.gone
 
-    area = _types.SimpleNamespace(id="0", name="エテルナ")
+    area = _types.SimpleNamespace(id="0", name="土地F0")
     app = App(world("ワーカーの世界", AREAS))
     app.player = _types.SimpleNamespace(current_area=area)
     move = "__main__:MovePhaseManager.move_phase"

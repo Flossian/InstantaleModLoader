@@ -232,7 +232,7 @@ check("phase ごとのランクが入る",
       facility_rows)
 
 print("闘技場でない施設は録らない")
-app.player.location = Facility("霧隠れの宿", "inn", {})
+app.player.location = Facility("宿J255", "inn", {})
 ctx.hooks["__main__:MovePhaseManager.move_phase"](lambda self: "moved", Manager(app))
 check("宿屋では行が増えない", len(rows("facility")) == 1, rows("facility"))
 app.player.location = arena

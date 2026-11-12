@@ -102,7 +102,7 @@ class Character(object):
 
 
 golem = Character("ゴーレム", 1376, 243)
-hero = Character("アーリ", 1832, 390, level=83)
+hero = Character("ベルク", 1832, 390, level=83)
 app = types.SimpleNamespace(current_enemy_dict={"ゴーレム": golem}, player=hero,
                             in_battle=1, in_boss_battle=0)
 mod.ui = types.SimpleNamespace(find_app=lambda: app, party_member_ids=lambda a: [],
@@ -132,7 +132,7 @@ check("スキルは強度と残り回数に縮める",
       enemy["fields"]["skills"]["通常攻撃"] == [("instant_damage", "weak", "single_enemy"), 16, 16],
       enemy["fields"].get("skills"))
 check("大きい項目は写さない", "life_log" not in enemy["fields"], sorted(enemy["fields"]))
-check("味方も写す", [a["name"] for a in row["allies"]] == ["アーリ"], row["allies"])
+check("味方も写す", [a["name"] for a in row["allies"]] == ["ベルク"], row["allies"])
 
 
 class MarkSeen(Character):
@@ -153,7 +153,7 @@ app.current_enemy_dict = {"ゴーレム": golem}
 
 print("1手")
 action = {"actor": "ゴーレム", "instant_damage": [
-    {"target": ["アーリ"], "power": "strong", "multiplier": 1, "category": "physical"}]}
+    {"target": ["ベルク"], "power": "strong", "multiplier": 1, "category": "physical"}]}
 math = ctx.hooks["scripts.functions:get_instant_damage"]
 
 
@@ -195,7 +195,7 @@ ctx.hooks["__main__:BattlePhaseManager.calculate_battle_effect"](
     calculate_hurts, types.SimpleNamespace(app=app), dict(action))
 act = [r for r in ctx.rows[before:] if r["kind"] == "act"][0]
 check("calculate の前後で HP が動けば state_changed に出る",
-      act["state_changed"].get("アーリ", [{}, {}])[1].get("current_hp") == 1732, act["state_changed"])
+      act["state_changed"].get("ベルク", [{}, {}])[1].get("current_hp") == 1732, act["state_changed"])
 check("battle_action への書き込みは呼んだ後の写しに出る",
       act["action_after"].get("raw") == 777 and "raw" not in act["action"], act)
 hero.current_hp = 1832
@@ -214,7 +214,7 @@ def resolve_real(self, character_key, character_side, battle_action, effect_to_e
 if getattr(sys, mod.RESOLVE_ARGS_MARK, None):
     delattr(sys, mod.RESOLVE_ARGS_MARK)
 before = len(ctx.rows)
-got = resolve(resolve_real, object(), "ゴーレム", "enemy", dict(action), {"アーリ": 500})
+got = resolve(resolve_real, object(), "ゴーレム", "enemy", dict(action), {"ベルク": 500})
 new = ctx.rows[before:]
 acts = [r for r in new if r["kind"] == "act"]
 shapes = [r for r in new if r["kind"] == "resolve_args"]
@@ -303,7 +303,7 @@ check("敵と味方の全員ぶん、全部の通りを録る", len(dry) == plan
 row = [r for r in dry if r["actor"] == "ゴーレム" and r["power"] == "extreme"
        and r["category"] == "magical"][0]
 check("敵の手は主人公を相手に、回数ぶんの素点が並ぶ", row["raws"] == [231, 231] and row["side"] == "enemy", row)
-row = [r for r in dry if r["actor"] == "アーリ" and r["power"] == "weak"
+row = [r for r in dry if r["actor"] == "ベルク" and r["power"] == "weak"
        and r["category"] == "physical"][0]
 check("味方の手は先頭の敵を相手に", row["raws"] == [100, 100] and row["side"] == "ally", row)
 check("実体には app を持たせて呼ぶ", FakePhase.seen and FakePhase.seen[-1] is app)

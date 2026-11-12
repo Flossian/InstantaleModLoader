@@ -506,7 +506,7 @@ def ask(ctx, manager_name: str, message, *, timeout, structure=None,
     ゲームの送り口は `timeout` を受け取るが、待ちを打ち切らない（main_026 で、クラウドもローカルも
     `timeout=0.5` で返事を最後まで待った。VERIFICATION.md §3.101）。
     ここでも打ち切らない。`timeout` 秒を過ぎたら WARN を1行出し、返事が来るまで待ち続ける。
-    ローカルの速さは GPU で何倍も違い、上限は開発機の実測から決めているので、打ち切ると遅い環境で
+    ローカルの速さは GPU で何倍も違い、上限は限られた環境の実測から決めているので、打ち切ると遅い環境で
     MOD の働きが毎回黙って消える。止まったきりの頼みは WARN で見分ける（VERIFICATION.md §3.101）。
     """
     name = "send_request" if structure is not None else "send_request_with_no_structure"

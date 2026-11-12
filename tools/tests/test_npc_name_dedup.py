@@ -288,7 +288,7 @@ for left, right, same in (
         ("カイル", "カイル", True),
         ("重鉄のバルカス", "元傭兵のバルガス", True),
         ("隻眼のバルガス", "バルガス", True),
-        ("バルガス・グラトル", "“黒蜥蜴”アルカス", False),
+        ("バルガス・ベルク", "“黒蜥蜴”アルカス", False),
         ("“黒蜥蜴”アルカス", "ヴァルガス・ヴォルフレイン", False),
         ("“黒蜥蜴”アルカス", "ヴァルガス・グレイヴ", False)):
     got = mod.too_close(mod.canonical(left), mod.canonical(right))

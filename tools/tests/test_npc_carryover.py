@@ -273,7 +273,7 @@ try:
     source["1"]["initial_location"] = {"area": "0", "node": None, "facility": "2"}
     target = {"0": npc_record("先住のバルガス", 0)}
 
-    for world, npcs, counters in (("ヴェスティア", source, {"npc": 2, "item": 30}),
+    for world, npcs, counters in (("世界H", source, {"npc": 2, "item": 30}),
                                   ("アルカディア", target, {"npc": 1, "item": 5})):
         folder = os.path.join(carryover.saves_dir(), world)
         os.makedirs(folder, exist_ok=True)
@@ -290,7 +290,7 @@ try:
             with io.open(os.path.join(chars, image), "wb") as fh:
                 fh.write(b"\x89PNG" + image.encode("ascii"))
     # image_src は絶対パス（実セーブと同じ形）
-    hans_dir = carryover.characters_dir("ヴェスティア", "重装のハンス")
+    hans_dir = carryover.characters_dir("世界H", "重装のハンス")
     source["0"]["image_src"] = {
         "base_normal": None, "base_upscaled": None,
         "fullbody": os.path.join(hans_dir, "fullbody.png"),
@@ -298,14 +298,14 @@ try:
         "face": os.path.join(hans_dir, "face_image.png")}
     payload = json.dumps({"npcs": source, "index": {"npc": 2, "item": 30},
                           "areas": SAVE_AREAS,
-                          "world_data": {"world_name": "ヴェスティア"}},
+                          "world_data": {"world_name": "世界H"}},
                          ensure_ascii=False).encode("utf-8")
-    with io.open(carryover.save_path("ヴェスティア"), "wb") as fh:
+    with io.open(carryover.save_path("世界H"), "wb") as fh:
         fh.write(carryover.xor(payload))
 
     print("-- 復号と場所")
     check("XOR のセーブを読める",
-          len(carryover.npcs_of(carryover.read_save("ヴェスティア"))) == 2)
+          len(carryover.npcs_of(carryover.read_save("世界H"))) == 2)
     plain = os.path.join(carryover.saves_dir(), "素", "savedata.json")
     os.makedirs(os.path.dirname(plain), exist_ok=True)
     io.open(plain, "w", encoding="utf-8").write('{"npcs": {}}')
@@ -313,7 +313,7 @@ try:
     io.open(plain, "wb").write(b"\x00\x01\x02")
     check("読めないセーブは None（例外にしない）", carryover.read_save("素") is None)
     check("世界の一覧に出る",
-          set(carryover.list_worlds()) == {"ヴェスティア", "アルカディア", "素"},
+          set(carryover.list_worlds()) == {"世界H", "アルカディア", "素"},
           carryover.list_worlds())
 
     print("-- 名前をファイル名に")
@@ -325,9 +325,9 @@ try:
     check("予約デバイス名は避ける", carryover.safe_name("CON") == "_CON")
 
     print("-- 書き出しと読み返し")
-    export_dir = os.path.join(carryover.carryover_dir(state_dir), "ヴェスティア")
+    export_dir = os.path.join(carryover.carryover_dir(state_dir), "世界H")
     dest = carryover.free_path(export_dir, "重装のハンス")
-    carryover.export(source["0"], "ヴェスティア", "0", dest,
+    carryover.export(source["0"], "世界H", "0", dest,
                      extra={"profile": {"name": "重装のハンス", "profile": "覚えた人物像"}})
     package = carryover.read_package(dest)
     check("読み返せる", package is not None and package.name == "重装のハンス")
@@ -356,10 +356,10 @@ try:
               carryover.carryover_dir(state_dir))])
 
     print("-- 立ち絵の在り処")
-    hans_folder = carryover.characters_dir("ヴェスティア", "重装のハンス")
+    hans_folder = carryover.characters_dir("世界H", "重装のハンス")
     check("記録どおりの場所を見つける",
-          carryover.image_dir_of(source["0"], "ヴェスティア") == hans_folder,
-          carryover.image_dir_of(source["0"], "ヴェスティア"))
+          carryover.image_dir_of(source["0"], "世界H") == hans_folder,
+          carryover.image_dir_of(source["0"], "世界H"))
     # 別の機械で作られた世界を持ってきた形（`image_src` が他人のユーザー名を指す）。
     # 実データがこの形で、ある世界では 95人中 93人が別の機械のユーザーフォルダを指していた。
     foreign = json.loads(json.dumps(source["0"]))
@@ -368,8 +368,8 @@ try:
               if isinstance(value, str) and value else value)
         for key, value in foreign["image_src"].items()}
     check("別の機械のパスは繋ぎ直して見つける",
-          carryover.image_dir_of(foreign, "ヴェスティア") == hans_folder,
-          carryover.image_dir_of(foreign, "ヴェスティア"))
+          carryover.image_dir_of(foreign, "世界H") == hans_folder,
+          carryover.image_dir_of(foreign, "世界H"))
     check("繋ぎ直しは worlds から後ろを残す",
           carryover.local_path(
               r"C:\Users\Owner\AppData\Local\Darmabeko\Instantale"
@@ -378,14 +378,14 @@ try:
     check("目印の無いパスはそのまま",
           carryover.local_path(r"D:\somewhere\a.png") == r"D:\somewhere\a.png")
     check("繋ぎ直しても在る画像だけを持ち出す",
-          sorted(name for _p, name in carryover.image_files("ヴェスティア", foreign))
+          sorted(name for _p, name in carryover.image_files("世界H", foreign))
           == ["face_image.png", "fullbody.png"])
     check("絵の無い NPC はフォルダ無し（空文字）",
           carryover.image_dir_of({"name": "まだ絵の無い者",
-                                  "image_src": {"face": None}}, "ヴェスティア") == "")
+                                  "image_src": {"face": None}}, "世界H") == "")
 
     print("-- 居た場所")
-    save_v = carryover.read_save("ヴェスティア")
+    save_v = carryover.read_save("世界H")
     check("current_* から引ける",
           carryover.location_of(save_v, source["0"]) == ("始まりの泥濘", "泥濘のギルド"),
           carryover.location_of(save_v, source["0"]))
@@ -399,7 +399,7 @@ try:
     sys.path.insert(0, MOD_DIR)
     tool = load("carryover_tool", os.path.join(MOD_DIR, "tool.py"))
     model = tool.Model()
-    check("世界を開ける", model.open_world("ヴェスティア"))
+    check("世界を開ける", model.open_world("世界H"))
     rows = model.rows()
     check("一覧が出る", len(rows) == 2, rows)
     hans_row = next(r for r in rows if r[1] == "重装のハンス")
@@ -434,7 +434,7 @@ try:
           lilia.where == ("始まりの泥濘", "灯り亭"), lilia.where)
 
     check("元の世界には同名が居る（検査が効く）",
-          model.collides("星読みのリリア", "ヴェスティア") is True)
+          model.collides("星読みのリリア", "世界H") is True)
     check("置き先には居ない", model.collides("星読みのリリア", "アルカディア") is False)
     check("読めない世界は検査できない（None）",
           model.collides("だれか", "素") is None)
@@ -727,10 +727,10 @@ try:
     # 元の世界での関係: id 9 = 重装のハンス（置き先では 7）、
     #                   id 3 = 誰それ（置き先に居ない）。
     social_zip = carryover.free_path(
-        os.path.join(carryover.carryover_dir(state_dir), "ヴェスティア"),
+        os.path.join(carryover.carryover_dir(state_dir), "世界H"),
         "社交のリナ")
     carryover.export(
-        npc_record("社交のリナ", 5), "ヴェスティア", "5", social_zip,
+        npc_record("社交のリナ", 5), "世界H", "5", social_zip,
         extra={"social": {"name": "社交のリナ", "relations": {
             "9": {"name": "重装のハンス", "relationship": "同行した"},
             "3": {"name": "居ないはずの誰か", "relationship": "見かけた"}}}})

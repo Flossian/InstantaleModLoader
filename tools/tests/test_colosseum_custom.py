@@ -45,7 +45,7 @@ def check(name, cond, detail=""):
 
 
 class Facility(object):
-    def __init__(self, name="漆黒斗技場", facility_type="colosseum", config=None,
+    def __init__(self, name="闘技場J161", facility_type="colosseum", config=None,
                  description="石造りの闘技場。"):
         self.id = "161"
         self.name = name
@@ -828,7 +828,7 @@ check("切れば何も言わない", not app.texts, app.texts)
 module.ANNOUNCE_RANK = True
 
 print("闘技場でない施設・値が読めないとき")
-app.player.location = Facility(name="霧隠れの宿", facility_type="inn", config={})
+app.player.location = Facility(name="宿J255", facility_type="inn", config={})
 app.texts = []
 ctx.hooks["__main__:EntryColosseumMatchManager.method"](
     lambda self: None, Manager(app))
@@ -935,7 +935,7 @@ check("例外を漏らさない（描写）", not ctx.errors, ctx.errors)
 print("相手の名前が主人公や仲間と重ならない")
 arena = Facility(config={"current_phase": 0, "enemy_data": {}})
 app = App(Player(arena))
-app.player.name = "ヴェイン・カスティロ"
+app.player.name = "ロラン・ベルク"
 ally = Player(arena)
 ally.name = "リュウ"
 app.party = {"player": app.player, "95": ally}
@@ -949,15 +949,15 @@ def named(name):
 
 
 check("主人公と同じ名前は改名する",
-      named("ヴェイン・カスティロ")["data"]["name"] == "ヴェイン・カスティロの名を騙る闘士")
+      named("ロラン・ベルク")["data"]["name"] == "ロラン・ベルクの名を騙る闘士")
 check("中黒と空白の違いも同じ名前に数える",
-      named("ヴェイン カスティロ")["data"]["name"] != "ヴェイン カスティロ")
+      named("ロラン ベルク")["data"]["name"] != "ロラン ベルク")
 check("仲間と同じ名前も改名する", named("リュウ")["data"]["name"] == "リュウの名を騙る闘士")
 check("重ならない名前はそのまま", named("白金の騎士")["data"]["name"] == "白金の騎士")
 check("改名を記録する", "same name as the party" in io.open(os.path.join(OUT_DIR, module.LOG_BASENAME), encoding="utf-8").read())
 told = generate(ctx, arena, 30)["location"]
 check("生成の頼みに一行の名前を伝える",
-      "闘士の名前に 「ヴェイン・カスティロ」「リュウ」 を使ってはならない" in told.description,
+      "闘士の名前に 「ロラン・ベルク」「リュウ」 を使ってはならない" in told.description,
       told.description)
 check("頼みに足した文は施設に残らない", "闘士の名前に" not in arena.description, arena.description)
 check("足すのは1度だけ", module.with_note(told, "闘士の名前に X", "闘士の名前に") is told)

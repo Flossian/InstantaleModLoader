@@ -423,7 +423,7 @@ def setup(charm_table=CHARM_RUNGS, broken=None, spread=1, steps=4,
 
     player = Character("ヴァン", is_player=True)
     npcs = [Character(name) for name in npc_names]
-    world = World("テストワールド", [(str(100 + i), npc)
+    world = World("世界F", [(str(100 + i), npc)
                                      for i, npc in enumerate(npcs)])
     app_cls = type("InstantaleApp", (BASE_APP,), {})
     main = sys.modules["__main__"]
@@ -599,7 +599,7 @@ HIGH_CHARM = 15         # 最上段の1つ下（強い魅力を感じている�
 
 def taste_of(module, npc):
     """setup() の世界での、その相手の好み（mod と同じ鍵で引く）。"""
-    return module._taste_of("テストワールド:{}:ヴァン".format(npc_id_of(npc)), 1)
+    return module._taste_of("世界F:{}:ヴァン".format(npc_id_of(npc)), 1)
 
 
 mod, ctx, call, npcs = setup(npc_names=NAMES)

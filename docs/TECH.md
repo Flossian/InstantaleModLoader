@@ -3625,7 +3625,7 @@ data = llm.ask(ctx, "mod_my_question", message, timeout=30, structure=structure)
 ゲームの送り口は `timeout` を受け取るが、待ちを打ち切らない
 （main_026 で、クラウドもローカルも `timeout=0.5` で返事を最後まで待った。GAME.md §2.12「送信と待ち」）。
 `ask` も打ち切らない。送り口を別のスレッドで呼び、`timeout` 秒を過ぎたら `still waiting` の WARN を1行出して待ち続け、返ったら `returned after` の WARN をもう1行出す。
-打ち切らないのは、ローカルの速さが GPU で何倍も違い、MOD の `timeout` は開発機の実測から決めているため。
+打ち切らないのは、ローカルの速さが GPU で何倍も違い、MOD の `timeout` は限られた環境の実測から決めているため。
 打ち切ると、遅い環境では MOD の働きが毎回黙って消える（返事が永久に来ない害より大きい。VERIFICATION.md §3.101）。
 送り口を直に呼ぶ MOD も同じ形にする（`335_`）。
 

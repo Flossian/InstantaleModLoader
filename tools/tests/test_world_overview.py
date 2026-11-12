@@ -77,7 +77,7 @@ def check(name, cond, detail=""):
 
 
 # ---------------------------------------------------------------- 偽ゲーム
-# 入力した文章（ヴェスティアの世界観の書き出しを短くしたもの）。
+# 入力した文章（世界Hの世界観の書き出しを短くしたもの）。
 PLOT = ("# 世界観\nこの資料は【A】と【B】の二つに分かれています。\n"
         "【A】は、あなただけが知る世界の真実です。出力に一切書きません。")
 
@@ -333,10 +333,10 @@ check("generate_new_world には載せない",
 # ==================================================== 入力どおりになること
 print("\n-- 差し替え --")
 mod, ctx, game, save_world = setup()
-save_world.generate_new_world("ヴェスティア", PLOT, False)
-check("保存された概要が入力した文章そのもの", saved_overview("ヴェスティア") == PLOT,
-      saved_overview("ヴェスティア"))
-check("本体が書いた文章は混ざらない", GENERATED not in (saved_overview("ヴェスティア") or ""))
+save_world.generate_new_world("世界H", PLOT, False)
+check("保存された概要が入力した文章そのもの", saved_overview("世界H") == PLOT,
+      saved_overview("世界H"))
+check("本体が書いた文章は混ざらない", GENERATED not in (saved_overview("世界H") or ""))
 check("差し替えが記録に残る", "overview replaced:" in log_text(), log_text()[-400:])
 check("読み返しが一致する", "OK the saved world_data['overview']" in log_text(),
       log_text()[-400:])
@@ -347,9 +347,9 @@ mod, ctx, game, save_world = setup()
 hook = ctx.hooks["scripts.llm.llm_manager_world_generate:"
                  "create_world_overview_from_plot"]
 by_keyword = hook(game.create_world_overview_from_plot,
-                  world_name="ヴェスティア", world_overview=PLOT)
+                  world_name="世界H", world_overview=PLOT)
 check("キーワードで拾える", by_keyword.overview == PLOT, by_keyword.overview)
-by_position = hook(game.create_world_overview_from_plot, "ヴェスティア", PLOT)
+by_position = hook(game.create_world_overview_from_plot, "世界H", PLOT)
 check("位置で拾える", by_position.overview == PLOT, by_position.overview)
 
 print("\n-- 触らないもの --")
@@ -364,13 +364,13 @@ check("例外を握り潰していない", ctx.errors == [], ctx.errors)
 mod, ctx, game, save_world = setup()
 hook = ctx.hooks["scripts.llm.llm_manager_world_generate:"
                  "create_world_overview_from_plot"]
-spaces = hook(game.create_world_overview_from_plot, "ヴェスティア", "   \n  ")
+spaces = hook(game.create_world_overview_from_plot, "世界H", "   \n  ")
 check("空白だけの入力も差し替えない", spaces.overview == GENERATED, spaces.overview)
 
 print("\n-- 本体の文章も残す（KEEP_GENERATED） --")
 mod, ctx, game, save_world = setup(keep_generated=True)
-save_world.generate_new_world("ヴェスティア", PLOT, False)
-kept = saved_overview("ヴェスティア")
+save_world.generate_new_world("世界H", PLOT, False)
+kept = saved_overview("世界H")
 check("入力が先頭に来る", (kept or "").startswith(PLOT), (kept or "")[:40])
 check("本体の文章が後ろに続く", (kept or "").endswith(GENERATED), (kept or "")[-40:])
 check("区切りが入る", kept == PLOT + mod.KEEP_SEPARATOR + GENERATED)
@@ -379,16 +379,16 @@ check("読み返しが一致する", "OK the saved world_data['overview']" in lo
 
 print("\n-- 応答の形が違うとき --")
 mod, ctx, game, save_world = setup(
-    response={"world_name": "ヴェスティア", "overview": GENERATED,
+    response={"world_name": "世界H", "overview": GENERATED,
               "structure_description": "…", "structure": {}})
-save_world.generate_new_world("ヴェスティア", PLOT, False)
-check("辞書で来ても差し替えられる", saved_overview("ヴェスティア") == PLOT,
-      saved_overview("ヴェスティア"))
+save_world.generate_new_world("世界H", PLOT, False)
+check("辞書で来ても差し替えられる", saved_overview("世界H") == PLOT,
+      saved_overview("世界H"))
 
-mod, ctx, game, save_world = setup(response={"world_name": "ヴェスティア"})
-save_world.generate_new_world("ヴェスティア", PLOT, False)
-check("overview が無ければ触らない", saved_overview("ヴェスティア") is None,
-      saved_overview("ヴェスティア"))
+mod, ctx, game, save_world = setup(response={"world_name": "世界H"})
+save_world.generate_new_world("世界H", PLOT, False)
+check("overview が無ければ触らない", saved_overview("世界H") is None,
+      saved_overview("世界H"))
 check("触れなかったことが警告に出る",
       "has no readable 'overview'" in log_text(), log_text()[-400:])
 check("例外を握り潰していない", ctx.errors == [], ctx.errors)
@@ -398,8 +398,8 @@ mod, ctx, game, save_world = setup()
 hook = ctx.hooks["scripts.llm.llm_manager_world_generate:"
                  "create_world_overview_from_plot"]
 # 差し替えた後、本体が別の文章を保存してしまう場合の再現。
-hook(game.create_world_overview_from_plot, "ヴェスティア", PLOT)
-game.save("ヴェスティア", GENERATED)
+hook(game.create_world_overview_from_plot, "世界H", PLOT)
+game.save("世界H", GENERATED)
 check("ずれたら WARN が出る",
       "WARN the saved world_data['overview'] is not what was put in"
       in log_text(), log_text()[-400:])
@@ -408,12 +408,12 @@ check("WARN はローダのログにも出る",
 
 print("\n-- 照合は生成の直後の1回だけ --")
 mod, ctx, game, save_world = setup()
-save_world.generate_new_world("ヴェスティア", PLOT, False)
+save_world.generate_new_world("世界H", PLOT, False)
 first = log_text()
 check("1回目で照合が済む", "OK the saved world_data['overview']" in first,
       first[-400:])
 # 遊んでいる間の保存。本体が概要を書き換えていても、ここでは何も言わない。
-game.save("ヴェスティア", GENERATED)
+game.save("世界H", GENERATED)
 check("2回目以降は照合しない", log_text() == first,
       log_text()[len(first):][:400])
 check("2回目の WARN も出ない",
@@ -423,21 +423,21 @@ print("\n-- world_data.json 以外への書き出し --")
 mod, ctx, game, save_world = setup()
 hook = ctx.hooks["scripts.llm.llm_manager_world_generate:"
                  "create_world_overview_from_plot"]
-hook(game.create_world_overview_from_plot, "ヴェスティア", PLOT)
+hook(game.create_world_overview_from_plot, "世界H", PLOT)
 before = log_text()
-game.save("ヴェスティア", GENERATED, basename="area_data.json")
+game.save("世界H", GENERATED, basename="area_data.json")
 check("エリアの書き出しは素通し", log_text() == before,
       log_text()[len(before):][:400])
 # 素通しした後も控えは生きていて、本物の world_data.json で照合できる。
-game.save("ヴェスティア", PLOT)
+game.save("世界H", PLOT)
 check("その後の world_data.json で照合する",
       "OK the saved world_data['overview']" in log_text(), log_text()[-400:])
 
 print("\n-- 復号器が引けないとき --")
 mod, ctx, game, save_world = setup(with_codec=False)
-save_world.generate_new_world("ヴェスティア", PLOT, False)
-check("差し替え自体は効く", saved_overview("ヴェスティア") == PLOT,
-      saved_overview("ヴェスティア"))
+save_world.generate_new_world("世界H", PLOT, False)
+check("差し替え自体は効く", saved_overview("世界H") == PLOT,
+      saved_overview("世界H"))
 check("読み返せなかったと記録される", "could not read" in log_text(),
       log_text()[-400:])
 check("書き出す直前の中身で照合する",

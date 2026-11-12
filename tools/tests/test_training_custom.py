@@ -131,7 +131,7 @@ KEEP_SAMPLES = (
 class Facility:
     """訓練所。**断りの根は `config["trained"]`**（実測）。"""
 
-    def __init__(self, name="ゼニスの風", trained=False):
+    def __init__(self, name="土地F6の風", trained=False):
         self.id = "mod:331_facility_investment:6-1"
         self.name = name
         # 一度も卒業していない施設は**キー自体を持たない**（実測）。

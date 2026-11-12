@@ -601,7 +601,7 @@ def fresh(**settings):
     module._store()["rng"] = FixedRng(0.0)
     ctx = FakeCtx()
     module.apply(ctx)
-    module._LEGACY_DISABLED.clear()             # 開発機の設定の控えに左右されないように
+    module._LEGACY_DISABLED.clear()             # 手元の設定の控えに左右されないように
     worker = module._store()["worker"]
     worker.enqueue = lambda job: worker.run(job)
     APP = InstantaleApp()

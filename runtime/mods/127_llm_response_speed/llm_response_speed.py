@@ -56,7 +56,7 @@ b10642 は MTP（複数トークン予測）を受け付ける。
 - 本体に無い: 別の下書き役を `--model-draft` で渡す（下の通り）
 
 Gemma 4 26B A4B 系に Gemma の下書き役（`mtp-gemma-4-26B-A4B-it.gguf`、252 MB）を付けると、
-戦闘の頼みで生成が約 1.5 倍、全体が約 2 割速い（ゲームと同じ温度 1.0。温度 0 では 1.7 倍・3 割）。Fenrir-X のような調整済みのモデルにも当たる（VERIFICATION.md §3.100）。
+戦闘の頼みで生成が約 1.5 倍、全体が約 2 割速い（ゲームと同じ温度 1.0。温度 0 では 1.7 倍・3 割）。Gemma 4 26B A4B を調整したモデルにも当たる（VERIFICATION.md §3.100）。
 ゲームは `--model-draft` を渡さないので、ここで足す。
 
 - 下書き役は、起動するモデルと同じフォルダの `mtp\` から探す（モデルの置き場に直に置くとゲームの一覧に並ぶ）
@@ -67,7 +67,7 @@ Gemma 4 26B A4B 系に Gemma の下書き役（`mtp-gemma-4-26B-A4B-it.gguf`、2
 - 設定欄に投機の旗（`--spec-type` など）があれば触らない
 
 MTP を付けるときは `ngram-mod`（頼みの文や書いた分の繰り返しを写して下書きする）も重ねる（`MTP_NGRAM`）。
-Fenrir-X・温度 1.0 で、MTP だけと比べて戦闘の頼みの生成が +5%、それ以外の頼みは +1%。VRAM は増えない。
+Gemma 4 26B A4B を調整したモデル・温度 1.0 で、MTP だけと比べて戦闘の頼みの生成が +5%、それ以外の頼みは +1%。VRAM は増えない。
 Qwen3.8-27B では −2% / +1% で、効かないが害も無い（VERIFICATION.md §3.100）。
 下書き役が無いモデルに `ngram-mod` だけを付けることはしない（測っていない）。
 起きなかったときは MTP ごと外して起こし直す。
@@ -528,7 +528,7 @@ def mtp_matches(target, draft):
 
     構造の名前が「本体の名前 + `-assistant`」で、出口の幅（`embedding_length_out`）が本体の幅と同じ、
     注意の形と RoPE（`MTP_SAME_KEYS`）と語彙が同じこと。どれかが読めなければ付けない。
-    Gemma 4 26B A4B の下書き役は、同じ構造を調整したモデル（Fenrir-X など）にも当たる（VERIFICATION.md §3.100）。
+    Gemma 4 26B A4B の下書き役は、同じ構造を調整したモデルにも当たる（VERIFICATION.md §3.100）。
     """
     arch = target.get("general.architecture")
     draft_arch = draft.get("general.architecture")

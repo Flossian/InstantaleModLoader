@@ -66,7 +66,7 @@ check("days are spread with the rest in front", rules.distribute(365, 12)[:6] ==
 check("the spread keeps the total", sum(rules.distribute(1000, 13)) == 1000)
 
 # ------------------------------------------------------------------ Location の下
-STATUS = "Atk:1\nGold:2\nLocation:城壁の足元"
+STATUS = "Atk:1\nGold:2\nLocation:土地F61"
 check("the date goes under the location",
       rules.with_date(STATUS, "Date:x") == STATUS + "\nDate:x")
 check("a later line stays under the date",

@@ -316,8 +316,8 @@
         "en": "Resize on the diffusers family too"
       },
       "note": {
-        "ja": "diffusers_openvino のような変換済みモデルの一族では、既定で寸法を変えない。この一族は形を固定してあるので、寸法を変えるとモデルの作り直しが走り、64GB の RAM を使い切って SSD へページングを始める。sdcpp 系（cuda / vulkan / cpu）には関係しない設定",
-        "en": "On families that run converted, fixed-shape models such as diffusers_openvino, the size is left alone by default. Changing it forces the model to be rebuilt, which fills 64GB of RAM and starts paging to the SSD. This setting does not affect the sdcpp family"
+        "ja": "diffusers_openvino のような変換済みモデルの一族では、既定で寸法を変えない。この一族は形を固定してあるので、寸法を変えるとモデルの作り直しが走り、RAM を使い切って SSD へページングを始める。sdcpp 系（cuda / vulkan / cpu）には関係しない設定",
+        "en": "On families that run converted, fixed-shape models such as diffusers_openvino, the size is left alone by default. Changing it forces the model to be rebuilt, which fills the RAM and starts paging to the SSD. This setting does not affect the sdcpp family"
       }
     },
     "LCM_METHOD": {

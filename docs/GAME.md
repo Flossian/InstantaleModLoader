@@ -808,7 +808,7 @@ app.world_dict['quests']      {id: dict}                 世界の雛形
   **その世界で新しく始めた別のキャラクタにまで乗る**
 - 生きた一覧（`app.world.quests`）へ書いた難易度は、画面には出るが
   `savedata.json` には出ない
-- 依頼を消す試し（2026-10-10、テストワールド。手順は下の「依頼を消す」）では、`app.save_data_dict['quests']` から消したときだけ、読み直しの後も消えていた。
+- 依頼を消す試し（2026-10-10、世界F。手順は下の「依頼を消す」）では、`app.save_data_dict['quests']` から消したときだけ、読み直しの後も消えていた。
   生きた一覧だけから消すと、読み直しで戻った（そのとき `save_data_dict['quests']` に残っていた）
 - 生きた一覧へ書いた値は、受注・クリア・保存をまたいでもセーブの中身へ写らない（2026-10-10、実プレイのセーブ1件をログと突き合わせた）。
   `325_` が生成の直後と受注の時点で難易度 74 を生きた一覧へ書き（ゲーム自身の値は 67）、その依頼を受けてクリアし、その後も保存と読み直しが続いた。
@@ -878,7 +878,7 @@ MOD からの書き方はこうなる。
 
 #### 掲示板で作った依頼と、それを消す（2026-10-10 実測）
 
-テストワールドの土地7（街）で「クエストを探す」を3回押し、間に消す試しを挟んだ。
+世界Fの土地7（街）で「クエストを探す」を3回押し、間に消す試しを挟んだ。
 `generate_random_quest` の前後を、ゲーム内スクリプトで包んで比べた（`tools\drive\`）。
 
 - 依頼は、いまいる土地の依頼として作られる。3回とも `neighboring_settlement_id` がいまいる土地の id（`'7'`）だった。`generate_random_quest` は引数を取らない
@@ -924,7 +924,7 @@ random.sample(range(lo, hi), k=3)          save_area_json.py:329
 エディタで後から足した街（id 9 以降）は枠が無く、全域 `range(1, 77)` から引かれる（id 33 で `[6, 34, 3]`、id 21 で `[13, 30, 40]`）。
 `133_ui_area_difficulty` はこの表で未訪問の街の帯を見積もる。
 
-「クエストを探す」で作る1件も同じ枠から引く（2026-10-31、テストワールドの id 8 で `225_` 版9。VERIFICATION.md §3.117）:
+「クエストを探す」で作る1件も同じ枠から引く（2026-10-31、世界Fの id 8 で `225_` 版9。VERIFICATION.md §3.117）:
 
 ```text
 random.randint(lo, hi - 1)                 instantale.py:5957（DisplayQuestChoice.generate_random_quest）
@@ -2195,7 +2195,7 @@ LLM へ渡る品の額は、そのときの `attributes` の額（店の品は�
 
 ##### 2.13.1.5 品を作る入口の戻りは品ではない（実測。VERIFICATION.md §3.121）
 
-2026-11-03 にテストワールドで入口を直に呼んで測った（作った品は抜いて戻した）:
+2026-11-03 に世界Fで入口を直に呼んで測った（作った品は抜いて戻した）:
 
 | 入口 | 戻り | 品の行き先 |
 | --- | --- | --- |
@@ -2264,7 +2264,7 @@ scripts.items:Item.__init__(self, name, item_type, attributes, description,
 イベントの判定（`field_event_evaluator` / `quest_referee_event_resolve`）は効果 `get_item` で品を渡すが、外見文の書き方を指示しておらず、本文と同じ日本語で返る（記録 12件中12。2026-10-17）。
 
 食べ物は、`consumable` ではなく大半が `healing_item` に入っている。
-2026-10-10 にテストワールドの全員の持ち物（98品）を数えた:
+2026-10-10 に世界Fの全員の持ち物（98品）を数えた:
 
 | `item_type` | 品数 | `item_detail` |
 | --- | --- | --- |
@@ -2653,7 +2653,7 @@ npcs[id].config.companion_quest_growth = {xp, base, days, stage}
 - `member_ids` には `'player'` も入るが、戻り値に並ぶのは仲間の分だけだった
 - `base` は6つの能力値すべてに同じだけ足される。上の依頼の後に180日送ると、ヴァルトの6つの能力値がどれも +0.423（筋力 10 → 10.42 など。小数のまま持つ）、経験値が +75.5 になった（2026-10-15、クラウド）
 - `stat_budget`（2.2）は、6つに配った量の合計（2.54）とも合わず、何を表すかは分かっていない
-- Lv72 の仲間2人（テストワールド、難易度の釣り合う依頼）では、`xp` も `base` も 0 で `stage` が 13 だった。レベルが高いと入らない
+- Lv72 の仲間2人（世界F、難易度の釣り合う依頼）では、`xp` も `base` も 0 で `stage` が 13 だった。レベルが高いと入らない
 
 #### 訓練・休暇のマネージャ（すべて `__main__`）
 
@@ -2856,7 +2856,7 @@ process_choice(AreaMoveManager,       '馬車(1000G)' / '徒歩(3ヵ月)')
   新しい値は `round(今の値 − 上限/2)`（Python の丸め。.5 は偶数へ）で、依頼の難易度は効かない。
   同じ行で同行者も引かれ、次の行（:6618）で主人公と同行者の `exhausted` を True にする。
   引いた後に最大 HP も下がる（Lv72 で 1848 → 1612）。
-  `240_probe_stamina` の実機（2026-10-08、テストワールド Lv72）: 難易度76 でも難易度1 でも 49→24、同行者は 100→50。
+  `240_probe_stamina` の実機（2026-10-08、世界F Lv72）: 難易度76 でも難易度1 でも 49→24、同行者は 100→50。
   セーブの控え（ゲームが `backups\` に残す zip）の前後でも同じ式に合う:
   Lv4・難易度5で 11→6、Lv49・難易度2で 39→20、Lv59・難易度66で 43→22、Lv85・難易度28で 41→18（上限46）。
   控えで半分より多く減った組（Lv66 で 46→18、Lv80 で 53→17）は道中で HP が大きく減っていた。
@@ -3750,8 +3750,8 @@ scripts.llm.batch_worker（RequestWorker / batch_requests）   送信の失敗�
 
 | 回 | 世界 | 流れた頼み |
 | --- | --- | --- |
-| 01:52〜01:56 | 検証ワールド（作った直後） | `npc_detail_generater` 58件（`llm_manager`）・`settlement_quest_generator` 5件（`llm_manager_world_generate`） |
-| 11:48〜11:55 で中断 | 検証ワールド2（主人公で30日遊んだ後） | `create_settlement_detail` 6件・`settlement_quest_generator` 5件（どちらも `llm_manager_world_generate`） |
+| 01:52〜01:56 | 検証用の世界（作った直後） | `npc_detail_generater` 58件（`llm_manager`）・`settlement_quest_generator` 5件（`llm_manager_world_generate`） |
+| 11:48〜11:55 で中断 | 世界K（主人公で30日遊んだ後） | `create_settlement_detail` 6件・`settlement_quest_generator` 5件（どちらも `llm_manager_world_generate`） |
 
 - 始めるときに `set_ai_models` が走り、送り口が作り直される（§2.12）
 - 画面にはエリアの名前と「完了 N 件 ／ 残り N 件 ／ 失敗 N 件」が出る。2回目の回は残りが 374 から 420 に増えた（集落の詳細を作ると、その中の人物や依頼が残りに足されるとみられる）
@@ -3767,8 +3767,8 @@ scripts.llm.batch_worker（RequestWorker / batch_requests）   送信の失敗�
 `batch_worker` は並列化の部品ではない。
 説明文は「Propagate provider worker errors to non-interactive generation jobs」で、遊んでいるときの再試行ボタンの代わりに、失敗を一括生成へ投げる。
 
-2026-10-15 夜に、検証ワールド3 の残りを最後まで流した。
-LLM はローカル（Fenrir-X-26B-A4B、llama-server の `--parallel 1`）、絵は手元の sdcpp_cuda で、`343_stable_diffusion`（当時 916）の解像度とサンプラーの上書きが効いている。
+2026-10-15 夜に、世界L の残りを最後まで流した。
+LLM はローカル（llama-server の `--parallel 1`）、絵は sdcpp_cuda で、`343_stable_diffusion`（当時 916）の解像度とサンプラーの上書きが効いている。
 21:11〜22:40 の 89 分で 632 件。失敗は0件。
 
 | 仕事 | 件数 | 1件 | うち絵（GPU） | 絵の枚数 | 1件で何が起きるか |
@@ -3965,7 +3965,7 @@ Atk:<n>(+<n>)\nDef:<n>(+<n>)\nExp:<n>/<n>\nGold:<n>\nAge:<n>\nSta:…\nLocation:
 > （`130_` の保険の経路が1度も走らなかった）。
 > ビルドが変われば逆に振れる側なので、書き換える側は保険を残しておくこと。
 
-`status_label` の組み方（2026-11-07、テストワールド、窓 1920×1080、dpi 96 で読んだ値）:
+`status_label` の組み方（2026-11-07、世界F、窓 1920×1080、dpi 96 で読んだ値）:
 
 | 項目 | 値 |
 | --- | --- |
@@ -4310,7 +4310,7 @@ AIManager.set_ai_models (instantale.py:510〜516)   一族を import する行�
 > この一族は**形を固定して変換したモデル**を回すので、
 > 出口へ渡す寸法を変えるとモデルの作り直しが走る。
 > 背景を 1024x512 から 1536x768（画素 x2.25）にした実機では、
-> 64GB の RAM を使い切って SSD へページングを始めた。
+> RAM を使い切って SSD へページングを始めた。
 > 1152x576（画素 x1.27）なら 15.1 秒で通る（素の 1024x512 は 10.5 秒）が、
 > **通った回も RAM は伸びたまま、ゲームを閉じるまで戻らない**。
 > 寸法ごとに作り直したものが常駐すると読める。
@@ -4326,7 +4326,7 @@ AIManager.set_ai_models (instantale.py:510〜516)   一族を import する行�
 ### 2.34 画面左下のアイコンの列（`icon_button_layout`）
 
 画面左下の能力値の欄の下端に、ゲーム自身のアイコンが4つ並ぶ。
-2026-10-10 にテストワールドで、窓 1980×1080（dpi 96）のときの値を読んだ（読むだけ）。
+2026-10-10 に世界Fで、窓 1980×1080（dpi 96）のときの値を読んだ（読むだけ）。
 
 | 番号 | 絵（`Assets/images/icons/interface/`） | 開くもの | `pos_hint` |
 | --- | --- | --- | --- |

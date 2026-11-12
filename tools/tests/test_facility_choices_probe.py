@@ -121,7 +121,7 @@ if True:
             return [line for line in fh.read().splitlines() if line.strip()]
 
     print("宿屋へ入る")
-    inn = Facility("霧隠れの宿", "inn", {"出る", "宿泊する"})
+    inn = Facility("宿J255", "inn", {"出る", "宿泊する"})
     app = types.SimpleNamespace(
         player=types.SimpleNamespace(location=inn),
         buttons=[button("出る", "MovePhaseManager", ["1", "2", "3"]),

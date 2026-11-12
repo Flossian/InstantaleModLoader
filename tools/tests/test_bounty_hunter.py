@@ -115,7 +115,7 @@ class BattleStartManager(object):
 
 
 class App(object):
-    def __init__(self, lawfulness, area_id="0", flags=(), world="テストワールド",
+    def __init__(self, lawfulness, area_id="0", flags=(), world="世界F",
                  buttons=()):
         self.player = types.SimpleNamespace(
             experience_level=60,
@@ -1081,7 +1081,7 @@ def main():
           BattleStartManager.built == [("guard", None)], BattleStartManager.built)
     key = list(ctx2.files)[0]
     check("控えは世界ごとのファイルに置く",
-          "テストワールド" in key or key.endswith(".json"), key)
+          "世界F" in key or key.endswith(".json"), key)
 
     # 関所（durations）が 90 を 14 に縮めた移動。この包みには素の 90 が来る。
     app = App({"0": -25})
