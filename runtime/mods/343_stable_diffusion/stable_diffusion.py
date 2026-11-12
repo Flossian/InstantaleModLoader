@@ -51,6 +51,7 @@ from instantale_modloader import saves
 from instantale_modloader import ui
 
 from . import assets
+from . import faces
 from . import humans
 from . import img2img
 from . import live as hot
@@ -133,7 +134,7 @@ STRIP_LORA = False
 
 #: diffusers 系（`diffusers_openvino` など）でも寸法を変える。
 #: **既定は切**。この一族は形を固定して変換したモデルを回すので、
-#: 寸法を変えると作り直しが走り、実機では 64GB の RAM を使い切って
+#: 寸法を変えると作り直しが走り、実機では RAM を使い切って
 #: SSD へページングを始めた（VERIFICATION.md §3.65）。sdcpp 系には関係しない。
 DIFFUSERS_RESIZE = False
 
@@ -1050,6 +1051,59 @@ def apply(ctx):
                         "strength": float(strength)}
             return extra
 
+        def refine(orig, self, args, kwargs, kind, stage, result, route):
+            """描き終えた立ち絵の顔だけを描き直して貼り戻す（`faces.py`。検出器を置いたときだけ）。
+
+            `route` はその立ち絵を最後に描いたプリセットの組（None はゲームの部品）。
+            顔が見つからない・描けないときは元の戻り値のまま。
+            """
+            conf = faces.config(state_dir)
+            if conf is None:
+                return result
+            image = img2img.first_image(result)
+            if image is None:
+                return result
+            started = time.time()
+            try:
+                found = faces.find(image, conf)
+            except Exception as exc:
+                ctx.log_exc("image quality: finding the face failed")
+                warn("face-find-failed", "顔の位置を探せなかったので、顔を描き直さない（{}: {}）".format(
+                    type(exc).__name__, exc))
+                return result
+            if found is None:
+                write("顔の描き直し [{}/{}]: 顔が見つからないので描き直さない".format(kind, stage))
+                return result
+            box, grow = found
+            left, top, size = faces.square(box, grow, image.size[0], image.size[1])
+            if conf["preset"]:
+                route = method_route(conf["preset"], "顔の描き直し")
+            family = route["model"][0] if route else FAMILY.get("name")
+            side = faces.side_for(conf, family)
+            from PIL import Image
+            crop = image.convert("RGB").crop((left, top, left + size, top + size)).resize(
+                (side, side), Image.LANCZOS)
+
+            def extra(params, changes):
+                got = {"width": side, "height": side, "init_image": crop, "strength": conf["strength"]}
+                prompt = changes.get("prompt", params.get("prompt"))
+                if isinstance(prompt, str):
+                    got["prompt"] = faces.face_prompt(prompt)
+                return got
+            try:
+                face = img2img.first_image(draw(orig, self, args, kwargs, kind, stage, route, extra,
+                                                "顔の描き直し"))
+            except Exception as exc:
+                ctx.log_exc("image quality: redrawing the face failed")
+                warn("face-redraw-failed", "顔を描き直せなかったので、元の絵のままにする（{}: {}）".format(
+                    type(exc).__name__, exc))
+                return result
+            if face is None:
+                return result
+            write("顔の描き直し [{}/{}]: 顔 {} を {} 四方で切り出し {} 四方で描き直した（強さ {}、{:.1f} 秒）".format(
+                kind, stage, box, size, side, conf["strength"], time.time() - started))
+            return faces.replace_first(result, faces.paste(image, face, left, top, size, conf["feather"]))
+
         def hook(orig, self, *args, **kwargs):
             result = run(orig, self, *args, **kwargs)
             if diffusers or sig is None:
@@ -1080,13 +1134,25 @@ def apply(ctx):
                     pick = "portrait"
                 mode = img2img.plan(pick, stage, dict(bound.arguments), live.img2img,
                                     source is not None, forced)
+
+            def finish(result, route):
+                # 立ち絵の最後の段（ゲームの2段の1段目は除く）だけ、顔を描き直す
+                if not sdcpp or kind != "portrait" or stage == "stage1":
+                    return result
+                try:
+                    return refine(orig, self, args, kwargs, kind, stage, result, route)
+                except Exception:
+                    # 描き終えた絵は失わない（描き直しの段の外へ例外を出すと、ふだんの描き方で描き直す）
+                    ctx.log_exc("image quality: face pass failed")
+                    return result
+
             if mode == "redraw":
                 conf = img2img.conf_for(live.img2img, mode, pick)
                 # プリセットが空なら、ゲーム既定のモデルで描く（続けて描くと同じ）。
                 route = method_route(conf["preset"], "描き直し（{}）".format(kind))
                 try:
-                    return draw(orig, self, args, kwargs, kind, stage, route,
-                                init_from(source, conf["strength"]), "描き直し")
+                    return finish(draw(orig, self, args, kwargs, kind, stage, route,
+                                       init_from(source, conf["strength"]), "描き直し"), route)
                 except Exception as exc:
                     ctx.log_exc("image quality: img2img redraw failed")
                     warn("img2img-redraw-failed",
@@ -1094,9 +1160,9 @@ def apply(ctx):
                              type(exc).__name__, exc))
             elif mode == "chain":
                 conf = img2img.conf_for(live.img2img, mode, pick)
+                first_route = method_route(conf["first"], "続けて描く1つ目（{}）".format(kind))
                 try:
-                    first = draw(orig, self, args, kwargs, kind, stage,
-                                 method_route(conf["first"], "続けて描く1つ目（{}）".format(kind)),
+                    first = draw(orig, self, args, kwargs, kind, stage, first_route,
                                  mode="続けて描く 1/2")
                 except Exception as exc:
                     ctx.log_exc("image quality: chain first pass failed")
@@ -1109,19 +1175,20 @@ def apply(ctx):
                         warn("img2img-chain-no-image",
                              "続けて描くの1つ目が絵を返さなかったので、1つ目の絵のままにする")
                         return first
+                    second_route = method_route(conf["second"], "続けて描く2つ目（{}）".format(kind))
                     try:
-                        return draw(orig, self, args, kwargs, kind, stage,
-                                    method_route(conf["second"], "続けて描く2つ目（{}）".format(kind)),
-                                    init_from(image, conf["strength"]), "続けて描く 2/2")
+                        second = draw(orig, self, args, kwargs, kind, stage, second_route,
+                                      init_from(image, conf["strength"]), "続けて描く 2/2")
                     except Exception as exc:
                         ctx.log_exc("image quality: chain second pass failed")
                         warn("img2img-chain-second-failed",
                              "続けて描くの2つ目で描けなかったので、1つ目の絵のままにする（{}: {}）".format(
                                  type(exc).__name__, exc))
-                        return first
+                        return finish(first, first_route)
+                    return finish(second, second_route)
             # 種類にプリセットを割り当てていれば、その部品と値で描く（sdcpp だけ）。
-            return draw(orig, self, args, kwargs, kind, stage,
-                        kind_route(pick) if sdcpp else None)
+            route = kind_route(pick) if sdcpp else None
+            return finish(draw(orig, self, args, kwargs, kind, stage, route), route)
         return hook
 
     # ------------------------------------------------------- 当てる・当て直す
