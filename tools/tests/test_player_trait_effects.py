@@ -371,6 +371,69 @@ check("古い版で置き換えた特質は頼み直す",
       and len(asked) == before_asked + 1 and "煤の肺" in asked[-1] and "値切りの目" not in asked[-1],
       stored().get("traits", {}).get(lung))
 
+print("戦闘の効果")
+check("検算: 上限で止める", rules.clean_effect({"kind": "battle", "effect": "reduce", "percent": 40})
+      == {"kind": "battle", "effect": "reduce", "percent": 15})
+check("検算: 特効は相手が要る", rules.clean_effect({"kind": "battle", "effect": "slayer", "percent": 20}) is None
+      and rules.clean_effect({"kind": "battle", "effect": "slayer", "percent": 20, "target": "boss"})
+      == {"kind": "battle", "effect": "slayer", "percent": 20, "target": "boss"})
+check("検算: 負の量と開いていない種類は捨てる",
+      rules.clean_effect({"kind": "battle", "effect": "evade", "percent": -5}) is None
+      and rules.clean_effect({"kind": "battle", "effect": "curse", "percent": 30}) is None)
+check("重さ: 割合を重さ1あたりの％で割る（特効はボス戦で 0.4 倍）",
+      rules.weight([{"kind": "battle", "effect": "critical", "percent": 10}]) == 2.0
+      and rules.weight([{"kind": "battle", "effect": "slayer", "percent": 20, "target": "boss"}]) == 0.8)
+check("同じ種類は足す", rules.normalize({"traits": [{"name": "a", "effects": [
+    {"kind": "battle", "effect": "evade", "percent": 10}, {"kind": "battle", "effect": "evade", "percent": 10}]}]},
+    [("a", "", 3)])["a"]["effects"] == [{"kind": "battle", "effect": "evade", "percent": 15}])
+row = rules.display_row("鉄の皮膚", {"effects": [{"kind": "battle", "effect": "reduce", "percent": 15},
+                                              {"kind": "battle", "effect": "slayer", "percent": 20, "target": "boss"}]})
+check("表示: 名前と値、戦闘の効果は戦闘中（ボス戦の特効はボス戦）だけ色が付く",
+      row["effects"] == [{"text": "軽減 受けるダメージ -15%", "condition": "battle"},
+                         {"text": "特効 ボス戦 +20%", "condition": "boss"}], row)
+prompt = rules.build_messages("x", "", [("a", "b", 3)])[1]["content"]
+check("頼み文に戦闘の効果の一覧と重さが載る", "3. battle" in prompt and "reduce: 軽減" in prompt and "endure 25" in prompt)
+
+player.traits.append({"name": "鉄の皮膚", "description": "刃も通りにくい硬い皮膚。ボスの大技にも怯まない。",
+                      "severity": 4})
+replies.append(json.dumps({"traits": [{"name": "鉄の皮膚", "effects": [
+    {"kind": "battle", "effect": "reduce", "percent": 20},
+    {"kind": "battle", "effect": "slayer", "percent": 20, "target": "boss"}], "note": ""}]}, ensure_ascii=False))
+# 前の段の頼みが終わるまで待つ（処理中の鍵には積まない。jobs.Worker.enqueue）
+worker = sys.modules["mod346.player_trait_effects"].process_store(ctx)["worker"]
+wait_for(lambda: not worker._pending)
+toggle(lambda self: None, None)
+skin = rules.fingerprint(rules.read_traits([player.traits[-1]])[0])
+check("戦闘の効果の特質を控える", wait_for(lambda: skin in stored().get("traits", {})), list(stored().get("traits", {})))
+from instantale_modloader import battle_effects  # noqa: E402
+check("戦闘の窓口に答えを置いた（411 は読み込んでいない）", battle_effects.owners() == [package], battle_effects.owners())
+check("主人公の戦闘の効果", battle_effects.effects_for(app, player) == {"reduce": 15, "slayer": {"boss": 20}},
+      battle_effects.effects_for(app, player))
+check("主人公でなければ答えない", battle_effects.effects_for(app, Person("仲間", [])) == {})
+mod.USE_BATTLE = False
+check("設定を切ると答えない", battle_effects.effects_for(app, player) == {})
+mod.USE_BATTLE = True
+
+battle_effects.install(ctx)
+handle = ctx.hooks["__main__:BattlePhaseManager.handle_battle_situation"]
+calc = ctx.hooks["__main__:BattlePhaseManager.calculate_battle_effect"]
+instant = ctx.hooks["scripts.functions:get_instant_damage"]
+foe = types.SimpleNamespace(name="ゴブリン", current_hp=50, max_hp=50, status={})
+app.current_enemy_dict = {"ゴブリン1": foe}
+app.party = {"player": player}
+app.add_text = lambda text: None
+ui.party_member_ids = lambda _app: []
+seen = {}
+
+
+def foe_turn(self, key, side, action):
+    calc(lambda s, a: ({"試験太郎": 200},), self, action)
+    seen["hit"] = instant(lambda attack, defense: attack, 200, 0)
+
+
+handle(foe_turn, types.SimpleNamespace(app=app), "ゴブリン1", "敵側", {})
+check("411 が無くても軽減が効く（200 → 170）", seen.get("hit") == 170, seen)
+
 check("握り潰した例外が無い", not ctx.errors, ctx.errors[:2])
 print()
 if failures:

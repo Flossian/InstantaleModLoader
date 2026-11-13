@@ -147,7 +147,7 @@
 | [`343_stable_diffusion`](MODS.md#343_stable_diffusion-stable-diffusion-の解像度サンプラーモデルプロンプトを差し替える) | Stable Diffusionの各種差し替え | Stable Diffusion の解像度・サンプラー・モデル・プロンプトを差し替える | 55 |  |
 | [`344_quest_return_days`](MODS.md#344_quest_return_days-依頼から帰還すると日付が進む) | 依頼から帰還すると日付が進む | 依頼から帰還すると日付が進む | 2 |  |
 | [`345_date_display`](MODS.md#345_date_display-現在地の下に日付を表示する) | 現在地の下に日付を表示する | 現在地の下に日付を表示する | 3 |  |
-| [`346_player_trait_effects`](MODS.md#346_player_trait_effects-主人公の特質を能力値と店の値段に効かせる) | 主人公の特質を能力値と店の値段に効かせる | 主人公の特質を能力値と店の値段に効かせる | 6 |  |
+| [`346_player_trait_effects`](MODS.md#346_player_trait_effects-主人公の特質を能力値戦闘店の値段に効かせる) | 主人公の特質を能力値・戦闘・店の値段に効かせる | 主人公の特質を能力値・戦闘・店の値段に効かせる | 7 |  |
 | [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘の審判への仲間の情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |
 | [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | 仲間とのアイテム受け渡し | 仲間とアイテムを受け渡しできる | - |  |
 | [`403_npc_social_memory`](MODS.md#403_npc_social_memory-npc同士がお互いを認知し関係を覚える) | NPC同士の認知と関係記憶 | NPC同士がお互いを認知し、関係を覚える | 5 |  |

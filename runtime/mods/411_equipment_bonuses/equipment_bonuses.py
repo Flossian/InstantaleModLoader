@@ -7,7 +7,7 @@
 `attributes` に「筋力: +3」の形で書く。説明欄にそのまま出て、セーブにも残る。
 付くのは epic / legendary / mythic だけで、数と量はレア度ごとに設定で決める。
 武器と防具にはさらに、それぞれの効果を「会心: 15%」の形で書く
-（種類と決まりは `effects.py`、戦闘への効かせ方は `battle.py`）。
+（種類と決まりは `effects.py`。戦闘に効かせるのはローダの戦闘の効果の窓口 `battle_effects`）。
 
 作られた瞬間を拾う経路は `410_` と同じ:
 
@@ -28,9 +28,10 @@
 答えが無ければ本体の `equipments` の weapon / wearable を読む。
 合算の仕方は `333_` の合算の設定に関係なく、この MOD の設定で決める。
 
-武器の効果は、主人公と仲間（`APPLY_TO_PARTY`）が身に着けている武器のものを、
-その者の1手の中でだけ効かせる（`battle.py`）。
-防具の効果は同じ者が身に着けている防具のもので、同じ種類を複数の部位に着ても重ならず、最大の1品だけが効く。
+武器と防具の効果は、主人公と仲間（`APPLY_TO_PARTY`）が身に着けている品のものを、
+ローダの戦闘の効果の窓口（`battle_effects.declare`。TECH.md §3.3.28）に答える。
+戦闘の中で効かせるのは窓口で、成長の討伐数だけは倒したときの知らせ（`on_kill`）でこの MOD が数える。
+防具の効果は、同じ種類を複数の部位に着ても重ならず、最大の1品だけが効く。
 重装の器用の低下は、能力値の窓口へ答える補正に足す。
 威光は主人公が着ているときだけ、値段の窓口（`prices.adjust`）で店の買値を下げる。
 """
@@ -40,9 +41,9 @@ import sys
 import threading
 import weakref
 
-from instantale_modloader import abilities, equipment, frames, items, llm, prices, ui
+from instantale_modloader import abilities, battle_effects, equipment, frames, items, llm, prices, ui
 
-from . import battle, bonus, effects
+from . import bonus, effects
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。TECH.md §3.8）----
 EPIC_COUNT_MIN = 1          # epic: 補正の数
@@ -350,7 +351,36 @@ def apply(ctx):
         return found or None
 
     abilities.declare(owner, answer, write=write)
-    battle.install(ctx, write, current_effects, current_armor, language)
+
+    def battle_answer(app, holder):
+        """身に着けている武器と防具の効果（戦闘の窓口が手ごとに聞く）。
+
+        武器の種類は武器から、防具の種類は防具からだけ取る（防具の説明欄に「会心」と書かれていても効かせない）。
+        威光は値段の効果なので答えない（下の値段の段で効かせる）。
+        """
+        armor = current_armor(app, holder)
+        weapon = current_effects(app, holder)
+        found = {kind: value for kind, value in armor.items()
+                 if kind in effects.ARMOR_KINDS and kind != "presence"}
+        found.update({kind: value for kind, value in weapon.items() if kind in effects.WEAPON_KINDS})
+        return found or None
+
+    def on_kill(app, actor, defender):
+        """倒した数を、身に着けている成長の品に数える。節目を越えたら本文に出す行を返す。"""
+        lines = []
+        for item in current_effects(app, actor).get("growth_items") or ():
+            kills = effects.add_kill(item)
+            if kills is None:
+                continue
+            write("growth: {} on {} ({} kills) by {}".format(
+                frames.attr(defender, "name", "?"), frames.attr(item, "name", "?"), kills,
+                frames.attr(actor, "name", "?")))
+            if kills % effects.GROWTH_STEP == 0:
+                lines.append(("（{}が手に馴染んできた: 討伐 {}）" if language() == "ja"
+                              else "({} grows stronger: {} kills)").format(frames.attr(item, "name", "?"), kills))
+        return lines
+
+    battle_effects.declare(owner, battle_answer, on_kill=on_kill, write=write)
 
     # ================================================================ 威光
     def presence_now():

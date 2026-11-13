@@ -755,6 +755,31 @@ def world_record(found, base, values):
     return dict((k, v) for k, v in values.items() if k in found and v != base.get(k))
 
 
+def shown_values(values):
+    """型のある値を、入力欄が返す形（`bool` 以外は文字列）に揃える。入力欄の値と比べる前に通す。"""
+    return dict((k, v if isinstance(v, bool) else str(v)) for k, v in values.items())
+
+
+def carry_shared(was, form_world, new_shared, new_world):
+    """保存する個別設定の値。一括設定を継いでいた項目は、新しい一括設定の値を継ぐ。
+
+        was         … {"shared": 一括設定, "world": その世界の値}（保存済み・押す前）
+        form_world  … 個別設定の入力欄の値（入力欄が返す形）
+        new_shared / new_world … 入力欄から型どおりに戻した値
+
+    継いでいた項目は、保存済みの個別の値が保存済みの一括の値と同じで、個別の欄に触っていない項目。
+    個別の欄は開いたときの一括設定の値を表示したまま残るので、そのまま差分を取ると、
+    一括設定だけ変えた保存で古い値がその世界の上書きとして書かれる（§3.12.1）。
+    """
+    shown_world = shown_values(was["world"])
+    out = dict(new_world)
+    for k in out:
+        if (k in new_shared and k in was["shared"] and k in was["world"]
+                and was["world"][k] == was["shared"][k] and form_world.get(k) == shown_world[k]):
+            out[k] = new_shared[k]
+    return out
+
+
 def saved_paths(found, was, now, shared_path, world_path):
     """保存で**実際に書いた先**の並び。何も動いていなければ空。
 
@@ -1086,7 +1111,7 @@ def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None, ed
         比較の前に必ず通す。`_Form.get()` は `"7"` を返すのに `saved` は `7` を
         持っているので、素で比べると**開いた直後から「未保存の変更あり」になる。**
         """
-        return dict((k, v if isinstance(v, bool) else str(v)) for k, v in values.items())
+        return shown_values(values)
 
     def dirty():
         """未保存の変更があるか。2段のどちらかが動いていれば真。"""
@@ -1138,10 +1163,14 @@ def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None, ed
         if bad:
             messagebox.showerror("一括設定を確かめてください", bad, parent=root)
             return False
-        new_world, bad = coerce_all(mod_dir, world_form.get(), root_dir)
+        form_world = world_form.get()
+        new_world, bad = coerce_all(mod_dir, form_world, root_dir)
         if bad:
             messagebox.showerror("ワールド個別設定を確かめてください", bad, parent=root)
             return False
+        if world_var.get():
+            # 一括設定を継いでいた項目は新しい一括設定を継ぐ（継がないと古い値がその世界に固定される。§3.12.1）
+            new_world = carry_shared(was, form_world, new_shared, new_world)
         try:
             # `strict=True` で例外を通してもらう。書けなかった理由（権限・掴まれている）
             # を出さないと、どこを直せばよいか分からない。
@@ -1158,6 +1187,8 @@ def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None, ed
             return False
         # 世界が無いときは個別設定を持たないので、基準を一括設定に揃える。
         saved["world"] = dict(new_world) if name else dict(shared)
+        # 継いだ値を個別の欄にも出す（出さないと欄は古い値のままで、次の保存の比べ先と食い違う）
+        world_form.set(saved["world"])
         # 書いた先を出す。**実際に動いたものだけ**を並べる。
         # 一括設定だけ直したのに世界の控えのパスが出ると、
         # その世界を保存したように読める（実機で踏んだ）。判断は `saved_paths`。

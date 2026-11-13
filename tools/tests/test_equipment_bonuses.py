@@ -31,7 +31,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
-from instantale_modloader import abilities, equipment, prices, ui  # noqa: E402
+from instantale_modloader import abilities, battle_effects, equipment, prices, ui  # noqa: E402
 
 failures = []
 
@@ -161,7 +161,9 @@ worn = {id(player): [("weapon", sword), ("free1", mail)], id(ally): [("wearable"
 equipment.gear = lambda _app, holder: worn.get(id(holder))
 ctx = FakeCtx(OUT_DIR, folder)
 mod.apply(ctx)
+battle_effects.install(ctx)     # 戦闘の効果はローダの窓口が効かせる（boot が MOD の後に当てる）
 check("窓口に答えを置いた", abilities.owners() == [package])
+check("戦闘の効果の窓口にも答えを置いた", battle_effects.owners() == [package], battle_effects.owners())
 check("主人公（自由枠は数えない）", abilities.bonus(app, player) == {"strength": 3, "wisdom": 1})
 check("仲間", abilities.bonus(app, ally) == {"strength": 4, "dexterity": 2})
 check("敵には答えない", abilities.bonus(app, enemy) == {})

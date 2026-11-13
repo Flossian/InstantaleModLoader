@@ -3,7 +3,8 @@
 
 入口（`player_trait_effects.py`）が設定をまとめて渡す。ここは設定もゲームも読まない。
 
-    効果の一覧   ability（能力値の補正。常に／条件つき）・price（店の買値と売値）
+    効果の一覧   ability（能力値の補正。常に／条件つき）・price（店の買値と売値）・
+                 battle（戦闘の効果。ローダの窓口 `battle_effects` の種類のうち特質に開くもの）
     頼み文       build_messages(player, traits, severity_mode)
     返答の検算   normalize(data, traits, ...)   一覧に無いもの・範囲の外を捨てる
     重さ         weight(effects)                 severity と比べる（記録と「寄せる」に使う）
@@ -12,6 +13,8 @@
 
 import hashlib
 import json
+
+from instantale_modloader import battle_effects
 
 #: 能力値の鍵（`ability_scores` の綴り。窓口 `abilities` と同じ）。
 STATS = ("strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma")
@@ -69,8 +72,48 @@ PERCENT_MAX = 20
 PERCENT_PER_WEIGHT = 5.0
 #: 重さの目安 = severity × この値。severity 3 で常に +1〜2（epic 相当）、6 で +3（legendary 相当）。
 SEVERITY_SCALE = 0.5
+#: 戦闘の効果のうち特質に開く種類 → (上限の％, 重さ 1 あたりの％)。
+#: 上限は 411 の装備の効果の legendary の強さ、重さは epic の強さの半分（epic の効果1つ ≈ 常に +2 の補正）。
+#: 呪い・成長・処刑・連携・重装・呪縛・威光は品の性質（代償や討伐数を持つ）なので開かない。
+BATTLE_EFFECTS = {
+    "critical": (15, 5.0),
+    "lifesteal": (10, 3.0),
+    "pierce": (35, 10.0),
+    "slayer": (30, 10.0),
+    "venom": (30, 10.0),
+    "daunt": (30, 10.0),
+    "endure": (75, 25.0),
+    "thorns": (30, 10.0),
+    "regen": (3, 1.0),
+    "guardian": (25, 10.0),
+    "resist": (50, 15.0),
+    "evade": (15, 5.0),
+    "desperate": (30, 10.0),
+    "reduce": (15, 5.0),
+}
+#: 特効の相手の重さの割合（ボス戦は効く戦闘が少ない）。
+SLAYER_FACTOR = {"boss": 0.4, "higher": 0.6, "wounded": 0.6, "unhurt": 0.6}
+#: 頼み文での戦闘の効果の説明。
+BATTLE_TEXT = {
+    "critical": "会心。自分の攻撃が一段強く入る確率",
+    "lifesteal": "吸収。与えたダメージのうち体力に戻す割合",
+    "pierce": "貫通。敵の防御のうち無視する割合",
+    "slayer": "特効。target の相手へのダメージの上乗せ。target は boss（ボス戦）・higher（自分より格上の敵）・"
+              "wounded（体力が半分以下の敵）・unhurt（無傷の敵）のどれか",
+    "venom": "毒。攻撃が当たったとき敵に毒を付ける確率（3ターン、毎ターン最大体力の4%）",
+    "daunt": "怯み。攻撃が当たったとき敵を怯ませる確率（2ターン、敵の一撃が30%弱まる）",
+    "endure": "不屈。倒れる一撃を体力1で耐える確率（戦闘に1回）",
+    "thorns": "棘。受けたダメージのうち相手に返す割合",
+    "regen": "再生。毎ターン戻る最大体力の割合",
+    "guardian": "守護。仲間への一撃を代わりに受ける確率",
+    "resist": "耐性。戦闘で敵に付けられた状態異常（毒・麻痺など）を防ぐ確率",
+    "evade": "軽業。敵の一撃をかわす確率",
+    "desperate": "火事場。体力が30%以下の間、受けるダメージを減らす割合",
+    "reduce": "軽減。受けるダメージを減らす割合",
+}
 #: 決まりの版。量の物差しを変えたら上げる（古い版で置き換えた特質は、次の照合で置き換え直す）。
-RULES_VERSION = 2
+#: 3 で戦闘の効果を足した（前の版の特質は、戦闘の効果を選べる頼みで置き換え直す）。
+RULES_VERSION = 3
 #: 1つの特質に付ける効果の数の上限。
 EFFECTS_PER_TRAIT = 3
 #: 数値にならない性質の文の長さの上限。
@@ -149,8 +192,14 @@ def build_messages(player_name, profile, traits, severity_mode="guide", profile_
             "（severity 4 なら 2、-2 なら -1）。severity が正なら合計を正に、負なら合計を負にする。\n"
             "  重さ: 常に効く能力値の補正は量の絶対値。条件つきは量の絶対値に、依頼の最中は {quest:g}、"
             "戦闘中は {battle:g}、体力が半分以下は {low_hp:g}、ボス戦は {boss:g} を掛ける。"
-            "値段は割合の絶対値を {per:g} で割る。\n"
-        ).format(per=PERCENT_PER_WEIGHT, **CONDITION_WEIGHT)
+            "値段は割合の絶対値を {per:g} で割る。"
+            "戦闘の効果は percent を次の数で割る: {battle_units}（特効はさらに boss なら {boss_factor:g}、"
+            "それ以外の target なら {other_factor:g} を掛ける）。\n"
+        ).format(per=PERCENT_PER_WEIGHT,
+                 battle_units="、".join("{} {:g}".format(key, unit) for key, (_m, unit) in BATTLE_EFFECTS.items()),
+                 boss_factor=SLAYER_FACTOR["boss"], other_factor=SLAYER_FACTOR["higher"], **CONDITION_WEIGHT)
+    battle_lines = "\n".join("  - {}: {}（1〜{}）".format(key, BATTLE_TEXT[key], top)
+                              for key, (top, _unit) in BATTLE_EFFECTS.items())
     user = (
         CONVERTER_MARK + "\n"
         "ゲームのキャラクターの特質（文で書かれた性質）を、ゲームが数値で処理できる効果に置き換える。\n\n"
@@ -167,7 +216,12 @@ def build_messages(player_name, profile, traits, severity_mode="guide", profile_
         "  察知・知識・勘は判断か知力、身のこなしは器用、体の丈夫さは耐久、人あたりや交渉は魅力に置く。\n"
         "2. price（店での値段）\n"
         "  side は buy（店から買う値段）か sell（店に売る値段）。\n"
-        "  percent は -{pmax}〜+{pmax} の整数。buy の負は安く買える、sell の正は高く売れる。\n\n"
+        "  percent は -{pmax}〜+{pmax} の整数。buy の負は安く買える、sell の正は高く売れる。\n"
+        "3. battle（戦闘の効果。主人公の戦闘にだけ効く。利点にだけ使う）\n"
+        "  effect は次のどれか。percent は括弧の範囲の整数:\n{battle}\n"
+        "  戦闘の場面に結びついた性質（攻撃をかわす・倒れない・傷が癒える・急所を突く・状態異常に強い など）は、"
+        "能力値より battle の効果に置く。\n"
+        "  戦闘の外の環境（瘴気・寒さ・毒の沼など）への強さは resist にせず、依頼の最中の耐久などにする。\n\n"
         "【決まり】\n"
         "- 説明に書かれていることだけを効果にする。書かれていない利点を足さない。\n"
         "- 「ただし」「その代わり」などの代償は、不利になる場面が説明に書かれているときだけ効果にする（負の量）。"
@@ -185,9 +239,10 @@ def build_messages(player_name, profile, traits, severity_mode="guide", profile_
         "次の JSON だけを出力する。特質の名前はそのまま写す。\n"
         '{{"traits": [{{"name": "特質の名前", "effects": ['
         '{{"kind": "ability", "stat": "wisdom", "amount": 2, "condition": "always"}}, '
-        '{{"kind": "price", "side": "buy", "percent": -5}}], "note": ""}}]}}'
+        '{{"kind": "price", "side": "buy", "percent": -5}}, '
+        '{{"kind": "battle", "effect": "slayer", "percent": 20, "target": "boss"}}], "note": ""}}]}}'
     ).format(name=player_name or "（不明）", profile=profile or "（なし）",
-             traits="\n".join(trait_lines), stats=stat_lines, conditions=condition_lines,
+             traits="\n".join(trait_lines), stats=stat_lines, conditions=condition_lines, battle=battle_lines,
              amax=AMOUNT_MAX, pmax=PERCENT_MAX, per=EFFECTS_PER_TRAIT, note=NOTE_CHARS,
              severity=severity_rules)
     system = "あなたはTRPGのルールの設計者。文で書かれた性質を、ゲームの決まった効果の組み合わせに置き換える。"
@@ -229,7 +284,28 @@ def clean_effect(raw):
             return None
         percent = max(-PERCENT_MAX, min(PERCENT_MAX, percent))
         return {"kind": "price", "side": side, "percent": percent}
+    if kind == "battle":
+        effect = str(raw.get("effect") or "").strip().lower()
+        percent = _int(raw.get("percent"))
+        if effect not in BATTLE_EFFECTS or not percent or percent < 0:
+            return None
+        found = {"kind": "battle", "effect": effect, "percent": min(BATTLE_EFFECTS[effect][0], percent)}
+        if effect == "slayer":
+            target = str(raw.get("target") or "").strip().lower()
+            if target not in SLAYER_FACTOR:
+                return None
+            found["target"] = target
+        return found
     return None
+
+
+def _field_limit(effect):
+    """効果の量の欄と上限。"""
+    if effect["kind"] == "ability":
+        return "amount", AMOUNT_MAX
+    if effect["kind"] == "battle":
+        return "percent", BATTLE_EFFECTS[effect["effect"]][0]
+    return "percent", PERCENT_MAX
 
 
 def _merge(effects):
@@ -237,13 +313,13 @@ def _merge(effects):
     merged = {}
     order = []
     for effect in effects:
-        key = (effect["kind"], effect.get("stat"), effect.get("condition"), effect.get("side"))
+        key = (effect["kind"], effect.get("stat"), effect.get("condition"), effect.get("side"),
+               effect.get("effect"), effect.get("target"))
         if key not in merged:
             merged[key] = dict(effect)
             order.append(key)
             continue
-        field = "amount" if effect["kind"] == "ability" else "percent"
-        limit = AMOUNT_MAX if field == "amount" else PERCENT_MAX
+        field, limit = _field_limit(effect)
         total = merged[key][field] + effect[field]
         merged[key][field] = max(-limit, min(limit, total))
     return [merged[key] for key in order
@@ -315,6 +391,10 @@ def effect_weight(effect):
     if effect.get("kind") == "price":
         sign = -1 if effect.get("side") == "buy" else 1
         return sign * effect["percent"] / PERCENT_PER_WEIGHT
+    if effect.get("kind") == "battle" and effect.get("effect") in BATTLE_EFFECTS:
+        unit = BATTLE_EFFECTS[effect["effect"]][1]
+        factor = SLAYER_FACTOR.get(effect.get("target"), 1.0) if effect["effect"] == "slayer" else 1.0
+        return effect["percent"] / unit * factor
     return 0.0
 
 
@@ -344,7 +424,7 @@ def fit_to_severity(effects, severity):
     fitted = []
     for effect in effects:
         effect = dict(effect)
-        field, limit = ("amount", AMOUNT_MAX) if effect["kind"] == "ability" else ("percent", PERCENT_MAX)
+        field, limit = _field_limit(effect)
         value = int(round(effect[field] * rate))
         if value == 0:
             value = 1 if effect[field] > 0 else -1
@@ -382,6 +462,21 @@ def price_percent(records, side, cap):
     return total
 
 
+def battle_totals(records):
+    """戦闘の効果の合計（窓口 `battle_effects` へ答える形）。`{種類: %, "slayer": {相手: %}}`。"""
+    totals = {}
+    for record in records:
+        for effect in record.get("effects") or ():
+            if effect.get("kind") != "battle" or effect.get("effect") not in BATTLE_EFFECTS:
+                continue
+            if effect["effect"] == "slayer":
+                table = totals.setdefault("slayer", {})
+                table[effect["target"]] = table.get(effect["target"], 0) + effect["percent"]
+            else:
+                totals[effect["effect"]] = totals.get(effect["effect"], 0) + effect["percent"]
+    return totals
+
+
 def priced(price, percent):
     """`price` に `percent`％を掛けた額（1 より下げない）。"""
     return max(1, int(round(price * (1.0 + percent / 100.0))))
@@ -397,7 +492,20 @@ def effect_text(effect, lang="ja"):
     if effect.get("kind") == "price":
         names = PRICE_LABELS.get(lang) or PRICE_LABELS["ja"]
         return "{}{:+d}%".format(names[effect["side"]], effect["percent"])
+    if effect.get("kind") == "battle" and effect.get("effect") in BATTLE_EFFECTS:
+        lang = lang if lang in battle_effects.LABELS else "ja"
+        return "{} {}".format(battle_effects.LABELS[lang][effect["effect"]],
+                              battle_effects.text_of(effect["effect"], effect["percent"], effect.get("target"), lang))
     return ""
+
+
+def display_condition(effect):
+    """説明の窓で灰色にする場面の名前（窓口の場面 `abilities.situations`）。"""
+    if effect.get("kind") == "ability":
+        return condition_of(effect)
+    if effect.get("kind") == "battle":
+        return "boss" if effect.get("effect") == "slayer" and effect.get("target") == "boss" else "battle"
+    return "always"
 
 
 def summary(record, lang="ja"):
@@ -433,12 +541,11 @@ def display_row(name, record, lang="ja"):
 
     `text` は効果をつないだ1文、`effects` は効果ごとの `{"text", "condition"}` の並び。
     説明の窓は1行ずつ出し、`condition` が窓口の場面（`abilities.situations`）に無ければ灰色にする。
-    値段の効果の条件は `always`。
+    値段の効果の条件は `always`、戦闘の効果は `battle`（ボス戦の特効は `boss`）。
     """
     effects = []
     for effect in (record or {}).get("effects") or ():
         text = effect_text(effect, lang)
         if text:
-            effects.append({"text": text,
-                            "condition": condition_of(effect) if effect.get("kind") == "ability" else "always"})
+            effects.append({"text": text, "condition": display_condition(effect)})
     return {"name": name, "text": summary(record or {}, lang), "effects": effects}

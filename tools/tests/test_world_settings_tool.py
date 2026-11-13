@@ -138,6 +138,17 @@ try:
               modtool.save_world_settings(root, path, decls, shared, dict(shared))
               and not os.path.exists(path))
 
+        # -- 一括設定だけ変えて保存（個別の欄は開いたときの一括設定の値のまま）
+        untouched = modtool.shown_values(shared)
+        carried = modtool.carry_shared({"shared": shared, "world": shared}, untouched, changed, dict(shared))
+        check("継いでいた項目は新しい一括設定を継ぐ", carried == changed, carried)
+        check("その保存では控えを書かない",
+              modtool.save_world_settings(root, path, decls, changed, carried) and not os.path.exists(path))
+        kept = modtool.carry_shared({"shared": shared, "world": shared}, modtool.shown_values(changed), shared, dict(changed))
+        check("同じ保存で個別の欄を変えた項目はその値", kept == changed, kept)
+        kept = modtool.carry_shared({"shared": shared, "world": changed}, modtool.shown_values(changed), shared, dict(changed))
+        check("上書きしていた項目はそのまま", kept == changed, kept)
+
         # -- 検査
         for key, decl in decls.items():
             if decl.get("max") is not None:

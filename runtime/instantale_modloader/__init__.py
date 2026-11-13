@@ -2065,11 +2065,13 @@ def _forget_unapplied(results: dict, manifests: dict) -> list[str]:
     from . import combat as _combat
     from . import equipment as _equipment
     from . import abilities as _abilities
+    from . import battle_effects as _battle_effects
     ok = {name for name, verdict in results.items() if verdict == "ok"}
     base, layers = _prices.item_price_sources()
     _inn_answer, inn_layers = _prices.inn_price_sources()
     owners = (set(manifests) | set(_durations.owners()) | {base} | set(layers) | set(inn_layers)
-              | set(_combat.owners()) | set(_equipment.owners()) | set(_abilities.owners()))
+              | set(_combat.owners()) | set(_equipment.owners()) | set(_abilities.owners())
+              | set(_battle_effects.owners()))
     gone = []
     for owner in sorted(owners - ok - {""}):
         if _durations.forget(owner, write=log):
@@ -2354,6 +2356,17 @@ def _boot(out_dir: str) -> dict:
             _registry.end_mod()
     except BaseException:
         log_exc("cannot install the stall guard")
+    # 戦闘の効果（battle_effects.py）。MOD の層より後、能力値の窓口より前に当てる（`319_` が差し替えた後の
+    # ダメージに足し、能力値の補正はその内側で見える）。答える MOD が居なくても包む（効果が空なら何もしない）。
+    try:
+        from . import battle_effects as _battle_effects
+        _registry.begin_mod("(loader)")
+        try:
+            _battle_effects.install(ctx)
+        finally:
+            _registry.end_mod()
+    except BaseException:
+        log_exc("cannot install the battle effects")
     # 能力値の補正を、ゲームが読む場面の間だけ足して見せる（abilities.py）。MOD の層より後に当てる
     # （MOD が自分の包みの中で読む攻撃力・能力値にも補正が乗る）。
     try:
@@ -2671,10 +2684,12 @@ def _unload(out_dir: str | None) -> dict:
         from . import combat as _combat
         from . import equipment as _equipment
         from . import abilities as _abilities
+        from . import battle_effects as _battle_effects
         base, layers = _prices.item_price_sources()
         _inn_answer, inn_layers = _prices.inn_price_sources()
         owners = (set(_durations.owners()) | {base} | set(layers) | set(inn_layers)
-                  | set(_combat.owners()) | set(_equipment.owners()) | set(_abilities.owners()))
+                  | set(_combat.owners()) | set(_equipment.owners()) | set(_abilities.owners())
+                  | set(_battle_effects.owners()))
         for owner in sorted(owners - {""}):
             _durations.forget(owner, write=log)
         # 読み口はクラスに残る（剥がさない）。場面の包みが剥がれたので補正は足されないが、念のため素通しにする

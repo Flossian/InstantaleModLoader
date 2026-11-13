@@ -1,53 +1,55 @@
 # -*- coding: utf-8 -*-
-"""武器と防具の効果の決まり（ゲームに触らない部分）。抽選・品への書き込み・読み取り・合算・戦闘の数。
+"""武器と防具の効果の決まり（ゲームに触らない部分）。抽選・品への書き込み・読み取り・合算。
 
 入口（`equipment_bonuses.py`）が設定をまとめて渡す。ここは設定を読まない。
-戦闘に効かせるのは `battle.py`。
+戦闘に効かせるのはローダの戦闘の効果の窓口（`battle_effects`。TECH.md §3.3.28）。
+種類の名前・戦闘の数・表記は窓口のものを使う（同じ名前でここから読めるように残してある）。
 """
 
-import random
 import re
 
-#: 効果の種類。品の説明欄の並びもこの順。
-WEAPON_KINDS = ("slayer", "critical", "lifesteal", "pierce", "venom", "daunt",
-                "curse", "growth", "execute", "teamwork")
-ARMOR_KINDS = ("endure", "thorns", "regen", "heavy", "guardian",
-               "resist", "evade", "desperate", "binding", "presence")
+from instantale_modloader import battle_effects as _battle
+
+# 411 の中と検査がこの名前で読む（中身は窓口のもの）。
+BINDING_COST = _battle.BINDING_COST
+CURSE_COST = _battle.CURSE_COST
+DAUNT_CUT = _battle.DAUNT_CUT
+DAUNT_TURNS = _battle.DAUNT_TURNS
+DESPERATE_AT = _battle.DESPERATE_AT
+GROWTH_CAP = _battle.GROWTH_CAP
+GROWTH_STEP = _battle.GROWTH_STEP
+HEAVY_DEX = _battle.HEAVY_DEX
+ON_HIT = _battle.ON_HIT
+POWERS = _battle.POWERS
+SLAYER_TARGETS = _battle.SLAYER_TARGETS
+STATUS_NAMES = _battle.STATUS_NAMES
+STATUS_TEXTS = _battle.STATUS_TEXTS
+TARGET_LABELS = _battle.TARGET_LABELS
+VENOM_RATE = _battle.VENOM_RATE
+VENOM_TURNS = _battle.VENOM_TURNS
+after_cuts = _battle.after_cuts
+drained = _battle.drained
+growth_percent = _battle.growth_percent
+is_desperate = _battle.is_desperate
+pierced = _battle.pierced
+raise_power = _battle.raise_power
+scaled = _battle.scaled
+share_of_max = _battle.share_of_max
+should_execute = _battle.should_execute
+slayer_bonus = _battle.slayer_bonus
+text_of = _battle.text_of
+venom_tick = _battle.venom_tick
+
+#: 効果の種類。品の説明欄の並びもこの順（窓口の並びと同じ）。
+WEAPON_KINDS = _battle.WEAPON_KINDS
+ARMOR_KINDS = _battle.ARMOR_KINDS
 KINDS = WEAPON_KINDS + ARMOR_KINDS
 
-#: 特効の相手。どれも戦闘の画面で見分けられるもの（敵の段と型は Character に残らない）。
-#:   boss      … ボス戦（`in_boss_battle`）
-#:   higher    … 自分よりレベルが上の敵
-#:   wounded   … 体力が半分以下の敵
-#:   unhurt    … 体力が満タンの敵
-SLAYER_TARGETS = ("boss", "higher", "wounded", "unhurt")
-
-#: 品の `attributes` に書く名前。読むときは両方の言語を見る。
-LABELS = {
-    "ja": {"slayer": "特効", "critical": "会心", "lifesteal": "吸収",
-           "pierce": "貫通", "venom": "毒", "daunt": "怯み",
-           "curse": "呪い", "growth": "成長", "execute": "処刑", "teamwork": "連携",
-           "endure": "不屈", "thorns": "棘", "regen": "再生", "heavy": "重装", "guardian": "守護",
-           "resist": "耐性", "evade": "軽業", "desperate": "火事場", "binding": "呪縛", "presence": "威光"},
-    "en": {"slayer": "Slayer", "critical": "Critical", "lifesteal": "Lifesteal",
-           "pierce": "Pierce", "venom": "Venom", "daunt": "Daunt",
-           "curse": "Cursed", "growth": "Growth", "execute": "Execute", "teamwork": "Teamwork",
-           "endure": "Endure", "thorns": "Thorns", "regen": "Regen", "heavy": "Heavy", "guardian": "Guardian",
-           "resist": "Resist", "evade": "Nimble", "desperate": "Last Stand", "binding": "Binding",
-           "presence": "Presence"},
-}
+#: 品の `attributes` に書く名前（品に付く種類だけ）。読むときは両方の言語を見る。
+LABELS = {lang: {kind: table[kind] for kind in KINDS} for lang, table in _battle.LABELS.items()}
 _KIND_OF = {label: kind for table in LABELS.values() for kind, label in table.items()}
-
-TARGET_LABELS = {
-    "ja": {"boss": "ボス戦", "higher": "格上", "wounded": "手負い", "unhurt": "無傷"},
-    "en": {"boss": "boss fights", "higher": "stronger foes",
-           "wounded": "wounded foes", "unhurt": "unhurt foes"},
-}
 _TARGET_OF = {label: target for table in TARGET_LABELS.values()
               for target, label in table.items()}
-
-#: 命中時に付く効果の値の前置き。
-ON_HIT = {"ja": "命中時 ", "en": "on hit "}
 
 #: レア度ごとの強さ（%）。並びは epic / legendary / mythic。
 #:   slayer    … 特効の相手へのダメージの上乗せ
@@ -94,47 +96,14 @@ STRENGTH = {
 }
 RARITIES = ("epic", "legendary", "mythic")
 
-#: 合算した後の上限（%）。確率と割合は 100 を超えても意味が無い。
-CAPS = {"critical": 100, "lifesteal": 100, "pierce": 100, "venom": 100, "daunt": 100,
-        "execute": 100, "endure": 100, "thorns": 100, "regen": 100, "heavy": 100, "guardian": 100,
-        "resist": 100, "evade": 100, "desperate": 100, "binding": 100, "presence": 100}
-
-#: 毒: 毎ターン最大体力のこの割合（%）を削る。この手数だけ続く。毒では倒れない（体力 1 で止まる）。
-VENOM_RATE = 4
-VENOM_TURNS = 3
-#: 怯み: 怯んだ敵の一撃をこの割合（%）だけ弱める。この手数だけ続く。
-DAUNT_CUT = 30
-DAUNT_TURNS = 2
-#: 呪い: 当てた手で、自分の最大体力のこの割合（%）を失う。呪いでは倒れない（体力 1 で止まる）。
-CURSE_COST = 3
-#: 成長: この数を倒すごとに伸びる。上乗せはこの % で止める。
-GROWTH_STEP = 10
-GROWTH_CAP = 100
-#: 重装: 下がる器用。
-HEAVY_DEX = 4
-#: 火事場: 体力がこの割合（%）以下の間に効く。
-DESPERATE_AT = 30
-#: 呪縛: 与えるダメージがこの割合（%）下がる。
-BINDING_COST = 20
-
-#: 状態異常の名前と説明（ゲームの `Character.status` に同じ形で書く）。
-STATUS_NAMES = {"ja": {"venom": "毒刃", "daunt": "怯み"},
-                "en": {"venom": "Venom", "daunt": "Daunted"}}
-STATUS_TEXTS = {
-    "ja": {"venom": "毎ターン最大体力の{}%のダメージ".format(VENOM_RATE),
-           "daunt": "与えるダメージが{}%下がる".format(DAUNT_CUT)},
-    "en": {"venom": "Loses {}% of max HP each turn".format(VENOM_RATE),
-           "daunt": "Deals {}% less damage".format(DAUNT_CUT)},
-}
-
-#: 審判の裁き（GAME.md §2.10.4）。会心はこの並びで1段上げる。
-POWERS = ("weak", "normal", "strong", "very_strong", "extreme")
+#: 合算した後の上限（%）（品に付く種類だけ）。
+CAPS = {kind: cap for kind, cap in _battle.CAPS.items() if kind in KINDS}
 
 #: 値段の鍵（`129_`）。効果の行はこの手前に入れる（能力値補正と同じ置き方）。
 PRICE_KEYS = ("買価", "売価", "buy price", "sell price", "Buy price", "Sell price")
 
-#: MOD 専用の乱数（ゲームの乱数の並びを動かさない）。
-RNG = random.Random()
+#: MOD 専用の乱数（ゲームの乱数の並びを動かさない）。戦闘の窓口と同じもの。
+RNG = _battle.RNG
 
 _NUMBER = re.compile(r"(\d+(?:\.\d+)?)")
 #: 成長の説明欄の討伐数（`討伐 34` / `(34 kills)`）。
@@ -169,47 +138,6 @@ def roll(rarity, counts, enabled, rng=None):
             target = rng.choice(SLAYER_TARGETS) if kind == "slayer" else None
             found.append((kind, STRENGTH[kind][tier], target))
     return found
-
-
-def text_of(kind, amount, target, lang):
-    """説明欄の値。`ボス戦 +30%`・`15%`・`命中時 30%`。"""
-    lang = lang if lang in LABELS else "ja"
-    ja = lang == "ja"
-    if kind == "slayer":
-        return "{} +{}%".format(TARGET_LABELS[lang].get(target, target), amount)
-    if kind in ("venom", "daunt"):
-        return "{}{}%".format(ON_HIT[lang], amount)
-    if kind == "curse":
-        return ("+{}%・当てると体力 -{}%" if ja else "+{}%, costs {}% HP per attack").format(amount, CURSE_COST)
-    if kind == "growth":
-        return ("+{}% / {}体（討伐 0）" if ja else "+{}% per {} kills (0 kills)").format(amount, GROWTH_STEP)
-    if kind == "execute":
-        return ("残り体力 {}% 以下" if ja else "below {}% HP").format(amount)
-    if kind == "teamwork":
-        return ("味方の後 +{}%" if ja else "+{}% after an ally").format(amount)
-    if kind == "endure":
-        return ("{}% 戦闘に1回" if ja else "{}% once per battle").format(amount)
-    if kind == "thorns":
-        return ("受けたダメージの {}%" if ja else "{}% of damage taken").format(amount)
-    if kind == "regen":
-        return ("毎ターン 最大体力の {}%" if ja else "{}% of max HP each turn").format(amount)
-    if kind == "heavy":
-        return ("受けるダメージ -{}%・器用 -{}" if ja else "-{}% damage taken, DEX -{}").format(amount, HEAVY_DEX)
-    if kind == "guardian":
-        return ("仲間をかばう {}%" if ja else "{}% to shield an ally").format(amount)
-    if kind == "resist":
-        return ("状態異常を防ぐ {}%" if ja else "{}% to block a status").format(amount)
-    if kind == "evade":
-        return ("一撃をかわす {}%" if ja else "{}% to dodge a blow").format(amount)
-    if kind == "desperate":
-        return ("受けるダメージ -{}%（体力 {}% 以下）" if ja else "-{}% damage taken (at {}% HP or less)").format(
-            amount, DESPERATE_AT)
-    if kind == "binding":
-        return ("受けるダメージ -{}%・与えるダメージ -{}%" if ja else "-{}% damage taken, -{}% damage dealt").format(
-            amount, BINDING_COST)
-    if kind == "presence":
-        return ("店の買値 -{}%" if ja else "-{}% shop prices").format(amount)
-    return "{}%".format(amount)
 
 
 def write(item, found, lang):
@@ -266,11 +194,6 @@ def kills_of(item):
     return 0
 
 
-def growth_percent(rate, kills):
-    """成長の上乗せ（%）。"""
-    return min(GROWTH_CAP, rate * (kills // GROWTH_STEP))
-
-
 def add_kill(item):
     """成長の品の討伐数を1増やす（説明欄に書いたものがそのまま残る）。増えた後の討伐数。無ければ None。"""
     attributes = getattr(item, "attributes", None)
@@ -312,92 +235,6 @@ def combine(items, mode):
         if kind in total:
             total[kind] = min(total[kind], cap)
     return total
-
-
-def slayer_bonus(table, boss_fight, actor_level, enemy_level, enemy_hp, enemy_max_hp):
-    """特効の上乗せ（%）と当てはまった相手の並び。当てはまる相手が複数なら足す。"""
-    if not table:
-        return 0, []
-    hits = []
-    if boss_fight:
-        hits.append("boss")
-    if _num(actor_level) is not None and _num(enemy_level) is not None \
-            and enemy_level > actor_level:
-        hits.append("higher")
-    if _num(enemy_hp) is not None and _num(enemy_max_hp) and enemy_max_hp > 0:
-        if enemy_hp * 2 <= enemy_max_hp:
-            hits.append("wounded")
-        elif enemy_hp >= enemy_max_hp:
-            hits.append("unhurt")
-    matched = [target for target in hits if table.get(target)]
-    return sum(table[target] for target in matched), matched
-
-
-def raise_power(power):
-    """裁きを1段上げる。extreme・知らない語はそのまま（上げられないので None）。"""
-    if power not in POWERS or power == POWERS[-1]:
-        return None
-    return POWERS[POWERS.index(power) + 1]
-
-
-def pierced(defense, percent):
-    """貫通の後の防御。"""
-    if _num(defense) is None or not percent:
-        return defense
-    return defense * max(0.0, 1.0 - percent / 100.0)
-
-
-def scaled(damage, percent):
-    """ダメージに上乗せ（負の % なら引く）。整数のダメージは整数に戻す。0 は 0 のまま。
-
-    小数のダメージは3桁で丸める（掛け算の誤差 489.99999… が体力と画面へ漏れないように）。
-    """
-    if _num(damage) is None or not damage or not percent:
-        return damage
-    value = damage * (1.0 + percent / 100.0)
-    return max(1, int(round(value))) if isinstance(damage, int) else max(1.0, round(value, 3))
-
-
-def drained(dealt, percent):
-    """吸収で戻す体力。"""
-    if _num(dealt) is None or dealt <= 0 or not percent:
-        return 0
-    return int(round(dealt * percent / 100.0))
-
-
-def share_of_max(max_hp, percent):
-    """最大体力の割合（少なくとも 1）。毒・呪い・再生の量。"""
-    if _num(max_hp) is None or max_hp <= 0 or not percent:
-        return 0
-    return max(1, int(round(max_hp * percent / 100.0)))
-
-
-def venom_tick(max_hp):
-    """毒の1手ぶんのダメージ。"""
-    return share_of_max(max_hp, VENOM_RATE)
-
-
-def after_cuts(damage, cuts):
-    """軽減の割合（%）の並びを順に掛けた後のダメージ。足さないので、種類が違っても 0 にはならない。"""
-    factor = 1.0
-    for cut in cuts:
-        if cut:
-            factor *= max(0.0, 1.0 - cut / 100.0)
-    return scaled(damage, (factor - 1.0) * 100.0) if factor < 1.0 else damage
-
-
-def is_desperate(hp, max_hp):
-    """火事場が効く体力か。"""
-    return _num(hp) is not None and _num(max_hp) is not None and max_hp > 0 \
-        and 0 < hp and hp * 100 <= max_hp * DESPERATE_AT
-
-
-def should_execute(hp, dealt, max_hp, percent):
-    """当てた後の敵の体力が割合以下で、まだ倒れていないか。"""
-    if not percent or _num(hp) is None or _num(dealt) is None or _num(max_hp) is None or max_hp <= 0:
-        return False
-    left = hp - dealt
-    return 0 < left and left * 100 <= max_hp * percent
 
 
 def _num(value):

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""主人公の特質を、能力値の補正と店の値段に効かせる（DOC.md）。
+"""主人公の特質を、能力値の補正・戦闘の効果・店の値段に効かせる（DOC.md）。
 
 ゲームの特質は `{name, description, severity}` の文だけで、severity は作成時の才能点にしか使われない
 （GAME.md §2.35）。会話や審判の頼みには載るが、数値には何も効いていない。
@@ -7,9 +7,10 @@
     変換     特質ごとに LLM へ1回だけ頼み（`rules.MANAGER`）、決まった効果の一覧に置き換えて
              `state\\trait_effects\\<世界×主人公>.json` に控える。特質の文が変わったら頼み直す
     能力値   窓口 `abilities` に答える（常に／依頼の最中／戦闘中／ボス戦／体力が半分以下。場面は `abilities.situations`）
+    戦闘     窓口 `battle_effects` に答える（会心・軽減・不屈など。効かせるのはローダ。TECH.md §3.3.28）
     値段     窓口 `prices` に段を置く（店の買値・売値。セーブには焼かない）
     LLM      頼みに主人公の特質が載っているとき、その文の後ろに効果の一覧を足す（`wrap_outgoing`）
-    表示     控えに人物欄の行（`display`）を書き、`121_ui_character_sheet` が特質の名前の後ろに出す
+    表示     控えに人物欄の行（`display`）を書き、`121_ui_character_sheet` が特性の箱のマウスオーバーの窓に出す
 
 変換は読み込みの後と人物欄の開閉の後に、背景のスレッドで行う（LLM を待つのでゲームのスレッドでは回さない）。
 severity の扱い（目安として渡す・寄せる・渡さない）は設定 `SEVERITY_MODE`。どれでも、効果の重さと
@@ -20,7 +21,7 @@ import datetime
 import os
 import sys
 
-from instantale_modloader import abilities, frames, jobs, llm, loads, prices, ui
+from instantale_modloader import abilities, battle_effects, frames, jobs, llm, loads, prices, ui
 from instantale_modloader.llm import wrap_outgoing
 from instantale_modloader.state import WorldStore
 
@@ -28,6 +29,7 @@ from . import rules
 
 # ---------------------------------------------------------------- 設定（mod.json と同じ既定値）
 USE_ABILITIES = True
+USE_BATTLE = True
 USE_PRICES = True
 NOTES_TO_AI = True
 SEVERITY_MODE = "guide"
@@ -262,6 +264,24 @@ def apply(ctx):
 
     abilities.declare(owner, answer, write=write)
 
+    # ------------------------------------------------------------ 戦闘の効果
+    def battle_answer(app, holder):
+        """窓口 `battle_effects` が手ごとに聞く。主人公にだけ答える。"""
+        if not USE_BATTLE:
+            return None
+        player = player_of(app)
+        if player is None or holder is not player:
+            return None
+        records = records_for(app, player)
+        if not records:
+            return None
+        totals = rules.battle_totals([record for _name, record in records])
+        if totals:
+            note_once("戦闘の効果: {}".format(totals))
+        return totals or None
+
+    battle_effects.declare(owner, battle_answer, write=write)
+
     # ------------------------------------------------------------ 値段
     def percents(app):
         records = [record for _name, record in records_for(app)]
@@ -375,6 +395,6 @@ def apply(ctx):
     except Exception:
         pass        # ゲームの外（検査）には Kivy が無い
 
-    write("installed abilities={} prices={} notes={} severity={} cap={} price_cap={}".format(
-        USE_ABILITIES, USE_PRICES, NOTES_TO_AI, severity_mode(), STAT_CAP, PRICE_CAP))
+    write("installed abilities={} battle={} prices={} notes={} severity={} cap={} price_cap={}".format(
+        USE_ABILITIES, USE_BATTLE, USE_PRICES, NOTES_TO_AI, severity_mode(), STAT_CAP, PRICE_CAP))
     ctx.log("trait effects: installed (severity={})".format(severity_mode()))

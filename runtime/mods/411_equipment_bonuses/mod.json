@@ -10,7 +10,7 @@
     "en": "When an epic, legendary or mythic weapon or armor is made (shop, crafting, events), it gets random ability bonuses such as STR +3, and may also get an effect, all shown in the item details. Weapons: Critical, Lifesteal, Pierce, Slayer, Venom, Daunt, Cursed, Growth, Execute, Teamwork. Armor: Endure, Thorns, Regen, Heavy, Guardian, Resist, Nimble, Last Stand, Binding, Presence. Higher rarity gets more and stronger ones. What the hero and companions wear counts wherever the game reads ability scores (damage, defense, turn order, quest events, impressions), through the loader's ability window, and shows as (+3) on the character sheet; weapon effects work on their own hits against enemies, armor effects on hits they take, and both are announced in the battle log. The same armor effect worn twice does not stack. The ability scores themselves are never changed. Items you already own get nothing",
     "ja": "epic・legendary・mythic の武器・防具が作られたとき（店・クラフト・イベント）、筋力 +3 のような能力値補正がランダムに付き、さらに効果が付くことがある。武器は会心・吸収・貫通・特効・毒・怯み・呪い・成長・処刑・連携、防具は不屈・棘・再生・重装・守護・耐性・軽業・火事場・呪縛・威光。どれも説明欄に出て、レア度が高いほど数と強さが上がる。主人公と仲間が身に着けている品の補正は、ローダの能力値の窓口を通して、ゲームが能力値を読むところ（火力・防御・手番の順・依頼の出来事・印象）に効き、ステータス画面の能力値に (+3) の形で出る。武器の効果はその者が敵に当てた一撃に、防具の効果はその者が受ける一撃に効き、戦闘の文に出る。同じ防具の効果を2つ着ても重ならない。能力値そのものは書き換えない。もともと持っている品には付かない"
   },
-  "version": "2",
+  "version": "3",
   "author": "わさの, R01/Flossian",
   "settings": {
     "EPIC_COUNT_MIN": {
