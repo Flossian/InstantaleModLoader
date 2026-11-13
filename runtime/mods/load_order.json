@@ -119,6 +119,7 @@
     "406_user_role_fix",
     "344_quest_return_days",
     "345_date_display",
+    "346_player_trait_effects",
     "215_probe_event_roll",
     "213_probe_npc_memory",
     "214_probe_new_character",

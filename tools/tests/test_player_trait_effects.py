@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""924_player_trait_effects（開発中）をゲーム抜きで通す。
+"""346_player_trait_effects をゲーム抜きで通す。
 
-    python tools/tests/test_wip_player_trait_effects.py
+    python tools/tests/test_player_trait_effects.py
 
   決まり     … 返答の検算（一覧に無いもの・範囲の外を捨てる、同じ効果を足す、名前の揺れ）、重さ、寄せる
   頼み文     … severity は「渡さない」のときだけ載らない。変換の目印が付く
@@ -57,7 +57,7 @@ def load(name, folder, path):
 
 
 class FakeCtx:
-    _mod = "924_player_trait_effects"
+    _mod = "346_player_trait_effects"
 
     def __init__(self, out_dir, mod_dir):
         self.out_dir = out_dir
@@ -129,10 +129,10 @@ REPLY = {"traits": [
 folder = find_mod("_player_trait_effects")
 package = os.path.basename(folder)
 sys.modules["scripts.languages"] = types.SimpleNamespace(language="ja")
-pkg = types.ModuleType("mod924")
+pkg = types.ModuleType("mod346")
 pkg.__path__ = [folder]
-sys.modules["mod924"] = pkg
-rules = load("mod924.rules", folder, os.path.join(folder, "rules.py"))
+sys.modules["mod346"] = pkg
+rules = load("mod346.rules", folder, os.path.join(folder, "rules.py"))
 
 print("返答の検算")
 fields = rules.read_traits(TRAITS)
@@ -218,7 +218,7 @@ check("効果も文も無ければ足さない", rules.note_block([("癖", {"eff
 # ================================================================== MOD を通す
 print("MOD")
 shutil.rmtree(OUT_DIR, ignore_errors=True)
-mod = load("mod924.player_trait_effects", folder, os.path.join(folder, "player_trait_effects.py"))
+mod = load("mod346.player_trait_effects", folder, os.path.join(folder, "player_trait_effects.py"))
 for attr in (abilities._REGISTRY_ATTR, mod.STORE_ATTR):
     if hasattr(sys, attr):
         delattr(sys, attr)
@@ -276,7 +276,7 @@ print("条件")
 legacy_fx = {"kind": "ability", "stat": "strength", "amount": 2, "condition": "dungeon"}
 quest_fx = {"kind": "ability", "stat": "dexterity", "amount": 1, "condition": "quest"}
 low_fx = {"kind": "ability", "stat": "charisma", "amount": 1, "condition": "low_hp"}
-worlds = sys.modules["mod924.player_trait_effects"].process_store(ctx)["worlds"]
+worlds = sys.modules["mod346.player_trait_effects"].process_store(ctx)["worlds"]
 with worlds.lock:
     bucket = worlds.load("試験世界×試験太郎")
     first = bucket["traits"][rules.fingerprint(fields[0])]

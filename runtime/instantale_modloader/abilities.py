@@ -74,7 +74,7 @@ SITUATIONS = ("always", "quest", "battle", "boss", "low_hp")
 def situations(app, holder=None):
     """いまの場面の名前の集まり（`SITUATIONS` のうち当てはまるもの）。
 
-    補正を置く MOD（`924_`）が条件つきの補正を答えるときと、画面が「いま効いているか」を見せるとき
+    補正を置く MOD（`346_`）が条件つきの補正を答えるときと、画面が「いま効いているか」を見せるとき
     （`121_` の説明の窓）とで、同じ見分けを使うためにここに置く。
     `holder` を渡すと、その人物の体力で `low_hp` を見る。
     依頼の最中は `ui.current_quest_id`、戦闘は `app.in_battle` / `app.in_boss_battle`（GAME.md §2.6）。

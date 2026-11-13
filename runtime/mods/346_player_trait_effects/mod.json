@@ -7,8 +7,8 @@
     "ja": "主人公の特質を能力値と店の値段に効かせる"
   },
   "description": {
-    "en": "The game's traits are only text passed to the LLM. The LLM turns each trait into fixed effects once (an ability bonus that always applies or only on quests, in dungeons, in battle, in boss fights or below half HP, and shop buy and sell prices), and they work through the game's own numbers. The effects show after the trait names on the character sheet (121), and the LLM is told the effects whenever the traits are sent to it",
-    "ja": "ゲームの特質は LLM に渡す文だけで、数値には効いていない。特質ごとに LLM へ1回頼んで決まった効果（常に効く能力値の補正、依頼の最中・ダンジョンの中・戦闘中・ボス戦・体力が半分以下で効く補正、店の買値と売値）に置き換え、ゲームの数値に効かせる。効果は人物欄（121）の特質の名前の後ろに出し、特質が LLM に渡るときは効果の一覧も添える"
+    "en": "The game's traits are only text passed to the LLM. The LLM turns each trait into fixed effects once (an ability bonus that always applies or only on quests, in battle, in boss fights or below half HP, and shop buy and sell prices), and they work through the game's own numbers. Hovering over the traits on the character sheet (121) shows the effects, and the LLM is told the effects whenever the traits are sent to it",
+    "ja": "ゲームの特質は LLM に渡す文だけで、数値には効いていない。特質ごとに LLM へ1回頼んで決まった効果（常に効く能力値の補正、依頼の最中・戦闘中・ボス戦・体力が半分以下で効く補正、店の買値と売値）に置き換え、ゲームの数値に効かせる。効果は人物欄（121）の特性の箱にマウスを乗せると出て、特質が LLM に渡るときは効果の一覧も添える"
   },
   "version": "1",
   "author": "R01/Flossian",
@@ -21,7 +21,7 @@
         "en": "Apply ability bonuses"
       },
       "note": {
-        "ja": "切っても変換はして、人物欄に出し続ける",
+        "ja": "切っても特質の置き換えはして、人物欄に出し続ける",
         "en": "Off still converts traits and shows them on the sheet"
       }
     },

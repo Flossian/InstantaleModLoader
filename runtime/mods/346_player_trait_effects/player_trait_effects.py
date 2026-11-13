@@ -106,7 +106,7 @@ def apply(ctx):
             noted.clear()
         noted.add(line)
         write(line)
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "924_player_trait_effects"
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "346_player_trait_effects"
     worlds = store["worlds"].rebind(ctx, write)
     lock = worlds.lock
 

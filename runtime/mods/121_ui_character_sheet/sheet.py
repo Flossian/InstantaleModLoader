@@ -111,8 +111,8 @@ def reputation_epithet(data):
 
 
 # ---------------------------------------------------------------- 特性の効果
-#: 特質の効果 MOD（`924_player_trait_effects`）の控えの置き場。`state\trait_effects\<世界×主人公>.json`。
-#: 形は MOD をまたいだ取り決め（`924_` の DOC.md）。二つ名と同じく、ファイルを読むことで繋がる。
+#: 特質の効果 MOD（`346_player_trait_effects`）の控えの置き場。`state\trait_effects\<世界×主人公>.json`。
+#: 形は MOD をまたいだ取り決め（`346_` の DOC.md）。二つ名と同じく、ファイルを読むことで繋がる。
 TRAIT_EFFECTS_DIRNAME = "trait_effects"
 
 
