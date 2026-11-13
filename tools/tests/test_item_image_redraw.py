@@ -242,6 +242,7 @@ def load(keep_state=False, **settings):
     mod.CROSS_SLOT = False
     for _name, setting in mod.IMAGE_SETS:
         setattr(mod, setting, "off")
+    mod.USE_REDRAW = True       # 描き直しを測る検査なので入れて測る（既定は切）
     for name, value in settings.items():
         setattr(mod, name, value)
     ctx = FakeCtx()
@@ -255,6 +256,15 @@ def unit(*v):
     v = list(v) + [0.0] * (4 - len(v))
     return v + [max(0.0, 1.0 - sum(x * x for x in v)) ** 0.5]
 
+
+# 既定は切: 素の絵をそのまま見せる
+with io.open(os.path.join(MOD_DIR, "mod.json"), encoding="utf-8") as f:
+    shipped = json.load(f)["settings"]["USE_REDRAW"]["default"]
+spec = importlib.util.spec_from_file_location("iiv_redraw_default", os.path.join(MOD_DIR, "item_image_variety.py"))
+default_mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(default_mod)
+check("描き直しの既定は切（mod.json と本体）", shipped is False and default_mod.USE_REDRAW is False,
+      (shipped, default_mod.USE_REDRAW))
 
 # 描き直しの埋め込みで選ぶ: 軸3 に近い外見文は、描き直しを使えば 1、切れば素の 1 は似ないので 2
 QUERIES["redraw-like"] = unit(0.0, 0.5, 0.0, 0.8)

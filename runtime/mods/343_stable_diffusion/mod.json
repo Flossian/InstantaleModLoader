@@ -7,8 +7,8 @@
     "ja": "Stable Diffusionの各種差し替え"
   },
   "description": {
-    "en": "Raises the generation resolution and overrides the sampler at the single exit every backend goes through, separately for portraits, enemies and backgrounds, keeping the aspect ratio. The checkpoint, TAESD, VAE and LoRA folder can be pointed elsewhere (for an SDXL model) because they are written before the pipeline is built. Every default is the game's own value, and a setting left at its default is never written",
-    "ja": "どのバックエンドでも通る1つの出口で、生成解像度を上げ、サンプラーを上書きする。立ち絵・敵・背景で別々に指定でき、縦横比は保つ。チェックポイント・TAESD・VAE・LoRA の置き場も差し替えられる（パイプラインが建つ前に書くため。SDXL のモデルへ移る用）。既定値はすべてゲームの値で、既定のままの項目は書き換えない"
+    "en": "Raises the generation resolution and overrides the sampler at the single exit every backend goes through, separately for portraits, enemies and backgrounds, keeping the aspect ratio. The checkpoint, TAESD, VAE and LoRA folder can be pointed elsewhere (for an SDXL model) because they are written before the pipeline is built. The advanced tab can also redraw only the portrait's face, which fixes eyes of mismatched color or shape. Every default is the game's own value, and a setting left at its default is never written",
+    "ja": "どのバックエンドでも通る1つの出口で、生成解像度を上げ、サンプラーを上書きする。立ち絵・敵・背景で別々に指定でき、縦横比は保つ。チェックポイント・TAESD・VAE・LoRA の置き場も差し替えられる（パイプラインが建つ前に書くため。SDXL のモデルへ移る用）。高度設定で、立ち絵の顔だけを描き直して、左右で色や形のずれた目を直すこともできる。既定値はすべてゲームの値で、既定のままの項目は書き換えない"
   },
   "version": "29",
   "author": "R01/Flossian",

@@ -104,7 +104,7 @@
     },
     "USE_REDRAW": {
       "type": "bool",
-      "default": true,
+      "default": false,
       "label": {
         "ja": "素の絵を描き直しで見せる",
         "en": "Show stock images as redrawn versions"
