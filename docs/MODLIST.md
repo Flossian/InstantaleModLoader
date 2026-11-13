@@ -79,7 +79,7 @@
 | [`133_ui_area_difficulty`](MODS.md#133_ui_area_difficulty-移動先に適正レベル帯を出す) | 移動先の適正レベル帯の表示 | 移動先に適正レベル帯を出す | 9 |  |
 | [`134_balance_item_effects`](MODS.md#134_balance_item_effects-アイテムの効果を分類ごとに作り直す) | アイテム効果の調整 | アイテムの効果を分類ごとに作り直す | 18 |  |
 | [`135_fix_inn_button_order`](MODS.md#135_fix_inn_button_order-宿屋の選択肢を他の施設と同じ順にする) | 宿屋の選択肢を他の施設と同じ順にする | 宿屋の選択肢を他の施設と同じ順にする | - |  |
-| [`136_cloud_model_override`](MODS.md#136_cloud_model_override-クラウドのモデルを差し替える) | クラウドモデルの差し替え | クラウドのモデルを差し替える | 10 |  |
+| [`136_cloud_model_override`](MODS.md#136_cloud_model_override-クラウドのモデルを差し替える) | クラウドモデルの差し替え | クラウドのモデルを差し替える | 14 |  |
 | [`137_fix_npc_skill_uses`](MODS.md#137_fix_npc_skill_uses-仲間と敵は使い切ったスキルと効果中の強化弱体を使わず宿で休むと回数が戻る) | 仲間と敵は使い切ったスキルと効果中の強化・弱体を使わず、宿で休むと回数が戻る | 仲間と敵は使い切ったスキルと効果中の強化・弱体を使わず、宿で休むと回数が戻る | - |  |
 | [`138_fix_character_image_refresh`](MODS.md#138_fix_character_image_refresh-再生成した立ち絵と顔がその場で表示に反映される) | 再生成した立ち絵と顔がその場で表示に反映される | 再生成した立ち絵と顔がその場で表示に反映される | - |  |
 | [`139_fix_quest_generation_runaway`](MODS.md#139_fix_quest_generation_runaway-依頼の生成が終わらずに失敗するのを直す) | 依頼の生成で敵が増え続ける件の修正 | 依頼の生成が終わらずに失敗するのを直す | 1 |  |
@@ -144,7 +144,7 @@
 | [`340_shop_lineup`](MODS.md#340_shop_lineup-宿屋と鍛冶屋でも売買でき店の種類ごとに品揃えの傾向が付く) | 宿屋と鍛冶屋でも売買でき、店の種類ごとに品揃えの傾向が付く | 宿屋と鍛冶屋でも売買でき、店の種類ごとに品揃えの傾向が付く | 1 |  |
 | [`341_shopkeeper_attitude`](MODS.md#341_shopkeeper_attitude-店主の人柄と主人公との関係で売買の値段が変わる) | 店主の人柄と主人公との関係で売買の値段が変わる | 店主の人柄と主人公との関係で売買の値段が変わる | 6 |  |
 | [`342_attack_animations`](MODS.md#342_attack_animations-攻撃の演出が武器と属性に合ったものになる) | 攻撃の演出が武器と属性に合ったものになる | 攻撃の演出が武器と属性に合ったものになる | 1 |  |
-| [`343_stable_diffusion`](MODS.md#343_stable_diffusion-stable-diffusion-の解像度サンプラーモデルプロンプトを差し替える) | Stable Diffusionの各種差し替え | Stable Diffusion の解像度・サンプラー・モデル・プロンプトを差し替える | 52 |  |
+| [`343_stable_diffusion`](MODS.md#343_stable_diffusion-stable-diffusion-の解像度サンプラーモデルプロンプトを差し替える) | Stable Diffusionの各種差し替え | Stable Diffusion の解像度・サンプラー・モデル・プロンプトを差し替える | 55 |  |
 | [`344_quest_return_days`](MODS.md#344_quest_return_days-依頼から帰還すると日付が進む) | 依頼から帰還すると日付が進む | 依頼から帰還すると日付が進む | 2 |  |
 | [`345_date_display`](MODS.md#345_date_display-現在地の下に日付を表示する) | 現在地の下に日付を表示する | 現在地の下に日付を表示する | 3 |  |
 | [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘の審判への仲間の情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |

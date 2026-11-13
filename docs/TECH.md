@@ -2285,6 +2285,10 @@ abilities.scores(app, holder)       # 補正を足した6つ（下限 1）
 abilities.bonus(app, holder)        # 補正だけの合計
 abilities.breakdown(app, holder)    # [{owner, label, amounts, until}]
 abilities.raw(holder, name)         # 補正を足さない素の値（場面の中から呼んでも素の値）
+
+# 条件つきの補正の場面（補正を答える MOD と、「いま効いているか」を見せる画面が同じ見分けを使う）
+abilities.situations(app, holder)   # {"always", "quest", "battle", "boss", "low_hp"} のうち当てはまるもの
+abilities.SITUATIONS                # 名前の並び。quest は依頼の最中（ダンジョンは依頼の中にしか無い）
 ```
 
 ゲームが能力値を読む場面は `244_probe_ability_reads` で測った（VERIFICATION.md §1）。

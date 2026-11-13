@@ -53,7 +53,7 @@ TECH.md §3.10 の「完全に元通りにはならないもの」に当たる�
 import os
 import sys
 
-from instantale_modloader import frames, ui
+from instantale_modloader import abilities, frames, ui
 from instantale_modloader.state import playthrough_key, world_filename
 
 from . import sheet
@@ -87,6 +87,17 @@ MARK = ui.MOD_WIDGET_PREFIX + "character_sheet"
 
 #: 窓の大きさの見張りを `Window` に控える属性名（`ui.window_watcher` が注入し直すたびに付け替える）。
 WINDOW_ATTR = MARK + "_on_resize"
+
+#: マウスの位置の見張りを `Window` に控える属性名（注入し直すたびに付け替える）。
+MOUSE_ATTR = MARK + "_on_mouse"
+
+#: 説明の窓の目印（注入し直したときに前の世代の窓を見つけて外す）。
+DETAIL_MARK = MARK + "_detail"
+
+#: 説明の窓の効果の行の色（名前の白と説明の灰色の間で目に付く色）。
+DETAIL_EFFECT = (0.93, 0.80, 0.52, 1)
+#: いまの場面で効いていない効果の色。説明の灰色と並ぶと見分けにくかった（実機）ので、効果の色を暗くする。
+DETAIL_INACTIVE = (0.45, 0.39, 0.27, 1)
 
 HUD_MODULE = "scripts.hud.new_hud"
 
@@ -334,6 +345,18 @@ def apply(ctx):
         return sheet.epithet_text(
             sheet.reputation_epithet(ctx.read_json(path, None)))
 
+    def trait_effects(app, character):
+        """特性の効果 MOD の控えがあれば `{名前: 効果の文}`。無ければ空（名前だけ出す）。
+
+        読み方は二つ名と同じ（フォルダを作らない・周回の鍵で引く・別人の人物欄には出さない）。
+        """
+        player = frames.attr(app, "player")
+        if player is frames.MISSING or player is None or character is not player:
+            return {}
+        path = os.path.join(ctx.state_dir, sheet.TRAIT_EFFECTS_DIRNAME,
+                            world_filename(playthrough_key(app)))
+        return sheet.trait_effect_texts(ctx.read_json(path, None))
+
     def write_epithet(hud, epithet):
         """レベル行の続きに二つ名を書く。無ければ素の行に戻す。
 
@@ -405,8 +428,9 @@ def apply(ctx):
             ui.show_widget(reroll, bool(epithet))
             if epithet:
                 place_reroll(hud, reroll)
-        boxes["skills"].text = sheet.list_text(
-            sheet.SKILLS_HEADING, sheet.names_of(frames.attr(character, "skills")))
+        skills = frames.attr(character, "skills")
+        traits = frames.attr(character, "traits")
+        boxes["skills"].text = sheet.list_text(sheet.SKILLS_HEADING, sheet.names_of(skills))
         # 既定を None にして「無い」も「None が入っている」も1つの判定で弾く。
         # 番人だけを見ていた版は、ゲームが箱を作る前（`character_sheet_empty` が None）に
         # `None.text = ...` を踏んでいた。
@@ -415,8 +439,142 @@ def apply(ctx):
         # 同じ関数の他の2箇所は最初から両方見ている（下の `place` / `copy_style`）。
         traits_box = frames.attr(hud, sheet.TRAITS_BOX, None)
         if traits_box is not None:
-            traits_box.text = sheet.list_text(
-                sheet.TRAITS_HEADING, sheet.names_of(frames.attr(character, "traits")))
+            traits_box.text = sheet.list_text(sheet.TRAITS_HEADING, sheet.names_of(traits))
+        # マウスを乗せたときの説明（`on_mouse`）。開いた人物のものを控える。
+        state["character"] = character
+        state["details"] = {
+            "traits": sheet.trait_details(traits, trait_effects(app, character)),
+            "skills": sheet.skill_details(skills),
+        }
+
+    # ------------------------------------------------------------ マウスオーバーの説明
+    def detail_widget(hud):
+        """説明の窓（1枚を使い回す）。HUD の置き場に無ければ足す。"""
+        from kivy.graphics import Color, Rectangle
+        from kivy.uix.floatlayout import FloatLayout
+        from kivy.uix.label import Label
+        from instantale_modloader import panels
+
+        widget = state.get("detail")
+        if widget is None:
+            widget = FloatLayout(size_hint=(None, None))
+            with widget.canvas.before:
+                Color(*panels.BG)
+                shade = Rectangle()
+            widget.bind(pos=lambda w, v: setattr(shade, "pos", v),
+                        size=lambda w, v: setattr(shade, "size", v))
+            panels.border(widget)
+            label = Label(markup=True, halign="left", valign="top", size_hint=(None, None))
+            widget.add_widget(label)
+            widget.label = label
+            setattr(widget, DETAIL_MARK, True)
+            state["detail"] = widget
+        host = ui.overlay_host(hud)
+        for child in list(frames.attr(host, "children", None) or []):
+            if child is not widget and getattr(child, DETAIL_MARK, False):
+                host.remove_widget(child)       # 注入し直す前の世代の窓
+        if widget.parent is not host:
+            if widget.parent is not None:
+                widget.parent.remove_widget(widget)
+            host.add_widget(widget)
+        return widget
+
+    def hide_detail():
+        """説明の窓を消す。注入し直す前の世代が出したままの窓も一緒に片付ける
+        （マウスが動かないと新しい世代の見張りは呼ばれず、古い窓が残った。実機）。"""
+        widget = state.get("detail")
+        state["hovering"] = None
+        if widget is not None and widget.parent is not None:
+            widget.parent.remove_widget(widget)
+        hud = state.get("hud")
+        if hud is None:
+            return
+        host = ui.overlay_host(hud)
+        for child in list(frames.attr(host, "children", None) or []):
+            if getattr(child, DETAIL_MARK, False):
+                host.remove_widget(child)
+
+    def show_detail(hud, key, pos):
+        """`key`（traits / skills）の説明を、マウスの位置 `pos` の近くに出す。"""
+        from kivy.core.window import Window
+        from instantale_modloader import panels
+
+        entries = (state.get("details") or {}).get(key) or []
+        if not entries:
+            hide_detail()
+            return
+        widget = detail_widget(hud)
+        label = widget.label
+        if state.get("hovering") != key:
+            style = frames.attr(hud, sheet.STYLE_SOURCE, None)
+            for name in ("font_name", "font_size"):
+                value = frames.attr(style, name, None)
+                if value is not None and value is not frames.MISSING:
+                    setattr(label, name, value)
+            # 条件つきの効果は、いまの場面（窓口の見分け）に当てはまらなければ灰色にする。
+            active = abilities.situations(ui.find_app(), state.get("character"))
+            label.text = panels.markup(sheet.detail_pieces(entries, active),
+                                       {"name": panels.TEXT, "effect": DETAIL_EFFECT,
+                                        "inactive": DETAIL_INACTIVE, "text": panels.DIM})
+            pad = ui.upx(12)
+            width = float(Window.width) * sheet.DETAIL_WIDTH
+            label.text_size = (width - 2 * pad, None)
+            label.texture_update()
+            height = label.texture_size[1] + 2 * pad
+            widget.size = (width, height)
+            label.size = (width - 2 * pad, height - 2 * pad)
+            state["hovering"] = key
+        widget.pos = sheet.detail_pos(pos, widget.size, (Window.width, Window.height),
+                                      ui.upx(sheet.DETAIL_GAP))
+        pad = ui.upx(12)
+        label.pos = (widget.x + pad, widget.y + pad)
+
+    def over(box, pos):
+        if box is None or box is frames.MISSING or frames.attr(box, "parent", None) is None:
+            return False
+        try:
+            return box.collide_point(*box.to_widget(*pos))
+        except Exception:
+            return False
+
+    def on_mouse(_window, pos):
+        """マウスが特性かスキルの箱の上に在れば説明を出し、外れたら消す。"""
+        try:
+            hud = state.get("hud")
+            layout = frames.attr(hud, "character_sheet_layout", None) if hud is not None else None
+            if layout is None or layout is frames.MISSING or not is_open(layout):
+                if state.get("hovering"):
+                    hide_detail()
+                return
+            boxes = state.get("boxes") or {}
+            for key, box in (("traits", frames.attr(hud, sheet.TRAITS_BOX, None)),
+                             ("skills", boxes.get("skills"))):
+                if over(box, pos):
+                    show_detail(hud, key, pos)
+                    return
+            if state.get("hovering"):
+                hide_detail()
+        except Exception:
+            hide_detail()
+            ctx.log_exc("character sheet: hover failed")
+
+    def watch_mouse():
+        """マウスの位置を見張る。注入し直したときは前の版の手を外してから結ぶ（`ui.window_watcher` と同じ）。"""
+        if state.get("mouse_watching"):
+            return
+        try:
+            from kivy.core.window import Window
+        except Exception:
+            return
+        previous = frames.attr(Window, MOUSE_ATTR, None)
+        if previous is not None:
+            try:
+                Window.unbind(mouse_pos=previous)
+            except Exception:
+                pass
+        Window.bind(mouse_pos=on_mouse)
+        setattr(Window, MOUSE_ATTR, on_mouse)
+        state["mouse_watching"] = True
 
     # ------------------------------------------------------------ 入口
     def decorate(hud, repaint=True):
@@ -437,6 +595,7 @@ def apply(ctx):
         if style is frames.MISSING:
             style = None
         boxes = ensure_boxes(layout, style)
+        state["boxes"] = boxes      # マウスオーバーの見分け（`on_mouse`）が読む
         reroll = ensure_reroll(layout)
 
         # ゲーム自身の箱も置き直す。
@@ -462,8 +621,12 @@ def apply(ctx):
         # 素の短い行では左に居るように見えるだけで、二つ名を続けて書いて
         # 箱を広げると中央へ寄ってしまう。寸法に束ねて `halign`（ゲーム自身の
         # left）を効かせる。束ねは1度だけ（開くたびに重ねない）。
-        info = frames.attr(hud, "character_sheet_basic_info")
-        if info is not frames.MISSING and info is not None:
+        # 借りている特性の箱も素のゲームでは `text_size` を持たず、長い行が箱の外で切れた
+        # （特性の効果を書き足したときの実機）。同じく寸法に束ねて箱の幅で折り返す。
+        for info in (frames.attr(hud, "character_sheet_basic_info"),
+                     frames.attr(hud, sheet.TRAITS_BOX)):
+            if info is frames.MISSING or info is None:
+                continue
             if not getattr(info, MARK + "_wrap", False):
                 try:
                     info.bind(size=lambda instance, value: setattr(
@@ -511,6 +674,8 @@ def apply(ctx):
     def toggle(orig, self, *args, **kwargs):
         result = orig(self, *args, **kwargs)
         watch_window()      # 注入ごとに1回だけ結ぶ（2回目からは何もしない）
+        watch_mouse()
+        hide_detail()       # 開け閉めのたびに説明は消す（閉じた後に残さない）
         decorate(self)      # 壊れてもゲームは orig の結果を受け取る（§3.1.5）
         return result
 

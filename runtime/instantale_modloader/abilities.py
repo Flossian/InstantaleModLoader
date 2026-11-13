@@ -65,6 +65,38 @@ def days(count):
     return {"days": int(count)}
 
 
+#: 補正を条件つきにする MOD が使う場面（`situations` が返す名前）。
+#: `always` はいつでも、`quest` は依頼の最中（道中・ダンジョン・戦闘・出来事。ダンジョンは依頼の中にしか無い）、
+#: `battle` は戦闘の間、`boss` はボス戦の間、`low_hp` は体力が最大の半分以下のとき。
+SITUATIONS = ("always", "quest", "battle", "boss", "low_hp")
+
+
+def situations(app, holder=None):
+    """いまの場面の名前の集まり（`SITUATIONS` のうち当てはまるもの）。
+
+    補正を置く MOD（`924_`）が条件つきの補正を答えるときと、画面が「いま効いているか」を見せるとき
+    （`121_` の説明の窓）とで、同じ見分けを使うためにここに置く。
+    `holder` を渡すと、その人物の体力で `low_hp` を見る。
+    依頼の最中は `ui.current_quest_id`、戦闘は `app.in_battle` / `app.in_boss_battle`（GAME.md §2.6）。
+    """
+    found = {"always"}
+    if app is None:
+        return found
+    if ui.current_quest_id(app):
+        found.add("quest")
+    if frames.attr(app, "in_battle", None):
+        found.add("battle")
+    if frames.attr(app, "in_boss_battle", None):
+        found.add("boss")
+    if holder is not None:
+        hp = frames.attr(holder, "current_hp", None)
+        top = frames.attr(holder, "max_hp", None)
+        if isinstance(hp, (int, float)) and isinstance(top, (int, float)) and top > 0 \
+                and not isinstance(hp, bool) and not isinstance(top, bool) and hp <= top / 2.0:
+            found.add("low_hp")
+    return found
+
+
 #: 読み口を置く属性。素点は攻撃力・魔力、ほかは能力値を読む。
 FIELDS = ("ability_scores", "attack_power", "magic_power")
 #: 攻撃力・魔力のもとになる能力値（GAME.md §2.10.4）。

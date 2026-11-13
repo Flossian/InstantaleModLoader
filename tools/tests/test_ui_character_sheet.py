@@ -430,7 +430,8 @@ def run():
     check("リサイズで枠も変わる",
           close(layout.size[0], want[0]) and close(layout.size[1], want[1]),
           (layout.size, want))
-    check("見張りは1つだけ", len(FakeWindow.bound) == 1, len(FakeWindow.bound))
+    check("見張りは種類ごとに1つだけ（大きさ・マウス）",
+          sorted(name for name, _fn in FakeWindow.bound) == ["mouse_pos", "on_resize"], FakeWindow.bound)
     toggle()                                   # 閉じる
     FakeWindow.resize(1600, 900)
     check("閉じている間は触らない", layout.size == (0, 0), layout.size)
@@ -514,7 +515,8 @@ def run():
     ctx2, hud2 = FakeCtx(), FakeHUD()
     toggle2, _borders = install(mod, ctx2, hud2, app2)
     toggle2()
-    check("注入し直しても見張りは1つだけ", len(FakeWindow.bound) == 1, FakeWindow.bound)
+    check("注入し直しても見張りは種類ごとに1つだけ",
+          sorted(name for name, _fn in FakeWindow.bound) == ["mouse_pos", "on_resize"], FakeWindow.bound)
     text2 = "".join(box.text for box in hud2.character_sheet_layout.children
                     if "手配度" in box.text)
     check("BGM が dungeons の土地を落とす", "霧の湿地帯" not in text2, text2)
@@ -603,6 +605,54 @@ def run():
     check("二つ名が空なら文も空",
           sheet.epithet_text("") == "" and sheet.epithet_text(None) == ""
           and sheet.epithet_text("竜追い") == "「竜追い」")
+
+    print("\n[マウスオーバーの説明] 特性とスキルの名前・効果・説明")
+    traits_box = hud.character_sheet_empty
+    effects_path = os.path.join(FakeCtx.STATE_DIR, sheet.TRAIT_EFFECTS_DIRNAME,
+                                world_filename(playthrough_key(app)))
+    os.makedirs(os.path.dirname(effects_path), exist_ok=True)
+    ctx.write_json(effects_path, {"display": [{"name": "不屈の闘志", "text": "体力半分以下で耐久+2"}]})
+    toggle()
+    toggle()
+    check("特質の効果の控えがあっても箱は名前だけ",
+          "不屈の闘志" in traits_box.text and "耐久+2" not in traits_box.text, traits_box.text)
+    os.remove(effects_path)
+    always = {"text": "判断+2", "condition": "always"}
+    check("効果の控えを形を決めつけずに読む（文字列だけ・つないだ1文は条件なし）",
+          sheet.trait_effect_texts({"display": [{"name": " 勘 ", "text": "判断+2"},
+                                                {"name": "癖", "text": ""}, "壊れ"]}) == {"勘": [always]}
+          and sheet.trait_effect_texts({"display": [{"name": "勘", "effects": ["判断+2"]}]}) == {"勘": [always]}
+          and sheet.trait_effect_texts(None) == {} and sheet.trait_effect_texts({"display": "x"}) == {})
+    battle = {"text": "戦闘中器用+1", "condition": "battle"}
+    check("効果ごとの並びを条件ごと読む",
+          sheet.trait_effect_texts({"display": [{"name": "勘", "text": "判断+2・戦闘中器用+1",
+                                                 "effects": [always, battle]}]}) == {"勘": [always, battle]})
+    traits = [{"name": "勘", "description": "罠に気づく。"}, {"name": "癖", "description": ""}, {"x": 1}]
+    check("特性の説明: 効果は控えのあるものだけ",
+          sheet.trait_details(traits, {"勘": [always, battle]}) == [
+              {"name": "勘", "effects": [always, battle], "text": "罠に気づく。"},
+              {"name": "癖", "effects": [], "text": ""}])
+    skills = {"斬撃": {"name": "斬撃", "description": "斬る。", "max_uses": 4, "current_uses": 2,
+                       "element": "物理"}}
+    skill_rows = sheet.skill_details(skills)
+    check("スキルの説明: 残りの使用回数と属性",
+          skill_rows[0]["effects"][0]["text"] == "使用回数 2/4・属性 物理" and skill_rows[0]["text"] == "斬る。",
+          skill_rows)
+    check("スキルの説明: 英語の属性は日本語にする",
+          sheet.skill_details({"x": {"name": "x", "element": "physical"}})[0]["effects"][0]["text"] == "属性 物理")
+    pieces = sheet.detail_pieces(sheet.trait_details(traits, {"勘": [always, battle]}), {"always"})
+    check("説明の文: 1件ごとに空行で区切り、いまの場面に無い効果は灰色",
+          pieces == [("勘", "name"), ("\n・判断+2", "effect"), ("\n・戦闘中器用+1", "inactive"),
+                     ("\n罠に気づく。", "text"), ("\n\n", None), ("癖", "name")], pieces)
+    check("説明の文: 場面に当てはまれば色を付ける",
+          ("\n・戦闘中器用+1", "effect") in sheet.detail_pieces(
+              sheet.trait_details(traits, {"勘": [battle]}), {"always", "battle"}))
+    check("説明の文: スキルの欄は行頭の印を付けない",
+          sheet.detail_pieces(skill_rows, {"always"})[1] == ("\n使用回数 2/4・属性 物理", "effect"))
+    check("説明の窓: マウスの右下、はみ出せば左・上へ",
+          sheet.detail_pos((100, 500), (300, 200), (1920, 1000), 16) == (116, 284)
+          and sheet.detail_pos((1800, 100), (300, 200), (1920, 1000), 16) == (1484, 116))
+    check("特性の効果の経路で例外を出していない", not ctx.errors, ctx.errors[:2])
 
     buttons = [child for child in layout.children
                if isinstance(child, FakeButton)]

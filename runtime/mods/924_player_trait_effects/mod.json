@@ -1,0 +1,108 @@
+{
+  "entry": "player_trait_effects.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Make the player's traits work on ability scores and shop prices",
+    "ja": "主人公の特質を能力値と店の値段に効かせる"
+  },
+  "description": {
+    "en": "The game's traits are only text passed to the LLM. The LLM turns each trait into fixed effects once (an ability bonus that always applies or only on quests, in dungeons, in battle, in boss fights or below half HP, and shop buy and sell prices), and they work through the game's own numbers. The effects show after the trait names on the character sheet (121), and the LLM is told the effects whenever the traits are sent to it",
+    "ja": "ゲームの特質は LLM に渡す文だけで、数値には効いていない。特質ごとに LLM へ1回頼んで決まった効果（常に効く能力値の補正、依頼の最中・ダンジョンの中・戦闘中・ボス戦・体力が半分以下で効く補正、店の買値と売値）に置き換え、ゲームの数値に効かせる。効果は人物欄（121）の特質の名前の後ろに出し、特質が LLM に渡るときは効果の一覧も添える"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "USE_ABILITIES": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "能力値の補正を効かせる",
+        "en": "Apply ability bonuses"
+      },
+      "note": {
+        "ja": "切っても変換はして、人物欄に出し続ける",
+        "en": "Off still converts traits and shows them on the sheet"
+      }
+    },
+    "USE_PRICES": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "店の値段を変える",
+        "en": "Change shop prices"
+      }
+    },
+    "NOTES_TO_AI": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "LLM に効果の一覧を添える",
+        "en": "Tell the LLM the effects"
+      },
+      "note": {
+        "ja": "主人公の特質が載った頼みに、効果の一覧と、数値にならない性質の文を足す",
+        "en": "Adds the effects and the non-numeric parts to requests that carry the player's traits"
+      }
+    },
+    "SEVERITY_MODE": {
+      "type": "choice",
+      "values": [
+        "guide",
+        "fit",
+        "off"
+      ],
+      "default": "guide",
+      "value_labels": {
+        "guide": {
+          "ja": "目安として渡す",
+          "en": "Pass as a guide"
+        },
+        "fit": {
+          "ja": "渡して、効果の重さを寄せる",
+          "en": "Pass and fit the effects to it"
+        },
+        "off": {
+          "ja": "渡さない（文だけで決める）",
+          "en": "Do not pass (text only)"
+        }
+      },
+      "label": {
+        "ja": "severity の扱い",
+        "en": "How severity is used"
+      },
+      "note": {
+        "ja": "特質の強さの数（作成時の才能点）。変えても変換済みの特質は変わらない",
+        "en": "The trait's strength number (its talent cost). Changing this does not redo converted traits"
+      }
+    },
+    "STAT_CAP": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 30,
+      "label": {
+        "ja": "能力値ごとの補正の上限",
+        "en": "Bonus cap per ability"
+      },
+      "note": {
+        "ja": "特質の補正を足した後の上限。0 で上限なし",
+        "en": "Cap after adding up the traits. 0 = no cap"
+      }
+    },
+    "PRICE_CAP": {
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "max": 90,
+      "label": {
+        "ja": "値段の割合の上限（％）",
+        "en": "Price change cap (%)"
+      },
+      "note": {
+        "ja": "特質の割合を足した後の上限。0 で上限なし",
+        "en": "Cap after adding up the traits. 0 = no cap"
+      }
+    }
+  }
+}

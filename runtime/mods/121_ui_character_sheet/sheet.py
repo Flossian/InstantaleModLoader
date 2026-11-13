@@ -110,6 +110,138 @@ def reputation_epithet(data):
     return value.strip() if isinstance(value, str) else ""
 
 
+# ---------------------------------------------------------------- 特性の効果
+#: 特質の効果 MOD（`924_player_trait_effects`）の控えの置き場。`state\trait_effects\<世界×主人公>.json`。
+#: 形は MOD をまたいだ取り決め（`924_` の DOC.md）。二つ名と同じく、ファイルを読むことで繋がる。
+TRAIT_EFFECTS_DIRNAME = "trait_effects"
+
+
+def trait_effect_texts(data):
+    """特質の効果 MOD の控えから `{特性の名前: [{"text", "condition"}, ...]}` を取り出す。読めなければ空。
+
+    効果は人物欄の特性の箱にマウスを乗せたときの説明の窓に出す（`trait_details`）。
+    `condition` は窓口の場面（`abilities.situations`）の名前で、いまの場面に無ければ灰色にする。
+    効果が文字列だけなら条件は `always`、効果ごとの並びが無ければつないだ1文（`text`）を1件として読む。
+
+        {"display": [{"name": "坑夫の勘", "text": "依頼中判断+2",
+                      "effects": [{"text": "依頼中判断+2", "condition": "quest"}]}, ...], ...}
+    """
+    rows = data.get("display") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        return {}
+    found = {}
+    for row in rows:
+        if not isinstance(row, dict) or not isinstance(row.get("name"), str):
+            continue
+        lines = []
+        for effect in row.get("effects") if isinstance(row.get("effects"), list) else []:
+            if isinstance(effect, str) and effect.strip():
+                lines.append({"text": effect.strip(), "condition": "always"})
+            elif isinstance(effect, dict) and isinstance(effect.get("text"), str) and effect["text"].strip():
+                condition = effect.get("condition")
+                lines.append({"text": effect["text"].strip(),
+                              "condition": condition if isinstance(condition, str) and condition else "always"})
+        if not lines and isinstance(row.get("text"), str) and row["text"].strip():
+            lines = [{"text": row["text"].strip(), "condition": "always"}]
+        if lines:
+            found[row["name"].strip()] = lines
+    return found
+
+
+# ---------------------------------------------------------------- マウスオーバーの説明
+# 特性とスキルの箱は狭く、名前が1行ぶんしか見えない（2件目は箱の下で落ちる。実機）。
+# 箱にマウスを乗せたら、全件の名前・効果・説明を並べた窓を出す。
+
+#: 説明の窓の幅（窓の幅に対する割合）と、マウスからの離れ（px。`ui.upx` で拡縮）。
+DETAIL_WIDTH = 0.26
+DETAIL_GAP = 16.0
+
+
+def _text_of(item, name):
+    value = item.get(name) if isinstance(item, dict) else getattr(item, name, None)
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _number(item, name):
+    value = item.get(name) if isinstance(item, dict) else getattr(item, name, None)
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def trait_details(value, effect_texts=None):
+    """特性の説明の行 `[{"name", "effects", "text"}]`。効果は特質の効果 MOD の控え（無ければ空）。
+
+    `effects` は `[{"text", "condition"}]`（`trait_effect_texts` の形）。
+    """
+    effect_texts = effect_texts or {}
+    items = value if isinstance(value, (list, tuple)) else (
+        list(value.values()) if isinstance(value, dict) else [])
+    found = []
+    for item in items:
+        name = _name_of(item) or (item.strip() if isinstance(item, str) else "")
+        if not name:
+            continue
+        found.append({"name": name, "effects": list(effect_texts.get(name.strip()) or []),
+                      "text": _text_of(item, "description")})
+    return found
+
+
+#: スキルの属性の英語の鍵（ゲームのデータに英語のまま入っていることがある。実機で `physical`）。
+ELEMENT_NAMES = {"physical": "物理", "magical": "魔法", "magic": "魔法", "fire": "火", "water": "水",
+                 "ice": "氷", "lightning": "雷", "thunder": "雷", "wind": "風", "earth": "土",
+                 "dark": "闇", "darkness": "闇", "light": "光", "holy": "聖", "poison": "毒"}
+
+
+def skill_details(value):
+    """スキルの説明の行 `[{"name", "effects", "text"}]`。効果の欄は残りの使用回数と属性（いつでも有効）。"""
+    found = []
+    pairs = value.items() if isinstance(value, dict) else enumerate(value if isinstance(value, (list, tuple)) else [])
+    for key, item in pairs:
+        name = _name_of(item) or (str(key) if isinstance(key, str) else "")
+        if not name:
+            continue
+        parts = []
+        left, top = _number(item, "current_uses"), _number(item, "max_uses")
+        if top is not None:
+            parts.append("使用回数 {}/{}".format(left if left is not None else top, top))
+        element = _text_of(item, "element")
+        if element:
+            parts.append("属性 " + ELEMENT_NAMES.get(element.lower(), element))
+        effects = [{"text": "・".join(parts), "condition": "always", "bullet": False}] if parts else []
+        found.append({"name": name, "effects": effects, "text": _text_of(item, "description")})
+    return found
+
+
+def detail_pieces(entries, active=None):
+    """説明の窓の文 `[(文, 色の鍵)]`。鍵は name / effect / inactive / text。1件ごとに空行で区切る。
+
+    効果は1行ずつ。`active`（いまの場面の名前の集まり）を渡すと、条件が当てはまらない効果を
+    `inactive`（灰色）にする。渡さなければ全部 `effect`。
+    """
+    pieces = []
+    for index, entry in enumerate(entries):
+        if index:
+            pieces.append(("\n\n", None))
+        pieces.append((entry["name"], "name"))
+        for effect in entry.get("effects") or ():
+            on = active is None or effect.get("condition", "always") in active
+            head = "" if effect.get("bullet") is False else "・"
+            pieces.append(("\n" + head + effect["text"], "effect" if on else "inactive"))
+        if entry.get("text"):
+            pieces.append(("\n" + entry["text"], "text"))
+    return pieces
+
+
+def detail_pos(mouse, size, window, gap):
+    """説明の窓の左下の位置。マウスの右下に出し、はみ出すなら左・上へ回す。"""
+    x = mouse[0] + gap
+    if x + size[0] > window[0]:
+        x = mouse[0] - gap - size[0]
+    y = mouse[1] - gap - size[1]
+    if y < 0:
+        y = mouse[1] + gap
+    return max(0.0, min(x, window[0] - size[0])), max(0.0, min(y, window[1] - size[1]))
+
+
 #: 二つ名の引き直しの頼み。ボタンが押されたらこの名前のファイルを書き、
 #: 評判 MOD が次の照合で消して応える（呼び合わずにファイルで繋ぐ。TECH.md §3.2.3）。
 #: 中身は読まれない（在ることが頼み）。
