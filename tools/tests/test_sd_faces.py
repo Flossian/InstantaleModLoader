@@ -3,12 +3,13 @@
 
     python tools/tests/test_sd_faces.py
 
-  設定   … 検出器のファイルが無ければ動かない。face.json は省けて、壊れた値は既定へ
+  設定   … 既定は切。入なら同梱の検出器で動き、壊れた値は既定へ
+  日本語 … パスに日本語があっても検出器を作れる（cv2 が無ければ飛ばす）
   枠     … 顔の枠を広げた正方形は絵の中に収まる
   順     … YuNet を先に、見つからなければ lbpcascade。倍率は見つけた方のもの
   文     … 全身を描かせるタグを外し、その位置に顔の寄りのタグを入れる
   貼る   … 楕円の内側だけ差し替わり、外側と元の絵は変わらない
-顔を探す処理（cv2）と描き直し（出口）はゲームの中でしか通らないので、ここでは見ない。
+顔を探す処理と描き直し（出口）はゲームの中でしか通らないので、ここでは見ない。
 """
 import importlib.util
 import io
@@ -34,54 +35,63 @@ def check(name, cond, detail=""):
 
 
 # ------------------------------------------------------------------ 設定
+MOD_DIR = os.path.dirname(FACES_PATH)
+MODELS = faces.models_dir(MOD_DIR)
+check("検出器は2つとも同梱している",
+      os.path.isfile(faces.yunet_path(MODELS)) and os.path.isfile(faces.cascade_path(MODELS))
+      and os.path.isfile(os.path.join(MODELS, "LICENSE.yunet.txt")))
+decls = json.load(io.open(os.path.join(MOD_DIR, "mod.json"), encoding="utf-8"))["settings"]
+check("mod.json に設定が3つあり、既定は切・空・0.4",
+      all(name in decls for name in faces.NAMES)
+      and (decls[faces.SWITCH]["default"], decls[faces.PRESET]["default"],
+           decls[faces.STRENGTH]["default"]) == (False, "", faces.DEFAULT_STRENGTH))
+check("既定の値では動かない", faces.config(faces.derive({}), MODELS) is None)
+on = faces.derive({faces.SWITCH: True, faces.PRESET: " WAI ", faces.STRENGTH: 0.35})
+check("設定の値を読む（プリセットの名前の前後の空白は外す）",
+      on == {"on": True, "preset": "WAI", "strength": 0.35}, on)
+check("強さの範囲の外と読めない値は既定、1 を超える値は 1",
+      [faces.derive({faces.STRENGTH: v})["strength"] for v in (0, -1, "x", None, float("nan"), 3)]
+      == [0.4, 0.4, 0.4, 0.4, 0.4, 1.0])
+got = faces.config(on, MODELS)
+check("入なら同梱の検出器で動く",
+      got is not None and got["yunet"] == faces.yunet_path(MODELS)
+      and got["cascade"] == faces.cascade_path(MODELS) and got["strength"] == 0.35, got)
+check("置き場が分からなければ動かない", faces.config(on, "") is None)
 state = tempfile.mkdtemp()
 try:
-    check("検出器が無ければ動かない", faces.config(state) is None)
-    check("置き場が空でも動かない", faces.config("") is None)
-    cascade = faces.cascade_path(state)
-    os.makedirs(os.path.dirname(cascade))
-    io.open(cascade, "w", encoding="utf-8").write(u"<opencv_storage/>")
-    got = faces.config(state)
-    check("検出器を置けば既定の値で動く",
-          got is not None and got["cascade"] == cascade
-          and {k: got[k] for k in ("strength", "preset", "grow", "feather", "side")}
-          == {"strength": 0.4, "preset": "", "grow": 2.2, "feather": 0.18, "side": 0}, got)
-    conf_path = os.path.join(faces.base_dir(state), faces.CONFIG_NAME)
-
-    def write_conf(value):
-        io.open(conf_path, "w", encoding="utf-8").write(
-            value if isinstance(value, str) else json.dumps(value, ensure_ascii=False))
-
-    write_conf({"enabled": False})
-    check("enabled が false なら止まる", faces.config(state) is None)
-    write_conf({"strength": 0.35, "preset": " WAI ", "grow": 3, "feather": 0.1, "side": 1000})
-    got = faces.config(state)
-    check("face.json の値を読み、一辺は 64 の倍数へ切り下げる",
-          (got["strength"], got["preset"], got["grow"], got["feather"], got["side"])
-          == (0.35, "WAI", 3.0, 0.1, 960), got)
-    write_conf({"strength": 0, "grow": "x", "feather": 0.9, "side": -5})
-    got = faces.config(state)
-    check("範囲の外と読めない値は既定へ",
-          (got["strength"], got["grow"], got["feather"], got["side"]) == (0.4, 2.2, 0.18, 0), got)
-    write_conf("{壊れた")
-    check("読めない face.json は既定の値で動く", faces.config(state)["strength"] == 0.4)
-    got = faces.config(state)
-    check("YuNet を置いていなければ lbpcascade だけ",
-          got["cascade"] == cascade and got["yunet"] is None and got["grow_yunet"] == 2.7, got)
-    yunet = faces.yunet_path(state)
-    io.open(yunet, "wb").write(b"onnx")
-    os.remove(cascade)
-    got = faces.config(state)
-    check("YuNet だけ置いても動く", got is not None and got["yunet"] == yunet and got["cascade"] is None, got)
+    check("検出器が1つも無ければ動かない", faces.config(on, state) is None)
+    io.open(faces.cascade_path(state), "w", encoding="utf-8").write(u"<opencv_storage/>")
+    got = faces.config(on, state)
+    check("lbpcascade だけでも動く", got is not None and got["yunet"] is None, got)
 finally:
     shutil.rmtree(state, ignore_errors=True)
+
+# ------------------------------------------------------------------ 日本語のパス
+if all(importlib.util.find_spec(name) for name in ("cv2", "numpy")):
+    state = tempfile.mkdtemp()
+    try:
+        folder = os.path.join(state, u"日本語の置き場")
+        shutil.copytree(MODELS, folder)
+        faces._CONTENTS.clear()
+        try:
+            cascade = faces.make_cascade(faces.cascade_path(folder))
+            yunet = faces.make_yunet(faces.yunet_path(folder), (320, 320))
+            ok, detail = (not cascade.empty() and yunet is not None), ""
+        except Exception as exc:
+            ok, detail = False, "{}: {}".format(type(exc).__name__, exc)
+        check("パスに日本語があっても検出器を作れる", ok, detail)
+    finally:
+        faces._CONTENTS.clear()
+        shutil.rmtree(state, ignore_errors=True)
+else:
+    print("skip 日本語のパス（cv2 が無い）")
 
 # ------------------------------------------------------------------ 探す順
 calls = []
 real = (faces.find_yunet, faces.find_cascade)
 faces.find_yunet = lambda image, model: calls.append("yunet") or answers["yunet"]
 faces.find_cascade = lambda image, path: calls.append("cascade") or answers["cascade"]
-both = {"yunet": "y.onnx", "cascade": "c.xml", "grow": 2.2, "grow_yunet": 2.7}
+both = {"yunet": "y.onnx", "cascade": "c.xml"}
 try:
     answers = {"yunet": (1, 2, 3, 4), "cascade": (5, 6, 7, 8)}
     check("両方あれば YuNet が先で、YuNet の倍率を返す",
@@ -103,9 +113,7 @@ check("顔の枠を grow 倍の正方形へ広げる（中心は顔の中心）"
       faces.square((300, 400, 100, 100), 2.0, 704, 1408) == (250, 350, 200))
 check("上の端からはみ出す枠は絵の中へずらす", faces.square((276, 10, 170, 170), 2.2, 704, 1408)[1] == 0)
 check("絵より大きい枠は絵の短い辺に収める", faces.square((0, 0, 600, 600), 2.2, 704, 1408) == (0, 0, 704))
-check("一辺は設定が 0 なら SDXL 1024・ほか 768",
-      (faces.side_for({"side": 0}, "sdxl"), faces.side_for({"side": 0}, "sd15"),
-       faces.side_for({"side": 896}, "sdxl")) == (1024, 768, 896))
+check("拡大の一辺は SDXL 1024・ほか 768", (faces.side_for("sdxl"), faces.side_for("sd15")) == (1024, 768))
 
 # ------------------------------------------------------------------ プロンプト
 got = faces.face_prompt("masterpiece, full body, 1girl, standing, grey eyes, straight-on, black background")

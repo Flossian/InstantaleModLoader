@@ -1,49 +1,47 @@
 # -*- coding: utf-8 -*-
-r"""立ち絵の顔だけを描き直す（ADetailer と同じやり方）ための部品。
+"""立ち絵の顔だけを描き直す（高度設定の「顔だけ描き直す」）ための部品。DOC.md「顔だけ描き直す」。
 
 描き終えた立ち絵の顔を探し、顔の周りを正方形に切り出して拡大し、img2img で描き直して
 縁をぼかした楕円で元の絵へ貼り戻す。描き直しそのものは `stable_diffusion.py` の出口がする。
 
-**検出器のファイルを置いたときだけ動く**（同梱しない。設定画面と DOC.md にも出さない）。
-どちらか1つ置けば動く。両方置けば YuNet で探し、見つからなければ lbpcascade で探す。
+検出器は `models/` に同梱する。YuNet で探し、見つからなければ lbpcascade で探す。
 
-    state\stable_diffusion\models\face\face_detection_yunet_2023mar.onnx   YuNet
-    state\stable_diffusion\models\face\lbpcascade_animeface.xml             lbpcascade
-    state\stable_diffusion\face.json                                         任意。無ければ既定の値
+    models/face_detection_yunet_2023mar.onnx   YuNet（opencv_zoo、MIT、Copyright (c) 2020 Shiqi Yu。
+                                               許諾文は同じフォルダの LICENSE.yunet.txt、NOTICE）
+    models/lbpcascade_animeface.xml            lbpcascade_animeface（nagadomi、MIT。許諾文はファイルの頭）
 
-YuNet は opencv_zoo の顔検出モデル（MIT、Copyright (c) 2020 Shiqi Yu）。
-https://github.com/opencv/opencv_zoo の `models/face_detection_yunet/` から置く。
-写実寄りの顔（年配・ひげ・眼鏡）も拾う。読むのは cv2 の `FaceDetectorYN`。
-lbpcascade は nagadomi の lbpcascade_animeface（MIT。許諾文はファイルの頭にある）。
-https://github.com/nagadomi/lbpcascade_animeface から置く。
-アニメの若い顔に強く、写実寄りの顔は拾えないことが多い。
-読むのはゲームに入っている OpenCV（cv2）の `CascadeClassifier`。
-
-`face.json` の項目（どれも省ける）:
-
-    enabled   false で止める（ファイルを消さずに切る）。既定 true
-    strength  描き直しの強さ。既定 0.4（0.5 では表情や目の形が下絵から離れ始めた）
-    preset    描くプリセットの名前。空なら、その立ち絵を最後に描いたプリセット
-    grow      lbpcascade の顔の枠を何倍の正方形に広げて切り出すか。既定 2.2
-    grow_yunet  YuNet の顔の枠を何倍に広げるか。既定 2.7（YuNet の枠は髪を含まず、
-              lbpcascade の枠の一辺の約 1/1.23。同じ大きさを切り出すように合わせた）
-    feather   貼るときにぼかす縁の幅（切り出しの一辺に対する割合）。既定 0.18
-    side      切り出しを拡大する一辺。0 なら SDXL 1024・ほか 768
-
-顔が見つからない絵、描き直しに失敗した絵は元の絵のまま返す。
+YuNet は写実寄りの顔（年配・ひげ・眼鏡）も拾う。lbpcascade はアニメの若い顔に強い。
+どちらもゲームに入っている OpenCV（cv2）で読む。OpenCV はパスに日本語があるとファイルを
+開けないので、中身を読んでから渡す（131_sharp_portrait の `faces.read_yunet` と同じ）。
 """
 import io
-import json
 import os
 
-#: 検出器のファイル名と置き場（`state\stable_diffusion\models\` の下）。
+#: 設定の名前（mod.json）。`live.py` が生成のたびに読み直す。
+SWITCH = "FACE_REDRAW"
+PRESET = "FACE_REDRAW_PRESET"
+STRENGTH = "FACE_REDRAW_STRENGTH"
+NAMES = (SWITCH, PRESET, STRENGTH)
+
+#: 強さの既定（mod.json と同じ値）。0.5 では表情や目の形が下絵から離れ始めた。
+DEFAULT_STRENGTH = 0.4
+
+#: 検出器のファイル（この MOD のフォルダの下）。
+MODELS_DIR = "models"
 CASCADE_NAME = "lbpcascade_animeface.xml"
 YUNET_NAME = "face_detection_yunet_2023mar.onnx"
-CASCADE_DIR = "face"
-CONFIG_NAME = "face.json"
 
-DEFAULTS = {"enabled": True, "strength": 0.4, "preset": "", "grow": 2.2, "grow_yunet": 2.7,
-            "feather": 0.18, "side": 0}
+#: 顔の枠を何倍の正方形に広げて切り出すか。YuNet の枠は髪を含まず、lbpcascade の枠の
+#: 一辺の約 1/1.23 なので、同じ大きさを切り出すように倍率を分けた。
+GROW_CASCADE = 2.2
+GROW_YUNET = 2.7
+
+#: 貼るときにぼかす縁の幅（切り出しの一辺に対する割合）。
+FEATHER = 0.18
+
+#: 切り出しを拡大する一辺（系統の得意な寸法）。
+SIDE_SDXL = 1024
+SIDE_OTHER = 768
 
 #: YuNet の確信度の下限（0.6 で 68 枚中 67 枚を拾い、残りの1枚は lbpcascade が拾った）。
 YUNET_SCORE = 0.6
@@ -55,73 +53,66 @@ DROP_TAGS = ("full body", "full-body", "standing", "straight-on")
 FACE_TAGS = "portrait, face focus, close-up"
 
 
-def base_dir(state_dir):
-    return os.path.join(state_dir, "stable_diffusion")
+def models_dir(mod_dir):
+    return os.path.join(mod_dir, MODELS_DIR) if mod_dir else ""
 
 
-def cascade_path(state_dir):
-    return os.path.join(base_dir(state_dir), "models", CASCADE_DIR, CASCADE_NAME)
+def cascade_path(models):
+    return os.path.join(models, CASCADE_NAME)
 
 
-def yunet_path(state_dir):
-    return os.path.join(base_dir(state_dir), "models", CASCADE_DIR, YUNET_NAME)
+def yunet_path(models):
+    return os.path.join(models, YUNET_NAME)
 
 
-def _number(value, fallback, low, high):
+def strength_of(value):
+    """強さを 0 より大きく 1 以下に収める。読めなければ既定。"""
     try:
         got = float(value)
     except (TypeError, ValueError):
-        return fallback
-    if got != got or got <= low or got > high:
-        return fallback
-    return got
+        return DEFAULT_STRENGTH
+    if got != got or got <= 0:              # NaN と 0 以下
+        return DEFAULT_STRENGTH
+    return min(got, 1.0)
 
 
-def config(state_dir):
-    """使える状態なら設定の辞書（`cascade` と `yunet` に検出器の場所。置いていなければ None）。
+def derive(values):
+    """設定の値を出口で使う形に組む。`{"on": 真偽, "preset": 名前, "strength": 強さ}`。"""
+    return {"on": bool(values.get(SWITCH)),
+            "preset": str(values.get(PRESET) or "").strip(),
+            "strength": strength_of(values.get(STRENGTH))}
 
-    検出器が1つも無いか、切ってあれば None。
+
+def config(settings, models):
+    """使えるなら、設定に検出器の場所（`cascade`・`yunet`。無ければ None）を足した辞書。
+
+    切ってあるか、検出器が1つも無ければ None。
     """
-    if not state_dir:
+    if not settings.get("on") or not models:
         return None
-    cascade, yunet = cascade_path(state_dir), yunet_path(state_dir)
+    cascade, yunet = cascade_path(models), yunet_path(models)
     cascade = cascade if os.path.isfile(cascade) else None
     yunet = yunet if os.path.isfile(yunet) else None
     if cascade is None and yunet is None:
         return None
-    raw = {}
-    path = os.path.join(base_dir(state_dir), CONFIG_NAME)
-    if os.path.isfile(path):
-        try:
-            raw = json.load(io.open(path, encoding="utf-8")) or {}
-        except (OSError, ValueError):
-            raw = {}
-        if not isinstance(raw, dict):
-            raw = {}
-    if raw.get("enabled", DEFAULTS["enabled"]) is False:
-        return None
-    side = raw.get("side", DEFAULTS["side"])
-    return {"cascade": cascade, "yunet": yunet,
-            "strength": _number(raw.get("strength"), DEFAULTS["strength"], 0.0, 1.0),
-            "preset": str(raw.get("preset") or "").strip(),
-            "grow": _number(raw.get("grow"), DEFAULTS["grow"], 1.0, 8.0),
-            "grow_yunet": _number(raw.get("grow_yunet"), DEFAULTS["grow_yunet"], 1.0, 8.0),
-            "feather": _number(raw.get("feather"), DEFAULTS["feather"], 0.0, 0.45),
-            "side": int(_number(side, 0, 63, 4096)) // 64 * 64 if side else 0}
+    return dict(settings, cascade=cascade, yunet=yunet)
 
 
-#: 読んだ検出器（置き場ごと。描くたびに読まない）。
-_CLASSIFIERS = {}
+#: 読んだ検出器のファイルの中身（置き場ごと）。検出器そのものは毎回作る（どちらも 3ms ほど。
+#: 生成はスレッドを跨ぐので、作った検出器を使い回さない）。
+_CONTENTS = {}
 
 
-def _classifier(path):
-    import cv2
-    got = _CLASSIFIERS.get(path)
+def _content(path, binary):
+    got = _CONTENTS.get(path)
     if got is None:
-        got = cv2.CascadeClassifier(path)
-        if got.empty():
-            raise ValueError("検出器を読めない: {}".format(path))
-        _CLASSIFIERS[path] = got
+        if binary:
+            import numpy as np
+            got = np.fromfile(path, dtype=np.uint8)
+        else:
+            with io.open(path, encoding="utf-8") as fh:
+                got = fh.read()
+        _CONTENTS[path] = got
     return got
 
 
@@ -130,7 +121,25 @@ def _largest(boxes):
     return int(x), int(y), int(w), int(h)
 
 
-def find_cascade(image, cascade):
+def make_cascade(path):
+    """lbpcascade の検出器（ファイルの中身から作る）。"""
+    import cv2
+    storage = cv2.FileStorage(_content(path, False), cv2.FILE_STORAGE_READ | cv2.FILE_STORAGE_MEMORY)
+    got = cv2.CascadeClassifier()
+    if not got.read(storage.getFirstTopLevelNode()) or got.empty():
+        raise ValueError("検出器を読めない: {}".format(path))
+    return got
+
+
+def make_yunet(path, size):
+    """YuNet の検出器（ファイルの中身から作る）。"""
+    import cv2
+    import numpy as np
+    return cv2.FaceDetectorYN.create("onnx", _content(path, True), np.array([], dtype=np.uint8),
+                                     size, YUNET_SCORE, 0.3, 5000)
+
+
+def find_cascade(image, path):
     """lbpcascade でいちばん大きい顔の枠 (x, y, w, h)。見つからなければ None。
 
     小さい絵の顔は拾いにくいので、まず近い候補の数 4 で探し、無ければ 2 に緩める
@@ -140,7 +149,7 @@ def find_cascade(image, cascade):
     import numpy as np
 
     gray = cv2.equalizeHist(np.asarray(image.convert("L")))
-    finder = _classifier(cascade)
+    finder = make_cascade(path)
     short = min(gray.shape[:2])
     least = max(24, short // 20)
     for neighbors in (4, 2):
@@ -151,21 +160,12 @@ def find_cascade(image, cascade):
     return None
 
 
-#: 読んだ YuNet（置き場ごと。寸法は描くたびに合わせる）。
-_YUNETS = {}
-
-
-def find_yunet(image, model):
+def find_yunet(image, path):
     """YuNet でいちばん大きい顔の枠 (x, y, w, h)。見つからなければ None。"""
     import cv2
     import numpy as np
 
-    size = (int(image.size[0]), int(image.size[1]))
-    det = _YUNETS.get(model)
-    if det is None:
-        det = cv2.FaceDetectorYN.create(model, "", size, YUNET_SCORE, 0.3, 5000)
-        _YUNETS[model] = det
-    det.setInputSize(size)
+    det = make_yunet(path, (int(image.size[0]), int(image.size[1])))
     _, found = det.detect(cv2.cvtColor(np.asarray(image.convert("RGB")), cv2.COLOR_RGB2BGR))
     if found is None or not len(found):
         return None
@@ -175,16 +175,16 @@ def find_yunet(image, model):
 def find(image, conf):
     """顔の枠と、それを広げる倍率 ((x, y, w, h), 倍率)。見つからなければ None。
 
-    YuNet を置いていれば先に YuNet、見つからなければ lbpcascade で探す。
+    YuNet があれば先に YuNet、見つからなければ lbpcascade で探す。
     """
     if conf.get("yunet"):
         box = find_yunet(image, conf["yunet"])
         if box is not None:
-            return box, conf["grow_yunet"]
+            return box, GROW_YUNET
     if conf.get("cascade"):
         box = find_cascade(image, conf["cascade"])
         if box is not None:
-            return box, conf["grow"]
+            return box, GROW_CASCADE
     return None
 
 
@@ -199,11 +199,9 @@ def square(box, grow, width, height):
     return left, top, side
 
 
-def side_for(conf, family):
-    """切り出しを拡大する一辺。設定が 0 なら系統の得意な寸法。"""
-    if conf.get("side"):
-        return conf["side"]
-    return 1024 if family == "sdxl" else 768
+def side_for(family):
+    """切り出しを拡大する一辺。"""
+    return SIDE_SDXL if family == "sdxl" else SIDE_OTHER
 
 
 def face_prompt(prompt):
@@ -222,7 +220,7 @@ def face_prompt(prompt):
     return ", ".join(tag for tag in kept if tag)
 
 
-def paste(base, face, left, top, size, feather):
+def paste(base, face, left, top, size, feather=FEATHER):
     """描き直した顔を元の大きさに戻し、縁をぼかした楕円で貼った写しを返す（元の絵は触らない）。"""
     from PIL import Image, ImageDraw, ImageFilter
 

@@ -189,6 +189,12 @@ CHAIN_BACKGROUND_AUTO = False
 #: 同じ高さの縦長に描いて正方形へ埋め戻す。既定は切（ゲームのまま）。sdcpp 系だけ（humans.py）。
 HUMAN_ENEMY_AS_PORTRAIT = False
 
+#: 描き終えた立ち絵の顔だけを切り出して描き直し、貼り戻す。既定は切（ゲームのまま）。
+#: プリセットが空なら、その立ち絵を描いたプリセットで描く。sdcpp 系だけ（faces.py）。
+FACE_REDRAW = False
+FACE_REDRAW_PRESET = ""
+FACE_REDRAW_STRENGTH = faces.DEFAULT_STRENGTH
+
 #: ゲームが部品を建てたときの引数。種類ごとの部品を同じ作りで建てるために控える。
 #: 部品のクラスに持たせる（注入のたびにモジュールは作り直されるが、クラスは同じ）。
 INIT_ATTR = "_mod343_init_kwargs"
@@ -403,6 +409,8 @@ def apply(ctx):
 
     #: 寸法・サンプラー・安全弁・規則。生成のたびに変わっていれば読み直す（`live.py`）。
     live = hot.Live(ctx, write)
+    #: 顔だけ描き直すときの検出器の置き場（同梱。ctx.mod_dir はフックの中では読めない）。
+    face_models = faces.models_dir(frames.attr(ctx, "mod_dir", None))
     for line in live.describe():
         write(line)
     if not live.hot():
@@ -877,6 +885,8 @@ def apply(ctx):
         for kind, conf in live.img2img["chain"].items() if live.img2img["chain_on"] else ():
             got.append(method_route(conf["first"], "続けて描く1つ目（{}）".format(kind)))
             got.append(method_route(conf["second"], "続けて描く2つ目（{}）".format(kind)))
+        if live.faces["on"] and live.faces["preset"]:
+            got.append(method_route(live.faces["preset"], "顔だけ描き直す"))
         return [route for route in got if route is not None]
 
     def pipe_key(mats):
@@ -1052,12 +1062,12 @@ def apply(ctx):
             return extra
 
         def refine(orig, self, args, kwargs, kind, stage, result, route):
-            """描き終えた立ち絵の顔だけを描き直して貼り戻す（`faces.py`。検出器を置いたときだけ）。
+            """描き終えた立ち絵の顔だけを描き直して貼り戻す（`faces.py`。高度設定で入のときだけ）。
 
             `route` はその立ち絵を最後に描いたプリセットの組（None はゲームの部品）。
             顔が見つからない・描けないときは元の戻り値のまま。
             """
-            conf = faces.config(state_dir)
+            conf = faces.config(live.faces, face_models)
             if conf is None:
                 return result
             image = img2img.first_image(result)
@@ -1079,7 +1089,7 @@ def apply(ctx):
             if conf["preset"]:
                 route = method_route(conf["preset"], "顔の描き直し")
             family = route["model"][0] if route else FAMILY.get("name")
-            side = faces.side_for(conf, family)
+            side = faces.side_for(family)
             from PIL import Image
             crop = image.convert("RGB").crop((left, top, left + size, top + size)).resize(
                 (side, side), Image.LANCZOS)
@@ -1102,7 +1112,7 @@ def apply(ctx):
                 return result
             write("顔の描き直し [{}/{}]: 顔 {} を {} 四方で切り出し {} 四方で描き直した（強さ {}、{:.1f} 秒）".format(
                 kind, stage, box, size, side, conf["strength"], time.time() - started))
-            return faces.replace_first(result, faces.paste(image, face, left, top, size, conf["feather"]))
+            return faces.replace_first(result, faces.paste(image, face, left, top, size))
 
         def hook(orig, self, *args, **kwargs):
             result = run(orig, self, *args, **kwargs)

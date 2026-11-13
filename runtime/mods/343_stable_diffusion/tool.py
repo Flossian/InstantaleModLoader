@@ -10,7 +10,7 @@ TECH.md §3.12 の契約で動く（`131_sharp_portrait` の道具と同じ）�
 
 ##### なぜ専用の画面か
 
-設定は 54 項目あり、ローダの設定画面はそれを宣言順に1列で並べる。
+設定は 55 項目あり、ローダの設定画面はそれを宣言順に1列で並べる。
 対になる値（短辺と長辺、方法と steps と cfg）が離れ、
 入れた数字が**実際に何ピクセルになるのか**も分からない。
 規則（LoRA の付け替えや条件つき追加）は表なので、そもそも宣言できない。
@@ -31,7 +31,7 @@ TECH.md §3.12 の契約で動く（`131_sharp_portrait` の道具と同じ）�
 | 完全置き換え | 完全置き換え | 同じ |
 | サンプラー | サンプラー | 種類ではなく段（1段目 / 2段目 / LCM の段）で持つ |
 | （無し） | モデル別 | 版26。`model` の付いた行と、モデルの系統に合わせたプロンプトの雛形（`profiles.py`） |
-| （無し） | 高度設定 | 今の絵を下絵にした描き直し（img2img）と、2つのモデルで続けて描く（txt2img→img2img）。部品は `img2img.py` |
+| （無し） | 高度設定 | 今の絵を下絵にした描き直し（img2img）と、2つのモデルで続けて描く（txt2img→img2img）。部品は `img2img.py`。版29 で立ち絵の顔だけの描き直し（`faces.py`）を足した |
 | （無し） | 次に描く絵（タブの上の帯） | 種類ごとのモデル・寸法・サンプラーと、効いていない設定。計算は `outlook.py`（VERIFICATION.md §3.65） |
 
 一覧の行は「選択行を削除」ではなく行ごとの `×` で消す（Tk の表に合わせた）。
@@ -60,6 +60,7 @@ for _tools in [os.environ.get("INSTANTALE_MODLOADER_TOOLS", ""),
         break
 
 import assets     # noqa: E402  自分の隣（モデルの置き場とダウンロード）
+import faces      # noqa: E402  自分の隣（顔だけ描き直すの設定名）
 import img2img    # noqa: E402  自分の隣（描き直しと続けて描くの設定名）
 import iniimport  # noqa: E402  自分の隣（元 MOD の ini の取り込み）
 import modtool  # noqa: E402
@@ -148,13 +149,16 @@ BLURBS = {
                  "タグとの照合（alias）は別名を正しいタグへ直すが、試した範囲では絵の良し悪しの差は見えていない。"),
     "サンプラー": ("段ごとにサンプラーを上書きする。ゲームの値のままなら書き込まない。"
                    "lcm は LCM LoRA 専用（4〜8 steps・cfg 1〜2）で、LoRA を外したまま使うと破綻する。"),
-    "高度設定": ("再生成の描き方を足す設定。既定は切（ゲームのまま）で、sdcpp 系のときだけ効く。\n"
+    "高度設定": ("描き方を足す設定。既定は切（ゲームのまま）で、sdcpp 系のときだけ効く。\n"
                  "プリセットは「状態 / モデル」で保存したカスタムプリセットから選ぶ。\n"
                  "「（ゲーム既定のモデル）」は、ゲームで選んだモデルで描く（寸法・サンプラーはほかのタブの値）。"),
 }
 
 #: 高度設定のプリセットのプルダウンで、空の設定（ゲームで選んだモデルで描く）の見せ方。
 SAME_LABEL = "（ゲーム既定のモデル）"
+
+#: 顔の描き直しのプリセットのプルダウンで、空の設定（立ち絵を描いたプリセットで描く）の見せ方。
+FACE_SAME_LABEL = "（立ち絵を描いたプリセット）"
 
 #: 種類ごとのプリセットのプルダウンで、空の設定（プリセットを使わずに描く）の見せ方。
 KIND_SAME_LABEL = "（プリセットを使わない）"
@@ -1048,7 +1052,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
     # ---------------------------------------------------------- 高度設定
     # 描き方ごとに同じ形の枠を2つ並べる。枠の見出しが「使う」のチェックで、切のあいだは中を畳む。
     tab = page("高度設定")
-    #: プリセットのプルダウン（設定の名前, 表示の変数, 部品）。空の設定は SAME_LABEL で見せる。
+    #: プリセットのプルダウン（設定の名前, 表示の変数, 部品, 空の設定の見せ方）。
     advanced_boxes = []
 
     def var_for(key):
@@ -1059,20 +1063,20 @@ def build_window(rules_in=None, settings_in=None, note=""):
             entries[key] = tk.StringVar(value=str(values.get(key)))
         return entries[key]
 
-    def preset_box(parent, key, row, column):
-        """カスタムプリセットを選ぶプルダウン。空の設定は SAME_LABEL で見せる。"""
+    def preset_box(parent, key, row, column, empty=SAME_LABEL):
+        """カスタムプリセットを選ぶプルダウン。空の設定は `empty` で見せる。"""
         shown = tk.StringVar()
         box = ttk.Combobox(parent, textvariable=shown, state="readonly", width=24)
         box.grid(row=row, column=column, sticky="w", padx=(0, 8), pady=2)
-        advanced_boxes.append((key, shown, box))
+        advanced_boxes.append((key, shown, box, empty))
 
         def picked(*_args):
-            want = "" if shown.get() == SAME_LABEL else shown.get()
+            want = "" if shown.get() == empty else shown.get()
             if entries[key].get() != want:
                 entries[key].set(want)
 
         def followed(*_args):
-            want = entries[key].get() or SAME_LABEL
+            want = entries[key].get() or empty
             if shown.get() != want:
                 shown.set(want)
 
@@ -1084,14 +1088,14 @@ def build_window(rules_in=None, settings_in=None, note=""):
         if names is None:
             names = [row["name"] for row in presets.load_custom(state_dir)]
         missing = []
-        for key, shown, box in advanced_boxes:
+        for key, shown, box, empty in advanced_boxes:
             now = entries[key].get()
-            choices = [SAME_LABEL] + list(names)
+            choices = [empty] + list(names)
             if now and now not in names:
                 choices.append(now)
                 missing.append(now)
             box.configure(values=choices)
-            shown.set(now or SAME_LABEL)
+            shown.set(now or empty)
         advanced_note.configure(text="".join(
             "※ 選んだプリセット「{}」が見つかりません。ゲーム既定のモデルで描きます。\n".format(name)
             for name in sorted(set(missing))).rstrip())
@@ -1165,6 +1169,16 @@ def build_window(rules_in=None, settings_in=None, note=""):
                                                                       padx=(0, 8))
         ttk.Checkbutton(grid, variable=var_for(img2img.chain_auto_name(kind))).grid(
             row=index, column=4, sticky="w")
+    grid = method_frame(
+        faces.SWITCH, "立ち絵の顔だけ描き直す",
+        ["入にすると、描き終えた立ち絵の顔を探し、顔の周りを切り出して大きく描き直し、元の絵へ貼り戻す。",
+         "左右の目の色や形がずれた顔が直る。顔の外は変わらない。",
+         "立ち絵だけに効く。1枚あたり、顔の周りを1回描くぶん時間が延びる（SDXL で約7秒）。",
+         "強さは、小さいほど元の顔が残る（既定 0.4）。"],
+        ("プリセット", "強さ"))
+    var_for(faces.PRESET)
+    preset_box(grid, faces.PRESET, 1, 0, FACE_SAME_LABEL)
+    ttk.Entry(grid, textvariable=var_for(faces.STRENGTH), width=8).grid(row=1, column=1, sticky="w")
     human_check = ttk.Checkbutton(tab, text="人間の敵（闘技場の相手など）を立ち絵の描き方で描く",
                                   variable=var_for("HUMAN_ENEMY_AS_PORTRAIT"))
     human_frame = ttk.LabelFrame(tab, labelwidget=human_check, padding=8)

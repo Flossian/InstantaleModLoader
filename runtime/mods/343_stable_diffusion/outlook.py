@@ -300,7 +300,7 @@ def method_cells(kind, values, custom, family, game_model):
 
 
 def method_missing(values, custom):
-    """描き直しと続けて描くで、使う設定が入なのに見つからないプリセット（知らせの文）。"""
+    """描き直し・続けて描く・顔の描き直しで、使う設定が入なのに見つからないプリセット（知らせの文）。"""
     notes = []
     names = set(row["name"] for row in custom)
     for kind, label in KINDS:
@@ -315,6 +315,9 @@ def method_missing(values, custom):
             name = str(values.get(key) or "").strip()
             if name and name not in names:
                 notes.append("{}の{}のプリセット「{}」（見つからない。ゲーム既定のモデルで描く）".format(label, what, name))
+    name = str(values.get("FACE_REDRAW_PRESET") or "").strip()
+    if values.get("FACE_REDRAW") and name and name not in names:
+        notes.append("顔の描き直しのプリセット「{}」（見つからない。ゲーム既定のモデルで描く）".format(name))
     return notes
 
 
@@ -336,6 +339,8 @@ def idle_notes(values, plans, family, backend, log):
             notes.append("種類ごとのプリセット（diffusers 系では使わない）")
         if values.get("IMG2IMG") or values.get("CHAIN"):
             notes.append("高度設定（diffusers 系では使わない）")
+        if values.get("FACE_REDRAW"):
+            notes.append("立ち絵の顔だけ描き直す（diffusers 系では使わない）")
         if values.get("HUMAN_ENEMY_AS_PORTRAIT"):
             notes.append("人間の敵を立ち絵の描き方で描く（diffusers 系では使わない）")
         resized = any(size_of(kind, "lcm", dict(values, DIFFUSERS_RESIZE=True), "sdcpp")

@@ -10,7 +10,7 @@
     "en": "Raises the generation resolution and overrides the sampler at the single exit every backend goes through, separately for portraits, enemies and backgrounds, keeping the aspect ratio. The checkpoint, TAESD, VAE and LoRA folder can be pointed elsewhere (for an SDXL model) because they are written before the pipeline is built. Every default is the game's own value, and a setting left at its default is never written",
     "ja": "どのバックエンドでも通る1つの出口で、生成解像度を上げ、サンプラーを上書きする。立ち絵・敵・背景で別々に指定でき、縦横比は保つ。チェックポイント・TAESD・VAE・LoRA の置き場も差し替えられる（パイプラインが建つ前に書くため。SDXL のモデルへ移る用）。既定値はすべてゲームの値で、既定のままの項目は書き換えない"
   },
-  "version": "28",
+  "version": "29",
   "author": "R01/Flossian",
   "state": ["stable_diffusion"],
   "settings": {
@@ -745,6 +745,44 @@
       "note": {
         "ja": "入にすると、種族が人間の敵だけ、立ち絵に割り当てたプリセット・img2img・txt2img→img2img で描き、正方形でなく同じ高さの縦長で描いてから左右を埋めて正方形に戻す。異形向けのモデルで敵を描いていると、人間の相手まで骸骨や仮面の顔になり、頭や足が切れるのを避けるため。規則と寸法の目標は敵のまま。sdcpp 系だけで効く",
         "en": "When on, only enemies whose race is human are drawn with the preset, img2img and txt2img then img2img assigned to portraits, at the same height but in portrait proportions, and then padded back to a square. With a monster-oriented model for enemies, human opponents otherwise come out with skull or mask faces and with the head or feet cut off. Rules and target sizes stay those of enemies. Works only on the sdcpp family"
+      }
+    },
+    "FACE_REDRAW": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "立ち絵の顔だけ描き直す",
+        "en": "Redraw only the face of portraits"
+      },
+      "note": {
+        "ja": "入にすると、描き終えた立ち絵の顔を探し、顔の周りを切り出して大きく描き直し、元の絵へ貼り戻す。左右の目の色や形がずれた顔が直る。顔の外は変わらない。立ち絵だけに効き、sdcpp 系のときだけ動く。1枚あたり、顔の周りを1回描くぶん時間が延びる（SDXL で約7秒）。顔が見つからない絵は元の絵のまま",
+        "en": "When on, finds the face in a finished portrait, cuts out the area around it, redraws it enlarged and pastes it back. Fixes faces whose eyes differ in colour or shape. Nothing outside the face changes. Portraits only, and only with the sdcpp backends. Each portrait takes one more face-sized pass (about 7 seconds with SDXL). A portrait with no face found is left as it was"
+      }
+    },
+    "FACE_REDRAW_PRESET": {
+      "type": "str",
+      "default": "",
+      "label": {
+        "ja": "顔を描き直すプリセット",
+        "en": "Preset for redrawing the face"
+      },
+      "note": {
+        "ja": "空なら、その立ち絵を描いたのと同じプリセット（モデル）で描く。カスタムプリセットの名前を入れると、そのプリセットのチェックポイントとサンプラーで描く。立ち絵と違うモデルのプリセットは、モデルをもう1つ読み込むので VRAM を多く使う",
+        "en": "Empty draws with the same preset (model) that drew the portrait. A custom preset name draws with that preset's checkpoint and sampler. A preset with a different model from the portrait loads another model, which uses more VRAM"
+      }
+    },
+    "FACE_REDRAW_STRENGTH": {
+      "type": "float",
+      "default": 0.4,
+      "min": 0.05,
+      "max": 1.0,
+      "label": {
+        "ja": "顔の描き直しの強さ",
+        "en": "Strength of the face redraw"
+      },
+      "note": {
+        "ja": "顔をどこまで描き変えるか。小さいほど元の顔が残る。既定の 0.4 は目の崩れが直り、表情と顔立ちが変わらなかった値（0.5 では表情や目の形が変わり始めた）",
+        "en": "How far the face moves away from the original. Lower keeps more of it. The default 0.4 fixed broken eyes without changing the expression or features (at 0.5 the expression and eye shape began to change)"
       }
     }
   },

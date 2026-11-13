@@ -27,6 +27,7 @@ import os
 from instantale_modloader import config as loader_config
 from instantale_modloader import frames
 
+from . import faces
 from . import img2img
 from . import rules as rulebook
 from . import sizes
@@ -40,7 +41,7 @@ HOT_NAMES = ("PORTRAIT_SHORT", "PORTRAIT_MAX_LONG",
              "LCM_METHOD", "LCM_STEPS", "LCM_CFG", "LCM_SCHEDULER",
              "STRIP_LORA", "MODEL_SAFETY", "DIFFUSERS_RESIZE",
              "KIND_PRESETS", "PORTRAIT_PRESET", "ENEMY_PRESET", "BACKGROUND_PRESET",
-             "HUMAN_ENEMY_AS_PORTRAIT") + img2img.NAMES
+             "HUMAN_ENEMY_AS_PORTRAIT") + img2img.NAMES + faces.NAMES
 
 #: 種類ごとに割り当てるカスタムプリセットの設定名（版26）。
 KIND_PRESET_NAMES = (("portrait", "PORTRAIT_PRESET"), ("enemy", "ENEMY_PRESET"),
@@ -138,6 +139,8 @@ class Live(object):
         self.kind_presets = got["kind_presets"]
         #: 描き直しと続けて描くの、入になっている種類（`img2img.derive`）。
         self.img2img = img2img.derive(values)
+        #: 顔だけ描き直す（`faces.derive`）。
+        self.faces = faces.derive(values)
 
     def hot(self):
         """読み直しができる状態か（場所が控えられていて、宣言も読めた）。"""
@@ -160,6 +163,9 @@ class Live(object):
                     for key, value in sorted(conf.items()))))
         if self.img2img["chain_auto"]:
             lines.append("img2img 続けて描く（通常の生成）: {}".format(", ".join(sorted(self.img2img["chain_auto"]))))
+        if self.faces["on"]:
+            lines.append("顔だけ描き直す: preset={}, strength={}".format(
+                self.faces["preset"] or "（立ち絵を描いたプリセット）", self.faces["strength"]))
         counts = sum(len(rows) for rows in self.rules.values())
         if counts:
             lines.append("rules: {} 行（{}）".format(

@@ -99,10 +99,16 @@ MIT で配っているが、著作権表示（LICENSE の Copyright 行）は提
 第三者のもの
 --------------------------------------------------------------------------
 
-**131_sharp_portrait の models/face_detection_yunet_2023mar.onnx は、本プロジェクトの著作物ではない。**
+**131_sharp_portrait と 343_stable_diffusion の models/face_detection_yunet_2023mar.onnx は、
+本プロジェクトの著作物ではない。**
 OpenCV の顔検出モデル YuNet（opencv_zoo、https://github.com/opencv/opencv_zoo）で、
 著作権は Shiqi Yu にあり、MIT License で配られている。
 同じフォルダの LICENSE.yunet.txt がその原文（著作権表示を含む）で、モデルと一緒に配る。
+
+**343_stable_diffusion の models/lbpcascade_animeface.xml は、本プロジェクトの著作物ではない。**
+nagadomi の顔検出器 lbpcascade_animeface（https://github.com/nagadomi/lbpcascade_animeface）で、
+著作権は nagadomi にあり、MIT License で配られている。
+許諾文（著作権表示を含む）はファイルの頭にあり、そのまま配る。
 
 --------------------------------------------------------------------------
 MIT が及ばないもの
@@ -229,12 +235,18 @@ AI-GENERATED IMAGES
   weights are not included.
 
 THIRD-PARTY FILES
-  models/face_detection_yunet_2023mar.onnx in 131_sharp_portrait is not this
-  project's work. It is YuNet, OpenCV's face detection model from opencv_zoo
-  (https://github.com/opencv/opencv_zoo), Copyright (c) 2020 Shiqi Yu,
-  distributed under the MIT License. Its license text, including the
-  copyright notice, is LICENSE.yunet.txt in the same folder and ships with
-  the model.
+  models/face_detection_yunet_2023mar.onnx in 131_sharp_portrait and in
+  343_stable_diffusion is not this project's work. It is YuNet, OpenCV's face
+  detection model from opencv_zoo (https://github.com/opencv/opencv_zoo),
+  Copyright (c) 2020 Shiqi Yu, distributed under the MIT License. Its license
+  text, including the copyright notice, is LICENSE.yunet.txt in the same
+  folder and ships with the model.
+
+  models/lbpcascade_animeface.xml in 343_stable_diffusion is not this
+  project's work. It is nagadomi's lbpcascade_animeface face detector
+  (https://github.com/nagadomi/lbpcascade_animeface), Copyright (C) 2011
+  nagadomi, distributed under the MIT License. Its license text, including
+  the copyright notice, is at the top of the file and ships unchanged.
 
 NOT COVERED
   Instantale itself, its executables, its assets (images, audio, text), and
