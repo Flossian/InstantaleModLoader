@@ -7,15 +7,22 @@
     "ja": "クラウドモデルの差し替え"
   },
   "description": {
-    "en": "Use Claude models the game does not list (Haiku 5.5 and others) from a list, and any other OpenAI / Claude model by typing its name. The model name is swapped right before sending, and arguments the target rejects are fixed. Prompt cache markers can be chosen too. Also fixes Claude refusing the game's quest schema as too large (no quests get made) and world generation resending over and over",
-    "ja": "ゲームの一覧に無い Claude のモデル（Haiku 5.5 など）を一覧から選び、OpenAI / Claude の一覧に無い名前は欄に書いて使う。送信直前にモデル名を差し替え、差し替え先が受け付けない引数も直す。プロンプトキャッシュの印の置き方も選べる。Claude がゲームの依頼の型を大きすぎるとして断り、依頼が作られないのと、世界の生成が何度も送り直しになるのも直す"
+    "en": "Use OpenAI / Claude / Gemini models the game does not list (GPT-6.1 Terra, Claude Fable 5.2, Haiku 5.5, Gemini 4 and others) from a list, and any other model by typing its name. The model name is swapped right before sending, and arguments the target rejects are fixed. Prompt cache markers can be chosen too. Also fixes Claude refusing the game's quest schema as too large (no quests get made) and world generation resending over and over",
+    "ja": "ゲームの一覧に無い OpenAI / Claude / Gemini のモデル（GPT-6.1 Terra・Claude Fable 5.2・Haiku 5.5・Gemini 4 など）を一覧から選び、一覧に無い名前は欄に書いて使う。送信直前にモデル名を差し替え、差し替え先が受け付けない引数も直す。プロンプトキャッシュの印の置き方も選べる。Claude がゲームの依頼の型を大きすぎるとして断り、依頼が作られないのと、世界の生成が何度も送り直しになるのも直す"
   },
-  "version": "7",
+  "version": "8",
   "author": "R01/Flossian",
   "settings": {
-    "OPENAI_CUSTOM": {
-      "type": "str",
-      "default": "",
+    "OPENAI_MODEL": {
+      "type": "choice",
+      "values": [
+        "off",
+        "gpt-6.1-terra"
+      ],
+      "default": "off",
+      "value_labels": {
+        "gpt-6.1-terra": "GPT-6.1 Terra"
+      },
       "group": {
         "ja": "OpenAI API",
         "en": "OpenAI API"
@@ -25,8 +32,24 @@
         "en": "Model actually sent"
       },
       "note": {
-        "ja": "モデル ID を書くと、送る直前にそのモデルへ差し替える。空なら差し替えない。ゲームの設定画面でプロバイダを OpenAI にしているときだけ効く。GPT-6 系・GPT-5.6 系はゲームの一覧から選べるので、ここに書かなくてよい",
-        "en": "Write a model ID to swap to it right before sending. Empty = no swap. Only takes effect when the game's provider is OpenAI. GPT-6 and GPT-5.6 models are in the game's own list, so they need not be written here"
+        "ja": "ゲームの一覧に無いモデルだけを並べる（GPT-6.1 Sol・GPT-6 Luna などはゲームの一覧から選ぶ）。ゲームの設定画面でプロバイダを OpenAI にしているときだけ効く。モデルは OpenAI の中から何を選んでいてもよい。off で差し替えない（推論量の指定も効かない）",
+        "en": "Lists only models the game does not (pick GPT-6.1 Sol, GPT-6 Luna and others in the game's own list). Only takes effect when the game's provider is OpenAI. Any OpenAI model may be selected there. off = no swap (the effort setting is not applied either)"
+      }
+    },
+    "OPENAI_CUSTOM": {
+      "type": "str",
+      "default": "",
+      "group": {
+        "ja": "OpenAI API",
+        "en": "OpenAI API"
+      },
+      "label": {
+        "ja": "一覧に無いモデル",
+        "en": "Model not in the list"
+      },
+      "note": {
+        "ja": "モデル ID を書くと、上の一覧より優先して、送る直前にそのモデルへ差し替える。空なら上の一覧に従う",
+        "en": "Write a model ID to swap to it right before sending, taking priority over the list above. Empty = follow the list above"
       }
     },
     "OPENAI_EFFORT": {
@@ -48,8 +71,8 @@
         "en": "Reasoning effort"
       },
       "note": {
-        "ja": "上の欄で差し替えるときだけ効く。keep はゲームが組み立てた値のまま。上げると賢くなるが応答が遅くなる。GPT-6 Astra と GPT-6.1 Sol へ差し替えるときは、none を受け付けないので low に上げて送る",
-        "en": "Only applies when swapping with the field above. keep = whatever the game built. Higher is smarter but slower. When swapping to GPT-6 Astra or GPT-6.1 Sol, none is rejected, so low is sent instead"
+        "ja": "差し替えるときだけ効く。keep はゲームが組み立てた値のまま。上げると賢くなるが応答が遅くなる。GPT-6 Astra と GPT-6.1 Sol へ差し替えるときは、none を受け付けないので low に上げて送る",
+        "en": "Only applies when swapping. keep = whatever the game built. Higher is smarter but slower. When swapping to GPT-6 Astra or GPT-6.1 Sol, none is rejected, so low is sent instead"
       }
     },
     "OPENAI_CACHE": {
@@ -91,11 +114,13 @@
       "type": "choice",
       "values": [
         "off",
+        "claude-fable-5-2",
         "claude-haiku-5-5",
         "claude-opus-5"
       ],
       "default": "off",
       "value_labels": {
+        "claude-fable-5-2": "Claude Fable 5.2",
         "claude-haiku-5-5": "Claude Haiku 5.5",
         "claude-opus-5": "Claude Opus 5"
       },
@@ -146,8 +171,8 @@
         "en": "Effort"
       },
       "note": {
-        "ja": "差し替えるときだけ効く。上げると賢くなるが応答が遅くなる。Opus 5.5 / Fable 5.1 のように思考を切れないモデルへ差し替えるなら、low にしないと応答が遅い。Claude Haiku 4.5 には送らない（受け付けないため）",
-        "en": "Only applies when swapping. Higher is smarter but slower. Models that cannot turn thinking off (Opus 5.5 / Fable 5.1) are slow above low. Never sent to Claude Haiku 4.5 (it rejects it)"
+        "ja": "差し替えるときだけ効く。上げると賢くなるが応答が遅くなる。Opus 5.5 / Fable 5.1 / Fable 5.2 のように思考を切れないモデルへ差し替えるなら、low にしないと応答が遅い。Claude Haiku 4.5 には送らない（受け付けないため）",
+        "en": "Only applies when swapping. Higher is smarter but slower. Models that cannot turn thinking off (Opus 5.5 / Fable 5.1 / Fable 5.2) are slow above low. Never sent to Claude Haiku 4.5 (it rejects it)"
       }
     },
     "CLAUDE_CACHE": {
@@ -183,6 +208,79 @@
       "note": {
         "ja": "ゲームは付けていない。5分 / 1時間 にすると、前のプロンプトと先頭から同じ部分をその時間だけ控えさせる。同じ部分が続けば 2回目から入力の料金が下がる。書き込む回は 5分 で 1.25 倍、1時間 で 2 倍。同じ部分が短いプロンプトでは何も起きない。上のモデルを off にしていても効く",
         "en": "The game sends none. 5 minutes / 1 hour caches the part that matches the previous request for that long. Input gets cheaper from the second time. Writes cost 1.25x (5 minutes) or 2x (1 hour). Requests with a short shared part are left alone. Works even when the model above is off"
+      }
+    },
+    "GEMINI_MODEL": {
+      "type": "choice",
+      "values": [
+        "off",
+        "gemini-4-carbon",
+        "gemini-4-argon",
+        "gemini-4-hydrogen",
+        "gemini-3.8-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash-lite"
+      ],
+      "default": "off",
+      "value_labels": {
+        "gemini-4-carbon": "Gemini 4 Carbon",
+        "gemini-4-argon": "Gemini 4 Argon",
+        "gemini-4-hydrogen": "Gemini 4 Hydrogen",
+        "gemini-3.8-flash": "Gemini 3.8 Flash",
+        "gemini-3.6-flash": "Gemini 3.6 Flash",
+        "gemini-3.5-flash-lite": "Gemini 3.5 Flash-Lite"
+      },
+      "group": {
+        "ja": "Gemini API",
+        "en": "Gemini API"
+      },
+      "label": {
+        "ja": "実際に送るモデル",
+        "en": "Model actually sent"
+      },
+      "note": {
+        "ja": "ゲームの一覧に無いモデルだけを並べる（Gemini 3.5 Flash・Gemini 3.1 Pro などはゲームの一覧から選ぶ）。ゲームの設定画面でプロバイダを Gemini にし、Gemini の API キーを入れているときだけ効く。モデルは Gemini の中から何を選んでいてもよい。off で差し替えない（思考の段階の指定も効かない）",
+        "en": "Lists only models the game does not (pick Gemini 3.5 Flash, Gemini 3.1 Pro and others in the game's own list). Only takes effect when the game's provider is Gemini with a Gemini API key. Any Gemini model may be selected there. off = no swap (the thinking level setting is not applied either)"
+      }
+    },
+    "GEMINI_CUSTOM": {
+      "type": "str",
+      "default": "",
+      "group": {
+        "ja": "Gemini API",
+        "en": "Gemini API"
+      },
+      "label": {
+        "ja": "一覧に無いモデル",
+        "en": "Model not in the list"
+      },
+      "note": {
+        "ja": "書いてあれば上の一覧より優先する。知らない名前には最新世代の思考の段階（low / medium / high）を当てる",
+        "en": "Takes priority over the list above when filled in. Unknown names get the newest generation's thinking levels (low / medium / high)"
+      }
+    },
+    "GEMINI_EFFORT": {
+      "type": "choice",
+      "values": [
+        "keep",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ],
+      "default": "keep",
+      "group": {
+        "ja": "Gemini API",
+        "en": "Gemini API"
+      },
+      "label": {
+        "ja": "思考の段階",
+        "en": "Thinking level"
+      },
+      "note": {
+        "ja": "差し替えるときだけ効く。keep はゲームが組み立てた値（minimal）のまま。上げると賢くなるが応答が遅くなる。差し替え先が受けない段階は近い段階に寄せて送る（Gemini 4 と Gemini 3.8 Flash は minimal を受けないので low、xhigh を受けるのは Gemini 4 Hydrogen だけ）",
+        "en": "Only applies when swapping. keep = what the game built (minimal). Higher is smarter but slower. A level the target rejects is sent as the nearest one it accepts (Gemini 4 and Gemini 3.8 Flash reject minimal, so low is sent; only Gemini 4 Hydrogen accepts xhigh)"
       }
     },
     "LOG_LIMIT": {
@@ -231,8 +329,8 @@
         "en": "Show it without a swap too"
       },
       "note": {
-        "ja": "上の欄がオンのときだけ効く。ゲームが API キーで OpenAI / Claude を使っていれば、差し替えていなくても、ゲームで選んだモデルとゲームが送る推論量を出す。ゲームが推論量を付けないモデルは「high（既定）」のように API の既定を出す",
-        "en": "Only with the option above on. When the game uses OpenAI / Claude with an API key, shows the model chosen in the game and the effort the game sends even without a swap. For models the game sends no effort for, the API default is shown, such as \"high（既定）\""
+        "ja": "上の欄がオンのときだけ効く。ゲームが API キーで OpenAI / Claude / Gemini を使っていれば、差し替えていなくても、ゲームで選んだモデルとゲームが送る推論量（Gemini は思考の段階）を出す。ゲームが推論量を付けないモデルは「high（既定）」のように API の既定を出す",
+        "en": "Only with the option above on. When the game uses OpenAI / Claude / Gemini with an API key, shows the model chosen in the game and the effort the game sends (the thinking level for Gemini) even without a swap. For models the game sends no effort for, the API default is shown, such as \"high（既定）\""
       }
     }
   }

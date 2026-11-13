@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
 """ゲームが知らないクラウドモデルを使う。**送信直前にモデル名を差し替える**。
 
-OpenAI API と Claude API の両方に対応する。
-差し替え先は、Claude は設定画面の一覧から選び、一覧に無い名前は「一覧に無いモデル」の欄に書く。
+OpenAI API・Claude API・Gemini API に対応する。
+差し替え先は設定画面の一覧から選び、一覧に無い名前は「一覧に無いモデル」の欄に書く。
 一覧に載せるのは、ゲームの一覧（main_026）に無いモデルだけ（ゲームが公式に選べるモデルは外した。版6）。
-OpenAI の差し替え先はゲームの一覧に全部入ったので、欄に名前を書いたときだけ差し替える。
+OpenAI の一覧は版6で一度外し、版8でゲームの一覧に無い GPT-6.1 Terra が出たので戻した。
+Gemini は版8で足した。
 
 ## ファイルの分け方
 
     cloud_model_override.py   入口。設定の定数・ログ・apply()
     openai_side.py            OpenAI API 宛ての直し・キャッシュ・包み
     claude_side.py            Claude API 宛ての直し・キャッシュ・包み
+    gemini_side.py            Gemini API 宛ての直し・包み
     claude_grammar.py         Claude API で型の文法が大きすぎて断られたときの迂回・SDK が外した const を戻す
     claude_bounds.py          Claude API の応答の数を、SDK が外した型の範囲に寄せる
     prefix_cache.py           キャッシュの印をどこに置くか（両方が使う）
@@ -19,8 +21,8 @@ OpenAI の差し替え先はゲームの一覧に全部入ったので、欄に�
 `tools/check_mods.py` も入口の定数と `mod.json` を突き合わせる。TECH.md §3.8.3）。
 宛先ごとのファイルは定数を読まず、`apply()` が値を引数で渡す。
 
-設定の名前は API の名前（OpenAI API / Claude API）に合わせて `OPENAI_` / `CLAUDE_` で始める。
-ゲームの設定画面のプロバイダ名も同じ「OpenAI API」「Claude API」。
+設定の名前は API の名前（OpenAI API / Claude API / Gemini API）に合わせて `OPENAI_` / `CLAUDE_` / `GEMINI_` で始める。
+ゲームの設定画面のプロバイダ名は「OpenAI API」「Claude API」「Gemini API(Experimental)」。
 
 ## なぜ送信直前か
 
@@ -38,10 +40,12 @@ HTTP に出る直前で差し替える**。
 
     openai._base_client:SyncAPIClient.post
     anthropic._base_client:SyncAPIClient.post
+    google.genai._api_client:BaseApiClient.request_streamed / request
 
-どちらの SDK も同じ生成器（Stainless）で作られていて、
+OpenAI と Anthropic の SDK は同じ生成器（Stainless）で作られていて、
 `responses.parse` も `messages.create` も最後はここを通る。
 `body` は送信するそのままの dict なので、`body["model"]` を書き換えれば済む。
+Gemini の SDK はモデル名を URL のパスに入れるので、パスを書き換える（`gemini_side.py`）。
 
 `body` の dict は写しを作って差し替える。
 SDK が呼び出し側の dict をそのまま握っている場合に、
@@ -76,7 +80,7 @@ import os
 
 from instantale_modloader import llm, ui
 
-from . import claude_side, openai_side
+from . import claude_side, gemini_side, openai_side
 
 # 「差し替えない」を表す選択肢。一覧の先頭に置く。
 OFF = "off"
@@ -85,8 +89,11 @@ OFF = "off"
 # AST で突き合わせる。TECH.md §3.8.3）。
 
 # ------------------------------------------------------------------ OpenAI API
-# 実際に送るモデル（一覧に無いモデル名）。空なら差し替えない。
-# 一覧（版5までの OPENAI_MODEL）は、差し替え先が全部ゲームの一覧（main_026）に入ったので外した。
+# 実際に送るモデル。既定は差し替えない。一覧はゲームの一覧（main_026）に無いモデルだけ。
+# 版6で一度外し、版8で GPT-6.1 Terra のために戻した。
+OPENAI_MODEL = "off"
+
+# 一覧に無いモデル名。空でなければ OPENAI_MODEL より優先する。
 OPENAI_CUSTOM = ""
 
 # 推論量。"keep" はゲームが組み立てた値のまま。
@@ -113,6 +120,16 @@ CLAUDE_EFFORT = "low"
 # 保持は当たるたびに延びるので、書き込みの安い 5m を既定にしてある。
 CLAUDE_CACHE = "5m"
 
+# ------------------------------------------------------------------ Gemini API
+# 実際に送るモデル。既定は差し替えない。一覧はゲームの一覧（main_026）に無いモデルだけ。
+GEMINI_MODEL = "off"
+
+# 一覧に無いモデル名。空でなければ GEMINI_MODEL より優先する。
+GEMINI_CUSTOM = ""
+
+# 思考の段階（thinking_level）。"keep" はゲームが組み立てた値（minimal）を差し替え先が受ける段階に寄せて送る。
+GEMINI_EFFORT = "keep"
+
 # ------------------------------------------------------------------ 共通
 # 差し替え（とキャッシュの使用量）をログに出す回数。
 # 毎回出すとログが埋まるので先頭だけ。
@@ -135,6 +152,10 @@ TITLE_ALPHA = 0.55
 #: ゲームの設定画面のプロバイダ名（`config.json` の `cloud_llm_provider`）と、差し替えの設定の対応。
 PROVIDER_OPENAI = "OpenAI API"
 PROVIDER_CLAUDE = "Claude API"
+PROVIDER_GEMINI = "Gemini API(Experimental)"
+
+#: 表示名を引く一覧の設定。
+MODEL_LISTS = ("OPENAI_MODEL", "CLAUDE_MODEL", "GEMINI_MODEL")
 
 
 def _pick(custom, chosen):
@@ -183,7 +204,7 @@ def model_names(mod_dir):
             settings = json.load(fh).get("settings") or {}
     except Exception:
         return names
-    for key in ("CLAUDE_MODEL",):
+    for key in MODEL_LISTS:
         for model, label in ((settings.get(key) or {}).get("value_labels") or {}).items():
             text = label.get("ja") if isinstance(label, dict) else label
             if isinstance(text, str) and text:
@@ -192,10 +213,11 @@ def model_names(mod_dir):
 
 
 def title_text(choice, openai_target, claude_target, names,
-               openai_effort="keep", claude_effort="keep", unswapped=False):
+               openai_effort="keep", claude_effort="keep", unswapped=False,
+               gemini_target=None, gemini_effort="keep"):
     """タイトル画面に出す1行（`LLM: <表示名> / effort: <推論量>`）。出さないときは None。
 
-    出すのは、ゲームが API キーでクラウド（OpenAI API / Claude API）を使っていて（`llm.game_choice`）、
+    出すのは、ゲームが API キーでクラウド（OpenAI API / Claude API / Gemini API）を使っていて（`llm.game_choice`）、
     そのプロバイダの差し替え先がこの MOD で決まっているときだけ。
     `unswapped` なら、差し替えていないときもゲームが選んだモデルとゲームが組む推論量を出す
     （推論量の設定は差し替えるときだけ効くので、そのときは keep として読む）。
@@ -211,6 +233,9 @@ def title_text(choice, openai_target, claude_target, names,
     elif provider == PROVIDER_CLAUDE and (claude_target or unswapped and game_model):
         target = claude_target or game_model
         effort = claude_side.sent_effort(target, claude_effort if claude_target else "keep", game_model)
+    elif provider == PROVIDER_GEMINI and (gemini_target or unswapped and game_model):
+        target = gemini_target or game_model
+        effort = gemini_side.sent_effort(target, gemini_effort if gemini_target else "keep", game_model)
     else:
         return None
     text = "LLM: " + names.get(target, target)
@@ -220,22 +245,26 @@ def title_text(choice, openai_target, claude_target, names,
 
 
 def apply(ctx):
-    openai_target = _pick(OPENAI_CUSTOM, OFF)
+    openai_target = _pick(OPENAI_CUSTOM, OPENAI_MODEL)
     openai_effort = _setting(OPENAI_EFFORT, "keep")
     openai_cache = _setting(OPENAI_CACHE, "keep")
     claude_target = _pick(CLAUDE_CUSTOM, CLAUDE_MODEL)
     claude_effort = _setting(CLAUDE_EFFORT, "keep")
     claude_cache = _setting(CLAUDE_CACHE, OFF)
+    gemini_target = _pick(GEMINI_CUSTOM, GEMINI_MODEL)
+    gemini_effort = _setting(GEMINI_EFFORT, "keep")
 
     # 差し替え先が無い側は、フックごと仕掛けない。
     # 「何もしない包み」を残すより、通り道を素のままにしておく方が安い。
     log = _Log(ctx)
     openai_side.install(ctx, openai_target, openai_effort, openai_cache, log)
     claude_side.install(ctx, claude_target, claude_effort, claude_cache, log)
+    gemini_side.install(ctx, gemini_target, gemini_effort, log)
 
     # タイトル画面の右上。出さないときも包んでおき、注入し直す前の1行を外す（設定を切ったときに残さない）。
     shown = title_text(llm.game_choice(), openai_target, claude_target, model_names(ctx.mod_dir),
-                       openai_effort, claude_effort, unswapped=TITLE_MODEL_UNSWAPPED) if TITLE_MODEL else None
+                       openai_effort, claude_effort, unswapped=TITLE_MODEL_UNSWAPPED,
+                       gemini_target=gemini_target, gemini_effort=gemini_effort) if TITLE_MODEL else None
 
     def decorate(screen):
         if shown is None:
@@ -247,5 +276,7 @@ def apply(ctx):
     ui.on_title_screen(ctx, decorate, key="136_cloud_model_override")
 
     ctx.log("cloud model override: openai={} (effort {}, cache {}) / claude={} (effort {}, cache {})"
-            " / title {!r}".format(openai_target or OFF, openai_effort, openai_cache,
-                                   claude_target or OFF, claude_effort, claude_cache, shown))
+            " / gemini={} (effort {}) / title {!r}".format(
+                openai_target or OFF, openai_effort, openai_cache,
+                claude_target or OFF, claude_effort, claude_cache,
+                gemini_target or OFF, gemini_effort, shown))

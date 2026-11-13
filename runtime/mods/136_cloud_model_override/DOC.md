@@ -1,7 +1,7 @@
 # `136_cloud_model_override`: クラウドのモデルを差し替える
 
-ゲームの一覧に無い OpenAI / Claude のモデル（Claude Haiku 5.5 など）で遊ぶ。
-Claude Sonnet 5.5・Opus 5.5・Fable 5.1 と GPT-6 系・GPT-5.6 系は、ゲーム本体の main_026 から一覧に入ったので、ゲームの設定画面で選ぶ（この MOD の一覧からは外した。版6）。
+ゲームの一覧に無い OpenAI / Claude / Gemini のモデル（GPT-6.1 Terra・Claude Fable 5.2・Claude Haiku 5.5・Gemini 4 など）で遊ぶ。
+Claude Sonnet 5.5・Opus 5.5・Fable 5.1 と GPT-6 系・GPT-5.6 系、Gemini 3.5 Flash・3.1 Pro などは、ゲームの一覧に入っているので、ゲームの設定画面で選ぶ（この MOD の一覧には載せない）。
 ゲームには一覧のモデルを選ばせたまま、送る直前にモデル名を差し替える。
 差し替え先が受け付けない引数も、送る前に直す。
 プロンプトキャッシュの印の置き方も、ここで選べる。
@@ -9,14 +9,15 @@ Claude Sonnet 5.5・Opus 5.5・Fable 5.1 と GPT-6 系・GPT-5.6 系は、ゲー
 ## ゲーム側で選ぶもの
 
 差し替えは**同じプロバイダの中だけ**で行う。
-OpenAI のモデルを Claude に、Claude のモデルを OpenAI に変えることはできない。
-ゲームはプロバイダごとに別のクライアント（`openai.OpenAI` / `anthropic.Anthropic`）で送り、API キーも別だから（GAME.md「プロバイダは1つだけ import される」）。
+OpenAI のモデルを Claude に、Claude のモデルを Gemini に、といった変え方はできない。
+ゲームはプロバイダごとに別のクライアント（`openai.OpenAI` / `anthropic.Anthropic` / `google.genai.Client`）で送り、API キーも別だから（GAME.md「プロバイダは1つだけ import される」）。
 先にゲームの設定画面で、使いたい側のプロバイダを選んで API キーを入れておく。
 
 | 使いたいモデル | ゲームの設定画面 | この MOD の設定 |
 | --- | --- | --- |
-| OpenAI（ゲームの一覧に無いモデル） | プロバイダは OpenAI、キーは OpenAI の API キー。モデルは OpenAI の一覧のどれでもよい（`gpt-5.5` を推奨。effort `none` の速い経路を組み立てる） | 「OpenAI API」の「実際に送るモデル」にモデル ID を書く |
-| Claude（Claude Haiku 5.5 / Opus 5） | プロバイダは Claude、キーは Anthropic の API キー。モデルは Claude の一覧のどれでもよい（素のゲームの既定は `claude-sonnet-5`） | 「Claude API」の「実際に送るモデル」。既定は `off` なので必ず選ぶ |
+| OpenAI（GPT-6.1 Terra など） | プロバイダは OpenAI、キーは OpenAI の API キー。モデルは OpenAI の一覧のどれでもよい（`gpt-5.5` を推奨。effort `none` の速い経路を組み立てる） | 「OpenAI API」の「実際に送るモデル」。既定は `off` なので必ず選ぶ。一覧に無いモデルは「一覧に無いモデル」にモデル ID を書く |
+| Claude（Claude Fable 5.2 / Haiku 5.5 / Opus 5） | プロバイダは Claude、キーは Anthropic の API キー。モデルは Claude の一覧のどれでもよい（素のゲームの既定は `claude-sonnet-5`） | 「Claude API」の「実際に送るモデル」。既定は `off` なので必ず選ぶ |
+| Gemini（Gemini 4 Carbon / Argon / Hydrogen など） | プロバイダは Gemini、キーは Gemini の API キー。モデルは Gemini の一覧のどれでもよい（Gemma 以外を推奨） | 「Gemini API」の「実際に送るモデル」。既定は `off` なので必ず選ぶ |
 
 ゲーム側を OpenAI にしたまま Claude の欄だけ設定しても、何も起きない。
 Claude の送信が1度も走らないため。
@@ -25,13 +26,14 @@ Claude の送信が1度も走らないため。
 
 ## 設定
 
-設定画面は「OpenAI API」「Claude API」「共通」の見出しで分かれている。
+設定画面は「OpenAI API」「Claude API」「Gemini API」「共通」の見出しで分かれている。
 
 ### OpenAI API
 
 | 設定 | 既定 | 意味 |
 | --- | --- | --- |
-| 実際に送るモデル | 空 | モデル ID を書くと差し替える。空なら差し替えない（版5までの一覧は、全部ゲームの一覧に入ったので外した） |
+| 実際に送るモデル | `off` | 一覧（ゲームの一覧に無いモデルだけ）から選ぶ。`off` で差し替えない |
+| 一覧に無いモデル | 空 | モデル ID を書けば一覧より優先 |
 | 推論量 | `keep` | 差し替えるときだけ効く。`keep` はゲームの値のまま（gpt-5.5 などを選んでいれば `none`）。GPT-6 Astra と GPT-6.1 Sol へ差し替えるときは `low` 以上で送る |
 | プロンプトキャッシュ | 前回と同じ所まで控える | ゲームのまま / 使わない。GPT-5.6 以降だけに効く。「プロンプトキャッシュ」の節 |
 
@@ -44,27 +46,44 @@ Claude の送信が1度も走らないため。
 | 推論量 | `low` | `output_config.effort`。差し替えるときだけ効く。思考を切れないモデル（Opus 5.5 など）へ差し替えるなら、low にしないと応答が遅い |
 | プロンプトキャッシュ | 5分 | 前回と同じ所までをその時間だけ控えさせる。1時間 / 使わない。「プロンプトキャッシュ」の節 |
 
+### Gemini API
+
+| 設定 | 既定 | 意味 |
+| --- | --- | --- |
+| 実際に送るモデル | `off` | 一覧（ゲームの一覧に無いモデルだけ）から選ぶ。`off` で差し替えない |
+| 一覧に無いモデル | 空 | 書けば一覧より優先 |
+| 思考の段階 | `keep` | `thinking_level`。差し替えるときだけ効く。`keep` はゲームの値のまま（ゲームで Gemini 3.5 Flash などを選んでいれば「思考しない」。タイトル画面には `budget 0` と出る）。差し替え先が受けない値は近い段階で送る（Gemini 4 と Gemini 3.8 Flash は `minimal` を受けないので `low`、`xhigh` を受けるのは Gemini 4 Hydrogen だけ） |
+
 ### 共通
 
 | 設定 | 既定 | 意味 |
 | --- | --- | --- |
 | 差し替えをログに出す回数 | 3 | `out\modloader.log`。効いているかの確認用。応答の入力・キャッシュの書き込み・読み出しの数も同じ回数だけ出す（Claude はキャッシュを使うときだけ） |
-| タイトル画面に使うモデルを出す | オン | タイトル画面の右上に「LLM: Claude Haiku 5.5 / effort: medium」のように、実際に送っているモデルと推論量を1行出す。推論量の設定が `keep` のときは、ゲームが組む値を出す（OpenAI の gpt-5.5 などなら none、Claude の Sonnet 5.5・Opus 5.5・Fable 5.1・Fable 5 なら low）。ゲームが推論量を付けない Claude のモデル（Sonnet 5 など）では、API の既定を「high（既定）」のように出す。推論量を送らないモデル（Claude Haiku 4.5 など）では付かない。ゲームが API キーでクラウドを使っていて、そのプロバイダをこの MOD で差し替えているときだけ出る（ローカルの LLM や、差し替え先が `off` のときは出ない）。`126_` の版の行がある場合は、その下に並ぶ |
-| 差し替えていないときも出す | オフ | 上の欄がオンのときだけ効く。ゲームが API キーで OpenAI / Claude を使っていれば、差し替えていなくても、ゲームで選んだモデル（モデル ID）とゲームが送る推論量を同じ形で出す。推論量の設定は差し替えるときだけ効くので、ここではゲームの値を出す |
+| タイトル画面に使うモデルを出す | オン | タイトル画面の右上に「LLM: Claude Haiku 5.5 / effort: medium」のように、実際に送っているモデルと推論量（Gemini は思考の段階）を1行出す。推論量の設定が `keep` のときは、ゲームが組む値を差し替え先が受ける値に寄せて出す（OpenAI の gpt-5.5 などなら none、Claude の Sonnet 5.5・Opus 5.5・Fable 5.1・Fable 5 なら low、Gemini を Gemini 4 へ差し替えるなら low）。ゲームが推論量を付けない Claude のモデル（Sonnet 5 など）では、API の既定を「high（既定）」のように出す。推論量を送らないモデル（Claude Haiku 4.5 など）では付かない。ゲームが API キーでクラウドを使っていて、そのプロバイダをこの MOD で差し替えているときだけ出る（ローカルの LLM や、差し替え先が `off` のときは出ない）。`126_` の版の行がある場合は、その下に並ぶ |
+| 差し替えていないときも出す | オフ | 上の欄がオンのときだけ効く。ゲームが API キーで OpenAI / Claude / Gemini を使っていれば、差し替えていなくても、ゲームで選んだモデル（モデル ID）とゲームが送る推論量を同じ形で出す。推論量の設定は差し替えるときだけ効くので、ここではゲームの値を出す |
 
-Claude の一覧の中身（画面には名前で出る。ログと「一覧に無いモデル」の欄はモデル ID）:
+一覧の中身（画面には名前で出る。ログと「一覧に無いモデル」の欄はモデル ID）:
 
-| 名前 | モデル ID |
-| --- | --- |
-| Claude Haiku 5.5 | `claude-haiku-5-5` |
-| Claude Opus 5 | `claude-opus-5` |
+| プロバイダ | 名前 | モデル ID |
+| --- | --- | --- |
+| OpenAI | GPT-6.1 Terra | `gpt-6.1-terra` |
+| Claude | Claude Fable 5.2 | `claude-fable-5-2` |
+| Claude | Claude Haiku 5.5 | `claude-haiku-5-5` |
+| Claude | Claude Opus 5 | `claude-opus-5` |
+| Gemini | Gemini 4 Carbon | `gemini-4-carbon` |
+| Gemini | Gemini 4 Argon | `gemini-4-argon` |
+| Gemini | Gemini 4 Hydrogen | `gemini-4-hydrogen` |
+| Gemini | Gemini 3.8 Flash | `gemini-3.8-flash` |
+| Gemini | Gemini 3.6 Flash | `gemini-3.6-flash` |
+| Gemini | Gemini 3.5 Flash-Lite | `gemini-3.5-flash-lite` |
 
 一覧に載せるのは、ゲームの一覧に無いモデルだけ。
-ゲームの一覧（main_026）の Claude は Sonnet 5.5・Opus 5.5・Fable 5.1・Fable 5・Sonnet 5・Opus 4.8・Opus 4.7・Sonnet 4.6・Haiku 4.5、OpenAI は GPT-6.1 Sol・GPT-6 Sol・GPT-6 Luna・GPT-6 Astra・GPT-5.6 Sol / Terra / Luna・GPT-5.5・GPT-5.4 系・GPT-4.1 系。
+ゲームの一覧（main_026）の Claude は Sonnet 5.5・Opus 5.5・Fable 5.1・Fable 5・Sonnet 5・Opus 4.8・Opus 4.7・Sonnet 4.6・Haiku 4.5、OpenAI は GPT-6.1 Sol・GPT-6 Sol・GPT-6 Luna・GPT-6 Astra・GPT-5.6 Sol / Terra / Luna・GPT-5.5・GPT-5.4 系・GPT-4.1 系、Gemini は Gemini 3.1 Pro Preview・Gemini 3.5 Flash・Gemini 3 Flash Preview・Gemini 3.1 Flash-Lite・Gemma 4 31B / 26B A4B。
 版5まではこれらも一覧に並べていた。版6 に上げると、それらを選んでいた設定は `off`（差し替えない）に戻るので、ゲームの設定画面でそのモデルを選ぶ。
 
 OpenAI 互換の別サーバー（任意互換 / Alibaba）も `openai` の SDK を通るので、
 **宛先が `api.openai.com` のときだけ**差し替える。
+Gemini も同じく、宛先が `generativelanguage.googleapis.com` のときだけ差し替える。
 
 ## 仕組み
 
@@ -84,12 +103,16 @@ gpt-6-sol / 6-luna / 5.6 系 / 5.5 / 5.4 系 / 5.2 / 5.1   responses.parse, effo
 ```
 
 そこで名前を足しに行かず、**ゲームには一覧に在る名前のまま持たせ、送信の直前に差し替える**。
-仕掛けるのは各 SDK で全リクエストが最後に通る1点。
+仕掛けるのは各 SDK で全リクエストが最後に通る所。
 
 ```
-openai._base_client:SyncAPIClient.post       OpenAI
-anthropic._base_client:SyncAPIClient.post    Claude
+openai._base_client:SyncAPIClient.post                     OpenAI
+anthropic._base_client:SyncAPIClient.post                  Claude
+google.genai._api_client:BaseApiClient.request_streamed    Gemini（ストリーム）
+google.genai._api_client:BaseApiClient.request             Gemini（一括）
 ```
+
+Gemini の SDK はモデル名を URL のパス（`models/<モデル>:streamGenerateContent`）に入れるので、パスのモデル名を書き換える。
 
 ### 名前だけでは通らないものを直す
 
@@ -102,12 +125,15 @@ anthropic._base_client:SyncAPIClient.post    Claude
 | OpenAI GPT-6 Astra / GPT-6.1 Sol | `effort="none"` → `"low"`（`none` を受け付けない） |
 | OpenAI GPT-5 以降 | `temperature` / `top_p` / `top_logprobs` を外す。chat.completions の `max_tokens` → `max_completion_tokens` |
 | Claude Opus 4.7 以降 / Sonnet 5 以降 / Haiku 5.5 / Fable | `temperature` / `top_p` / `top_k` を外す。`thinking` の `enabled`（budget_tokens）→ `adaptive` |
-| Claude Opus 5.5 / Fable 5 / Fable 5.1 | 上に加えて `thinking: disabled` を外す（思考を切れない） |
+| Claude Opus 5.5 / Fable 5 / Fable 5.1 / Fable 5.2 | 上に加えて `thinking: disabled` を外す（思考を切れない） |
 | Claude Sonnet 5.5 | 「Opus 4.7 以降」の行に加えて `thinking: disabled` → `between_tools`（同じく思考を切る指定） |
 | Claude Opus 5 / Sonnet 5.5 / Haiku 5.5 | 推論量が `xhigh` / `max` のときは思考を切る指定を受け付けないので、`thinking: disabled` を外す |
-| Claude Opus 5.5 / Sonnet 5.5 / Fable 5.1 | `tool_choice` の `any` / `tool` → `auto` |
+| Claude Opus 5.5 / Sonnet 5.5 / Fable 5.1 / Fable 5.2 | `tool_choice` の `any` / `tool` → `auto` |
 | Sonnet 5.5 以外（ゲームで Sonnet 5.5 を選んでいるとき） | ゲームが送る `thinking: between_tools` → `disabled`（思考を切れないモデルには外す。Haiku 5.5 などは `between_tools` を断る） |
 | Claude Haiku 4.5 | `output_config.effort` を外す（受け付けない） |
+| Gemini 3.5 Flash-Lite / 3.8 Flash / 4 Carbon / 4 Argon（ゲームで 3.5 Flash などを選んでいるとき） | ゲームが送る `thinking_budget: 0`（思考しない）を外し、いちばん浅い段階で送る（3.5 Flash-Lite は上限 0 を断る。3.8 Flash・Carbon・Argon は受けるか確かめられていないので外す）。Gemini 4 Hydrogen と 3.6 Flash は上限 0 を受けるので、そのまま送って思考せずに答えさせる |
+| Gemini 4 / Gemini 3.8 Flash（ゲームで Gemma を選んでいるとき） | ゲームが送る `thinking_level: minimal` → `low`（`minimal` を受け付けない） |
+| Gemini 3.8 Flash ほか（思考の段階を指定したとき） | 差し替え先が受けない段階は近い段階へ（`xhigh` → `high` など）。ゲームが送る上限は外して段階で送る |
 
 一覧に無い名前（「一覧に無いモデル」の欄）には、**いちばん厳しい側**の直しを当てる。
 新しいモデルを試すときに書く欄なので、そちらの方が 400 を踏みにくい。
@@ -152,7 +178,7 @@ GPT-5.5 以前は書き込みの割増しが無く、頭が同じなら自動で
 | --- | --- |
 | ゲームのまま | OpenAI がプロンプトの末尾に自動で印を置く。末尾は毎回変わるので当たらず、入力のほぼ全部を毎回 1.25 倍で払う |
 | 使わない | 印を置かない。控えも割増しも無くなり、ゲームのままより入力の料金が約2割下がる |
-| 前回と同じ所まで控える | 同じ部分を 1.25 倍で書き込み、次からは 0.1 倍（GPT-6.1 Sol は 0.05 倍）で読む。控えは最後に使ってから30分残る |
+| 前回と同じ所まで控える | 同じ部分を 1.25 倍で書き込み、次からは 0.1 倍（GPT-6.1 Sol と GPT-6.1 Terra は 0.05 倍）で読む。控えは最後に使ってから30分残る |
 
 ### Claude API
 
@@ -161,8 +187,13 @@ GPT-5.5 以前は書き込みの割増しが無く、頭が同じなら自動で
 
 | 設定 | 書き込む回 | 当たった回 |
 | --- | --- | --- |
-| 5分 | 入力の 1.25 倍 | 入力の 0.1 倍（Opus 5.5 は 0.05 倍、Fable 5.1 は 0.025 倍） |
+| 5分 | 入力の 1.25 倍 | 入力の 0.1 倍（Opus 5.5 は 0.05 倍、Fable 5.1 と Fable 5.2 は 0.025 倍） |
 | 1時間 | 入力の 2 倍 | 同上 |
+
+### Gemini API
+
+設定は無い。
+Gemini 4 は Google が同じ部分を自動で控える（暗黙のキャッシュ）だけで、印を付ける指定を受け付けないので、この MOD は何もしない。
 
 保持の時間は当たるたびに延びる。
 「1時間」が得になるのは、同じプロンプトの間が5〜60分空く回が、書き込み3回につき2回より多いとき。
@@ -200,6 +231,7 @@ GPT-5.5 以前は書き込みの割増しが無く、頭が同じなら自動で
 | API がモデル名を知らないと返す | 一覧に無いモデルの欄の綴り。鍵の側でそのモデルが使えるかも見る |
 | Claude で「リクエストを再実行」が出たまま依頼が作られない | ログに `grammar too large; sent with` の行が出ているか。`grammar still too large` が出ていれば、置き換えても文法が大きすぎた。そのプロンプトの種類（ログの `random_quest_generator` など）を添えて報告する |
 | 400 で引数を断られる | ログの `fixed:` に何が載っているか。ゲームが新しい引数を送り始めた可能性がある。エラー文にある引数名を添えて報告する |
-| 応答が遅い | 推論量を下げる（OpenAI は `none`、Claude は `low`）。GPT-6 Astra と GPT-6.1 Sol は `none` にできないので、速さが要るならゲームの設定画面で GPT-6 Luna / GPT-6 Sol を選ぶ |
+| 応答が遅い | 推論量を下げる（OpenAI は `none`、Claude は `low`、Gemini は `low` か `minimal`）。GPT-6 Astra と GPT-6.1 Sol は `none` にできないので、速さが要るならゲームの設定画面で GPT-6 Luna / GPT-6 Sol を選ぶか、GPT-6.1 Terra へ差し替える。Gemini 4 は `minimal` にできないので、速さが要るなら Gemini 3.6 Flash / 3.5 Flash-Lite へ差し替える |
 | 版6 に上げたら差し替わらなくなった | 一覧から外したモデル（ゲームの一覧に入ったもの）を選んでいた。ゲームの設定画面でそのモデルを選ぶ。ログの `settings:` の行に、使えなくなった値が出ている |
+| Gemini で `429 You exceeded your current quota` が出て「リクエストを再実行」になる | Gemini の API キーの割り当てを使い切った。無料枠は1モデルあたり1日の回数に上限があり（Gemini 4 Hydrogen は20回）、Gemini 4 Carbon / Argon は無料枠では使えない。ログの `stall guard` の行にエラー文が出る。翌日まで待つか、別のモデルへ差し替えるか、有料枠のキーにする |
 | ゲーム内のコスト表示が合わない | 仕様。価格はゲームが選んだモデルの単価で計算される（表示だけで、実際の課金には関わらない） |

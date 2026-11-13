@@ -56,10 +56,11 @@ TRAITS = (
     ("claude-sonnet-5-5", dict(STRICT, between_tools=True, off_upto_high=True)),
     ("claude-haiku-5-5", dict(STRICT, no_disable=False, off_upto_high=True,
                               no_forced=False)),
+    # Fable 5.2 は 5.1 と同じ面（思考を切れない・強制ツール指定を断る）。
+    # 表に無いと、前方一致で claude-fable-5 の行（強制ツール指定を通す）に当たっていた。
+    ("claude-fable-5-2", STRICT),
     ("claude-fable-5-1", STRICT),
-    ("claude-mythos-5-1", STRICT),
     ("claude-fable-5", dict(STRICT, no_forced=False)),
-    ("claude-mythos-5", dict(STRICT, no_forced=False)),
     ("claude-opus-5", dict(STRICT, no_disable=False, off_upto_high=True, no_forced=False)),
     ("claude-sonnet-5", dict(STRICT, no_disable=False, no_forced=False)),
     ("claude-opus-4-8", dict(STRICT, no_disable=False, no_forced=False)),

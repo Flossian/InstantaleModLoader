@@ -13,6 +13,9 @@ API の経路を分けている**:
     gpt-6-sol / 6-luna / 5.6 系 / 5.5 / 5.4 系 / 5.2 / 5.1  responses.parse, effort="none"
     それ以外                                        beta.chat.completions, max_tokens=
 
+GPT-6.1 Terra（`gpt-6.1-terra`）はゲームの一覧に無い。none を受け、`prompt_cache_options` も受ける
+（版の数字で 6.1 と読むので、表に足さずに上の読み替えとキャッシュの判定が当たる）。
+
 3番目は古い経路で、GPT-5 系は
 `max_tokens` を受け付けない（`max_completion_tokens` が要る）。
 `config.json` の `cloud_llm` に新しい名前を直接書くと、

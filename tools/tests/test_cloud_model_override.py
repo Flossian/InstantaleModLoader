@@ -35,16 +35,28 @@ for key, spec_ in manifest["settings"].items():
     assert getattr(MOD, key) == spec_["default"], key
     if spec_["type"] == "choice":
         assert spec_["default"] in spec_["values"], key
-# モデルの一覧は、off 以外すべてに表示名（Claude Haiku 5.5 の形）を付ける
-spec_ = manifest["settings"]["CLAUDE_MODEL"]
-named = set(spec_["value_labels"])
-assert named == set(spec_["values"]) - {MOD.OFF}, set(spec_["values"]) ^ named
-assert all(label.startswith("Claude ") for label in spec_["value_labels"].values())
-# 一覧に載せるのはゲームの一覧（main_026）に無いモデルだけ。OpenAI の一覧は外した（全部ゲームの一覧に入った）
-GAME_CLAUDE = {"claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1", "claude-fable-5", "claude-sonnet-5",
-               "claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5", "claude-haiku-4-5-20251001"}
-assert not set(spec_["values"]) & GAME_CLAUDE, set(spec_["values"]) & GAME_CLAUDE
-assert "OPENAI_MODEL" not in manifest["settings"] and not hasattr(MOD, "OPENAI_MODEL")
+# 一覧に載せるのはゲームの一覧（main_026 の hud_option の cloud_model_name_list）に無いモデルだけ
+GAME_LISTS = {
+    "OPENAI_MODEL": ("GPT-", {"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna", "gpt-6-astra", "gpt-5.6-sol",
+                              "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini",
+                              "gpt-5.4-nano", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"}),
+    "CLAUDE_MODEL": ("Claude ", {"claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1", "claude-fable-5",
+                                 "claude-sonnet-5", "claude-opus-4-8", "claude-opus-4-7", "claude-sonnet-4-6",
+                                 "claude-haiku-4-5", "claude-haiku-4-5-20251001"}),
+    "GEMINI_MODEL": ("Gemini ", {"gemini-3.1-pro-preview", "gemini-3.5-flash", "gemini-3-flash-preview",
+                                 "gemini-3.1-flash-lite", "gemma-4-31b-it", "gemma-4-26b-a4b-it"}),
+}
+assert set(GAME_LISTS) == set(MOD.MODEL_LISTS)
+for key, (head, game) in GAME_LISTS.items():
+    spec_ = manifest["settings"][key]
+    # off 以外すべてに表示名（Claude Haiku 5.5 の形）を付ける
+    named = set(spec_["value_labels"])
+    assert named == set(spec_["values"]) - {MOD.OFF}, (key, set(spec_["values"]) ^ named)
+    assert all(label.startswith(head) for label in spec_["value_labels"].values()), key
+    assert spec_["values"][0] == MOD.OFF and spec_["default"] == MOD.OFF, key
+    assert not set(spec_["values"]) & game, (key, set(spec_["values"]) & game)
+assert "gpt-6.1-terra" in manifest["settings"]["OPENAI_MODEL"]["values"]
+assert "claude-fable-5-2" in manifest["settings"]["CLAUDE_MODEL"]["values"]
 
 
 class Ctx(object):
@@ -163,6 +175,23 @@ sent = ctx.hooks[OA.POST](orig, OPENAI, "/responses",
 assert sent == {"model": "gpt-5.5", "reasoning": {"effort": "low"}}, sent
 MOD.OPENAI_EFFORT, MOD.OPENAI_CUSTOM = "keep", ""
 
+# 一覧（OPENAI_MODEL）で選んでも差し替える。欄の名前が優先する
+MOD.OPENAI_CUSTOM, MOD.OPENAI_MODEL = "", "gpt-6.1-terra"
+ctx = Ctx()
+MOD.apply(ctx)
+sent = ctx.hooks[OA.POST](orig, OPENAI, "/responses",
+                          body={"model": "gpt-6.1-sol", "input": [], "reasoning": {"effort": "low"}})
+assert sent == {"model": "gpt-6.1-terra", "input": [], "reasoning": {"effort": "low"}}, sent
+sent = ctx.hooks[OA.POST](orig, OPENAI, "/responses",
+                          body={"model": "gpt-6-luna", "input": [], "reasoning": {"effort": "none"}})
+assert sent["reasoning"] == {"effort": "none"}, "Terra は none を受ける"
+assert OA.takes_cache_options("gpt-6.1-terra")
+MOD.OPENAI_CUSTOM = "gpt-6-luna"
+ctx = Ctx()
+MOD.apply(ctx)
+assert ctx.hooks[OA.POST](orig, OPENAI, "/responses", body={"model": "gpt-5.5"})["model"] == "gpt-6-luna"
+MOD.OPENAI_MODEL, MOD.OPENAI_CUSTOM = "off", ""
+
 # 名前を書いていなければ OpenAI の送信を包まない（タイトル画面の包みは、前の1行を外すために残る）。
 # Claude は文法が大きすぎるときの迂回のために包み、型の無い要求は本文をそのまま渡す
 assert MOD.OPENAI_CUSTOM == ""
@@ -244,6 +273,16 @@ assert CL.traits("claude-haiku-4-5")["sampling"] is False
 fixed = {"model": "x", "temperature": 0.5, "output_config": {"effort": "high"}}
 CL.fix(fixed, "claude-haiku-4-5", "low")
 assert fixed == {"model": "claude-haiku-4-5", "temperature": 0.5}, fixed
+
+# Fable 5.2 は 5.1 と同じ。前方一致で claude-fable-5 の行（強制ツール指定を通す）に当てない
+for target in ("claude-fable-5-2",):
+    assert CL.traits(target) == CL.STRICT, target
+    fixed = {"model": "x", "thinking": {"type": "disabled"}, "tool_choice": {"type": "tool", "name": "q"},
+             "temperature": 0.7}
+    CL.fix(fixed, target, "low")
+    assert fixed == {"model": target, "tool_choice": {"type": "auto"}, "output_config": {"effort": "low"}}, fixed
+assert CL.traits("claude-fable-5")["no_forced"] is False
+assert CL.sent_effort("claude-fable-5-2", "keep", "claude-sonnet-5") == "high（既定）"
 
 # 知らない名前はいちばん厳しい側
 assert CL.traits("claude-someday-9") == CL.STRICT
@@ -391,7 +430,9 @@ assert "prompt_cache_options" not in ask(SHARED + "一回目", model="gpt-6-luna
 # ---------------------------------------------------------------- タイトル画面の1行
 # 出すのは、API キーでクラウドを使っていて、そのプロバイダを差し替えているときだけ
 NAMES = MOD.model_names(folder)
-assert NAMES == {"claude-haiku-5-5": "Claude Haiku 5.5", "claude-opus-5": "Claude Opus 5"}, NAMES
+assert NAMES["claude-haiku-5-5"] == "Claude Haiku 5.5" and NAMES["gpt-6.1-terra"] == "GPT-6.1 Terra", NAMES
+assert NAMES["gemini-4-hydrogen"] == "Gemini 4 Hydrogen", NAMES
+assert len(NAMES) == sum(len(manifest["settings"][k]["value_labels"]) for k in MOD.MODEL_LISTS), NAMES
 cloud = {"inference": "cloud_api_key", "provider": "Claude API", "model": "claude-sonnet-5"}
 t = MOD.title_text(cloud, "gpt-6-luna", "claude-haiku-5-5", NAMES, claude_effort="medium")
 assert t == "LLM: Claude Haiku 5.5 / effort: medium", t
@@ -421,6 +462,21 @@ assert MOD.title_text(dict(cloud, provider="Gemini API(Experimental)"), "gpt-6-l
 assert MOD.title_text(None, "gpt-6-luna", None, NAMES) is None
 t = MOD.title_text(dict(openai_cloud, model="gpt-6-sol"), "gpt-6-luna", None, NAMES)
 assert t == "LLM: gpt-6-luna / effort: none", "ゲームの一覧の GPT-6 系も none を組む（main_026）"
+t = MOD.title_text(openai_cloud, "gpt-6.1-terra", None, NAMES)
+assert t == "LLM: GPT-6.1 Terra / effort: none", "Terra は none を受ける"
+# Gemini: ゲームは 3.5 Flash などで thinking_budget 0 を組む（実機）。受ける先には budget 0、受けない先には最も浅い段階
+gemini_cloud = dict(cloud, provider="Gemini API(Experimental)", model="gemini-3.5-flash")
+t = MOD.title_text(gemini_cloud, None, None, NAMES, gemini_target="gemini-4-argon")
+assert t == "LLM: Gemini 4 Argon / effort: low", t
+t = MOD.title_text(gemini_cloud, None, None, NAMES, gemini_target="gemini-4-hydrogen")
+assert t == "LLM: Gemini 4 Hydrogen / effort: budget 0", t
+t = MOD.title_text(gemini_cloud, None, None, NAMES, gemini_target="gemini-3.5-flash-lite")
+assert t == "LLM: Gemini 3.5 Flash-Lite / effort: minimal", "3.5 Flash-Lite は budget 0 を断る"
+t = MOD.title_text(gemini_cloud, None, None, NAMES, gemini_target="gemini-4-carbon", gemini_effort="xhigh")
+assert t == "LLM: Gemini 4 Carbon / effort: high", "xhigh を受けるのは Hydrogen だけ"
+t = MOD.title_text(dict(gemini_cloud, model="gemma-4-31b-it"), None, None, NAMES, gemini_target="gemini-4-hydrogen")
+assert t == "LLM: Gemini 4 Hydrogen / effort: low", "ゲームの Gemma は minimal を組む。Hydrogen は受けないので low"
+assert MOD.title_text(gemini_cloud, None, "claude-haiku-5-5", NAMES) is None, "Gemini を差し替えていなければ出さない"
 
 # 差し替えていないときも出す（既定はオフ）。ゲームが選んだモデルと、ゲームが組む推論量
 U = dict(unswapped=True)
@@ -438,7 +494,13 @@ assert MOD.title_text(dict(openai_cloud, model="gpt-4.1"), None, None, NAMES, **
 t = MOD.title_text(cloud, None, "claude-haiku-5-5", NAMES, claude_effort="medium", **U)
 assert t == "LLM: Claude Haiku 5.5 / effort: medium", "差し替えているときは今までどおり"
 assert MOD.title_text(dict(cloud, inference="local"), None, None, NAMES, **U) is None
-assert MOD.title_text(dict(cloud, provider="Gemini API(Experimental)"), None, None, NAMES, **U) is None
+t = MOD.title_text(gemini_cloud, None, None, NAMES, gemini_effort="high", **U)
+assert t == "LLM: gemini-3.5-flash / effort: budget 0", "Gemini も差し替えないときはゲームの値"
+t = MOD.title_text(dict(gemini_cloud, model="gemini-3.1-pro-preview"), None, None, NAMES, **U)
+assert t == "LLM: gemini-3.1-pro-preview / effort: low", "3.1 Pro はゲームが low を組む"
+t = MOD.title_text(dict(gemini_cloud, model="gemma-4-31b-it"), None, None, NAMES, **U)
+assert t == "LLM: gemma-4-31b-it / effort: minimal", t
+assert MOD.title_text(dict(cloud, provider="Alibaba Cloud"), None, None, NAMES, **U) is None
 assert MOD.title_text(dict(cloud, model=None), None, None, NAMES, **U) is None, "モデルが読めなければ出さない"
 assert MOD.TITLE_MODEL_UNSWAPPED is False, "既定は出さない"
 
@@ -663,6 +725,107 @@ assert skill_api.calls == 2, skill_api.calls
 assert parsed[0]["skills"][0] == {"max_uses": 1, "effects": [{"type": "status", "duration": 5}]}, parsed
 assert any("clamped to the type's range: 0->1, 9->5" in line for line in ctx.lines), ctx.lines
 MOD.CLAUDE_MODEL, MOD.CLAUDE_CACHE = "claude-opus-5-5", "5m"
+
+# ---------------------------------------------------------------- Gemini
+GM = sys.modules[NAME + ".gemini_side"]
+
+
+class GenaiClient(object):
+    """google.genai の BaseApiClient の代わり。宛先は `_http_options.base_url` と `vertexai` で決まる。"""
+
+    def __init__(self, base_url, vertexai=False):
+        self._http_options = {"base_url": base_url}
+        self.vertexai = vertexai
+
+
+GEMINI = GenaiClient("https://generativelanguage.googleapis.com/")
+VERTEX = GenaiClient("https://us-central1-aiplatform.googleapis.com/", vertexai=True)
+
+
+def genai_orig(self, http_method, path, request_dict, http_options=None):
+    return path, request_dict
+
+
+# ゲームが Gemma を選んだときの本文（SDK 1.52 の形: generationConfig の中の thinkingConfig は snake_case）
+def game_request(level="minimal"):
+    return {"contents": [{"role": "user", "parts": [{"text": "やあ"}]}],
+            "systemInstruction": {"parts": [{"text": "決まり"}]},
+            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 8000,
+                                 "responseMimeType": "application/json",
+                                 "thinkingConfig": {"thinking_level": level}}}
+
+
+# 差し替えなし（既定）は包まない
+assert MOD.GEMINI_MODEL == "off"
+ctx = Ctx()
+MOD.apply(ctx)
+assert GM.STREAMED not in ctx.hooks and GM.REQUEST not in ctx.hooks
+
+MOD.GEMINI_MODEL = "gemini-4-argon"
+ctx = Ctx()
+MOD.apply(ctx)
+streamed, request = ctx.hooks[GM.STREAMED], ctx.hooks[GM.REQUEST]
+original = game_request()
+path, sent = streamed(genai_orig, GEMINI, "post", "models/gemini-3.5-flash:streamGenerateContent?alt=sse",
+                      original, None)
+assert path == "models/gemini-4-argon:streamGenerateContent?alt=sse", path
+assert sent["generationConfig"]["thinkingConfig"] == {"thinking_level": "low"}, "Gemini 4 は minimal を受けない"
+assert sent["generationConfig"]["temperature"] == 0.7 and sent["contents"] == original["contents"]
+assert original["generationConfig"]["thinkingConfig"] == {"thinking_level": "minimal"}, "呼び出し側は変えない"
+assert any("[gemini] gemini-3.5-flash -> gemini-4-argon" in line and "thinking_level minimal->low" in line
+           for line in ctx.lines), ctx.lines
+# 一括の generateContent も同じ。生成以外のパスと Vertex AI 宛ては触らない
+path, sent = request(genai_orig, GEMINI, "post", "models/gemini-3.5-flash:generateContent", game_request(), None)
+assert path == "models/gemini-4-argon:generateContent", path
+count = game_request()
+assert request(genai_orig, GEMINI, "post", "models/gemini-3.5-flash:countTokens", count, None) == \
+    ("models/gemini-3.5-flash:countTokens", count)
+assert streamed(genai_orig, VERTEX, "post", "models/gemini-3.5-flash:streamGenerateContent?alt=sse",
+                count, None)[0].startswith("models/gemini-3.5-flash")
+# ゲームが 3.1 Pro で送る LOW（列挙型の大文字）はそのまま通す
+path, sent = streamed(genai_orig, GEMINI, "post", "models/gemini-3.1-pro-preview:streamGenerateContent?alt=sse",
+                      game_request("LOW"), None)
+assert sent["generationConfig"]["thinkingConfig"] == {"thinking_level": "LOW"}, sent
+
+# 段階の寄せ方: 受けない段階は近い端へ。minimal を受けるモデルはそのまま
+assert GM.fit_level("gemini-3.6-flash", "minimal") == "minimal"
+assert GM.fit_level("gemini-3.8-flash", "minimal") == "low"
+assert GM.fit_level("gemini-4-hydrogen", "xhigh") == "xhigh"
+assert GM.fit_level("gemini-4-carbon", "xhigh") == "high"
+assert GM.fit_level("gemini-someday-9", "minimal") == "low", "知らない名前は新しい世代の幅"
+assert GM.fit_level("gemini-4-argon", "weird") == "weird", "読めない値はそのまま"
+assert GM.traits("gemini-3.5-flash-lite") != GM.traits("gemini-3.5-flash"), "長い名前を先に引く"
+# 段階の指定は差し替えるときだけ効く
+fixed = game_request()
+assert GM.fix(fixed, "gemini-4-hydrogen", "xhigh") == ["thinking_level minimal->xhigh"]
+# 思考の上限 0（ゲームで 3.5 Flash などを選んだとき。実機）は、受ける先には keep でそのまま送る
+# （Hydrogen・3.6 Flash は受けて思考せずに答えた。実測）。受けない先・測れていない先には最も浅い段階で送る
+fixed = {"generationConfig": {"thinkingConfig": {"thinking_budget": 0}}}
+assert GM.fix(fixed, "gemini-4-hydrogen", "keep") == [] and fixed["generationConfig"]["thinkingConfig"] == {
+    "thinking_budget": 0}, fixed
+for target, level in (("gemini-3.5-flash-lite", "minimal"), ("gemini-4-argon", "low"), ("gemini-3.8-flash", "low"),
+                      ("gemini-someday-9", "low")):
+    fixed = {"generationConfig": {"thinkingConfig": {"thinking_budget": 0}}}
+    assert GM.fix(fixed, target, "keep") == ["-thinking_budget 0", "thinking_level None->" + level], (target, fixed)
+    assert fixed["generationConfig"]["thinkingConfig"] == {"thinking_level": level}, (target, fixed)
+fixed = {"generationConfig": {"thinkingConfig": {"thinkingBudget": 0}, "temperature": 1}}
+assert GM.fix(fixed, "gemini-4-argon", "medium") == ["-thinking_budget 0", "thinking_level None->medium"], fixed
+assert fixed["generationConfig"] == {"thinkingConfig": {"thinking_level": "medium"}, "temperature": 1}, fixed
+# 段階の指定が無い本文には、指定があるときだけ足す。Gemma には触らない
+fixed = {"contents": []}
+assert GM.fix(fixed, "gemini-4-argon", "keep") == [] and fixed == {"contents": []}
+GM.fix(fixed, "gemini-4-argon", "high")
+assert fixed["generationConfig"] == {"thinkingConfig": {"thinking_level": "high"}}, fixed
+fixed = game_request()
+assert GM.fix(fixed, "gemma-4-31b-it", "high") == [] and fixed == game_request()
+# 差し替え先がゲームの選択と同じで直すものも無ければ、本文はそのまま
+MOD.GEMINI_MODEL = "gemini-3.6-flash"
+ctx = Ctx()
+MOD.apply(ctx)
+same = game_request()
+assert ctx.hooks[GM.STREAMED](genai_orig, GEMINI, "post", "models/gemini-3.6-flash:streamGenerateContent?alt=sse",
+                              same, None)[1] is same
+MOD.GEMINI_MODEL = "off"
 
 
 print("ok")
