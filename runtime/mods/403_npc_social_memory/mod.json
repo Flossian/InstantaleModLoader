@@ -5,6 +5,7 @@
   "version": "10",
   "author": "MoririnJP",
   "state": ["npc_social_memory"],
+  "state_lifetime": {"npc_social_memory": "save"},
   "shares": ["npc_profiles"],
   "name": {
     "en": "NPC social memory",

@@ -105,7 +105,7 @@
 import random
 import sys
 
-from instantale_modloader import arrivals, choices, confinement, durations, frames, guards, ui, wanted
+from instantale_modloader import arrivals, choices, confinement, durations, frames, guards, loads, ui, wanted
 from instantale_modloader.state import WorldStore, world_key
 
 from . import hunt
@@ -783,6 +783,18 @@ def apply(ctx):
             ctx.log_exc("bounty hunter: 日数の経過で失敗")
 
     durations.on_days(OWNER, ctx, after=after_days, write=write)
+
+    def new_game_before(call):
+        """新しい主人公を始めたら、通算日数を読み直させる（TECH.md §5.4）。
+
+        控えのファイルはローダが退避する。世界名が同じなので `load_memo` は読み直さず、
+        前の主人公の日数を数え続けて次の `save_memo` で書き戻す作りになっていた。
+        """
+        if call.world and memo["world"] == call.world:
+            memo["world"] = None
+            write("新しい主人公を始めたので、世界 {} の控えを読み直す".format(call.world))
+
+    loads.on(OWNER + ":new_game", ctx, (loads.NEW_GAME,), before=new_game_before, write=write)
 
     @ctx.wrap("scripts.llm.llm_manager:master_ai_facilitator", required=False,
               safe=True)

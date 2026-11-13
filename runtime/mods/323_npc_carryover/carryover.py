@@ -82,6 +82,27 @@ PENDING_NAME = "pending.json"
 PENDING = "pending"
 PLACED = "placed"
 SKIPPED = "skipped"
+#: 置いた後に、その世界で新しい主人公を始めた予約。置いた周回のセーブはもう無いので、置き直さない。
+ENDED = "ended"
+ENDED_REASON = "新しい主人公で始めたので持ち越さない"
+
+
+def end_reservations(rows, world, when) -> list:
+    """その世界で置いた予約を「終了」にする（新しい主人公を始めたとき）。終えた名前を返す。
+
+    ゲームは新しい主人公のセーブを骨格から組み直すので、置いた NPC は消える（GAME.md §2.32）。
+    置いたまま保存されていない予約は、次のロードで「待機」に戻して置き直す作り（`unsaved`）なので、
+    ここで終えないと前の周回の持ち込みが新しい主人公の世界へ持ち越される。
+    まだ置いていない予約（待機）はどの周回にも入っていないので、そのまま新しい主人公の世界へ置く。
+    """
+    ended = []
+    for row in rows:
+        if row.get("status") == PLACED and row.get("target_world") == world:
+            row["status"] = ENDED
+            row["ended_at"] = when
+            row["reason"] = ENDED_REASON
+            ended.append(str(row.get("name") or row.get("zip") or "?"))
+    return ended
 
 #: 置ける施設（`npc_carryover.py` の「誰をどこへ」。実セーブに出る `facility_type`）。
 PLACEABLE_TYPES = ("guild", "inn")

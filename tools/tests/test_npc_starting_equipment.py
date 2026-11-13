@@ -610,6 +610,39 @@ try:
 finally:
     slots.close()
 
+print("=== 持ち物にある品（骨格に焼き付いた前の周回の品・初めから持っている品） ===")
+module, ctx, app, npc = fresh()
+slots = FakeSlots()
+try:
+    staff = Item("item_314", "牧羊杖", "", "weapon", "medium_weapon", 10, "common")
+    potion = Item("item_9", "薬草", "", "consumable", "healing_item", 1, "common")
+    npc.inventory = {"item_9": potion, "item_314": staff}
+    app.add_party_member(NPC_ID)
+    settle(module)
+    check("持ち物にある武器を装備させ、作らない（窓口へ渡すのはその品そのもの）",
+          slots.asked and slots.asked[0] == (NPC_ID, staff), slots.asked)
+    check("無い種類（防具）だけを LLM に頼む",
+          len(LLM.asked) == 1 and "身に着けている防具を" in LLM.asked[0][1][0]["content"], LLM.asked)
+    check("武器は増えない（持っていた1品と作った防具）",
+          sorted(i.item_type for i in npc.inventory.values()) == ["consumable", "weapon", "wearable"],
+          npc.inventory)
+    check("持ち物から装備させた種類も渡した印に入る",
+          marks_on_disk(module) == {"テスト世界×テスト主人公.json": {NPC_ID: GIVEN_BOTH}},
+          marks_on_disk(module))
+    check("持ち物から装備させたことを記録する",
+          "from the inventory: npc={} weapon=".format(NPC_ID) in read_log(module), read_log(module))
+finally:
+    slots.close()
+
+module, ctx, app, npc = fresh()
+npc.inventory = {"item_314": Item("item_314", "牧羊杖", "", "weapon", "medium_weapon", 10, "common"),
+                 "item_315": Item("item_315", "ベスト", "", "wearable", "clothing", 10, "common")}
+app.add_party_member(NPC_ID)
+settle(module)
+check("両方持っていれば LLM を呼ばない（装備欄の MOD が居なくても渡したとみなす）",
+      not LLM.asked and marks_on_disk(module) == {"テスト世界×テスト主人公.json": {NPC_ID: GIVEN_BOTH}},
+      (LLM.asked, marks_on_disk(module)))
+
 print()
 if failures:
     print("FAILED: {}".format(len(failures)))

@@ -47,10 +47,12 @@ import すると番号を振り直した瞬間に壊れる、という理由で�
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import sys
 import threading
+import time
 
 #: ファイル名に使えない文字（Windows の禁則＋制御文字）。
 _UNSAFE = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
@@ -156,14 +158,64 @@ def playthrough_key_of_dict(save_data_dict, fallback=None):
 
     セーブに周回の id は無く、`original_ability_scores` も `age` も遊んでいる間に変わる
     （実セーブ12本で確かめた）ので、名前で見分ける。
-    同じ名前で作り直せば前の周回を引き継ぐ。
+    同じ名前で作り直すと鍵も同じになるので、前の周回の控えは新しい主人公を始めるときに
+    ローダが退避する（`retire_world`。TECH.md §5.4）。
     主人公の名が読めないときは世界名だけ（前と同じファイル）。
+    ただし新しい主人公を始めている最中（`start_game` の中）は、セーブにまだ名前が無いので、
+    作成画面から控えた名前を使う（`new_game_player`。GAME.md §2.32）。
     """
     world = world_key_of_dict(save_data_dict, None)
     if world is None:
         return fallback
-    name = player_name_of_dict(save_data_dict)
+    name = player_name_of_dict(save_data_dict) or new_game_player(world)
     return world + PLAYTHROUGH_SEP + name if name else world
+
+
+# ---------------------------------------------------------------------------
+# 新しい主人公を始めている最中（`start_game` の中）
+# ---------------------------------------------------------------------------
+#: `{"world": 世界名, "player": 作成画面の名前か None}` を置く `sys` の属性。`start_game` の間だけ立つ。
+_NEW_GAME_ATTR = "_instantale_state_new_game"
+
+
+def begin_new_game(world) -> None:
+    """新しい主人公を始める（`loads` の `start_game` の関所が入口で呼ぶ）。"""
+    setattr(sys, _NEW_GAME_ATTR, {"world": world if isinstance(world, str) else None, "player": None})
+
+
+def note_new_player(name) -> bool:
+    """作成画面の名前を控える（ローダが `CharacterVM.to_dict` の戻り値から呼ぶ）。新しい主人公を始めている最中だけ控えて True。"""
+    found = getattr(sys, _NEW_GAME_ATTR, None)
+    if not isinstance(found, dict) or not isinstance(name, str) or not name.strip():
+        return False
+    found["player"] = name.strip()
+    return True
+
+
+def end_new_game() -> None:
+    """新しい主人公を始め終えた（`start_game` が戻った・投げた）。"""
+    setattr(sys, _NEW_GAME_ATTR, None)
+
+
+def new_game_player(world=None):
+    """新しい主人公を始めている最中なら、作成画面の名前。`world` を渡せば、その世界を始めているときだけ。
+
+    `start_game` の中では、骨格から組んだセーブにまだ主人公の名前が無く（`World.__init__` の時点）、
+    ゲームを閉じずに作り直すと `app.player` はまだ前の主人公を指している（GAME.md §2.32）。
+    どちらから引いても周回の鍵を取り違えるので、ここを先に見る。
+    """
+    found = getattr(sys, _NEW_GAME_ATTR, None)
+    if not isinstance(found, dict) or not found.get("player"):
+        return None
+    if world is not None and found.get("world") not in (None, world):
+        return None
+    return found["player"]
+
+
+def new_game_world():
+    """新しい主人公を始めている最中なら、その世界名。"""
+    found = getattr(sys, _NEW_GAME_ATTR, None)
+    return found.get("world") if isinstance(found, dict) else None
 
 
 def playthrough_key(app):
@@ -174,7 +226,12 @@ def playthrough_key(app):
     **`World.__init__` の中では使わない**
     （`app` の辞書と `player` はまだ前の周回を指していることがある）。
     そこでは引数の `save_data_dict` を `playthrough_key_of_dict` に渡す。
+    新しい主人公を始めている最中で作成画面の名前が控えてあれば、`app` を見ずにその世界とその名前で返す
+    （`app` の辞書も `player` も前の周回のままのことがある。`new_game_player`）。
     """
+    pending = new_game_player()
+    if pending and new_game_world():
+        return new_game_world() + PLAYTHROUGH_SEP + pending
     world = world_key(app)
     if world == UNKNOWN_WORLD:
         return UNKNOWN_WORLD
@@ -201,11 +258,16 @@ def other_playthroughs(state_dir, key) -> list:
     own = world_filename(key, "")
     prefix = _UNSAFE.sub("_", world.strip()) + PLAYTHROUGH_SEP
     found = set()
+    # 新しい主人公を始めたときに退避した前の周回（`retire_world`）も別の周回と数える。
+    # 数えないと、退避の後に残った世界名だけの控えが新しい主人公へ移る。
+    found.update(retired_playthroughs(state_dir, world))
     try:
         folders = os.listdir(state_dir)
     except OSError:
-        return []
+        return sorted(found)
     for folder in folders:
+        if folder == RETIRED_DIRNAME:
+            continue
         path = os.path.join(state_dir, folder)
         if not os.path.isdir(path):
             continue
@@ -222,6 +284,194 @@ def other_playthroughs(state_dir, key) -> list:
                     and os.path.isfile(os.path.join(path, name)):
                 found.add(stem)
     return sorted(found)
+
+
+# ---------------------------------------------------------------------------
+# 新しい主人公を始めたときの退避
+# ---------------------------------------------------------------------------
+#: 退避した控えを置く `state/` 直下のフォルダ。`<世界>/<日時>/<元の相対パス>` の形で置く。
+RETIRED_DIRNAME = "_retired"
+
+#: 世界名だけの控えの拡張子（`<世界>` の後ろ）。`retire_world` はこの形のファイルだけを世界のものと読む。
+#: `"<世界>." で始まる名前` と広く取ると、`A` の世界を始めたときに `A.b` の世界のファイルまで退避する。
+WORLD_SUFFIXES = (".json", ".jsonl", ".cast.json", ".reroll.json")
+
+#: ローダのモジュールが持つ、セーブと同じ寿命の控えのフォルダ。
+LOADER_SAVE_DIRS = ("abilities", "choices", "modfacility", "modnpc", "prices")
+
+#: `mod.json` の `"state_lifetime"` で `"save"` と宣言されたフォルダの台帳を置く `sys` の属性。
+_SAVE_DIRS_ATTR = "_instantale_state_save_dirs"
+
+
+def declare_save_dirs(dirs) -> list:
+    """セーブと同じ寿命の控えのフォルダ（`state/` からの相対。`/` 区切り）を据える。据えた並びを返す。
+
+    ローダが注入のたびに全 MOD の `mod.json` から集めて呼ぶ（`"state_lifetime"`。TECH.md §3.11）。
+    ローダのモジュールの分（`LOADER_SAVE_DIRS`）は常に足す。
+    """
+    found = set(LOADER_SAVE_DIRS)
+    for rel in dirs or ():
+        if isinstance(rel, str) and rel.strip("/"):
+            found.add(rel.strip("/"))
+    rows = sorted(found)
+    setattr(sys, _SAVE_DIRS_ATTR, rows)
+    return rows
+
+
+def save_dirs() -> list:
+    """セーブと同じ寿命の控えのフォルダ。`declare_save_dirs` がまだならローダの分だけ。"""
+    found = getattr(sys, _SAVE_DIRS_ATTR, None)
+    return list(found) if isinstance(found, list) else sorted(LOADER_SAVE_DIRS)
+
+
+def world_of_key(key):
+    """鍵（世界名か周回の鍵）の世界名。"""
+    return str(key).partition(PLAYTHROUGH_SEP)[0]
+
+
+def key_in_world(key, world) -> bool:
+    """鍵がその世界のものか（世界名だけの鍵と、その世界の周回の鍵）。
+
+    1つのファイルの中に鍵ごとの控えを持つ MOD（`301_` / `307_`）が、新しい主人公を始めたときに
+    その世界の分を捨てるのに使う。
+    """
+    return isinstance(key, str) and isinstance(world, str) and bool(world) \
+        and world_of_key(key) == world
+
+
+def retired_playthroughs(state_dir, world) -> list:
+    """その世界で退避した前の周回（`_retired/<世界>/<日時>`）。無ければ空。"""
+    if not state_dir or not isinstance(world, str) or not world:
+        return []
+    root = os.path.join(state_dir, RETIRED_DIRNAME, world_filename(world, ""))
+    try:
+        stamps = os.listdir(root)
+    except OSError:
+        return []
+    return sorted("{}/{}/{}".format(RETIRED_DIRNAME, world_filename(world, ""), stamp)
+                  for stamp in stamps if os.path.isdir(os.path.join(root, stamp)))
+
+
+def _world_files(folder, world, with_world_only):
+    """フォルダの中の、その世界の控えのファイル名。
+
+    周回の鍵のファイル（`<世界>×…`。副ファイルも含む）は常に、世界名だけのファイル
+    （`<世界>` ＋ `WORLD_SUFFIXES`）は `with_world_only` のときだけ。
+    """
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return []
+    prefix = _UNSAFE.sub("_", world.strip()) + PLAYTHROUGH_SEP
+    stem = world_filename(world, "")
+    plain = {stem + suffix for suffix in WORLD_SUFFIXES} if with_world_only else set()
+    return sorted(name for name in names
+                  if (name.startswith(prefix) or name in plain)
+                  and os.path.isfile(os.path.join(folder, name)))
+
+
+def retire_world(state_dir, world, *, dirs=None, write=None, now=None) -> list:
+    """その世界の前の周回の控えを `state/_retired/<世界>/<日時>/` へ移す。移した相対パスを返す。
+
+    ゲームのセーブは世界に1つで、新しい主人公を始めるとゲームはセーブを骨格から組み直す
+    （GAME.md §2.32）。この時点で、その世界の周回の控えはどれも中身のセーブを失っている。
+    主人公の名前を問わず移すので、同じ名前で作り直した主人公にも前の周回は渡らない。
+
+    移すもの:
+      - どのフォルダでも、周回の鍵のファイル（`<世界>×<主人公>…`）
+      - セーブと同じ寿命と宣言されたフォルダ（`dirs`。省けば `save_dirs()`）の、世界名だけのファイル
+
+    消さずに移す（ゲームの `backups\\` から前の主人公を戻したときに、手で戻せるように）。
+    移した後は、このプロセスの控え（`WorldStore`）のキャッシュを全部捨てる。
+    捨てないと、前の周回の中身を覚えた控えが次の `save` でファイルを作り直す。
+    1つのファイルの中に世界ごとの控えを持つ MOD と、控えをメモリに別に持つ MOD は、
+    ローダの窓口 `loads.NEW_GAME` の `before` で自分の分を捨てる（TECH.md §5.4）。
+    """
+    if not state_dir or not isinstance(world, str) or not world.strip() or world == UNKNOWN_WORLD:
+        return []
+    declared = set(save_dirs() if dirs is None else dirs)
+    targets = []
+    try:
+        folders = sorted(os.listdir(state_dir))
+    except OSError:
+        folders = []
+    for folder in folders:
+        if folder == RETIRED_DIRNAME or not os.path.isdir(os.path.join(state_dir, folder)):
+            continue
+        for name in _world_files(os.path.join(state_dir, folder), world, folder in declared):
+            targets.append(folder + "/" + name)
+    # 入れ子のフォルダ（`musics/place` の形）の宣言は、上の1段目の走査に入らない。
+    for rel in sorted(declared):
+        if "/" not in rel:
+            continue
+        folder = os.path.join(state_dir, *rel.split("/"))
+        for name in _world_files(folder, world, True):
+            if rel + "/" + name not in targets:
+                targets.append(rel + "/" + name)
+    if not targets:
+        return []
+    stamp = now or time.strftime("%Y%m%d-%H%M%S")
+    root = os.path.join(state_dir, RETIRED_DIRNAME, world_filename(world, ""), stamp)
+    serial = 1
+    while os.path.exists(root):
+        serial += 1
+        root = os.path.join(state_dir, RETIRED_DIRNAME, world_filename(world, ""),
+                            "{}-{}".format(stamp, serial))
+    moved = []
+    for rel in targets:
+        source = os.path.join(state_dir, *rel.split("/"))
+        dest = os.path.join(root, *rel.split("/"))
+        try:
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            os.replace(source, dest)
+            moved.append(rel)
+        except OSError as exc:
+            if write is not None:
+                write("WARN state: 前の周回の控えを退避できなかった: {} ({})".format(rel, exc))
+    for store in list(_owners().values()):
+        if _is_store(store):
+            try:
+                store.forget()
+                # 世界名だけの控えを移したかの印も捨てる（退避の後にもう一度確かめる）。
+                adopted = store.__dict__.get("_adopted")
+                if isinstance(adopted, set):
+                    adopted.clear()
+            except Exception:
+                pass
+    if moved and write is not None:
+        write("state: 新しい主人公を始めたので、世界 {!r} の前の周回の控え {} 件を {} へ退避した".format(
+            world, len(moved), os.path.relpath(root, state_dir).replace(os.sep, "/")))
+    return moved
+
+
+def retire_entries(state_dir, world, name, payload, *, write=None, now=None):
+    """1つのファイルの中から捨てる、その世界の前の周回の分を `_retired/<世界>/<日時>/<name>` に書き残す。
+
+    `retire_world` はファイルごと移すので、全周回ぶんを1つのファイルに持つ MOD（`301_` / `307_`）の
+    中の鍵には届かない。その MOD が `loads.NEW_GAME` の `before` で自分の分を捨てるとき、消す代わりにここへ残す。
+    同じ秒の退避は同じフォルダに入れる（`retire_world` が先に作っていればそこへ）。書いた場所を返す。書けなければ None。
+    """
+    if not state_dir or not isinstance(world, str) or not world or not name:
+        return None
+    stamp = now or time.strftime("%Y%m%d-%H%M%S")
+    root = os.path.join(state_dir, RETIRED_DIRNAME, world_filename(world, ""), stamp)
+    path = os.path.join(root, *str(name).replace("\\", "/").split("/"))
+    serial = 1
+    base, ext = os.path.splitext(path)
+    while os.path.exists(path):
+        serial += 1
+        path = "{}-{}{}".format(base, serial, ext)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".writing"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False, indent=1)
+        os.replace(tmp, path)
+    except (OSError, TypeError, ValueError) as exc:
+        if write is not None:
+            write("WARN state: 前の周回の分を退避できなかった: {} ({})".format(name, exc))
+        return None
+    return path
 
 
 def _clean(key: str) -> str:
@@ -549,6 +799,10 @@ class WorldStore(object):
         """
         if not self.own or not key or not old_key or key == old_key \
                 or UNKNOWN_WORLD in (key, old_key):
+            return False
+        # 別の世界の世界名だけの控えは移さない（新しい主人公を始めている最中は、鍵が新しい世界、
+        # `world_key(app)` がまだ前の世界を指すことがある。`playthrough_key` の説明）。
+        if world_of_key(key) != old_key:
             return False
         with self.lock:
             # 前の版のローダが作った控えは `sys` に残っていて、この欄を持たない。

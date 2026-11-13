@@ -4202,12 +4202,23 @@ NPC の記憶も進みも無い、初期化された同じ世界になる。
 | --- | --- | --- |
 | `InstantaleApp.load_game_new(world_name)` | **続きから**（タイトルのロード） | `224_` が6回のロードで前後を測った（VERIFICATION.md §1）。`107_` / `110_` / `120_` がロード地点として包む |
 | `scripts.hud.hud_charamake:CharacterCreateScreen.start_story(instance)` | 作成画面の確定 | `214_` が包んだ |
-| `InstantaleApp.start_game(world_name)` | 作成から呼ばれる | `123_` が包む。**続きからも通るかは未測** |
+| `InstantaleApp.start_game(world_name)` | 作成から呼ばれる | `123_` が包む。続きからは通らない（VERIFICATION.md §3.129。呼び元は作成の後の `create_world.py` の `fade_out_step` だけ） |
+
+`start_game` の中の順（VERIFICATION.md §3.129・`214_` の記録）:
+
+1. 作成画面の `scripts.create_world:CharacterVM.to_dict()` を呼ぶ。戻り値に新しい主人公の `name` がある
+2. 骨格からセーブを組み、`World.__init__` を通す。**このときのセーブにはまだ主人公の名前が無い**（ローダは 1. の名前で周回の鍵を補う。TECH.md §5.4）
+3. 主人公の `Character.__init__`
+
+ゲームを閉じずに作り直すと、`start_game` に入った時点の `app.player` はまだ前の主人公を指している。
+
+骨格の NPC の持ち物には、MOD が仲間に持たせた品（`407_` の初期装備）が入っていた。
+新しい主人公の世界でも、その NPC の持ち物に装備されないまま残る。
 
 MOD の控え（`state\<MOD>\`）は世界名で引いていたので、前の主人公が建てた建物や結んだ契約が
 新しい主人公に引き継がれた（`331_` の実機。新しい主人公が前の主人公の施設の出資者として迎えられた）。
 セーブと同じ寿命のものは **世界×主人公** で持つ（`state.playthrough_key`。TECH.md §5.4）。
-同じ名前で作り直せば前の周回を引き継ぐ。
+同じ名前で作り直すと鍵も同じになるので、新しい主人公を始めるときにローダがその世界の控えを退避する（TECH.md §5.4「新しい主人公を始めたときの退避」）。
 
 ### 2.33 画像生成のバックエンドと出口（`230_` で実測）
 

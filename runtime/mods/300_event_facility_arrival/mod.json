@@ -13,6 +13,7 @@
   "version": "7",
   "author": "R01/Flossian",
   "state": ["arrival_event"],
+  "state_lifetime": {"arrival_event": "save"},
   "after": [
     "205_probe_player_events"
   ],

@@ -39,22 +39,36 @@ check("重複を落とす", ml._state_decl("m", ["a", "a/", "a"]) == ["a"])
 check("外へ出るものを捨てる",
       ml._state_decl("m", ["../out", "/abs", "C:/x", "", ".", 3, "ok.json"]) == ["ok.json"])
 check("並びでなければ空", ml._state_decl("m", {"a": 1}) == [] and ml._state_decl("m", None) == [])
+check("寿命: 区切りを均して受ける",
+      ml._state_lifetime_decl("m", {"musics\\place": "save", "x": "world"}) == {"musics/place": "save", "x": "world"})
+check("寿命: 語彙の外・外へ出るものを捨てる",
+      ml._state_lifetime_decl("m", {"a": "forever", "../out": "save", "ok": "save"}) == {"ok": "save"})
+check("寿命: 無ければ空、オブジェクトでなければ空",
+      ml._state_lifetime_decl("m", None) == {} and ml._state_lifetime_decl("m", ["a"]) == {})
+check("寿命: 全 MOD の save をローダの台帳へ据える（切った MOD の分も）",
+      "npc_profiles" in ml._declare_save_dirs({"a": {"state_lifetime": {"npc_profiles": "save"}},
+                                               "b": {"state_lifetime": {"settings_x": "world"}},
+                                               "c": None})
+      and "settings_x" not in ml._declare_save_dirs({"b": {"state_lifetime": {"settings_x": "world"}}}))
 
 print("[検査]")
 TMP = tempfile.mkdtemp(prefix="state_decl_")
 
 
-def problems(state, source):
+def problems(state, source, lifetime=None, mark='"state"'):
     name = "999_probe_{}".format(len(os.listdir(TMP)))
     folder = os.path.join(TMP, name)
     os.makedirs(folder)
+    data = {"entry": "mod.py", "api": 1, "kind": "feature", "state": state}
+    if lifetime is not None:
+        data["state_lifetime"] = lifetime
     with io.open(os.path.join(folder, "mod.json"), "w", encoding="utf-8") as fh:
-        json.dump({"entry": "mod.py", "api": 1, "kind": "feature", "state": state}, fh)
+        json.dump(data, fh)
     with io.open(os.path.join(folder, "mod.py"), "w", encoding="utf-8") as fh:
         fh.write(source)
     manifest = ml._manifest(TMP, name)
     found, _notes = check_mods.check_manifest(name, manifest)
-    return [message for _path, _where, message in found if '"state"' in message]
+    return [message for _path, _where, message in found if mark in message]
 
 
 saved = check_mods.MODS_DIR
@@ -69,6 +83,15 @@ try:
     check("外へ出る宣言を拾う", len(got) == 1, got)
     got = problems({"a": 1}, "")
     check("並びでない宣言を拾う", len(got) == 1, got)
+    life = '"state_lifetime"'
+    check("寿命: state に在るフォルダの save は通す",
+          problems(["npc_profiles"], 'DIR = "npc_profiles"\n', {"npc_profiles": "save"}, life) == [])
+    got = problems(["npc_profiles"], 'DIR = "npc_profiles"\n', {"npc_profile": "save"}, life)
+    check("寿命: state に無いフォルダを拾う", len(got) == 1 and "npc_profile" in got[0], got)
+    got = problems(["npc_profiles"], 'DIR = "npc_profiles"\n', {"npc_profiles": "forever"}, life)
+    check("寿命: 語彙に無い値を拾う", len(got) == 1, got)
+    got = problems(["npc_profiles"], 'DIR = "npc_profiles"\n', ["npc_profiles"], life)
+    check("寿命: オブジェクトでない宣言を拾う", len(got) == 1, got)
 finally:
     check_mods.MODS_DIR = saved
     shutil.rmtree(TMP, ignore_errors=True)

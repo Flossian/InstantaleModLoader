@@ -348,6 +348,36 @@ def apply(ctx):
         given = record.get("given")
         return pending | ({str(t) for t in given} if isinstance(given, list) else set())
 
+    def equip_carried(app, key, npc_id, character, missing):
+        """持ち物にもうある武器・防具を装備させ、その種類を「渡した」として印を積む。まだ無い種類を返す。
+
+        ゲームは保存のたびに骨格（`world_data.json`）も書き、仲間の持ち物もそこへ入る（GAME.md §2.32）。
+        同じ世界で主人公を作り直すと、前の周回で渡した品が持ち物に装備されないまま残っている。
+        作ると古い品と新しい品が両方残るので、持っている品を使う。素の NPC が初めから持っている品も同じ扱い。
+        種類ごとに持ち物の最初の1品。装備欄の MOD が居なければ（`equip` が None）持ち物に渡すだけの形と
+        同じなので、持っていれば渡したとみなす。
+        """
+        inventory = items.inventory_of(character)
+        if not isinstance(inventory, dict) or not missing:
+            return missing
+        found = {}
+        for item_key, item in list(inventory.items()):
+            kind = getattr(item, "item_type", None)
+            if kind in missing and kind not in found:
+                found[kind] = (str(item_key), item)
+        if not found:
+            return missing
+        done = []
+        for kind, (item_key, item) in found.items():
+            answer = equipment.equip(app, character, item)
+            done.append("{}={}({}) -> {}".format(
+                kind, frames.short(getattr(item, "name", None), 60), item_key, answer or "inventory"))
+        with worlds.lock:
+            marks.setdefault(key, {}).setdefault(npc_id, set()).update(found)
+        write("starting equipment from the inventory: npc={} {}".format(npc_id, " ".join(done)))
+        save_soon(app, "starting equipment")
+        return [t for t in missing if t not in found]
+
     def in_party(app, npc_id):
         try:
             return npc_id in {str(member) for member in ui.party_member_ids(app)}
@@ -383,6 +413,9 @@ def apply(ctx):
         worn = _worn_types(app, character)
         missing = [t for t in EQUIP_TYPES
                    if t not in given and t not in worn and (types is None or t in types)]
+        # 持ち物にもうある種類も作らず、それを装備させる（DOC.md「持ち物にある品」）。
+        if attempt == 0:
+            missing = equip_carried(app, key, npc_id, character, missing)
         if not missing:
             return False
         if snapshot is None:

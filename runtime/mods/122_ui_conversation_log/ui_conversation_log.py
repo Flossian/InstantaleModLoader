@@ -91,10 +91,11 @@ VERIFICATION.md §3.21）。
 
 import datetime
 import json
+import os
 import sys
 import weakref
 
-from instantale_modloader import frames, ui
+from instantale_modloader import frames, loads, ui
 from instantale_modloader.state import world_filename, world_key
 
 # ---------------------------------------------------------------- 設定
@@ -933,6 +934,20 @@ def apply(ctx):
         result = orig(self, instance, value, *args, **kwargs)
         upkeep(self)
         return result
+
+    # 新しい主人公を始めたら、その世界の控えをメモリからも捨てる。ファイルはローダが退避する（TECH.md §5.4）。
+    # 捨てないと、窓に前の主人公の本文が出続け、畳み直し（`compact`）でファイルへ書き戻される。
+    def new_game_before(call):
+        world = getattr(call, "world", None)
+        if not world:
+            return
+        dropped = len(store["buckets"].pop(world, None) or [])
+        store["lines"].pop(world, None)
+        if dropped:
+            note("new game in {!r}: dropped {} entr(y/ies) of the previous playthrough".format(world, dropped))
+
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "122_ui_conversation_log"
+    loads.on(owner, ctx, (loads.NEW_GAME,), before=new_game_before, write=note)
 
     ctx.log("conversation log: keeping the last {} message(s) in {} ({} button, "
             "{} icon); notes go to out/{}".format(

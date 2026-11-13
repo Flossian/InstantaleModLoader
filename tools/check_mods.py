@@ -364,6 +364,20 @@ def check_manifest(name, manifest):
                 problems.append((path, MANIFEST_NAME,
                                  '"state" の {!r} がソースに無い（{}）'.format(rel, ", ".join(missing))))
 
+    # 記録の寿命（"save" は新しい主人公を始めたときに世界名だけの控えも退避する。TECH.md §3.11）。
+    # ローダは読めない項目を黙って捨てるので、退避されないまま前の周回が渡ることにここで気付く。
+    raw_lifetime = data.get("state_lifetime")
+    if raw_lifetime is not None:
+        if not isinstance(raw_lifetime, dict) \
+                or len(manifest.get("state_lifetime") or {}) != len(raw_lifetime):
+            problems.append((path, MANIFEST_NAME,
+                             '"state_lifetime" は {{"state のパス": "{}"}} の形で書く: {!r}'.format(
+                                 '" / "'.join(ml.STATE_LIFETIMES), raw_lifetime)))
+        for rel in manifest.get("state_lifetime") or {}:
+            if rel not in (manifest.get("state") or []):
+                problems.append((path, MANIFEST_NAME,
+                                 '"state_lifetime" の {!r} が "state" に無い'.format(rel)))
+
     # ローダ API。
     # ここで撥ねられる mod は注入しても読み込まれない。
     verdict, reason = ml.api_status(manifest)

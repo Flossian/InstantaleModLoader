@@ -637,7 +637,27 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("npc carryover: the load hook failed")
 
-    loads.on(os.path.basename(getattr(ctx, "mod_dir", "") or "") or "323_npc_carryover", ctx, LOAD_KINDS, after=on_load, write=write)
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "323_npc_carryover"
+    loads.on(owner, ctx, LOAD_KINDS, after=on_load, write=write)
+
+    def new_game_before(call):
+        """新しい主人公を始める前に、その世界で置いた予約を「終了」にする（`carryover.end_reservations`）。"""
+        world = getattr(call, "world", None)
+        if not world:
+            return
+        rows = carryover.load_pending(state_dir)
+        ended = carryover.end_reservations(
+            rows, world, datetime.datetime.now().isoformat(timespec="seconds"))
+        if not ended:
+            return
+        if carryover.save_pending(state_dir, rows):
+            write("{}: a new protagonist started; ended {} placed reservation(s): {}".format(
+                world, len(ended), "、".join(ended)))
+        else:
+            write("WARN {}: could not end the placed reservations".format(world))
+
+    # 同じ持ち主の登録は差し替わるので、`on_load`（後の処理）とは別の名で登録する。
+    loads.on(owner + ":new_game", ctx, (loads.NEW_GAME,), before=new_game_before, write=write)
 
     @ctx.wrap(SAVE_TARGET, required=False, safe=True)
     def save_game(orig, self, *args, **kwargs):

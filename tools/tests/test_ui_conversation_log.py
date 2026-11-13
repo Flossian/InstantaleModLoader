@@ -398,6 +398,10 @@ class InstantaleApp(object):
         self.calls.append((dt, context, index))
         return "done"
 
+    def start_game(self, world_name):
+        """新しい主人公を始める（ローダの窓口 `loads.NEW_GAME` が包む）。"""
+        return None
+
 
 class FakeHUD(FakeWidget):
     """本物の `InstanTaleHUD` のうち、この mod から見える部分だけ。"""
@@ -891,6 +895,19 @@ def run():
     check("another world gets its own file, and does not mix in",
           os.path.isfile(other_path) and len(lines_of(log_path)) == before,
           os.listdir(os.path.join(state_dir, mod.STATE_DIRNAME)))
+
+    # -- 新しい主人公を始める --------------------------------------------------
+    # ファイルはローダが退避し（`state.retire_world`。宣言は mod.json の "state_lifetime"）、
+    # メモリの控えはこの MOD が捨てる。捨てないと、次の本文で前の主人公の分ごと書き戻される。
+    ml.state.declare_save_dirs([mod.STATE_DIRNAME])
+    other_app.start_game("ヴァルド")
+    check("starting a new protagonist retires the file of that world",
+          not os.path.isfile(other_path) and os.path.isfile(log_path),
+          os.listdir(os.path.join(state_dir, mod.STATE_DIRNAME)))
+    other_app.add_text_display(0, "新しい主人公の本文")
+    check("the new protagonist's log starts empty (the old entries are not written back)",
+          [json.loads(line)["text"] for line in lines_of(other_path)] == ["新しい主人公の本文"],
+          lines_of(other_path))
 
     check("nothing was swallowed by an exception handler", not ctx.errors,
           "\n".join(ctx.errors))

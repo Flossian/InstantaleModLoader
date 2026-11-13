@@ -467,6 +467,133 @@ def test_adopt_world_file():
         shutil.rmtree(sandbox, ignore_errors=True)
 
 
+def test_retire_world():
+    """新しい主人公を始めたときの退避（`retire_world` / `retire_entries` / 退避済みの周回の数え方）。"""
+    print("=== retire_world: 新しい主人公を始めたら、その世界の前の周回を退避する ===")
+    sep = st.PLAYTHROUGH_SEP
+    sandbox = tempfile.mkdtemp(prefix="instantale_retire_")
+    try:
+        state_dir = os.path.join(sandbox, "state")
+        ctx = ml.ModContext(os.path.join(sandbox, "out"),
+                            os.path.join(_ROOT, "runtime"), state_dir)
+
+        def put(rel, data="{}"):
+            path = os.path.join(state_dir, *rel.split("/"))
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(data)
+
+        def there(rel):
+            return os.path.exists(os.path.join(state_dir, *rel.split("/")))
+
+        put("marks/灰の街" + sep + "ミツバ.json", '{"105": {"generated": true}}')
+        put("marks/灰の街" + sep + "ムツハ.json")                 # 別の名の前の主人公
+        put("marks/灰の街" + sep + "ミツバ.cast.json")            # 同じ周回の副ファイル
+        put("marks/灰の街.json")                                  # 宣言の無いフォルダの世界名だけ
+        put("memory/灰の街.json", '{"7": {"profile": "x"}}')      # 宣言したフォルダの世界名だけ
+        put("memory/灰の街.jsonl")
+        put("memory/灰の街.b.json")                               # 別の世界「灰の街.b」
+        put("memory/灰の街ほか.json")                             # 頭が同じだけの別の世界
+        put("settings_dir/灰の街.json")                           # 世界ごとの設定（宣言なし）
+        put("musics/place/灰の街.json")                           # 入れ子の宣言
+        put("marks/砂の港" + sep + "ミツバ.json")                 # 別の世界
+
+        store = st.WorldStore(ctx, "marks")
+        key = "灰の街" + sep + "ミツバ"
+        check(store.load(key) == {"105": {"generated": True}}, "（前提）控えを読んで覚えている")
+        logged = []
+        moved = st.retire_world(state_dir, "灰の街", dirs=["memory", "musics/place"],
+                                write=logged.append, now="20260101-000000")
+        check(sorted(moved) == sorted([
+            "marks/灰の街" + sep + "ミツバ.json", "marks/灰の街" + sep + "ムツハ.json",
+            "marks/灰の街" + sep + "ミツバ.cast.json", "memory/灰の街.json",
+            "memory/灰の街.jsonl", "musics/place/灰の街.json"]),
+            "名前を問わず周回のファイルと、宣言したフォルダの世界名だけのファイルを移す: {}".format(moved))
+        check(there("_retired/灰の街/20260101-000000/marks/灰の街" + sep + "ミツバ.json")
+              and there("_retired/灰の街/20260101-000000/memory/灰の街.json"),
+              "消さずに _retired/<世界>/<日時>/<元の相対パス> へ移す")
+        check(there("marks/灰の街.json") and there("settings_dir/灰の街.json"),
+              "宣言の無いフォルダの世界名だけのファイル（設定）は移さない")
+        check(there("memory/灰の街.b.json") and there("memory/灰の街ほか.json"),
+              "名前の頭が同じだけの別の世界のファイルは移さない")
+        check(there("marks/砂の港" + sep + "ミツバ.json"), "別の世界のファイルは移さない")
+        check(store.cached(key) is None and store.load(key) == {},
+              "控えのキャッシュを捨て、同じ鍵を読み直すと空になる")
+        check(any("退避した" in line for line in logged), "退避したことをログに残す")
+
+        check(st.other_playthroughs(state_dir, key) == ["_retired/灰の街/20260101-000000"],
+              "退避した前の周回も、別の周回として数える（世界名だけの控えが新しい主人公へ移らない）")
+        adopter = st.WorldStore(ctx, "marks", write=logged.append)
+        check(not adopter.adopt(key, "灰の街") and there("marks/灰の街.json"),
+              "退避の後に残った世界名だけの控えは、同じ名前の新しい主人公へ移らない")
+
+        put("marks/灰の街" + sep + "ミツバ.json")
+        again = st.retire_world(state_dir, "灰の街", dirs=[], now="20260101-000000")
+        check(again == ["marks/灰の街" + sep + "ミツバ.json"]
+              and there("_retired/灰の街/20260101-000000-2/marks/灰の街" + sep + "ミツバ.json"),
+              "同じ秒にもう一度退避しても上書きしない（-2 を付ける）")
+        check(st.retire_world(state_dir, "灰の街", dirs=[]) == [], "移すものが無ければ何もしない")
+        check(st.retire_world(state_dir, st.UNKNOWN_WORLD) == [] and st.retire_world(state_dir, "") == [],
+              "世界名が読めなければ何もしない")
+
+        path = st.retire_entries(state_dir, "灰の街", "quest_clients.json",
+                                 {key: {"3": {"npc_id": "7"}}}, now="20260101-000000")
+        check(path is not None and os.path.isfile(path)
+              and os.path.dirname(path) == os.path.join(state_dir, "_retired", "灰の街", "20260101-000000"),
+              "1つのファイルの中の分は、同じ秒の退避のフォルダへ書き残す")
+        with open(path, encoding="utf-8") as handle:
+            check(json.load(handle) == {key: {"3": {"npc_id": "7"}}}, "書き残した中身が読める")
+        second = st.retire_entries(state_dir, "灰の街", "quest_clients.json", {}, now="20260101-000000")
+        check(second is not None and second != path, "同じ名前がもう在れば別の名で残す")
+
+        check(st.key_in_world("灰の街", "灰の街") and st.key_in_world(key, "灰の街")
+              and not st.key_in_world("灰の街ほか" + sep + "ミツバ", "灰の街")
+              and not st.key_in_world(None, "灰の街"),
+              "key_in_world は世界名だけの鍵とその世界の周回の鍵だけを拾う")
+        check("modnpc" in st.declare_save_dirs(["memory", "/musics/place/", 3]) and
+              "musics/place" in st.save_dirs() and "memory" in st.save_dirs(),
+              "declare_save_dirs はローダの分を常に足し、区切りを均す")
+    finally:
+        shutil.rmtree(sandbox, ignore_errors=True)
+
+
+def test_new_game_key():
+    """新しい主人公を始めている最中（`start_game` の中）の周回の鍵。"""
+    print("=== new_game_player: start_game の間は作成画面の名前で周回の鍵を作る ===")
+    sep = st.PLAYTHROUGH_SEP
+    skeleton = {"world_data": {"world_name": "灰の街"}}          # 骨格から組んだセーブ（主人公の名前が無い）
+    old = _App({"world_data": {"world_name": "砂の港"}})        # ゲームを閉じずに作り直すと前の周回のまま
+    old.save_data_dict = {"world_data": {"world_name": "砂の港"}, "player_data": {"name": "前の主人公"}}
+    try:
+        check(st.playthrough_key_of_dict(skeleton) == "灰の街", "（前提）ふだんは名前が無ければ世界名だけ")
+        check(not st.note_new_player("ミツバ"), "始めていないときは名前を控えない")
+        st.begin_new_game("灰の街")
+        check(st.playthrough_key_of_dict(skeleton) == "灰の街",
+              "名前を控える前は世界名だけ（作成画面の名前がまだ無い）")
+        check(st.note_new_player(" ミツバ "), "始めている最中は名前を控える")
+        check(st.playthrough_key_of_dict(skeleton) == "灰の街" + sep + "ミツバ",
+              "セーブに名前が無ければ作成画面の名前で鍵を作る")
+        check(st.playthrough_key_of_dict({"world_data": {"world_name": "別の街"}}) == "別の街",
+              "別の世界のセーブには作成画面の名前を使わない")
+        check(st.playthrough_key(old) == "灰の街" + sep + "ミツバ",
+              "app の辞書と player が前の周回を指していても、始めている世界と名前で返す")
+        sandbox = tempfile.mkdtemp(prefix="instantale_newgame_")
+        try:
+            ctx = ml.ModContext(os.path.join(sandbox, "out"), os.path.join(_ROOT, "runtime"),
+                                os.path.join(sandbox, "state"))
+            store = st.WorldStore(ctx, "newgame_test")
+            store.save("砂の港", {"x": 1})
+            check(not store.adopt("灰の街" + sep + "ミツバ", "砂の港") and store.load("砂の港") == {"x": 1},
+                  "別の世界の世界名だけの控えは移さない（鍵は新しい世界、world_key はまだ前の世界）")
+        finally:
+            shutil.rmtree(sandbox, ignore_errors=True)
+    finally:
+        st.end_new_game()
+    check(st.playthrough_key_of_dict(skeleton) == "灰の街" and st.new_game_player() is None,
+          "始め終えたら作成画面の名前を使わない")
+    check(st.playthrough_key(old) == "砂の港" + sep + "前の主人公", "始め終えたら app から引く")
+
+
 def test_world_key_of_dict():
     """**セーブの辞書から**引く入口（`104_` のように app を持たないフック用）。"""
     from instantale_modloader.state import world_key_of_dict
@@ -525,6 +652,8 @@ def main():
     test_read_json_with_bom()
     test_store_survives_reload()
     test_adopt_world_file()
+    test_retire_world()
+    test_new_game_key()
     print()
     if _FAILS:
         print("{} 件失敗: {}".format(len(_FAILS), _FAILS))

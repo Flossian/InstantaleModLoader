@@ -10,9 +10,10 @@
     "en": "Keeps every message that scrolled past and shows it in a scrollable window opened by a book icon next to the text-expand button",
     "ja": "画面に流れた本文を残し、本のアイコンから読み返せる窓を出す。ログは state\\conversation_log\\ に世界ごとに残る"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "state": ["conversation_log"],
+  "state_lifetime": {"conversation_log": "save"},
   "after": ["113_ui_text_expand", "118_batch_message_render"],
   "shares": ["_instantale_expand_button"],
   "settings": {

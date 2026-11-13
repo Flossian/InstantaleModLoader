@@ -112,7 +112,8 @@ import os
 import random
 import time
 
-from instantale_modloader import choices, durations, frames, ui
+from instantale_modloader import choices, durations, frames, loads, ui
+from instantale_modloader import state as state_api
 
 from . import world
 from .journey import Journey
@@ -962,6 +963,25 @@ def apply(ctx):
                                        or (quest_id is None and record.get("stage") == "armed"))
 
     durations.declare_quest_travel(owner, travels_after_quest)
+
+    def new_game_before(call):
+        """新しい主人公を始める前に、その世界の前の周回の道を外す（TECH.md §5.4）。
+
+        控えのファイル（`road_travel.json`）は世界を問わず1つなので、ローダの退避が届かない。
+        同じ名前で作り直すと周回の鍵が同じになり、前の主人公の依頼の id が新しい依頼を道として扱う。
+        外した記録は消さずに `_retired` へ書き残す（`state.retire_entries`）。
+        """
+        place = getattr(call, "world", None)
+        journey.sync()
+        record = journey.record
+        if not place or record is None or not state_api.key_in_world(record.get("world"), place):
+            return
+        if state_api.retire_entries(ctx.state_dir, place, STATE_BASENAME, {"pending": record},
+                                    write=write) is None:
+            return
+        journey.drop("a new protagonist started in {!r}".format(place))
+
+    loads.on(owner + ":new_game", ctx, (loads.NEW_GAME,), before=new_game_before, write=write)
 
     @ctx.wrap("__main__:AreaMoveManager.__init__", required=False)
     def area_move(orig, self, *args, **kwargs):

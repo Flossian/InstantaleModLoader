@@ -56,6 +56,8 @@ TARGETS = (
     # ローダの窓口 `choices`（組み直しの後の合図を預けた）が、押下と保存も包む。
     "__main__:InstantaleApp.on_button_press",
     "__main__:InstantaleApp.save_game",
+    # 新しい主人公を始めたら控えを読み直す（ローダの窓口 `loads.NEW_GAME`）。
+    "__main__:InstantaleApp.start_game",
 )
 #: TARGETS のうち、この MOD ではなくローダの窓口が包む対象
 WINDOW_TARGETS = (

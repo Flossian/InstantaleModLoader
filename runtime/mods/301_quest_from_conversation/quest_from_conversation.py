@@ -114,10 +114,11 @@ import sys
 import threading
 import time
 
-from instantale_modloader import (arrivals, board, choices, confinement, frames, modnpc, quest_claims,
+from instantale_modloader import (arrivals, board, choices, confinement, frames, loads, modnpc, quest_claims,
                                   quest_clients, ui)
-from instantale_modloader.state import (PLAYTHROUGH_SEP, UNKNOWN_WORLD, WorldStore, other_playthroughs,
-                                        playthrough_key, world_filename, world_key)
+from instantale_modloader.state import (PLAYTHROUGH_SEP, UNKNOWN_WORLD, WorldStore, key_in_world,
+                                        other_playthroughs, playthrough_key, retire_entries,
+                                        world_filename, world_key)
 
 LOG_BASENAME = "quest_offer.log"
 
@@ -794,6 +795,33 @@ def apply(ctx):
         key = playthrough_key(app)
         adopt_clients(key, world_key(app))
         return key
+
+    def new_game_before(call):
+        """新しい主人公を始める前に、その世界の前の周回の依頼の出所を外す（TECH.md §5.4）。
+
+        このファイルは全周回ぶんが1つなので、ローダの退避（ファイルごと）が届かない。
+        外した分は消さずに `_retired` へ書き残す（`state.retire_entries`）。
+        同じ名前で作り直すと周回の鍵が同じになり、前の主人公の依頼の id が新しい依頼に当たる。
+        """
+        world = getattr(call, "world", None)
+        if not world:
+            return
+        with clients_lock:
+            data = load_clients()
+            dropped = {k: v for k, v in data.items() if key_in_world(k, world)}
+            if not dropped:
+                return
+            kept = {k: v for k, v in data.items() if k not in dropped}
+            if retire_entries(ctx.state_dir, world, CLIENTS_BASENAME, dropped, write=write) is None:
+                return
+            if not ctx.write_json(clients_path, kept):
+                write("WARN could not drop the clients of the previous playthrough in {!r}".format(world))
+                return
+            clients["data"] = kept
+            clients["checked"] = {k for k in clients["checked"] if not key_in_world(k, world)}
+            write("new game in {!r}: retired the clients of {}".format(world, ", ".join(sorted(dropped))))
+
+    loads.on(owner + ":new_game", ctx, (loads.NEW_GAME,), before=new_game_before, write=write)
 
     def remember_client(app, quest_id, npc_id, npc_name):
         """この依頼はこの NPC 発、と控える。セーブには触らない。"""

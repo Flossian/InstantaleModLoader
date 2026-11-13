@@ -1178,7 +1178,17 @@ def install(ctx, write=None):
         with _LOCK:
             _load_pins(key)
 
+    def new_game_before(call):
+        """新しい主人公を始める前に、前の周回の固定を書かずに捨てる。
+
+        控えのファイルはローダが退避する（`state.retire_world`）。同じ名前で作り直すと周回の鍵が同じになり、
+        `_load_pins` はメモリの固定をそのまま使い、次の保存で前の周回の値を書き戻す作りになっていた。
+        """
+        with _LOCK:
+            _item_registry()["pins"] = {"key": None, "bucket": None, "items": {}, "dirty": False}
+
     loads.on(_HAGGLE_OWNER, ctx, (loads.WORLD,), before=world_before, write=write)
+    loads.on(_HAGGLE_OWNER + ":new_game", ctx, (loads.NEW_GAME,), before=new_game_before, write=write)
     generation = getattr(ctx, "generation", None)
     done = item_gate()
     if done is not None and done.get("generation") == generation:

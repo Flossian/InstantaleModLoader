@@ -13,6 +13,7 @@
   "version": "9",
   "author": "yoshinari/tomotomo-y, R01/Flossian",
   "state": ["npc_profiles"],
+  "state_lifetime": {"npc_profiles": "save"},
   "settings": {
     "CONVERSATION_TURNS": {
       "type": "int",

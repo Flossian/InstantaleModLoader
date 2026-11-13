@@ -990,6 +990,8 @@ def build_window(model):
             elif status == model.C.SKIPPED:
                 tag = "warn"
                 text = "見送り: {}".format(row.get("reason") or "")
+            elif status == model.C.ENDED:
+                text = "終了: {}".format(row.get("reason") or model.C.ENDED_REASON)
             elif model.collides(row.get("name") or "", row.get("target_world") or "", exclude=row):
                 tag = "warn"
                 text = "同名の人物が居る"
@@ -1107,11 +1109,13 @@ def build_window(model):
         row = selected_row()
         if row is None:
             return
-        placed = row.get("status") != model.C.PENDING
+        placed = row.get("status") not in (model.C.PENDING, model.C.ENDED)
         model.drop([row])
         refresh_plan()
         on_plan_select()
-        if placed:
+        if row.get("status") == model.C.ENDED:
+            say("「{}」の記録を消しました".format(row.get("name") or ""))
+        elif placed:
             say("「{}」の記録を消しました（世界に居る NPC はそのままです。"
                 "消すならセーブエディタで）".format(row.get("name") or ""))
         else:

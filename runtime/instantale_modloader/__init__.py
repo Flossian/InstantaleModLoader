@@ -1545,7 +1545,45 @@ def _manifest(mods_dir: str, name: str) -> dict:
         # 置き場所はコードの定数で決まり、フォルダ名とも一致しない（"adventurer_recruit"）ので、
         # GUI が推し量らずに済むよう MOD に言わせる。
         "state": _state_decl(name, data.get("state")),
+        # 記録の寿命（{"npc_profiles": "save"}）。"save" はセーブと同じ寿命で、新しい主人公を始めたときに
+        # その世界の世界名だけの控えも退避する（`state.retire_world`。TECH.md §3.11）。書かなければ "world"。
+        "state_lifetime": _state_lifetime_decl(name, data.get("state_lifetime")),
     }
+
+
+#: `"state_lifetime"` の値の語彙。
+STATE_LIFETIMES = ("save", "world")
+
+
+def _state_lifetime_decl(name: str, raw) -> dict:
+    """`"state_lifetime"` の宣言を均す。`{相対パス: "save" | "world"}`。読めない項目は捨てる。"""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        log("{}: \"state_lifetime\" がオブジェクトではない。無視する".format(name), level="WARN")
+        return {}
+    found = {}
+    for rel, value in raw.items():
+        paths = _state_decl(name, [rel]) if isinstance(rel, str) else []
+        if not paths:
+            continue
+        if value not in STATE_LIFETIMES:
+            log("{}: \"state_lifetime\" の {!r} の値 {!r} が語彙（{}）に無い。無視する".format(
+                name, rel, value, " / ".join(STATE_LIFETIMES)), level="WARN")
+            continue
+        found[paths[0]] = value
+    return found
+
+
+def _declare_save_dirs(manifests: dict) -> list:
+    """全 MOD の `"state_lifetime"` で "save" のフォルダを `state` の台帳へ据える。切った MOD の分も入れる。
+
+    切った MOD の控えも、前の周回のセーブを失った点は同じなので、新しい主人公を始めたときに退避する。
+    """
+    from . import state as _state_mod
+    dirs = [rel for manifest in manifests.values()
+            for rel, value in ((manifest or {}).get("state_lifetime") or {}).items() if value == "save"]
+    return _state_mod.declare_save_dirs(dirs)
 
 
 def _state_decl(name: str, raw) -> list[str]:
@@ -2202,6 +2240,18 @@ def _boot(out_dir: str) -> dict:
             _keep_save_gates(ctx)
         except BaseException:
             log_exc("cannot keep the save gates")
+        # 新しい主人公を始めたときに前の周回の控えを退避する関所（loads.NEW_GAME）。登録する MOD が無くても立てる。
+        try:
+            _declare_save_dirs(manifests)
+            from . import loads as _loads
+            _registry.begin_mod("(loader)")
+            try:
+                _loads.install(ctx, _loads.NEW_GAME, log)
+                _loads.install_new_player(ctx, log)
+            finally:
+                _registry.end_mod()
+        except BaseException:
+            log_exc("cannot install the new game gate")
         for fname in names:
             manifest = manifests[fname]
 

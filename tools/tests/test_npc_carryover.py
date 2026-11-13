@@ -961,6 +961,31 @@ try:
     carryover.save_pending(state_dir, kept_rows)
     model.pending = kept_rows
 
+    print("-- 新しい主人公を始めたとき")
+    rows = [{"name": "置いた人", "target_world": "アルカディア", "status": carryover.PLACED, "saved": "x"},
+            {"name": "未保存の人", "target_world": "アルカディア", "status": carryover.PLACED},
+            {"name": "待機の人", "target_world": "アルカディア", "status": carryover.PENDING},
+            {"name": "別の世界の人", "target_world": "世界H", "status": carryover.PLACED}]
+    ended = carryover.end_reservations(rows, "アルカディア", "T")
+    check("その世界で置いた予約だけを終了にする（保存の有無を問わない）",
+          ended == ["置いた人", "未保存の人"]
+          and [row["status"] for row in rows]
+          == [carryover.ENDED, carryover.ENDED, carryover.PENDING, carryover.PLACED], rows)
+    check("終えた理由と時刻を残す",
+          rows[1].get("reason") == carryover.ENDED_REASON and rows[1].get("ended_at") == "T", rows[1])
+    entry = dict(loads.GATES[loads.NEW_GAME].entries()).get("323_npc_carryover:new_game")
+    check("新規開始の前の処理を、後の処理とは別の名で登録する",
+          entry is not None and entry.get("before") is not None
+          and "323_npc_carryover" in loads.owners(loads.NEW_GAME), loads.owners(loads.NEW_GAME))
+    carryover.save_pending(state_dir, [
+        {"name": "未保存の人", "target_world": "アルカディア", "status": carryover.PLACED},
+        {"name": "待機の人", "target_world": "アルカディア", "status": carryover.PENDING}])
+    entry["before"](gates.Call(loads.NEW_GAME, None, ("アルカディア",), {}, world="アルカディア"))
+    after = carryover.load_pending(state_dir)
+    check("新規開始の前に、置いた予約を終了にして書き戻す（待機はそのまま）",
+          [row["status"] for row in after] == [carryover.ENDED, carryover.PENDING], after)
+    carryover.save_pending(state_dir, kept_rows)
+
     check("記録に例外が残っていない", not ctx.errors, ctx.errors)
 finally:
     os.environ.pop("IML_INSTANTALE_DATA", None)
