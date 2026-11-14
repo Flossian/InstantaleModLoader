@@ -78,8 +78,8 @@
         "en": "Penalty for a different color or material"
       },
       "note": {
-        "ja": "外見文と絵の説明で色（材質）の語が食い違う絵の類似度から引く。色と材質の両方が違えば2回引く。0 で引かない",
-        "en": "Subtracted from the similarity of images whose color (or material) words contradict the appearance text; twice when both differ. 0 = off"
+        "ja": "外見文と絵の説明で色（材質）の語が食い違う絵の類似度から引く。色と材質の両方が違えば2回引く。0 で引かない。「素の絵を描き直しで見せる」を入れているときだけ効く",
+        "en": "Subtracted from the similarity of images whose color (or material) words contradict the appearance text; twice when both differ. 0 = off. Applies only while \"Show stock images as redrawn versions\" is on"
       },
       "group": {
         "ja": "選び方",

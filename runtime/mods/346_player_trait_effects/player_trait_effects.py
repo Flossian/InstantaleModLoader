@@ -11,6 +11,8 @@
     値段     窓口 `prices` に段を置く（店の買値・売値。セーブには焼かない）
     LLM      頼みに主人公の特質が載っているとき、その文の後ろに効果の一覧を足す（`wrap_outgoing`）
     表示     控えに人物欄の行（`display`）を書き、`121_ui_character_sheet` が特性の箱のマウスオーバーの窓に出す
+    作成画面 キャラ作成画面の特質も置き換え、特質の箱の下と特質の窓に効果を出す（`charamake.py`）。
+             物語を始めたときの照合で、同じ印の特質はその効果を引き継ぐ
 
 変換は読み込みの後と人物欄の開閉の後に、背景のスレッドで行う（LLM を待つのでゲームのスレッドでは回さない）。
 severity の扱い（目安として渡す・寄せる・渡さない）は設定 `SEVERITY_MODE`。どれでも、効果の重さと
@@ -25,13 +27,14 @@ from instantale_modloader import abilities, battle_effects, frames, jobs, llm, l
 from instantale_modloader.llm import wrap_outgoing
 from instantale_modloader.state import WorldStore
 
-from . import rules
+from . import charamake, rules
 
 # ---------------------------------------------------------------- 設定（mod.json と同じ既定値）
 USE_ABILITIES = True
 USE_BATTLE = True
 USE_PRICES = True
 NOTES_TO_AI = True
+SHOW_ON_CREATION = True
 SEVERITY_MODE = "guide"
 STAT_CAP = 10
 PRICE_CAP = 30
@@ -156,6 +159,11 @@ def apply(ctx):
         wanted = {rules.fingerprint(f): f for f in fields}
         with lock:
             bucket = worlds.load(key)
+            # 作成画面で置き換えた特質は、同じ印ならそのまま引き継ぐ（物語を始めた後に頼み直さない）
+            adopted = creation.adopt(wanted, bucket["traits"])
+            for record in adopted:
+                write("引き継ぎ: {}（作成画面で置き換えた効果） -> [{}]".format(
+                    record.get("name"), rules.summary(record, "ja") or "効果なし"))
             stale = [fp for fp in bucket["traits"] if fp not in wanted]
             for fp in stale:
                 record = bucket["traits"].pop(fp)
@@ -163,7 +171,7 @@ def apply(ctx):
             name = str(frames.attr(player, "name", "") or "")
             before = list(bucket["display"])
             refresh_display(bucket, fields)
-            if stale or bucket.get("player") != name or bucket["display"] != before:
+            if adopted or stale or bucket.get("player") != name or bucket["display"] != before:
                 bucket["player"] = name
                 if fields or stale or os.path.exists(worlds.path(key)):
                     worlds.save(key, bucket)
@@ -182,10 +190,11 @@ def apply(ctx):
             write("変換を予約: {}（{} 件、契機 {}）".format(
                 key, len(missing), why))
 
-    def convert(job):
-        """特質を効果に置き換えて控える（背景のスレッド）。"""
-        traits, mode = job["traits"], job["mode"]
-        messages = rules.build_messages(job["player"], job["profile"], traits, mode)
+    def ask_effects(job):
+        """LLM に頼んで返答を検算する（背景のスレッド）。読めなければ None。"""
+        traits = job["traits"]
+        messages = rules.build_messages(job["player"], job["profile"], traits, job["mode"],
+                                        previous=job.get("previous"))
         raw = llm.ask(ctx, rules.MANAGER, messages, timeout=CONVERT_TIMEOUT,
                       label="trait effects", write=write)
         data = None
@@ -195,37 +204,55 @@ def apply(ctx):
             data = llm.as_dict(raw)
         parsed = rules.normalize(data, traits)
         if parsed is None:
-            write("変換: 読めなかったので控えない（次の読み込みで頼み直す）: {!r}".format(
+            write("変換: 読めなかったので控えない（{}）: {!r}".format(
+                "作成画面の効果を再生成で頼み直せる" if job.get("creation") else "次の読み込みで頼み直す",
                 (raw if isinstance(raw, str) else repr(raw))[:200]))
-            return
+        return parsed
+
+    def make_record(fields, answer, mode, day, stamp):
+        """返答の1件を控えの形にする。ログにも1行書く。"""
+        name, _description, severity = fields
+        effects = answer["effects"]
+        raw_weight = rules.weight(effects)
+        fitted = False
+        if mode == "fit":
+            effects, fitted = rules.fit_to_severity(effects, severity)
+        record = {"name": name, "severity": severity, "effects": effects,
+                  "note": answer["note"], "weight": rules.weight(effects),
+                  "mode": mode, "rules": rules.RULES_VERSION, "day": day,
+                  "updated": stamp}
+        if fitted:
+            record["weight_before_fit"] = raw_weight
+        write("変換: {} severity={}（目安の重さ {}） 重さ={}{} -> [{}]{}".format(
+            name, severity, rules.target_weight(severity) if severity is not None else "-", raw_weight,
+            " → 寄せて {}".format(record["weight"]) if fitted else "",
+            rules.summary(record, "ja") or "効果なし",
+            " / {}".format(answer["note"]) if answer["note"] else ""))
+        return record
+
+    def convert(job):
+        """特質を効果に置き換えて控える（背景のスレッド）。"""
+        traits, mode = job["traits"], job["mode"]
+        parsed = ask_effects(job)
         stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if job.get("creation"):
+            fields = traits[0]
+            answer = parsed.get(fields[0]) if parsed is not None else None
+            record = make_record(fields, answer, mode, None, stamp) if answer is not None else None
+            creation.finish(rules.fingerprint(fields), record)
+            return
+        if parsed is None:
+            return
         changed = False
         with lock:
             bucket = worlds.load(job["world"])
             for fields in traits:
-                name, _description, severity = fields
-                answer = parsed.get(name)
+                answer = parsed.get(fields[0])
                 if answer is None:
-                    write("変換: {} が返答に無かった（次の読み込みで頼み直す）".format(name))
+                    write("変換: {} が返答に無かった（次の読み込みで頼み直す）".format(fields[0]))
                     continue
-                effects = answer["effects"]
-                raw_weight = rules.weight(effects)
-                fitted = False
-                if mode == "fit":
-                    effects, fitted = rules.fit_to_severity(effects, severity)
-                record = {"name": name, "severity": severity, "effects": effects,
-                          "note": answer["note"], "weight": rules.weight(effects),
-                          "mode": mode, "rules": rules.RULES_VERSION, "day": job.get("day"),
-                          "updated": stamp}
-                if fitted:
-                    record["weight_before_fit"] = raw_weight
-                bucket["traits"][rules.fingerprint(fields)] = record
+                bucket["traits"][rules.fingerprint(fields)] = make_record(fields, answer, mode, job.get("day"), stamp)
                 changed = True
-                write("変換: {} severity={}（目安の重さ {}） 重さ={}{} -> [{}]{}".format(
-                    name, severity, rules.target_weight(severity) if severity is not None else "-", raw_weight,
-                    " → 寄せて {}".format(record["weight"]) if fitted else "",
-                    rules.summary(record, "ja") or "効果なし",
-                    " / {}".format(answer["note"]) if answer["note"] else ""))
             if changed:
                 refresh_display(bucket, job["all"])
                 worlds.save(job["world"], bucket)
@@ -233,7 +260,7 @@ def apply(ctx):
             refresh_prices("converted")
 
     def job_key(job):
-        return job["world"]
+        return job.get("creation") or job["world"]
 
     def note_dropped(job):
         write("変換: 古い頼みを捨てた（{}）".format(job_key(job)))
@@ -243,6 +270,15 @@ def apply(ctx):
         or jobs.Worker(ctx, convert, name="trait_effects", label="trait effects",
                        key=job_key, on_drop=note_dropped),
         ctx, convert, write, on_drop=note_dropped)
+
+    # ------------------------------------------------------------ キャラ作成画面
+    def creation_job(name, profile, fields, previous=None):
+        return {"creation": "creation:" + rules.fingerprint(fields), "world": "", "player": name,
+                "profile": profile, "traits": [fields], "all": [fields], "mode": severity_mode(),
+                "why": "作成画面", "day": None,
+                "previous": {fields[0]: previous} if isinstance(previous, dict) else None}
+
+    creation = charamake.install(ctx, store, write, worker, creation_job, language, enabled=SHOW_ON_CREATION)
 
     # ------------------------------------------------------------ 能力値
     def answer(app, holder):

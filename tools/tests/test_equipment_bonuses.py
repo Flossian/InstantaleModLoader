@@ -309,6 +309,34 @@ check("毒刃と怯みが敵の status に付く", set(foe.status) == {"毒刃",
 check("画面に会心・特効が出て、吸収の行は 411 から出さない",
       said and "会心" in said[-1] and "特効: 無傷" in said[-1] and "吸収" not in said[-1], said)
 
+
+
+def guard_turn(self, key, side, action):
+    """逃走の手の代わり: 審判は敵へのダメージの欄を付けるが、敵の体力は減らない。"""
+    calc(lambda s, a: seen.setdefault("guard_power", a["instant_damage"][0]["power"]), self, action)
+
+
+del said[:]
+kept = (foe.current_hp, dict(foe.status))      # 後の検査が1手目の毒刃と怯みを読むので、終わったら戻す
+handle(guard_turn, manager, "主人公", "味方陣営",
+       {"instant_damage": [{"target": "ゴブリン", "power": "weak", "category": "physical"}]})
+check("会心は引くが、敵の体力が減らない手では行を出さない",
+      seen["guard_power"] == "normal" and not any("会心" in s for s in said), (seen, said))
+del said[:]
+
+
+def outer_turn(self, key, side, action):
+    """一撃の戻りが 0 でも、敵の体力が減った手（実機の防御の手。VERIFICATION.md §3.130）。"""
+    calc(lambda s, a: None, self, action)
+    instant(lambda attack, d: 0, 10, npc_defense(lambda s: 100, foe))
+    foe.current_hp -= 9
+
+
+handle(outer_turn, manager, "主人公", "味方陣営",
+       {"instant_damage": [{"target": "ゴブリン", "power": "weak", "category": "physical"}]})
+check("一撃の戻りが 0 でも敵の体力が減れば会心の行を出す", said and "会心" in said[0], said)
+foe.current_hp, foe.status = kept[0], kept[1]
+
 hits_blade = Item("連撃の剣", "weapon", "mythic", {"吸収": "10%"})
 worn[id(player)] = [("weapon", hits_blade)]
 

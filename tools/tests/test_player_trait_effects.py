@@ -10,6 +10,7 @@
   控え       … 人物欄の行（121 との取り決め）。特質が変われば頼み直し、消えた特質は片付ける
   LLM        … 特質が載った頼みにだけ効果の一覧を足す。二重に足さない。変換の頼みには足さない
   読めない   … 返事が読めなければ何も控えない
+  作成画面   … 特質ができたら頼む。表示の文。再生成は前の効果を添える。物語を始めた後は引き継いで頼み直さない
 """
 import importlib.util
 import json
@@ -394,11 +395,39 @@ check("表示: 名前と値、戦闘の効果は戦闘中（ボス戦の特効�
 prompt = rules.build_messages("x", "", [("a", "b", 3)])[1]["content"]
 check("頼み文に戦闘の効果の一覧と重さが載る", "3. battle" in prompt and "reduce: 軽減" in prompt and "endure 25" in prompt)
 
+print("戦闘の代償")
+check("代償は4種類", set(rules.BATTLE_COSTS) == {"fragile", "falter", "unmend", "backlash"}, rules.BATTLE_COSTS)
+check("検算: 代償も正の percent で持ち、上限で止める",
+      rules.clean_effect({"kind": "battle", "effect": "fragile", "percent": 40})
+      == {"kind": "battle", "effect": "fragile", "percent": 15}
+      and rules.clean_effect({"kind": "battle", "effect": "falter", "percent": -5}) is None)
+check("重さ: 代償は負に数える（脆さ 10% = -2、治りにくさ 30% = -2、治りやすさ 20% = +2）",
+      rules.weight([{"kind": "battle", "effect": "fragile", "percent": 10}]) == -2.0
+      and rules.weight([{"kind": "battle", "effect": "unmend", "percent": 30}]) == -2.0
+      and rules.weight([{"kind": "battle", "effect": "mend", "percent": 20}]) == 2.0)
+check("どの代償も上限で重さ -3",
+      all(rules.effect_weight({"kind": "battle", "effect": kind, "percent": rules.BATTLE_EFFECTS[kind][0]}) == -3.0
+          for kind in rules.BATTLE_COSTS))
+fitted, done = rules.fit_to_severity([{"kind": "battle", "effect": "backlash", "percent": 15}], -2)
+check("寄せる: 負の severity に代償を縮める（-3 → 目安 -1）",
+      done and fitted == [{"kind": "battle", "effect": "backlash", "percent": 5}], fitted)
+row = rules.display_row("痛みを噛み殺す", {"effects": [{"kind": "battle", "effect": "backlash", "percent": 10},
+                                                 {"kind": "battle", "effect": "falter", "percent": 5}]})
+check("表示: 代償の名前と値",
+      row["effects"] == [{"text": "反動 戦闘の後 最大体力の 10% を失う", "condition": "battle"},
+                         {"text": "隙 攻撃が空を切る 5%", "condition": "battle"}], row)
+check("頼み文に代償の一覧と負の重さが載る",
+      "代償（percent は正の数で書く" in prompt and "fragile: 脆さ" in prompt and "backlash: 反動" in prompt
+      and "重さは負に数える" in prompt and "daunt を付けない" in prompt)
+check("頼み文の利点の一覧に代償が混ざらない",
+      prompt.index("fragile: 脆さ") > prompt.index("代償（percent"))
+
 player.traits.append({"name": "鉄の皮膚", "description": "刃も通りにくい硬い皮膚。ボスの大技にも怯まない。",
                       "severity": 4})
 replies.append(json.dumps({"traits": [{"name": "鉄の皮膚", "effects": [
     {"kind": "battle", "effect": "reduce", "percent": 20},
-    {"kind": "battle", "effect": "slayer", "percent": 20, "target": "boss"}], "note": ""}]}, ensure_ascii=False))
+    {"kind": "battle", "effect": "slayer", "percent": 20, "target": "boss"},
+    {"kind": "battle", "effect": "unmend", "percent": 20}], "note": ""}]}, ensure_ascii=False))
 # 前の段の頼みが終わるまで待つ（処理中の鍵には積まない。jobs.Worker.enqueue）
 worker = sys.modules["mod346.player_trait_effects"].process_store(ctx)["worker"]
 wait_for(lambda: not worker._pending)
@@ -407,7 +436,8 @@ skin = rules.fingerprint(rules.read_traits([player.traits[-1]])[0])
 check("戦闘の効果の特質を控える", wait_for(lambda: skin in stored().get("traits", {})), list(stored().get("traits", {})))
 from instantale_modloader import battle_effects  # noqa: E402
 check("戦闘の窓口に答えを置いた（411 は読み込んでいない）", battle_effects.owners() == [package], battle_effects.owners())
-check("主人公の戦闘の効果", battle_effects.effects_for(app, player) == {"reduce": 15, "slayer": {"boss": 20}},
+check("主人公の戦闘の効果（代償も窓口へ答える）",
+      battle_effects.effects_for(app, player) == {"reduce": 15, "slayer": {"boss": 20}, "unmend": 20},
       battle_effects.effects_for(app, player))
 check("主人公でなければ答えない", battle_effects.effects_for(app, Person("仲間", [])) == {})
 mod.USE_BATTLE = False
@@ -433,6 +463,66 @@ def foe_turn(self, key, side, action):
 
 handle(foe_turn, types.SimpleNamespace(app=app), "ゴブリン1", "敵側", {})
 check("411 が無くても軽減が効く（200 → 170）", seen.get("hit") == 170, seen)
+
+print("キャラ作成画面")
+charamake = mod.charamake
+creation = mod.process_store(ctx)["creation"]
+check("作成画面の入口と特質の窓を包む",
+      "scripts.create_world:StoryApp.apply_character_sheet" in ctx.hooks
+      and "scripts.hud.hud_charamake:TraitPopup.__init__" in ctx.hooks)
+wait_for(lambda: not worker._pending)
+stomach = types.SimpleNamespace(name="鉄の胃袋", description="腐りかけの物を食べても腹を壊さず、毒にも強い。", severity=3)
+story = types.SimpleNamespace(character_vm=types.SimpleNamespace(name="作成太郎", backstory="鉱山の町の出",
+                                                                  trait_1=stomach))
+stomach_fp = rules.fingerprint(charamake.trait_of(story))
+replies.append(json.dumps({"traits": [{"name": "鉄の胃袋", "effects": [
+    {"kind": "ability", "stat": "constitution", "amount": 2, "condition": "quest"},
+    {"kind": "battle", "effect": "resist", "percent": 20}], "note": ""}]}, ensure_ascii=False))
+before_asked = len(asked)
+check("特質ができたら頼む", creation.request(story) and creation.state_of(stomach_fp)[0] == "waiting")
+check("返事が来たら控える（ファイルには書かない）",
+      wait_for(lambda: creation.state_of(stomach_fp)[0] == "done") and len(asked) == before_asked + 1
+      and "作成太郎" in asked[-1] and "鉱山の町の出" in asked[-1])
+record = creation.state_of(stomach_fp)[1]
+check("箱の下の1行", charamake.box_text("done", record, "ja") == "依頼中耐久+2・耐性 状態異常を防ぐ 20%",
+      charamake.box_text("done", record, "ja"))
+check("窓の行", charamake.popup_lines("done", record, "ja")
+      == [("・依頼中耐久+2", False), ("・耐性 状態異常を防ぐ 20%", False)])
+check("待つ間・効果なし・読めなかったときの表示",
+      charamake.box_text("waiting", None, "ja") == "効果を確かめています…"
+      and charamake.box_text("done", {"effects": []}, "ja") == "数値になる効果は無い"
+      and "再生成" in charamake.box_text("failed", None, "ja") and charamake.box_text(None, None, "ja") == "")
+check("済んだ特質は頼み直さない", not creation.request(story) and len(asked) == before_asked + 1)
+replies.append(json.dumps({"traits": [{"name": "鉄の胃袋", "effects": [
+    {"kind": "battle", "effect": "resist", "percent": 30}], "note": ""}]}, ensure_ascii=False))
+check("効果を再生成は前の効果を添えて頼み直す",
+      creation.request(story, force=True) and wait_for(lambda: creation.state_of(stomach_fp)[0] == "done")
+      and "前の置き換え: 依頼中耐久+2・耐性 状態異常を防ぐ 20%" in asked[-1]
+      and creation.state_of(stomach_fp)[1]["effects"] == [{"kind": "battle", "effect": "resist", "percent": 30}],
+      asked[-1][-400:])
+odd = types.SimpleNamespace(character_vm=types.SimpleNamespace(
+    name="作成太郎", backstory="", trait_1=types.SimpleNamespace(name="読めない特質", description="x", severity=1)))
+odd_fp = rules.fingerprint(charamake.trait_of(odd))
+check("読めなければ失敗として出し、自分からは頼み直さない",
+      creation.request(odd) and wait_for(lambda: creation.state_of(odd_fp)[0] == "failed")
+      and not creation.request(odd))
+check("空の特質は頼まない", not creation.request(types.SimpleNamespace(character_vm=types.SimpleNamespace(
+    name="", backstory="", trait_1=types.SimpleNamespace(name="", description="", severity=0)))))
+creation.enabled = False
+check("設定を切ると頼まない", not creation.request(story, force=True))
+creation.enabled = True
+
+# 物語を始めた後の照合で、同じ印の特質は作成画面の効果を引き継ぐ
+wait_for(lambda: not worker._pending)
+player.traits[:] = [stomach.__dict__.copy()]
+before_asked = len(asked)
+toggle(lambda self: None, None)
+check("物語を始めたら作成画面の効果を引き継ぎ、頼み直さない",
+      wait_for(lambda: stored().get("traits", {}).get(stomach_fp, {}).get("effects")
+               == [{"kind": "battle", "effect": "resist", "percent": 30}]) and len(asked) == before_asked,
+      stored().get("traits", {}).get(stomach_fp))
+check("引き継いだ後は作成画面の控えを捨てる",
+      not creation.records and not creation.failed and creation.state_of(stomach_fp)[0] is None)
 
 check("握り潰した例外が無い", not ctx.errors, ctx.errors[:2])
 print()

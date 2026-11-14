@@ -4402,6 +4402,18 @@ system は「世界観と背景に基づき」と言うが、渡すのは名前�
 
 窓の「生成」をスクリプトから押しても（`click`・`on_press` / `on_release` の発火とも）頼みは送られなかった（2026-10-11）。押下の先は測っていない。
 
+作成画面の特質の持ち方と窓（`246_probe_charamake_traits` と読み取りのスクリプト。2026-11-14）:
+
+- 作成中のキャラは `StoryApp.character_vm`（`CharacterVM`）。値は Kivy のプロパティで、`vars()` には出ない（`properties()` で読む）。
+  欄は `name` / `gender` / `age` / `backstory` / `look_description` / `category` / `gold` / `point_use` / 能力値6つ（`attribute_*`）/ `skill_1` / `skill_2` / `trait_1`
+- **特質の欄は `trait_1` の1つだけ**。`TraitVM` のプロパティは `name` / `description` / `severity`、`to_dict()` はセーブの `player_data.traits` の1件と同じ形。
+  さいころが特質を2つ返しても（Haiku の見本で 80件中8件）画面に載るのは1つ。さいころで特質が空になることもある
+- 特質の箱は `scripts.hud.hud_charamake:TraitButton`（1つ）。押すと `TraitPopup`（`ModalView`、625×500）が開く。
+  中身は名前の `TextInput`・説明の `TextInput`（どちらも書き換えられる。`trait_popup_name` / `trait_popup_description`）・「削除」「生成」のボタン・「消費ポイント: n」の `Label`（`trait_popup_point_label`）。字体は `MisakiGothic` の 20
+- 窓の説明には表示用の改行（`insert_newlines`）が入る。`trait_1.description` には入らない
+- 窓の「生成」は、窓の名前と説明を頼みにして `create_trait` で特質を作り直し、`trait_1` を書き換える。窓は開いたまま中身が変わる（2026-11-14 の実機。名前と説明を入れてから実際の押下で通った）
+- 主人公の居る世界の札は「開始する」の一覧でも続きの読み込みになる。作成画面へは主人公の居ない世界の札から入る
+
 さいころに渡る才能点（`talent_point_left`）は、貯まっている才能点（`common_savedata.json` の `talent_point`）そのもの。
 手元では 2497 で、頼み文は「10 で貧弱・30 で一端の冒険者・60 で名の知れた実力者・150 で伝説」「概ねスキル・能力・年齢で 1/3 ずつ」と目安を書く。
 13 件の返答では、能力値の補正は +5 まで、スキルは1つで有用度 5〜26、年齢は 31〜46 に収まった（使えるのは 2172〜2497 点）。

@@ -7,8 +7,8 @@
     "ja": "主人公の特質を能力値・戦闘・店の値段に効かせる"
   },
   "description": {
-    "en": "The game's traits are only text passed to the LLM. The LLM turns each trait into fixed effects once (an ability bonus that always applies or only on quests, in battle, in boss fights or below half HP; battle effects such as critical hits, damage reduction, endure and status resistance; and shop buy and sell prices), and they work through the game's own numbers. Hovering over the traits on the character sheet (121) shows the effects, and the LLM is told the effects whenever the traits are sent to it",
-    "ja": "ゲームの特質は LLM に渡す文だけで、数値には効いていない。特質ごとに LLM へ1回頼んで決まった効果（常に効く能力値の補正と、依頼の最中・戦闘中・ボス戦・体力が半分以下で効く補正、会心・軽減・不屈・耐性などの戦闘の効果、店の買値と売値）に置き換え、ゲームの数値に効かせる。効果は人物欄（121）の特性の箱にマウスを乗せると出て、特質が LLM に渡るときは効果の一覧も添える"
+    "en": "The game's traits are only text passed to the LLM. The LLM turns each trait into fixed effects once (an ability bonus that always applies or only on quests, in battle, in boss fights or below half HP; battle effects such as critical hits, damage reduction, endure and status resistance, and battle drawbacks such as fragility and faltering; and shop buy and sell prices), and they work through the game's own numbers. Hovering over the traits on the character sheet (121) shows the effects, and the LLM is told the effects whenever the traits are sent to it",
+    "ja": "ゲームの特質は LLM に渡す文だけで、数値には効いていない。特質ごとに LLM へ1回頼んで決まった効果（常に効く能力値の補正と、依頼の最中・戦闘中・ボス戦・体力が半分以下で効く補正、会心・軽減・不屈・耐性などの戦闘の効果と脆さ・隙などの戦闘の代償、店の買値と売値）に置き換え、ゲームの数値に効かせる。効果は人物欄（121）の特性の箱にマウスを乗せると出て、特質が LLM に渡るときは効果の一覧も添える"
   },
   "version": "1",
   "author": "R01/Flossian",
@@ -56,6 +56,18 @@
       "note": {
         "ja": "主人公の特質が載った頼みに、効果の一覧と、数値にならない性質の文を足す",
         "en": "Adds the effects and the non-numeric parts to requests that carry the player's traits"
+      }
+    },
+    "SHOW_ON_CREATION": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "キャラ作成画面に効果を出す",
+        "en": "Show effects on character creation"
+      },
+      "note": {
+        "ja": "特質ができるたびに LLM を1回呼び、特質の箱の下と特質の窓に効果を出す。窓に「効果を再生成」のボタンを足す",
+        "en": "Asks the LLM once whenever a trait is made, and shows the effects under the trait box and in the trait window, which gets a Regenerate button"
       }
     },
     "SEVERITY_MODE": {

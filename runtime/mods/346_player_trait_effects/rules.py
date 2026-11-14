@@ -4,7 +4,8 @@
 入口（`player_trait_effects.py`）が設定をまとめて渡す。ここは設定もゲームも読まない。
 
     効果の一覧   ability（能力値の補正。常に／条件つき）・price（店の買値と売値）・
-                 battle（戦闘の効果。ローダの窓口 `battle_effects` の種類のうち特質に開くもの）
+                 battle（戦闘の効果。ローダの窓口 `battle_effects` の種類のうち特質に開くもの。
+                 代償の種類 `BATTLE_COSTS` も percent は正で持ち、重さを負に数える）
     頼み文       build_messages(player, traits, severity_mode)
     返答の検算   normalize(data, traits, ...)   一覧に無いもの・範囲の外を捨てる
     重さ         weight(effects)                 severity と比べる（記録と「寄せる」に使う）
@@ -90,7 +91,15 @@ BATTLE_EFFECTS = {
     "evade": (15, 5.0),
     "desperate": (30, 10.0),
     "reduce": (15, 5.0),
+    "mend": (30, 10.0),
+    # 代償（`BATTLE_COSTS`）。重さは負に数える。上限は量の上限（±3）に揃え、どれも重さ -3 で止まる
+    "fragile": (15, 5.0),
+    "falter": (15, 5.0),
+    "unmend": (45, 15.0),
+    "backlash": (15, 5.0),
 }
+#: 戦闘の効果のうち代償になる種類（窓口の `COST_KINDS`）。
+BATTLE_COSTS = tuple(kind for kind in battle_effects.COST_KINDS if kind in BATTLE_EFFECTS)
 #: 特効の相手の重さの割合（ボス戦は効く戦闘が少ない）。
 SLAYER_FACTOR = {"boss": 0.4, "higher": 0.6, "wounded": 0.6, "unhurt": 0.6}
 #: 頼み文での戦闘の効果の説明。
@@ -110,10 +119,16 @@ BATTLE_TEXT = {
     "evade": "軽業。敵の一撃をかわす確率",
     "desperate": "火事場。体力が30%以下の間、受けるダメージを減らす割合",
     "reduce": "軽減。受けるダメージを減らす割合",
+    "mend": "治りやすさ。戦闘中に受ける回復（回復の術・吸収・再生）を増やす割合",
+    "fragile": "脆さ。受けるダメージが増える割合",
+    "falter": "隙。自分の攻撃の手が止まり、空を切る確率",
+    "unmend": "治りにくさ。戦闘中に受ける回復（回復の術・吸収・再生）が減る割合",
+    "backlash": "反動。戦闘が終わったときに失う最大体力の割合",
 }
 #: 決まりの版。量の物差しを変えたら上げる（古い版で置き換えた特質は、次の照合で置き換え直す）。
 #: 3 で戦闘の効果を足した（前の版の特質は、戦闘の効果を選べる頼みで置き換え直す）。
-RULES_VERSION = 3
+#: 4 で戦闘の代償（脆さ・隙・治りにくさ・反動）と治りやすさを足した。
+RULES_VERSION = 4
 #: 1つの特質に付ける効果の数の上限。
 EFFECTS_PER_TRAIT = 3
 #: 数値にならない性質の文の長さの上限。
@@ -171,8 +186,12 @@ def fingerprint(fields):
 
 
 # ================================================================== 頼み文
-def build_messages(player_name, profile, traits, severity_mode="guide", profile_chars=400):
-    """変換の頼み文。`traits` は `[(名前, 説明, severity)]`。"""
+def build_messages(player_name, profile, traits, severity_mode="guide", profile_chars=400, previous=None):
+    """変換の頼み文。`traits` は `[(名前, 説明, severity)]`。
+
+    `previous` は `{名前: 前の控え}`。作成画面の「効果を再生成」で渡し、前と違う置き換えを頼む
+    （同じ頼み文では同じ答えが返った。実機）。
+    """
     stat_lines = "\n".join("  - {}（{}）".format(key, STAT_LABELS["ja"][key]) for key in STATS)
     condition_lines = "\n".join("  - {}: {}".format(key, CONDITION_TEXT[key]) for key in CONDITIONS)
     trait_lines = []
@@ -180,6 +199,10 @@ def build_messages(player_name, profile, traits, severity_mode="guide", profile_
         line = "- 名前: {}\n  説明: {}".format(name, description or "（説明なし）")
         if severity_mode != "off" and severity is not None:
             line += "\n  severity: {}".format(severity)
+        before = (previous or {}).get(name)
+        if isinstance(before, dict):
+            line += "\n  前の置き換え: {}（これとは違う組み合わせにする。説明に沿う範囲で、効果の種類か場面を変える）".format(
+                summary(before, "ja") or "効果なし")
         trait_lines.append(line)
     profile = (profile or "").strip()
     if len(profile) > profile_chars:
@@ -190,16 +213,21 @@ def build_messages(player_name, profile, traits, severity_mode="guide", profile_
             "- severity は特質の強さの目安（-10〜+10）。正なら利点が代償より重く、負なら代償が利点より重い。\n"
             "  効果の重さの合計（利点を正、代償を負として足したもの）が severity の半分に近くなるようにする"
             "（severity 4 なら 2、-2 なら -1）。severity が正なら合計を正に、負なら合計を負にする。\n"
+            "  利点と代償の両方を付けるときは、severity の向きの側を主にし、反対の側はそれより軽くする"
+            "（打ち消し合って合計が 0 にならないようにする）。\n"
             "  重さ: 常に効く能力値の補正は量の絶対値。条件つきは量の絶対値に、依頼の最中は {quest:g}、"
             "戦闘中は {battle:g}、体力が半分以下は {low_hp:g}、ボス戦は {boss:g} を掛ける。"
             "値段は割合の絶対値を {per:g} で割る。"
             "戦闘の効果は percent を次の数で割る: {battle_units}（特効はさらに boss なら {boss_factor:g}、"
-            "それ以外の target なら {other_factor:g} を掛ける）。\n"
-        ).format(per=PERCENT_PER_WEIGHT,
+            "それ以外の target なら {other_factor:g} を掛ける）。"
+            "戦闘の代償（{costs}）の重さは負に数える。\n"
+        ).format(per=PERCENT_PER_WEIGHT, costs="・".join(BATTLE_COSTS),
                  battle_units="、".join("{} {:g}".format(key, unit) for key, (_m, unit) in BATTLE_EFFECTS.items()),
                  boss_factor=SLAYER_FACTOR["boss"], other_factor=SLAYER_FACTOR["higher"], **CONDITION_WEIGHT)
     battle_lines = "\n".join("  - {}: {}（1〜{}）".format(key, BATTLE_TEXT[key], top)
-                              for key, (top, _unit) in BATTLE_EFFECTS.items())
+                              for key, (top, _unit) in BATTLE_EFFECTS.items() if key not in BATTLE_COSTS)
+    cost_lines = "\n".join("  - {}: {}（1〜{}）".format(key, BATTLE_TEXT[key], BATTLE_EFFECTS[key][0])
+                            for key in BATTLE_COSTS)
     user = (
         CONVERTER_MARK + "\n"
         "ゲームのキャラクターの特質（文で書かれた性質）を、ゲームが数値で処理できる効果に置き換える。\n\n"
@@ -217,15 +245,19 @@ def build_messages(player_name, profile, traits, severity_mode="guide", profile_
         "2. price（店での値段）\n"
         "  side は buy（店から買う値段）か sell（店に売る値段）。\n"
         "  percent は -{pmax}〜+{pmax} の整数。buy の負は安く買える、sell の正は高く売れる。\n"
-        "3. battle（戦闘の効果。主人公の戦闘にだけ効く。利点にだけ使う）\n"
-        "  effect は次のどれか。percent は括弧の範囲の整数:\n{battle}\n"
-        "  戦闘の場面に結びついた性質（攻撃をかわす・倒れない・傷が癒える・急所を突く・状態異常に強い など）は、"
-        "能力値より battle の効果に置く。\n"
+        "3. battle（戦闘の効果。主人公の戦闘にだけ効く）\n"
+        "  effect は次のどれか。percent は括弧の範囲の整数。\n"
+        "  利点:\n{battle}\n"
+        "  代償（percent は正の数で書く。大きいほど不利）:\n{costs}\n"
+        "  戦闘の場面に結びついた性質（攻撃をかわす・倒れない・傷が癒える・急所を突く・状態異常に強い、"
+        "傷を負いやすい・手が止まる・治療が効きにくい・無理の反動が来る など）は、能力値より battle の効果に置く。\n"
+        "  battle の効果は、その場面が説明に書かれているときだけ付ける（敵を怯ませる話の無い特質に daunt を付けない、"
+        "治療や回復の話の無い特質に unmend を付けない など）。重さを合わせるために、説明に無い代償を足さない。\n"
         "  戦闘の外の環境（瘴気・寒さ・毒の沼など）への強さは resist にせず、依頼の最中の耐久などにする。\n\n"
         "【決まり】\n"
         "- 説明に書かれていることだけを効果にする。書かれていない利点を足さない。\n"
-        "- 「ただし」「その代わり」などの代償は、不利になる場面が説明に書かれているときだけ効果にする（負の量）。"
-        "condition はその場面に合わせる。\n"
+        "- 「ただし」「その代わり」などの代償は、不利になる場面が説明に書かれているときだけ効果にする。"
+        "能力値は負の量にして condition をその場面に合わせ、戦闘の場面なら battle の代償を使う。\n"
         "- 不利になる場面の書かれていない代償（見た目・噂・本人にも分からない・体の徴が広がる など）は"
         "数値にせず、note に書く。\n"
         "- 1つの特質に付ける効果は 0〜{per} 個。数値にならない性質しか無い特質は effects を空にする。\n"
@@ -243,6 +275,7 @@ def build_messages(player_name, profile, traits, severity_mode="guide", profile_
         '{{"kind": "battle", "effect": "slayer", "percent": 20, "target": "boss"}}], "note": ""}}]}}'
     ).format(name=player_name or "（不明）", profile=profile or "（なし）",
              traits="\n".join(trait_lines), stats=stat_lines, conditions=condition_lines, battle=battle_lines,
+             costs=cost_lines,
              amax=AMOUNT_MAX, pmax=PERCENT_MAX, per=EFFECTS_PER_TRAIT, note=NOTE_CHARS,
              severity=severity_rules)
     system = "あなたはTRPGのルールの設計者。文で書かれた性質を、ゲームの決まった効果の組み合わせに置き換える。"
@@ -394,7 +427,8 @@ def effect_weight(effect):
     if effect.get("kind") == "battle" and effect.get("effect") in BATTLE_EFFECTS:
         unit = BATTLE_EFFECTS[effect["effect"]][1]
         factor = SLAYER_FACTOR.get(effect.get("target"), 1.0) if effect["effect"] == "slayer" else 1.0
-        return effect["percent"] / unit * factor
+        sign = -1 if effect["effect"] in BATTLE_COSTS else 1
+        return sign * effect["percent"] / unit * factor
     return 0.0
 
 

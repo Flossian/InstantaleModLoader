@@ -48,7 +48,7 @@ build/README.md）。
 素の絵は、同じ物・同じ向きのまま足した絵の絵柄で描き直した絵（`images/redraw/`）で見せる（USE_REDRAW）。
 品の絵を描く部品に渡すパスだけを替え、品の image_src は素の絵のパスのまま。選ぶときも、描き直しのある素の絵の説明を
 描き直しの一文の埋め込み（`data/redraw/`）に替える。候補は top1 から SIM_GAP より離れた絵を外し、
-外見文と色・材質の語が食い違う絵は TAG_PENALTY だけ下げてから決める（作り方は build/README.md、測った値は VERIFICATION.md §3.26）。
+外見文と色・材質の語が食い違う絵は TAG_PENALTY だけ下げてから決める（USE_REDRAW を入れているときだけ。作り方は build/README.md、測った値は VERIFICATION.md §3.26）。
 
 セーブには何も足さない。選ばれた image_src がアイテムに書かれるのは素の
 ゲームと同じ。履歴を消してやり直したいときは該当世界の
@@ -84,6 +84,7 @@ SIM_GAP = 0.05
 # 外見文と絵の説明文で、色の語（または材質の語）が食い違う絵の類似度から引く値。0 なら引かない。
 # 埋め込みは物の名前を重く、色の語を軽く見るので、「淡い青の小瓶」に橙の小瓶が付く。説明文の分かる絵だけを比べる
 # （足した絵・追加辞書の絵・描き直した素の絵。説明文はビルドで語の組 `data/tags.json` にしておく）
+# 引くのは USE_REDRAW を入れているときだけ（切っていると素の絵の語の組が無く、足した絵だけが下がる）
 TAG_PENALTY = 0.05
 TAGS_FILE = "tags.json"
 # 語の組。1つの語が2つの組に入ってよい（teal は緑と青）。dark・pale のような明暗の語は色に数えない
@@ -1013,7 +1014,8 @@ def apply(ctx):
         query = emb_mod.text_to_embedding(split_compound(query_text))
         query = query.detach().reshape(-1).to(dtype=pool[1].dtype)
         query = query / query.norm().clamp_min(1e-12)
-        query_tags = tags_of(query_text) if TAG_PENALTY > 0 else None
+        # 描き直しを切っていると、語の組で判定できるのが足した絵だけになり、足した絵だけが下がる（VERIFICATION.md §3.26）
+        query_tags = tags_of(query_text) if TAG_PENALTY > 0 and USE_REDRAW else None
         own = rank(pool, query, query_tags)
         # 覚えている絵は、今の辞書と設定でも候補に入っているときだけ使い続ける。辞書の説明が替わって
         # （描き直し・足した絵）候補から外れた絵は捨てて選び直す。確かめるのは外見文ごとに1回（VERIFICATION.md §3.26）

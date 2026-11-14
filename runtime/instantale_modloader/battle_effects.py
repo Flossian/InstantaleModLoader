@@ -28,19 +28,28 @@
     成長   倒すたびに `on_kill` を呼ぶ（数えるのは答えた MOD）
     毒刃   命中した敵の `status` にゲームと同じ形で書き、毎手の減算の前に体力を削る
     怯み   命中した敵の `status` に書き、その敵の一撃を弱める
+    隙     手の最初の一撃でこの確率を引き、当たればその手の敵への一撃をすべて 0 にする（代償）
 
 受ける側の効果は、敵の手で味方が受ける一撃に効く。
 
     軽業   一撃を無効にする
     軽減・重装・呪縛・火事場   受けるダメージを減らす。足さずに順に掛ける（足すと種類が違うだけで 100% に届く）
+    脆さ   軽減の後のダメージに上乗せする（代償）
     守護   仲間への一撃を、別の者がこの確率で肩代わりする（その者の効果で受け、倒れるなら肩代わりしない）
     不屈   倒れる一撃を体力 1 で耐える（戦闘に1回）
     棘     受けたダメージの割合を、その敵に返す（敵は体力 1 で止まる。手番の中で敵を消さない）
     再生   毎手の減算の前に、最大体力の割合を戻す
     耐性   敵の手の `resolve_battle_effect` で新しく付いた状態異常を外す
 
+回復と戦闘の終わりに効く効果。
+
+    治りやすさ・治りにくさ   受ける回復を増やす・減らす（差し引きで1つの割合）。
+                             ゲームの回復は `resolve_battle_effect` の前後の体力の増えから、窓口の吸収・再生は戻す量で直す
+    反動   `check_battle_end` が戦闘の終わりを返したとき、最大体力の割合を失う（体力 1 で止まる。戦闘に1回）
+
 重装の器用の低下、呪縛の与えるダメージの低下（ここで引く）、威光の買値は、品の効果の代償・付録。
 器用と買値は答えた MOD が能力値と値段の窓口に置く。
+代償の種類（`COST_KINDS`）も値は正の %。大きいほど不利になる。
 
 ダメージの経路は GAME.md §2.10.2。敵の防御は `get_npc_defense` で聞かれた直後に
 `get_instant_damage` へ渡るので、直前に聞かれた敵を受け側とする（`319_` と同じ見分け方）。
@@ -69,8 +78,10 @@ WEAPON_KINDS = ("slayer", "critical", "lifesteal", "pierce", "venom", "daunt",
 #: 受ける側の効果（`presence` は値段の効果で、戦闘では使わない）。
 ARMOR_KINDS = ("endure", "thorns", "regen", "heavy", "guardian",
                "resist", "evade", "desperate", "binding", "presence")
-#: 品に付かない種類（特質など）。`reduce` は代償の無い軽減。
-EXTRA_KINDS = ("reduce",)
+#: 品に付かない種類（特質など）。`reduce` は代償の無い軽減、`mend` は受ける回復の上乗せ。
+#: `COST_KINDS` は不利な効果（値は正の %）。
+COST_KINDS = ("fragile", "falter", "unmend", "backlash")
+EXTRA_KINDS = ("reduce", "mend") + COST_KINDS
 KINDS = WEAPON_KINDS + ARMOR_KINDS + EXTRA_KINDS
 
 #: 特効の相手。どれも戦闘の画面で見分けられるもの（敵の段と型は Character に残らない）。
@@ -86,13 +97,15 @@ LABELS = {
            "curse": "呪い", "growth": "成長", "execute": "処刑", "teamwork": "連携",
            "endure": "不屈", "thorns": "棘", "regen": "再生", "heavy": "重装", "guardian": "守護",
            "resist": "耐性", "evade": "軽業", "desperate": "火事場", "binding": "呪縛", "presence": "威光",
-           "reduce": "軽減"},
+           "reduce": "軽減", "mend": "治りやすさ",
+           "fragile": "脆さ", "falter": "隙", "unmend": "治りにくさ", "backlash": "反動"},
     "en": {"slayer": "Slayer", "critical": "Critical", "lifesteal": "Lifesteal",
            "pierce": "Pierce", "venom": "Venom", "daunt": "Daunt",
            "curse": "Cursed", "growth": "Growth", "execute": "Execute", "teamwork": "Teamwork",
            "endure": "Endure", "thorns": "Thorns", "regen": "Regen", "heavy": "Heavy", "guardian": "Guardian",
            "resist": "Resist", "evade": "Nimble", "desperate": "Last Stand", "binding": "Binding",
-           "presence": "Presence", "reduce": "Ward"},
+           "presence": "Presence", "reduce": "Ward", "mend": "Quick Mend",
+           "fragile": "Fragile", "falter": "Falter", "unmend": "Slow Mend", "backlash": "Backlash"},
 }
 
 TARGET_LABELS = {
@@ -105,9 +118,11 @@ TARGET_LABELS = {
 ON_HIT = {"ja": "命中時 ", "en": "on hit "}
 
 #: 足した後の上限（%）。確率と割合は 100 を超えても意味が無い。軽減は 90 で止める（全部を消さない）。
+#: 代償は、隙と反動を 50 で止める（毎手空振り・1戦で体力が尽きる形にしない）。治りにくさは 90（回復を全部は消さない）。
 CAPS = {"critical": 100, "lifesteal": 100, "pierce": 100, "venom": 100, "daunt": 100,
         "execute": 100, "endure": 100, "thorns": 100, "regen": 100, "heavy": 100, "guardian": 100,
-        "resist": 100, "evade": 100, "desperate": 100, "binding": 100, "presence": 100, "reduce": 90}
+        "resist": 100, "evade": 100, "desperate": 100, "binding": 100, "presence": 100, "reduce": 90,
+        "mend": 100, "fragile": 100, "falter": 50, "unmend": 90, "backlash": 50}
 
 #: 毒: 毎ターン最大体力のこの割合（%）を削る。この手数だけ続く。毒では倒れない（体力 1 で止まる）。
 VENOM_RATE = 4
@@ -209,6 +224,16 @@ def text_of(kind, amount, target, lang):
         return ("店の買値 -{}%" if ja else "-{}% shop prices").format(amount)
     if kind == "reduce":
         return ("受けるダメージ -{}%" if ja else "-{}% damage taken").format(amount)
+    if kind == "mend":
+        return ("受ける回復 +{}%" if ja else "+{}% healing received").format(amount)
+    if kind == "fragile":
+        return ("受けるダメージ +{}%" if ja else "+{}% damage taken").format(amount)
+    if kind == "falter":
+        return ("攻撃が空を切る {}%" if ja else "{}% to miss an attack").format(amount)
+    if kind == "unmend":
+        return ("受ける回復 -{}%" if ja else "-{}% healing received").format(amount)
+    if kind == "backlash":
+        return ("戦闘の後 最大体力の {}% を失う" if ja else "loses {}% of max HP after a battle").format(amount)
     return "{}%".format(amount)
 
 
@@ -304,6 +329,19 @@ def should_execute(hp, dealt, max_hp, percent):
         return False
     left = hp - dealt
     return 0 < left and left * 100 <= max_hp * percent
+
+
+def heal_rate(found):
+    """受ける回復の増減（%）。治りやすさから治りにくさを引いたもの。"""
+    found = found or {}
+    return (_num(found.get("mend")) or 0) - (_num(found.get("unmend")) or 0)
+
+
+def healed(amount, rate):
+    """回復の量 `amount` に増減 `rate`（%）を掛けた量（0 より下げない。整数に丸める）。"""
+    if _num(amount) is None or amount <= 0 or not rate:
+        return amount
+    return max(0, int(round(amount * (1.0 + rate / 100.0))))
 
 
 # ---------------------------------------------------------------------------
@@ -413,8 +451,10 @@ def _on_kill(app, actor, defender):
 # ---------------------------------------------------------------------------
 # 効かせる（ローダが1つの世代に1回 `install` する）
 # ---------------------------------------------------------------------------
+#: `own_gains` … `resolve_battle_effect` の間に窓口が戻した体力（`{id: 量}`。ゲームの回復と分ける）
+#: `backlashed` … この戦闘で反動を払ったか（次の戦闘の最初の手で戻す）
 _state = {"action": None, "last_defense": None, "marks": {}, "last_hit": None, "endured": set(),
-          "write": None}
+          "write": None, "own_gains": None, "backlashed": False}
 
 
 def _write(text):
@@ -513,16 +553,25 @@ def _lose_hp(holder, amount, kind):
     return hp - new_hp
 
 
-def _gain_hp(holder, amount, kind):
-    """`kind` の出どころで体力を戻す（最大まで。倒れている者は戻さない）。戻した量を返す。"""
+def _gain_hp(holder, amount, kind, app=None):
+    """`kind` の出どころで体力を戻す（最大まで。倒れている者は戻さない）。戻した量を返す。
+
+    `app` を渡すと、`holder` の治りやすさ・治りにくさで量を直す。
+    ゲームの回復の直し（`_resolve_battle_effect`）が窓口の分を数えないように、戻した量を控える。
+    """
     hp, top = _hp_of(holder)
     if hp is None or hp <= 0 or not amount:
         return 0
+    if app is not None:
+        amount = healed(amount, heal_rate(effects_for(app, holder)))
     new_hp = int(min(top, hp + amount)) if top else int(hp + amount)
     if new_hp <= hp:
         return 0
     ui.note_damage(_name_of(holder), new_hp - hp, _label(kind))
     holder.current_hp = new_hp
+    own = _state.get("own_gains")
+    if isinstance(own, dict):
+        own[id(holder)] = own.get(id(holder), 0) + new_hp - hp
     return new_hp - hp
 
 
@@ -569,8 +618,11 @@ def _open_action(app, character_key, character_side):
                         "notes": [], "dealt": 0, "drained": 0, "slayer": [],
                         "plan": {},       # 対象 → 素点（calculate_battle_effect の戻り）
                         "foes": [],       # この手で当てた敵
-                        "teamwork": False, "cursed": False}
+                        "critical": None,  # 会心の行の控え（{at, foes: [(敵, 手の前の体力)], note}）
+                        "teamwork": False, "cursed": False,
+                        "faltered": None}  # 隙を引いたか（手の最初の一撃で1回だけ引く）
     _state["last_defense"] = None
+    _state["backlashed"] = False       # 手が来たのは戦闘の中（前の戦闘の反動の印を戻す）
 
 
 def _close_action():
@@ -579,6 +631,16 @@ def _close_action():
     if action is None:
         return
     lang = language()
+    critical = action.get("critical")
+    if critical:
+        # 体力の読めない相手が居れば、当たったかは分からないので出す
+        landed = not critical["foes"] or any(
+            before is None or _hp_of(holder)[0] is None or _hp_of(holder)[0] < before
+            for holder, before in critical["foes"])
+        if landed:
+            action["notes"].insert(critical["at"], critical["note"])
+        else:
+            _write("critical: {} dealt no damage; the line is not shown".format(action["name"]))
     if action["slayer"]:
         labels = [TARGET_LABELS[lang][t] for t in action["slayer"]]
         action["notes"].append(("（特効: {}）" if lang == "ja" else "(Slayer: {})")
@@ -597,7 +659,7 @@ def _drain(action):
     if action["actor"] is None or owed <= 0:
         return
     action["drained"] += owed
-    gained = _gain_hp(action["actor"], owed, "lifesteal")
+    gained = _gain_hp(action["actor"], owed, "lifesteal", action["app"])
     if gained:
         _write("lifesteal: {} dealt {} -> +{}".format(action["name"], action["dealt"], gained))
 
@@ -664,8 +726,16 @@ def _calculate_battle_effect(orig, self, *args, **kwargs):
                     setattr(entry, "power", higher)
                 raised.append("{} {}->{}".format(target, power, higher))
             if raised:
-                action["notes"].append(("（{}の会心の一撃）" if language() == "ja"
-                                        else "({} lands a critical hit)").format(action["name"]))
+                # 行は手の終わりに、上げた相手の体力が減っていたときだけ出す（`_close_action`）。
+                # 審判は防御や逃走の手にも敵へのダメージの欄を付けるので、ここで出すと当たっていない手に行が出る。
+                # 減ったかは体力で見る。一撃の戻りが 0 なのに敵の体力が減った手があった（VERIFICATION.md §3.130）
+                hit = {str(entry_target) for entry_target in
+                       (_field(entry, "target") for entry in _field(battle_action, "instant_damage") or [])}
+                foes = [(holder, _hp_of(holder)[0]) for key, holder in _enemies_of(action["app"]).items()
+                        if str(key) in hit or _name_of(holder, key) in hit]
+                action["critical"] = {"at": len(action["notes"]), "foes": foes,
+                                      "note": ("（{}の会心の一撃）" if language() == "ja"
+                                               else "({} lands a critical hit)").format(action["name"])}
                 _write("critical: {} ({}%) {}".format(action["name"], chance, "; ".join(raised)))
     except Exception:
         log_exc("battle effects: critical failed")
@@ -726,8 +796,26 @@ def _get_instant_damage(orig, *args, **kwargs):
 
 
 # ------------------------------------------------------------ 味方の手
+def _faltered(action):
+    """隙。手の最初の一撃で1回だけ引き、当たればその手の敵への一撃をすべて空振りにする。"""
+    chance = action["effects"].get("falter")
+    if not chance:
+        return False
+    if action["faltered"] is None:
+        action["faltered"] = RNG.random() * 100 < chance
+        if action["faltered"]:
+            action["notes"].append(("（{}の攻撃は空を切った）" if language() == "ja"
+                                    else "({}'s attack goes wide)").format(action["name"]))
+            _write("falter: {} misses ({}%)".format(action["name"], chance))
+    return action["faltered"]
+
+
 def _ally_turn_hit(action, defender, defense, orig, args, kwargs):
     found = action["effects"]
+    if _faltered(action):
+        result = orig(*args, **kwargs)
+        _write("falter: {} -> {} dmg={} -> 0".format(action["name"], _name_of(defender), result))
+        return 0 if isinstance(result, int) else 0.0
     hp, top = _hp_of(defender)
     pierce = found.get("pierce")
     if pierce and _num(defense) is not None:
@@ -829,14 +917,18 @@ def _defend(action, ally, dealt):
 
 
 def _reduced(app, holder, dealt, quiet=False):
-    """軽減・重装・呪縛・火事場の後のダメージ。"""
+    """軽減・重装・呪縛・火事場の後に、脆さを上乗せしたダメージ。"""
     worn = effects_for(app, holder)
     hp, top = _hp_of(holder)
     cuts = [worn.get("reduce"), worn.get("heavy"), worn.get("binding"),
             worn.get("desperate") if is_desperate(hp, top) else None]
     amount = after_cuts(dealt, cuts)
+    fragile = worn.get("fragile")
+    if fragile:
+        amount = scaled(amount, fragile)
     if amount != dealt and not quiet:
-        _write("cut: {} {} -> {} {}".format(_name_of(holder), dealt, amount, [c for c in cuts if c]))
+        _write("cut: {} {} -> {} {}{}".format(_name_of(holder), dealt, amount, [c for c in cuts if c],
+                                             " fragile +{}%".format(fragile) if fragile else ""))
     return amount
 
 
@@ -880,20 +972,66 @@ def _statuses_of(holder):
     return found if isinstance(found, dict) else None
 
 
+def _adjust_heals(action, healers, own):
+    """ゲームの回復を、治りやすさ・治りにくさで直す。
+
+    増えた体力から窓口の吸収など（`own`）を引いた分をゲームの回復とみる。
+    同じ手で減ってもいれば増えは小さく見え、その分は直さない。
+    """
+    lang = language()
+    for ally, rate, before in healers:
+        after, top = _hp_of(ally)
+        if after is None or after <= 0:
+            continue
+        gained = after - before - own.get(id(ally), 0)
+        if gained <= 0:
+            continue
+        change = healed(gained, rate) - gained
+        new_hp = after + change
+        if change > 0 and top:
+            new_hp = min(top, new_hp)
+        new_hp = int(max(1, new_hp))
+        if new_hp == after:
+            continue
+        ally.current_hp = new_hp
+        if new_hp > after:
+            note = ("（{}は治りやすく、回復が {} 増えた）" if lang == "ja"
+                    else "({} heals quickly: +{})").format(_name_of(ally), new_hp - after)
+        else:
+            note = ("（{}は治りにくく、回復が {} 減った）" if lang == "ja"
+                    else "({} heals poorly: -{})").format(_name_of(ally), after - new_hp)
+        action["notes"].append(note)
+        _write("heal: {} +{} -> +{} ({:+}%)".format(_name_of(ally), gained, gained + new_hp - after, rate))
+
+
 def _resolve_battle_effect(orig, self, *args, **kwargs):
     action = _state["action"]
-    if action is None or action["side"] != ENEMY_SIDE or _dry_run():
+    if action is None or _dry_run():
         return orig(self, *args, **kwargs)
-    watched = []
+    watched = []   # 耐性（敵の手だけ）
+    healers = []   # 治りやすさ・治りにくさ（どちらの手でも。味方の回復の手で効く）
     try:
         for ally in _allies_of(action["app"]):
-            chance = effects_for(action["app"], ally).get("resist")
+            worn = effects_for(action["app"], ally)
+            chance = worn.get("resist")
             current = _statuses_of(ally)
-            if chance and current is not None:
+            if action["side"] == ENEMY_SIDE and chance and current is not None:
                 watched.append((ally, chance, set(current)))
+            rate = heal_rate(worn)
+            hp = _hp_of(ally)[0]
+            if rate and hp is not None and hp > 0:
+                healers.append((ally, rate, hp))
     except Exception:
         log_exc("battle effects: cannot read the statuses")
-    result = orig(self, *args, **kwargs)
+    _state["own_gains"] = {} if healers else None
+    try:
+        result = orig(self, *args, **kwargs)
+    finally:
+        own, _state["own_gains"] = _state["own_gains"] or {}, None
+    if healers:
+        _guarded(_adjust_heals, action, healers, own)
+    if not watched:
+        return result
     try:
         for ally, chance, before in watched:
             current = _statuses_of(ally) or {}
@@ -928,7 +1066,7 @@ def _reduce_status_turns_and_log(orig, self, *args, **kwargs):
             app = getattr(self, "app", None) or ui.find_app()
             rate = effects_for(app, character).get("regen")
             top = _num(frames.attr(character, "max_hp", None))
-            gained = _gain_hp(character, share_of_max(top, rate), "regen") if rate else 0
+            gained = _gain_hp(character, share_of_max(top, rate), "regen", app) if rate else 0
             if gained:
                 _write("regen: {} +{}".format(_name_of(character), gained))
     except Exception:
@@ -942,7 +1080,47 @@ def _start_battle(orig, self, *args, **kwargs):
     _state["action"] = None
     _state["last_defense"] = None
     _state["last_hit"] = None
+    _state["backlashed"] = False
     return orig(self, *args, **kwargs)
+
+
+# ------------------------------------------------------------ 戦闘の終わり（反動）
+def _fighters_of(app):
+    """戦闘に出ていた味方。逃げて預かり（`escaped_member_in_battle`）に入った者も数える。"""
+    found = _allies_of(app)
+    escaped = frames.attr(app, "escaped_member_in_battle", None)
+    for holder in (escaped.values() if isinstance(escaped, dict) else ()):
+        if holder is not None and not any(holder is other for other in found):
+            found.append(holder)
+    return found
+
+
+def _backlash(app):
+    """反動。戦闘の終わりに1回、最大体力の割合を失う（体力 1 で止まる）。"""
+    lines = []
+    for ally in _fighters_of(app):
+        rate = effects_for(app, ally).get("backlash")
+        if not rate:
+            continue
+        lost = _lose_hp(ally, share_of_max(_num(frames.attr(ally, "max_hp", None)), rate), "backlash")
+        if lost:
+            lines.append(("（{}は反動で体力を {} 失った）" if language() == "ja"
+                          else "({} loses {} HP to backlash)").format(_name_of(ally), lost))
+            _write("backlash: {} loses {} ({}%)".format(_name_of(ally), lost, rate))
+    if lines:
+        _say(app, "\n".join(lines))
+
+
+def _check_battle_end(orig, self, *args, **kwargs):
+    result = orig(self, *args, **kwargs)
+    # 真を返すと戦闘の繰り返しを抜ける（GAME.md §2.10 の「逃げたときと倒れたとき」）。終わり方の本文より先に出す
+    if result and not _state["backlashed"] and not _dry_run():
+        _state["backlashed"] = True
+        try:
+            _backlash(getattr(self, "app", None) or ui.find_app())
+        except Exception:
+            log_exc("battle effects: backlash failed")
+    return result
 
 
 #: 包む対象と包み。
@@ -954,6 +1132,7 @@ TARGETS = (
     ("__main__:BattlePhaseManager.resolve_battle_effect", _resolve_battle_effect),
     ("__main__:BattlePhaseManager.reduce_status_turns_and_log", _reduce_status_turns_and_log),
     ("__main__:BattleStartManager.start_battle", _start_battle),
+    ("__main__:BattlePhaseManager.check_battle_end", _check_battle_end),
 )
 
 
@@ -962,7 +1141,8 @@ def install(ctx):
 
     答える MOD が居なくても包む（どの手でも、効果が空なら何もしない）。
     """
-    _state.update({"action": None, "last_defense": None, "last_hit": None})
+    _state.update({"action": None, "last_defense": None, "last_hit": None,
+                   "own_gains": None, "backlashed": False})
     _state["marks"] = {}
     _state["endured"] = set()
     logger = getattr(ctx, "logger", None)
