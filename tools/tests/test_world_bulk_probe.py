@@ -88,7 +88,7 @@ class GameGenerationBackend(object):
     def generate(self, task, world):
         self.calls.append(task.kind)
         if task.kind == "area":
-            time.sleep(0.05)                       # LLM の待ちの代わり
+            time.sleep(0.2)                        # LLM の待ちの代わり
             world["areas"].append(task.ids)
             world["npcs"].append(task.ids + "-npc")
         elif task.kind == "portrait":
@@ -321,8 +321,11 @@ by = {}
 for row in tasks:
     by.setdefault(row["task"], []).append(row)
 area = by.get("area", [{}])[0]
-check("エリアは待ちに入る", area.get("seconds", 0) >= 0.05 and area.get("image") == 0
-      and area.get("wait", 0) >= 0.04, area)
+# Windows の `time.thread_time()` は 15.625ms 刻みで進み、眠っているだけの仕事にも1刻み分の
+# cpu が付くことがある（CI のランナーで cpu=0.02 になり、待ち 0.03 で落ちた）。
+# 刻み3つ分の余裕を取る。
+check("エリアは待ちに入る", area.get("seconds", 0) >= 0.2 and area.get("image") == 0
+      and area.get("wait", 0) >= 0.15, area)
 portrait = by.get("portrait", [{}])[0]
 check("入れ子の絵は1枚と数える", portrait.get("image_n") == 1, portrait)
 check("絵の時間は外側の1回分", portrait.get("image", 0) >= 0.04, portrait)
