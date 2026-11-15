@@ -260,6 +260,16 @@ def stored():
     return ctx.read_json(state_path, None) or {}
 
 
+# 頼みは背景のスレッドでこなし、処理中の世界には次の頼みを積まない（jobs.Worker.enqueue）。
+# 返事を受け取った後も控えを書き終えるまでは処理中なので、頼みを積む前に前の頼みが
+# 終わるのを待つ（CI のランナーで、待たずに積んだ頼みが捨てられ、後の返事がずれた）。
+worker = sys.modules["mod346.player_trait_effects"].process_store(ctx)["worker"]
+
+
+def settle():
+    return wait_for(lambda: not worker._pending)
+
+
 check("窓口に答えを置いた", package in abilities.owners(), abilities.owners())
 check("変換の前は答えない", abilities.bonus(app, player) == {})
 replies.append(json.dumps(REPLY, ensure_ascii=False))
@@ -339,6 +349,7 @@ check("切れば足さない", rewrite(prompt, "test") is None)
 mod.NOTES_TO_AI = True
 
 print("特質が変わる")
+settle()
 player.traits[0]["description"] = "地下で罠を察知できる。"
 replies.append(json.dumps({"traits": [{"name": "坑夫の勘", "effects": [
     {"kind": "ability", "stat": "intelligence", "amount": 1, "condition": "quest"}], "note": ""}]},
@@ -353,6 +364,7 @@ check("消えた特質は片付ける", wait_for(lambda: len(stored().get("trait
 check("片付けても頼まない", len(asked) == 2, len(asked))
 
 print("読めない返事")
+settle()
 player.traits.append({"name": "古傷", "description": "雨の日に膝が痛む。", "severity": -1})
 replies.append("ふさわしい効果はありません")
 toggle(lambda self: None, None)
@@ -366,9 +378,12 @@ replies.append(json.dumps({"traits": [{"name": "煤の肺", "effects": [
     {"kind": "ability", "stat": "constitution", "amount": -1, "condition": "battle"}], "note": ""}]},
     ensure_ascii=False))
 before_asked = len(asked)
+settle()
 toggle(lambda self: None, None)
+# 版を戻したのはメモリの控えだけで、ファイルの版は元から新しい。新しい返事の量で待つ
 check("古い版で置き換えた特質は頼み直す",
-      wait_for(lambda: stored().get("traits", {}).get(lung, {}).get("rules") == rules.RULES_VERSION)
+      wait_for(lambda: (stored().get("traits", {}).get(lung, {}).get("effects") or [{}])[0].get("amount") == -1)
+      and stored()["traits"][lung].get("rules") == rules.RULES_VERSION
       and len(asked) == before_asked + 1 and "煤の肺" in asked[-1] and "値切りの目" not in asked[-1],
       stored().get("traits", {}).get(lung))
 
@@ -428,9 +443,7 @@ replies.append(json.dumps({"traits": [{"name": "鉄の皮膚", "effects": [
     {"kind": "battle", "effect": "reduce", "percent": 20},
     {"kind": "battle", "effect": "slayer", "percent": 20, "target": "boss"},
     {"kind": "battle", "effect": "unmend", "percent": 20}], "note": ""}]}, ensure_ascii=False))
-# 前の段の頼みが終わるまで待つ（処理中の鍵には積まない。jobs.Worker.enqueue）
-worker = sys.modules["mod346.player_trait_effects"].process_store(ctx)["worker"]
-wait_for(lambda: not worker._pending)
+settle()
 toggle(lambda self: None, None)
 skin = rules.fingerprint(rules.read_traits([player.traits[-1]])[0])
 check("戦闘の効果の特質を控える", wait_for(lambda: skin in stored().get("traits", {})), list(stored().get("traits", {})))
@@ -470,7 +483,7 @@ creation = mod.process_store(ctx)["creation"]
 check("作成画面の入口と特質の窓を包む",
       "scripts.create_world:StoryApp.apply_character_sheet" in ctx.hooks
       and "scripts.hud.hud_charamake:TraitPopup.__init__" in ctx.hooks)
-wait_for(lambda: not worker._pending)
+settle()
 stomach = types.SimpleNamespace(name="鉄の胃袋", description="腐りかけの物を食べても腹を壊さず、毒にも強い。", severity=3)
 story = types.SimpleNamespace(character_vm=types.SimpleNamespace(name="作成太郎", backstory="鉱山の町の出",
                                                                   trait_1=stomach))
@@ -493,6 +506,7 @@ check("待つ間・効果なし・読めなかったときの表示",
       and charamake.box_text("done", {"effects": []}, "ja") == "数値になる効果は無い"
       and "再生成" in charamake.box_text("failed", None, "ja") and charamake.box_text(None, None, "ja") == "")
 check("済んだ特質は頼み直さない", not creation.request(story) and len(asked) == before_asked + 1)
+settle()                         # done になるのは仕事の途中。終わるまでは同じ特質の頼みを積まない
 replies.append(json.dumps({"traits": [{"name": "鉄の胃袋", "effects": [
     {"kind": "battle", "effect": "resist", "percent": 30}], "note": ""}]}, ensure_ascii=False))
 check("効果を再生成は前の効果を添えて頼み直す",
@@ -513,7 +527,7 @@ check("設定を切ると頼まない", not creation.request(story, force=True))
 creation.enabled = True
 
 # 物語を始めた後の照合で、同じ印の特質は作成画面の効果を引き継ぐ
-wait_for(lambda: not worker._pending)
+settle()
 player.traits[:] = [stomach.__dict__.copy()]
 before_asked = len(asked)
 toggle(lambda self: None, None)

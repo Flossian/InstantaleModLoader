@@ -192,6 +192,18 @@ def test_foreign_store(root):
 
 # -------------------------------------------------------------------- Worker
 
+def picked_up(worker, seconds=5.0):
+    """背景のスレッドが待ち行列の仕事を取り出すまで待つ。
+
+    スレッドは積んだときに起きるが、走り出す時刻は決まらない（CI のランナーでは遅れうる）。
+    取り出す前に次を積むと、上限で捨てる1件や処理中の鍵の扱いが変わる。
+    """
+    deadline = time.monotonic() + seconds
+    while worker.pending() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    return worker.pending() == 0
+
+
 def test_worker(root):
     print("jobs.Worker")
     ctx = FakeCtx(root)
@@ -206,6 +218,7 @@ def test_worker(root):
     check("積む前はスレッドが居ない", not worker.alive())
 
     worker.enqueue({"n": 1})     # これは走り出して gate で止まる
+    check("1件目が走り出す", picked_up(worker))
     worker.enqueue({"n": 2})
     worker.enqueue({"n": 3})
     worker.enqueue({"n": 4})     # 上限2を超えたので {"n": 2} が落ちる
@@ -226,7 +239,7 @@ def test_worker(root):
     keyed = jobs.Worker(ctx, run2, name="test_keyed", idle=1.0,
                         key=lambda job: job["area"])
     keyed.enqueue({"area": "a"})          # 走り出して hold で止まる
-    check("走り出した1件は待ち行列から出ている", keyed.pending() == 0)
+    check("走り出した1件は待ち行列から出ている", picked_up(keyed))
     # 処理中の鍵も積まない。積む側は `run` が書く結果を見て積むかを決めるので、
     # 受けると同じ入力で LLM を二度呼ぶ（jobs.Worker.enqueue の注記）。
     check("処理中の鍵は積まない", not keyed.enqueue({"area": "a"}))
@@ -266,6 +279,7 @@ def test_worker(root):
     check("仕事が無ければ自分で畳む", not quick.alive())
     quick.enqueue(2)
     check("次の仕事で起き直す", quick.alive() or quick.drain(5.0))
+    quick.drain(5.0)             # 2 を前の世代で済ませてから繋ぎ替える（残ると新しい世代が 2 もこなす）
 
     # 世代の繋ぎ替え。
     later = []

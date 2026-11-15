@@ -679,14 +679,15 @@ def test_extraction_runs_after_the_reply():
 def test_extraction_does_not_block_the_game_thread():
     """LLMが遅くても会話とClockは即座に戻る"""
     run = Run(answers=FOUND)
-    Llm.delay = 0.2
+    # 遅れと判定の間は広く取る（CI のランナーではメインスレッドも止められうる）
+    Llm.delay = 1.0
     phase = ConversationPhaseManager(run.app, "自由入力")
     started = time.monotonic()
     reply = phase.conversation_continued("お前の故郷はどこだ")
     Clock.pump()
     elapsed = time.monotonic() - started
     check(reply == Facilitator.reply, "会話の返答が返らない")
-    check(elapsed < 0.1, "メインスレッドを {:.3f}s 止めた".format(elapsed))
+    check(elapsed < 0.5, "メインスレッドを {:.3f}s 止めた".format(elapsed))
     check(run.profile() == "", "完了前に保存された: {!r}".format(run.profile()))
     check(run.app.texts[-1].startswith("傭兵ガロ: "),
           "抽出待ちで返答が出ていない: {}".format(run.app.texts))
