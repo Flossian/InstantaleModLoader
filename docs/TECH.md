@@ -1070,6 +1070,7 @@ MOD 同梱の設定画面（`tool.py`。§3.12）はゲームの中では走ら�
 | 施設の選択肢の画面かの判定・いま居る施設の引き当て | `ui.is_facility_screen` / `current_facility` | 6本 / 10本。施設 id を str だけ引き当てる版と int も引き当てる版、見つからないときに None を返す版と id を返す版に分かれていた |
 | 好感度の読み書き（実行時の人物とセーブの素データ） | `npcs.affinity_value` / `affinity_of` / `set_affinity`（GAME.md §2.25） | 9か所 / 2本。float を通す版・int だけの版・int に切り捨てる版、実行時の名簿だけを見る版と素データまで見る版に分かれていた |
 | 窓口が持つ登録の ctx が用済みでないかの確かめ | `instantale_modloader.alive`（`gates.alive` は同じ関数） | 17本（窓口の14モジュールと `gates`・`holdings`・`hudicons`）。新しい窓口を作るたびに写されていた |
+| 宣言の設定の画面の組み立てと、設定の出し入れ・下の欄・控えの頁 | `modtool.SettingsWindow` / `SettingsFooter` / `RecordsPage`（§3.12） | 6本（`331_` / `336_` / `338_` / `342_` / `343_` / `911_` の `tool.py`）。画面に置いていない項目の扱いと、未保存の判定の比べ先が3通りに分かれ、`343_` には閉じるときの未保存の確認が無かった |
 
 ```python
 from instantale_modloader import state
@@ -3023,6 +3024,11 @@ MOD が自分の画面を持つほうが分かりやすい。
 | 配色と書体 | `modtool.setup_theme(win, root)`（戻り値は `gui` モジュール。他も借りられる） |
 | ディスクのセーブ | `modtool.saves_module(mod_dir=MOD_DIR)`（＝`instantale_modloader.saves`） |
 | 曲の試聴 | `modtool.preview_bar(parent, pick)`（▶ 試聴 / ■ 停止の一行。`pick()` が `(絶対パス, 名前)` を返す。鳴らすのは Windows の MCI で、mp3 と wav が鳴る。鳴る曲は1つなので1ウィンドウに1本） |
+| 宣言の設定の画面（窓・題・下の欄の枠） | `modtool.SettingsWindow(MOD_DIR, geometry=, minsize=, subtitle=)`。中身は `win.outer` に置き、`win.form(parent, keys)` で宣言から入力欄を組む。最後に `win.finish(get_values, set_values)` |
+| 設定の出し入れと下の欄（既定に戻す・保存・閉じる・未保存の確認） | `modtool.SettingsFooter`（`win.finish` が作る。窓を自分で組む道具は直に使う）。画面に置いていない項目はファイルの値のまま保存する。独自の保存物は `before_save` / `after_save` / `extra_dirty` で足す |
+| 宣言から組む入力欄・縦にスクロールする枠 | `modtool.Form(parent, decls, note_of)` / `scrollable(parent)` |
+| `state\` の控えを読む頁 | `modtool.RecordsPage(notebook, window, state_dir, dirname, describe)` / `state_files(state_dir, dirname)` |
+| 文の欄（`tk.Text`）の配色 | `modtool.text_style(theme)`（`win.text_style()`） |
 
 `modtool` は状態を持たない（`MOD_DIR` は毎回引数）。
 オフラインの検査が1プロセスで複数の `tool.py` を読み込むので、持つと2本目が1本目の場所を使ってしまう。
@@ -3125,7 +3131,7 @@ python tools/check_tool_screens.py --only 322   名前に 322 を含む MOD だ�
 
 シムで足りないのは項目が表の形をしているとき。`331_facility_investment` は種類6×3項目＋共通5の 23 項目で、
 1列に並べると読めないので、種類を行・項目を列にした独自の画面を持つ（`tool.py`）。
-土台（場所・宣言・読み書き・ウィンドウの記憶・配色・共通項目の入力欄 `_Form`）は `modtool` を借り、
+土台（場所・宣言・読み書き・ウィンドウの記憶・配色・共通項目の入力欄 `Form`）は `modtool` を借り、
 コピーしたのは表の組み立てだけ。本体が読まない段階は出さない（ワールド個別のタブは無い）。
 `state\` の保存データのフォルダ名は `modtool.state_dirname(MOD_DIR)`（番号を除いたもの）が決めるので、
 MOD 側に書くことは無い。

@@ -89,40 +89,18 @@ def shown_width(width):
 
 def build_window(mod_dir=MOD_DIR):
     """設定画面を組んで返す（`mainloop()` は呼ばない。検査が中を数えるため）。"""
-    import time
     import tkinter as tk
-    from tkinter import messagebox, ttk
+    from tkinter import ttk
 
-    info = modtool.manifest(mod_dir)
-    title = (info.get("name") or {}).get("ja") or modtool.mod_name(mod_dir)
-    root_dir, _state_dir, _game_dir = modtool.locate(mod_dir)
-    runtime = os.path.join(root_dir, "runtime")
-    config = modtool.config_module(root_dir, mod_dir)
-    found = modtool.decls(mod_dir, root_dir)
-    current = modtool.load_settings(root_dir, mod_dir)
-
-    root = tk.Tk()
-    root.title(title)
-    root.minsize(820, 740)           # 見本の6行が切れない高さ
-    modtool.restore_window(root_dir, mod_dir, root, "900x820")
-    modtool.setup_theme(root, root_dir)
-
-    outer = ttk.Frame(root, padding=12)
-    outer.pack(fill="both", expand=True)
-    ttk.Label(outer, text=title, style="Title.TLabel").pack(anchor="w")
-    ttk.Label(outer, style="Sub.TLabel", wraplength=780, justify="left",
-              text="見本は、描き足した絵をゲームの戦闘と同じ速さで動かす。\n"
-                   "ゲームに元からある絵（打撃・爆発・風・光・闇・魔力など）は見え方を選べない"
-              ).pack(anchor="w", pady=(0, 8))
-
-    footer = ttk.Frame(outer)
-    footer.pack(side="bottom", fill="x")
-    ttk.Separator(outer).pack(side="bottom", fill="x", pady=8)
+    win = modtool.SettingsWindow(          # 高さは見本の6行が切れない寸法
+        mod_dir, geometry="900x820", minsize=(820, 740), subtitle_wrap=780,
+        subtitle="見本は、描き足した絵をゲームの戦闘と同じ速さで動かす。\n"
+                 "ゲームに元からある絵（打撃・爆発・風・光・闇・魔力など）は見え方を選べない")
+    root, found, outer = win.root, win.found, win.outer
 
     holder = ttk.Frame(outer)
     holder.pack(fill="x")
-    form = modtool._Form(holder, dict((key, found[key]) for key in found),
-                         lambda k: "既定: " + modtool.shown(found[k]["default"], found[k]))
+    form = win.form(holder, found)
 
     picker = ttk.Frame(outer)
     picker.pack(fill="x", pady=(12, 4))
@@ -212,60 +190,11 @@ def build_window(mod_dir=MOD_DIR):
     if players:
         root.after(FRAME_MS, tick)
 
-    # ---- 値の出し入れ（`338_` の tool.py と同じ）
-    def as_shown(values):
-        return dict((k, v if isinstance(v, bool) else str(v)) for k, v in values.items())
-
-    saved = {"values": {}}
-    last = {"values": current}
-
-    def load_values(values):
-        form.set(dict((k, values.get(k, found[k]["default"])) for k in form.vars))
-        saved["values"] = as_shown(dict((k, values.get(k, found[k]["default"])) for k in found))
+    def set_values(values):
+        form.set(dict((k, values[k]) for k in form.vars))
         mark_current()
 
-    load_values(current)
-
-    def dirty():
-        return as_shown(dict((k, v) for k, v in form.get().items() if k in found)) != saved["values"]
-
-    status = ttk.Label(footer, style="Faint.TLabel", text="ゲームを起動し直すと効きます")
-    status.pack(side="left")
-
-    def save():
-        values, bad = modtool.coerce_all(mod_dir, form.get(), root_dir)
-        if bad:
-            messagebox.showerror("設定を確かめてください", bad, parent=root)
-            return False
-        try:
-            modtool.save_settings(root_dir, mod_dir, values, strict=True)
-        except Exception as exc:
-            messagebox.showerror("保存に失敗しました", "{}\n{}: {}".format(
-                config.store_path(runtime), type(exc).__name__, exc), parent=root)
-            return False
-        saved["values"] = as_shown(values)
-        last["values"] = values
-        status.configure(text="保存しました {}  {}".format(time.strftime("%H:%M:%S"), config.store_path(runtime)))
-        return True
-
-    def reset():
-        load_values(dict((k, d["default"]) for k, d in found.items()))
-        saved["values"] = as_shown(dict((k, last["values"][k]) for k in found if k in last["values"]))
-
-    def close():
-        modtool.save_window(root_dir, mod_dir, root)
-        if dirty():
-            answer = messagebox.askyesnocancel("未保存の変更", "変更を保存してから閉じますか？", parent=root)
-            if answer is None:
-                return
-            if answer and not save():
-                return
-        root.destroy()
-
-    ttk.Button(footer, text="閉じる", command=close).pack(side="right")
-    ttk.Button(footer, text="保存", style="Accent.TButton", command=save).pack(side="right", padx=(0, 6))
-    ttk.Button(footer, text="既定に戻す", command=reset).pack(side="right", padx=(0, 12))
-    root.protocol("WM_DELETE_WINDOW", close)
+    win.finish(form.get, set_values)
     root._iml_players = players       # 検査が数える（見本の升ごとのコマ）
     return root
 

@@ -1088,7 +1088,7 @@ def scene_tool():
     check("様子に名前と態度", "冒険者11" in text and "1 一目置く" in text, text)
     check("様子に取り合いの記録", "しくじった後をプレイヤーが片付けた" in text, text)
     check("様子に話の種", "話の種: " in text and "尻拭いされた（「古城（北）の亡霊」）" in text, text)
-    files = tool.state_files(STATE_DIR)
+    files = tool.modtool.state_files(STATE_DIR, tool.STATE_DIRNAME)
     check("様子の控えの一覧", len(files) == 1 and files[0][1].endswith(".json"), files)
 
 
@@ -1107,7 +1107,7 @@ def scene_redraw():
     elapse(ctx, app, 45)
     check("片付けた状態", "1" in bucket_of(module, app).get("taken", {}))
     # 設定画面のボタンと同じ処理（ゲームは閉じている）
-    files = tool.state_files(STATE_DIR)
+    files = tool.modtool.state_files(STATE_DIR, tool.STATE_DIRNAME)
     bucket = tool.modtool.read_json(files[0][1])
     name = rivalry.decline_rival(bucket)
     tool.modtool.write_json("", files[0][1], rivalry.order_bucket(bucket))

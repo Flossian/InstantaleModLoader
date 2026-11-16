@@ -109,7 +109,7 @@ def legacy_disabled(root_dir, config):
 
 
 class KindsForm:
-    """出来事の種類のチェックの欄。`modtool._Form` と同じ口（vars / get / set）で、値は `DISABLED_KINDS`。"""
+    """出来事の種類のチェックの欄。`modtool.Form` と同じ口（vars / get / set）で、値は `DISABLED_KINDS`。"""
 
     def __init__(self, parent, kinds):
         import tkinter as tk
@@ -163,24 +163,6 @@ def preview_lines(values):
 
 
 # ---------------------------------------------------------------- 様子
-def state_files(state_dir):
-    """控えのファイル `[(表示名, パス)]`。新しく書かれた順。"""
-    folder = os.path.join(state_dir, STATE_DIRNAME)
-    try:
-        names = [name for name in os.listdir(folder) if name.endswith(".json")]
-    except OSError:
-        return []
-    stamped = []
-    for name in names:
-        path = os.path.join(folder, name)
-        try:
-            stamped.append((os.path.getmtime(path), path))
-        except OSError:
-            continue
-    stamped.sort(reverse=True)
-    return [(os.path.basename(path)[:-5], path) for _mtime, path in stamped]
-
-
 def describe(bucket, values):
     """控え1つを読む用の文にする。一覧と同じ行に、一覧には出さない控えの中身を足す。"""
     if not isinstance(bucket, dict):
@@ -223,55 +205,30 @@ def describe(bucket, values):
 # ---------------------------------------------------------------- 設定画面
 def build_window(mod_dir=MOD_DIR):
     """設定画面を組んで返す（`mainloop()` は呼ばない。検査が中を数えるため）。"""
-    import time
     import tkinter as tk
-    from tkinter import messagebox, ttk
+    from tkinter import ttk
 
-    info = modtool.manifest(mod_dir)
-    title = (info.get("name") or {}).get("ja") or modtool.mod_name(mod_dir)
-    root_dir, state_dir, _game_dir = modtool.locate(mod_dir)
-    runtime = os.path.join(root_dir, "runtime")
-    config = modtool.config_module(root_dir, mod_dir)
-    found = modtool.decls(mod_dir, root_dir)
-    current = modtool.load_settings(root_dir, mod_dir)
-    handled = set(setting_keys())
-    missing = [key for key in handled if key not in found]
-    unplaced = [key for key in found if key not in handled]
+    win = modtool.SettingsWindow(mod_dir, geometry="1000x760", minsize=(860, 600))
+    found = win.found
+    missing = [key for key in setting_keys() if key not in found]
+    legacy = legacy_disabled(win.root_dir, modtool.config_module(win.root_dir, mod_dir))
+    if legacy:
+        # 旧い設定の止めた種類を、今の欄に足して見せる（保存したときに今の設定へ移る）
+        win.current = dict(win.current, DISABLED_KINDS=", ".join(
+            sorted(split_keys(win.current.get("DISABLED_KINDS")) | legacy)))
+    text_style = win.text_style(8, 6)
 
-    root = tk.Tk()
-    root.title(title)
-    root.minsize(860, 600)
-    modtool.restore_window(root_dir, mod_dir, root, "1000x760")
-    theme = modtool.setup_theme(root, root_dir)
-    palette = getattr(theme, "PALETTE", None) if theme is not None else None
-    text_style = {} if not isinstance(palette, dict) else {
-        "background": palette.get("surface"), "foreground": palette.get("text"),
-        "insertbackground": palette.get("text"), "relief": "flat", "bd": 0,
-        "highlightthickness": 1, "highlightbackground": palette.get("control_edge"),
-        "highlightcolor": palette.get("control_edge"), "padx": 8, "pady": 6}
-    text_style = dict((k, v) for k, v in text_style.items() if v is not None)
-
-    outer = ttk.Frame(root, padding=12)
-    outer.pack(fill="both", expand=True)
-    ttk.Label(outer, text=title, style="Title.TLabel").pack(anchor="w")
-    ttk.Frame(outer, height=8).pack()
-
-    footer = ttk.Frame(outer)
-    footer.pack(side="bottom", fill="x")
-    ttk.Separator(outer).pack(side="bottom", fill="x", pady=8)
-
-    notebook = ttk.Notebook(outer)
+    notebook = ttk.Notebook(win.outer)
     notebook.pack(fill="both", expand=True)
 
     forms = []
     preview = {"box": None}
 
     def everything():
-        values = {}
+        """いまの値。画面に置いていない項目はファイルの値（見本と記録の読み方に使う）。"""
+        values = dict(win.current)
         for form in forms:
             values.update(form.get())
-        for key in unplaced:
-            values[key] = current.get(key, found[key]["default"])
         return values
 
     def show_preview(*_args):
@@ -294,25 +251,23 @@ def build_window(mod_dir=MOD_DIR):
                 ttk.Label(page, style="Sub.TLabel", wraplength=920, justify="left",
                           text="読めなかった出来事（飛ばしている）:\n" + "\n".join(rules.PROBLEMS)
                           ).pack(side="bottom", anchor="w", fill="x", pady=(6, 0))
-            body = modtool._scrollable(page)
+            body = modtool.scrollable(page)
             form = KindsForm(body, rules.KINDS)
             forms.append(form)
             continue
         if name == "一覧":
             holder = ttk.Frame(page)
             holder.pack(fill="x")
-            form = modtool._Form(holder, dict((key, found[key]) for key in keys if key in found),
-                                 lambda k: "既定: " + modtool.shown(found[k]["default"], found[k]))
+            form = win.form(holder, keys)
             forms.append(form)
             ttk.Label(page, text="見本", style="Group.TLabel").pack(anchor="w", pady=(12, 4))
             box = tk.Text(page, wrap="char", height=16, **text_style)
             box.pack(fill="both", expand=True)
             preview["box"] = box
             continue
-        body = modtool._scrollable(page)
+        body = modtool.scrollable(page)
         body.columnconfigure(1, weight=1)
-        forms.append(modtool._Form(body, dict((key, found[key]) for key in keys if key in found),
-                                   lambda k: "既定: " + modtool.shown(found[k]["default"], found[k])))
+        forms.append(win.form(body, keys))
 
     # 見本は、一覧の見え方に効く欄が変わるたびに描き直す（段の日数と強さも一覧の文に効く）。
     for form in forms:
@@ -322,124 +277,23 @@ def build_window(mod_dir=MOD_DIR):
                 var.trace_add("write", show_preview)
 
     # ---- 様子
-    page = ttk.Frame(notebook, padding=(4, 8, 4, 4))
-    notebook.add(page, text="記録")
-    ttk.Label(page, style="Sub.TLabel", wraplength=920, justify="left",
-              text="「記録を消す」はゲームを閉じてから使う"
-              ).pack(anchor="w", pady=(0, 6))
-    picker_row = ttk.Frame(page)
-    picker_row.pack(fill="x")
-    ttk.Label(picker_row, text="記録").pack(side="left", padx=(0, 8))
-    picked = tk.StringVar()
-    picker = ttk.Combobox(picker_row, textvariable=picked, state="readonly", width=60)
-    picker.pack(side="left", fill="x", expand=True)
-    view = tk.Text(page, wrap="char", height=20, **text_style)
-    view.pack(fill="both", expand=True, pady=(8, 0))
-    status_files = {"rows": []}
+    records = modtool.RecordsPage(
+        notebook, win.root, win.state_dir, STATE_DIRNAME,
+        lambda path: describe(modtool.read_json(path), everything()),
+        note="「記録を消す」はゲームを閉じてから使う",
+        empty="記録はまだありません（日数を進めた世界から作られる）。",
+        erase_question="「{name}」の記録を消しますか？\n起きている出来事も、終わった出来事も消えます。"
+                       "\nゲームは閉じていますか？",
+        style=text_style)
 
-    def show_state(*_args):
-        path = dict(status_files["rows"]).get(picked.get())
-        view.configure(state="normal")
-        view.delete("1.0", "end")
-        if path is None:
-            view.insert("1.0", "記録はまだありません（日数を進めた世界から作られる）。")
-        else:
-            view.insert("1.0", describe(modtool.read_json(path), everything()) + "\n\n" + path)
-        view.configure(state="disabled")
-
-    def reload_state():
-        status_files["rows"] = state_files(state_dir)
-        names = [name for name, _path in status_files["rows"]]
-        picker.configure(values=names)
-        if picked.get() not in names:
-            picked.set(names[0] if names else "")
-        show_state()
-
-    def delete_state():
-        path = dict(status_files["rows"]).get(picked.get())
-        if path is None:
-            return
-        if not messagebox.askyesno(
-                "記録を消す", "「{}」の記録を消しますか？\n起きている出来事も、終わった出来事も消えます。"
-                "\nゲームは閉じていますか？".format(picked.get()),
-                parent=root):
-            return
-        try:
-            os.remove(path)
-        except OSError as exc:
-            messagebox.showerror("消せませんでした", "{}\n{}".format(path, exc), parent=root)
-        reload_state()
-
-    picker.bind("<<ComboboxSelected>>", show_state)
-    buttons = ttk.Frame(page)
-    buttons.pack(fill="x", pady=(6, 0))
-    ttk.Button(buttons, text="読み直す", command=reload_state).pack(side="left")
-    ttk.Button(buttons, text="記録を消す", command=delete_state).pack(side="right")
-
-    # ---- 値の出し入れ（`911_` の tool.py と同じ）
-    def as_shown(values):
-        return dict((k, v if isinstance(v, bool) else str(v)) for k, v in values.items())
-
-    saved = {"values": {}}
-    last = {"values": current}
-
-    def load_values(values):
+    def set_values(values):
         for form in forms:
             form.set(dict((k, values[k]) for k in form.vars))
-        saved["values"] = as_shown(dict((k, values[k]) for k in found))
         show_preview()
 
-    legacy = legacy_disabled(root_dir, config)
-    if legacy:
-        current = dict(current, DISABLED_KINDS=", ".join(
-            sorted(split_keys(current.get("DISABLED_KINDS")) | legacy)))
-    load_values(current)
-    reload_state()
-
-    def dirty():
-        return as_shown(dict((k, v) for k, v in everything().items() if k in found)) != saved["values"]
-
-    status = ttk.Label(footer, style="Faint.TLabel", text="ゲームを起動し直すと効きます"
-                       + ("  ※ 宣言が無い項目: " + ", ".join(missing) if missing else ""))
-    status.pack(side="left")
-
-    def save():
-        values, bad = modtool.coerce_all(mod_dir, everything(), root_dir)
-        if bad:
-            messagebox.showerror("設定を確かめてください", bad, parent=root)
-            return False
-        try:
-            modtool.save_settings(root_dir, mod_dir, values, strict=True)
-        except Exception as exc:
-            messagebox.showerror("保存に失敗しました", "{}\n{}: {}".format(
-                config.store_path(runtime), type(exc).__name__, exc), parent=root)
-            return False
-        saved["values"] = as_shown(values)
-        last["values"] = values
-        status.configure(text="保存しました {}  {}".format(
-            time.strftime("%H:%M:%S"), config.store_path(runtime)))
-        return True
-
-    def reset():
-        load_values(dict((k, d["default"]) for k, d in found.items()))
-        saved["values"] = as_shown(dict((k, last["values"][k]) for k in found
-                                        if k in last["values"]))
-
-    def close():
-        modtool.save_window(root_dir, mod_dir, root)
-        if dirty():
-            answer = messagebox.askyesnocancel("未保存の変更", "変更を保存してから閉じますか？", parent=root)
-            if answer is None:
-                return
-            if answer and not save():
-                return
-        root.destroy()
-
-    ttk.Button(footer, text="閉じる", command=close).pack(side="right")
-    ttk.Button(footer, text="保存", style="Accent.TButton", command=save).pack(side="right", padx=(0, 6))
-    ttk.Button(footer, text="既定に戻す", command=reset).pack(side="right", padx=(0, 12))
-    root.protocol("WM_DELETE_WINDOW", close)
-    return root
+    win.finish(everything, set_values, missing=missing)
+    records.reload()
+    return win.root
 
 
 def main():

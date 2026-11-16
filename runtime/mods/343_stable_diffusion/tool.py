@@ -72,7 +72,6 @@ import sizes    # noqa: E402  自分の隣（本体と共通の計算）
 import tagbook  # noqa: E402  自分の隣（Danbooru のタグ一覧）
 
 MOD_NAME = modtool.mod_name(MOD_DIR)
-SETTING_DEFAULTS = modtool.defaults(MOD_DIR)
 
 #: 画面に出す種類（元 GUI の portrait / landscape / square に当たる）。
 KIND_LABELS = (("portrait", "立ち絵 (キャラ):"),
@@ -499,7 +498,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
     def page(title):
         frame = ttk.Frame(book)
         book.add(frame, text=" {} ".format(title))
-        inner = modtool._scrollable(frame)
+        inner = modtool.scrollable(frame)
         blurb = BLURBS.get(title)
         if blurb:
             ttk.Label(inner, text=blurb, style="Faint.TLabel", wraplength=790,
@@ -900,11 +899,10 @@ def build_window(rules_in=None, settings_in=None, note=""):
         if not path:
             return
         settings, rules_in, notes = iniimport.read(path)
-        for key, value in settings.items():
-            if key in entries:
-                entries[key].set(value)
+        # 開き直した窓にも、まだ保存していない欄の値を持ち越す（取り込んだ値が上に乗る）。
+        carried = dict(current(), **settings)
         window.destroy()
-        _reopen(rules_in, settings, iniimport.summarize(settings, rules_in, notes))
+        _reopen(rules_in, carried, iniimport.summarize(settings, rules_in, notes))
 
     ttk.Button(box, text="sd_upscale.ini を読み込む", command=import_ini).pack(
         anchor="w", pady=(8, 0))
@@ -1232,47 +1230,40 @@ def build_window(rules_in=None, settings_in=None, note=""):
         got["tags"] = tables["tags"].get()
         return got
 
-    def save():
-        # 打たれた値を先に検める（`coerce_all` は `(値, 最初の不備)` を返す）。
-        # 版17 までは組のまま `save_settings` へ渡していたので、必ず失敗していた。
-        values, bad = modtool.coerce_all(MOD_DIR, current(), root_dir)
-        if bad:
-            messagebox.showerror("設定を確かめてください", bad)
-            return
+    # 規則は設定とは別の保存物。開いた時点の中身を覚えて、未保存の変更があるかを見る。
+    # 取り込んだ直後（`rules_in` / `settings_in` が在る）は、保存するまで未保存の変更として扱う。
+    pending = {"rules": gather_rules(), "imported": rules_in is not None or bool(settings_in)}
+
+    def save_rules(_values):
         if not rulebook.save(state_dir, gather_rules()):
             messagebox.showerror("規則を保存できませんでした",
-                                 "{} に書けませんでした。".format(rulebook.rules_path(state_dir)))
-            return
-        try:
-            modtool.save_settings(root_dir, MOD_DIR, values, strict=True)
-        except Exception as exc:
-            messagebox.showerror("保存に失敗しました", "{}\n{}: {}".format(
-                modtool.config_module(root_dir, MOD_DIR).store_path(
-                    os.path.join(root_dir, "runtime")),
-                type(exc).__name__, exc))
-            return
+                                 "{} に書けませんでした。".format(rulebook.rules_path(state_dir)), parent=window)
+            return False
+        return True
+
+    def saved(_values):
+        pending["rules"] = gather_rules()
+        pending["imported"] = False
         messagebox.showinfo(
             "保存しました",
             "次に生成される絵から効きます。\n"
             "モデルの差し替え（チェックポイント・TAESD・VAE・LoRA の置き場）だけは、"
-            "ゲームを起動し直すと効きます。")
+            "ゲームを起動し直すと効きます。", parent=window)
 
-    def reset():
+    def set_values(values):
         for key, var in entries.items():
-            var.set(SETTING_DEFAULTS[key])
+            if key in values:
+                var.set(values[key])
         refresh()
 
     bar = ttk.Frame(window)
     bar.pack(fill="x", padx=12, pady=10)
-    def close():
-        modtool.save_window(root_dir, MOD_DIR, window)
-        window.destroy()
-
-    # 並びと色はほかの設定画面と揃える（右から 閉じる・保存・既定に戻す）。
-    ttk.Button(bar, text="閉じる", command=close).pack(side="right")
-    ttk.Button(bar, text="保存", style="Accent.TButton", command=save).pack(side="right", padx=(0, 6))
-    ttk.Button(bar, text="設定を既定に戻す", command=reset).pack(side="right", padx=(0, 12))
-    window.protocol("WM_DELETE_WINDOW", close)
+    # 欄は組み終えているので入れ直さない（`fill=False`）。並びと色はほかの設定画面と同じ。
+    modtool.SettingsFooter(
+        window, bar, MOD_DIR, root_dir, decls, values, current, set_values, fill=False,
+        note="次に生成される絵から効く。モデルの差し替えだけはゲームを起動し直すと効く",
+        reset_label="設定を既定に戻す", before_save=save_rules, after_save=saved,
+        extra_dirty=lambda: pending["imported"] or gather_rules() != pending["rules"])
     return window
 
 

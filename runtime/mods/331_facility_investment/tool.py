@@ -102,38 +102,16 @@ def merge(table_values, general_values):
 
 def build_window(mod_dir=MOD_DIR):
     """窓を組んで返す（`mainloop()` は呼ばない。検査が中を数えるため）。"""
-    import time
     import tkinter as tk
-    from tkinter import messagebox, ttk
+    from tkinter import ttk
 
-    info = modtool.manifest(mod_dir)
-    title = (info.get("name") or {}).get("ja") or modtool.mod_name(mod_dir)
-    root_dir, _state_dir, _game_dir = modtool.locate(mod_dir)
-    runtime = os.path.join(root_dir, "runtime")
-    config = modtool.config_module(root_dir, mod_dir)
-    found = modtool.decls(mod_dir, root_dir)
-    current = modtool.load_settings(root_dir, mod_dir)
+    win = modtool.SettingsWindow(
+        mod_dir, geometry="980x680", minsize=(820, 560),
+        subtitle="額は並の等級を町に建てるときのもの。等級・街の規模・倍率が掛かる。右の参考は都市・最上のとき")
+    found = win.found
     missing = [key for key in table_keys() if key not in found]
 
-    root = tk.Tk()
-    root.title(title)
-    root.minsize(820, 560)
-    modtool.restore_window(root_dir, mod_dir, root, "980x680")
-    modtool.setup_theme(root, root_dir)
-
-    outer = ttk.Frame(root, padding=12)
-    outer.pack(fill="both", expand=True)
-    ttk.Label(outer, text=title, style="Title.TLabel").pack(anchor="w")
-    ttk.Label(outer, style="Sub.TLabel", wraplength=920, justify="left",
-              text="額は並の等級を町に建てるときのもの。等級・街の規模・倍率が掛かる。"
-                   "右の参考は都市・最上のとき"
-              ).pack(anchor="w", pady=(0, 8))
-
-    footer = ttk.Frame(outer)
-    footer.pack(side="bottom", fill="x")
-    ttk.Separator(outer).pack(side="bottom", fill="x", pady=8)
-
-    body = modtool._scrollable(outer)
+    body = modtool.scrollable(win.outer)
     body.columnconfigure(0, weight=1)
 
     # ---- 種類ごとの表
@@ -163,7 +141,7 @@ def build_window(mod_dir=MOD_DIR):
             elif decl["type"] == "choice":
                 # 欄には表示名（`value_labels`）を出す。値との行き来は `table_get` / `table_set`。
                 ttk.Combobox(table, textvariable=var,
-                             values=[modtool._choice_text(decl, v) for v in decl["values"]], width=10,
+                             values=[modtool.choice_text(decl, v) for v in decl["values"]], width=10,
                              state="readonly").grid(row=row, column=column, sticky="ew",
                                                     padx=(0, 8), pady=(4, 0))
             else:
@@ -182,24 +160,19 @@ def build_window(mod_dir=MOD_DIR):
     ttk.Label(body, text="共通", style="Group.TLabel").grid(row=2, column=0, sticky="w")
     common = ttk.Frame(body, padding=(0, 4, 6, 0))
     common.grid(row=3, column=0, sticky="ew")
-    general = dict((key, found[key]) for key in general_keys(found))
-    general_form = modtool._Form(common, general,
-                                 lambda k: "既定: " + modtool.shown(found[k]["default"], found[k]))
-
-    def as_shown(values):
-        return dict((k, v if isinstance(v, bool) else str(v)) for k, v in values.items())
+    general_form = win.form(common, general_keys(found))
 
     def is_choice(key):
         return key in found and found[key]["type"] == "choice"
 
     def table_get():
-        return dict((key, modtool._choice_value(found[key], var.get()) if is_choice(key) else var.get())
+        return dict((key, modtool.choice_value(found[key], var.get()) if is_choice(key) else var.get())
                     for key, var in table_vars.items())
 
     def table_set(values):
         for key, var in table_vars.items():
             value = values.get(key, "")
-            var.set(modtool._choice_text(found[key], value) if is_choice(key) else str(value))
+            var.set(modtool.choice_text(found[key], value) if is_choice(key) else str(value))
 
     def everything():
         return merge(table_get(), general_form.get())
@@ -212,62 +185,13 @@ def build_window(mod_dir=MOD_DIR):
     for var in list(table_vars.values()) + list(general_form.vars.values()):
         var.trace_add("write", refresh_previews)
 
-    saved = {"values": {}}
-    # ファイルに在る値。「既定に戻す」の後の比べ先で、保存のたびに差し替える
-    # （起動時の値のままだと、保存した後の「既定に戻す」を変更なしと読む）。
-    last = {"values": current}
-
-    def load_values(values):
+    def set_values(values):
         table_set(values)
-        general_form.set(dict((k, values[k]) for k in general))
-        saved["values"] = as_shown(dict((k, values[k]) for k in found))
+        general_form.set(dict((key, values[key]) for key in general_form.vars))
         refresh_previews()
 
-    load_values(current)
-
-    def dirty():
-        return as_shown(everything()) != saved["values"]
-
-    status = ttk.Label(footer, style="Faint.TLabel", text="ゲームを起動し直すと効きます"
-                       + ("  ※ 宣言が無い項目: " + ", ".join(missing) if missing else ""))
-    status.pack(side="left")
-
-    def save():
-        values, bad = modtool.coerce_all(mod_dir, everything(), root_dir)
-        if bad:
-            messagebox.showerror("設定を確かめてください", bad, parent=root)
-            return False
-        try:
-            modtool.save_settings(root_dir, mod_dir, values, strict=True)
-        except Exception as exc:
-            messagebox.showerror("保存に失敗しました", "{}\n{}: {}".format(
-                config.store_path(runtime), type(exc).__name__, exc), parent=root)
-            return False
-        saved["values"] = as_shown(values)
-        last["values"] = values
-        status.configure(text="保存しました {}  {}".format(
-            time.strftime("%H:%M:%S"), config.store_path(runtime)))
-        return True
-
-    def reset():
-        load_values(dict((k, d["default"]) for k, d in found.items()))
-        saved["values"] = as_shown(last["values"])  # 「既定に戻す」は未保存の変更のまま
-
-    def close():
-        modtool.save_window(root_dir, mod_dir, root)
-        if dirty():
-            answer = messagebox.askyesnocancel("未保存の変更", "変更を保存してから閉じますか？", parent=root)
-            if answer is None:
-                return
-            if answer and not save():
-                return
-        root.destroy()
-
-    ttk.Button(footer, text="閉じる", command=close).pack(side="right")
-    ttk.Button(footer, text="保存", style="Accent.TButton", command=save).pack(side="right", padx=(0, 6))
-    ttk.Button(footer, text="既定に戻す", command=reset).pack(side="right", padx=(0, 12))
-    root.protocol("WM_DELETE_WINDOW", close)
-    return root
+    win.finish(everything, set_values, missing=missing)
+    return win.root
 
 
 def main():

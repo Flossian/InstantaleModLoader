@@ -119,24 +119,6 @@ def one_line(text):
 
 
 # ---------------------------------------------------------------- 様子
-def state_files(state_dir):
-    """控えのファイル `[(表示名, パス)]`。新しく書かれた順。"""
-    folder = os.path.join(state_dir, STATE_DIRNAME)
-    try:
-        names = [name for name in os.listdir(folder) if name.endswith(".json")]
-    except OSError:
-        return []
-    stamped = []
-    for name in names:
-        path = os.path.join(folder, name)
-        try:
-            stamped.append((os.path.getmtime(path), path))
-        except OSError:
-            continue                    # 一覧を取った後に消えた（ゲームや別の窓が消した）
-    stamped.sort(reverse=True)
-    return [(os.path.basename(path)[:-5], path) for _mtime, path in stamped]
-
-
 def describe(bucket):
     """控え1つを読む用の文にする。"""
     if not isinstance(bucket, dict):
@@ -201,45 +183,15 @@ def describe(bucket):
 # ---------------------------------------------------------------- 窓
 def build_window(mod_dir=MOD_DIR):
     """窓を組んで返す（`mainloop()` は呼ばない。検査が中を数えるため）。"""
-    import time
     import tkinter as tk
     from tkinter import messagebox, ttk
 
-    info = modtool.manifest(mod_dir)
-    title = (info.get("name") or {}).get("ja") or modtool.mod_name(mod_dir)
-    root_dir, state_dir, _game_dir = modtool.locate(mod_dir)
-    runtime = os.path.join(root_dir, "runtime")
-    config = modtool.config_module(root_dir, mod_dir)
-    found = modtool.decls(mod_dir, root_dir)
-    current = modtool.load_settings(root_dir, mod_dir)
-    handled = set(text_keys()) | set(number_keys())
-    missing = [key for key in handled if key not in found]
-    unplaced = [key for key in found if key not in handled]
+    win = modtool.SettingsWindow(mod_dir, geometry="1000x760", minsize=(860, 600))
+    root, found = win.root, win.found
+    missing = [key for key in set(text_keys()) | set(number_keys()) if key not in found]
+    text_style = win.text_style(6, 4)
 
-    root = tk.Tk()
-    root.title(title)
-    root.minsize(860, 600)
-    modtool.restore_window(root_dir, mod_dir, root, "1000x760")
-    theme = modtool.setup_theme(root, root_dir)
-    # 文の欄は ttk ではないので、設定画面の色を自分で渡す（借りられなければ素の色）。
-    palette = getattr(theme, "PALETTE", None) if theme is not None else None
-    text_style = {} if not isinstance(palette, dict) else {
-        "background": palette.get("surface"), "foreground": palette.get("text"),
-        "insertbackground": palette.get("text"), "relief": "flat", "bd": 0,
-        "highlightthickness": 1, "highlightbackground": palette.get("control_edge"),
-        "highlightcolor": palette.get("control_edge"), "padx": 6, "pady": 4}
-    text_style = dict((k, v) for k, v in text_style.items() if v is not None)
-
-    outer = ttk.Frame(root, padding=12)
-    outer.pack(fill="both", expand=True)
-    ttk.Label(outer, text=title, style="Title.TLabel").pack(anchor="w")
-    ttk.Frame(outer, height=8).pack()
-
-    footer = ttk.Frame(outer)
-    footer.pack(side="bottom", fill="x")
-    ttk.Separator(outer).pack(side="bottom", fill="x", pady=8)
-
-    notebook = ttk.Notebook(outer)
+    notebook = ttk.Notebook(win.outer)
     notebook.pack(fill="both", expand=True)
 
     forms = []
@@ -272,16 +224,15 @@ def build_window(mod_dir=MOD_DIR):
         notebook.add(page, text=name)
         ttk.Label(page, text=blurb, style="Sub.TLabel", wraplength=920, justify="left").pack(
             anchor="w", pady=(0, 6))
-        body = modtool._scrollable(page)
+        body = modtool.scrollable(page)
         body.columnconfigure(1, weight=1)
         row = 0
         if numbers:
             # 文の欄と同じ格子に置く（別の枠にすると左の見出しの幅が揃わない）。
-            # `_Form` は 0 行目から1項目2行ずつ使う。
-            present = dict((key, found[key]) for key in numbers if key in found)
-            forms.append(modtool._Form(body, present,
-                                       lambda k: "既定: " + modtool.shown(found[k]["default"])))
-            row += 2 * len(present)
+            # `Form` は 0 行目から1項目2行ずつ使う。
+            form = win.form(body, numbers)
+            forms.append(form)
+            row += 2 * len(form.vars)
         if name == "態度":
             ttk.Label(body, text="段ごとの文", style="Group.TLabel").grid(
                 row=row, column=0, columnspan=2, sticky="w", pady=(12, 0))
@@ -300,42 +251,8 @@ def build_window(mod_dir=MOD_DIR):
             row += 2
 
     # ---- 様子
-    page = ttk.Frame(notebook, padding=(4, 8, 4, 4))
-    notebook.add(page, text="様子")
-    ttk.Label(page, style="Sub.TLabel", wraplength=920, justify="left",
-              text="「ライバルを選び直す」「記録を消す」はゲームを閉じてから使う"
-              ).pack(anchor="w", pady=(0, 6))
-    picker_row = ttk.Frame(page)
-    picker_row.pack(fill="x")
-    ttk.Label(picker_row, text="記録").pack(side="left", padx=(0, 8))
-    picked = tk.StringVar()
-    picker = ttk.Combobox(picker_row, textvariable=picked, state="readonly", width=60)
-    picker.pack(side="left", fill="x", expand=True)
-    view = tk.Text(page, wrap="char", height=20, **text_style)
-    view.pack(fill="both", expand=True, pady=(8, 0))
-    status_files = {"rows": []}
-
-    def show_state(*_args):
-        rows = dict(status_files["rows"])
-        path = rows.get(picked.get())
-        view.configure(state="normal")
-        view.delete("1.0", "end")
-        if path is None:
-            view.insert("1.0", "記録がまだありません。")
-        else:
-            view.insert("1.0", describe(modtool.read_json(path)) + "\n\n" + path)
-        view.configure(state="disabled")
-
-    def reload_state():
-        status_files["rows"] = state_files(state_dir)
-        names = [name for name, _path in status_files["rows"]]
-        picker.configure(values=names)
-        if picked.get() not in names:
-            picked.set(names[0] if names else "")
-        show_state()
-
-    def redraw_state():
-        path = dict(status_files["rows"]).get(picked.get())
+    def redraw_state(records):
+        _name, path = records.selected()
         if path is None:
             return
         bucket = modtool.read_json(path)
@@ -352,104 +269,36 @@ def build_window(mod_dir=MOD_DIR):
         rivalry.decline_rival(bucket)
         if not modtool.write_json(_IML_ROOT, path, rivalry.order_bucket(bucket)):
             messagebox.showerror("書けませんでした", path, parent=root)
-        reload_state()
+        records.reload()
 
-    def delete_state():
-        path = dict(status_files["rows"]).get(picked.get())
-        if path is None:
-            return
-        if not messagebox.askyesno(
-                "記録を消す", "「{}」の記録を消しますか？\nライバル・勝敗・隠している依頼がすべて最初に戻ります。\n"
-                "ゲームは閉じていますか？".format(picked.get()), parent=root):
-            return
-        try:
-            os.remove(path)
-        except OSError as exc:
-            messagebox.showerror("消せませんでした", "{}\n{}".format(path, exc), parent=root)
-        reload_state()
-
-    picker.bind("<<ComboboxSelected>>", show_state)
-    buttons = ttk.Frame(page)
-    buttons.pack(fill="x", pady=(6, 0))
-    ttk.Button(buttons, text="読み直す", command=reload_state).pack(side="left")
-    ttk.Button(buttons, text="記録を消す", command=delete_state).pack(side="right")
-    ttk.Button(buttons, text="ライバルを選び直す", command=redraw_state).pack(side="right", padx=(0, 8))
-    reload_state()
+    records = modtool.RecordsPage(
+        notebook, root, win.state_dir, STATE_DIRNAME,
+        lambda path: describe(modtool.read_json(path)),
+        title="様子", note="「ライバルを選び直す」「記録を消す」はゲームを閉じてから使う",
+        empty="記録がまだありません。",
+        erase_question="「{name}」の記録を消しますか？\nライバル・勝敗・隠している依頼がすべて最初に戻ります。\n"
+                       "ゲームは閉じていますか？",
+        extra_buttons=[("ライバルを選び直す", redraw_state)], style=text_style)
+    records.reload()
 
     # ---- 値の出し入れ
-    def as_shown(values):
-        return dict((k, v if isinstance(v, bool) else str(v)) for k, v in values.items())
-
     def everything():
         values = {}
         for form in forms:
             values.update(form.get())
         for key, (box, _refresh) in texts.items():
             values[key] = one_line(box.get("1.0", "end"))
-        for key in unplaced:
-            values[key] = current.get(key, found[key]["default"])
         return values
 
-    saved = {"values": {}}
-    # ファイルに在る値。「既定に戻す」の後の比べ先で、保存のたびに差し替える
-    # （起動時の値のままだと、保存した後の「既定に戻す」を変更なしと読む）。
-    last = {"values": current}
-
-    def load_values(values):
+    def set_values(values):
         for form in forms:
             form.set(dict((k, values[k]) for k in form.vars))
         for key, (box, refresh) in texts.items():
             box.delete("1.0", "end")
             box.insert("1.0", str(values.get(key, "")))
             refresh()
-        saved["values"] = as_shown(dict((k, values[k]) for k in found))
 
-    load_values(current)
-
-    def dirty():
-        return as_shown(dict((k, v) for k, v in everything().items() if k in found)) != saved["values"]
-
-    status = ttk.Label(footer, style="Faint.TLabel", text="ゲームを起動し直すと効きます"
-                       + ("  ※ 宣言が無い項目: " + ", ".join(missing) if missing else ""))
-    status.pack(side="left")
-
-    def save():
-        values, bad = modtool.coerce_all(mod_dir, everything(), root_dir)
-        if bad:
-            messagebox.showerror("設定を確かめてください", bad, parent=root)
-            return False
-        try:
-            modtool.save_settings(root_dir, mod_dir, values, strict=True)
-        except Exception as exc:
-            messagebox.showerror("保存に失敗しました", "{}\n{}: {}".format(
-                config.store_path(runtime), type(exc).__name__, exc), parent=root)
-            return False
-        saved["values"] = as_shown(values)
-        last["values"] = values
-        status.configure(text="保存しました {}  {}".format(
-            time.strftime("%H:%M:%S"), config.store_path(runtime)))
-        return True
-
-    def reset():
-        load_values(dict((k, d["default"]) for k, d in found.items()))
-        # 「既定に戻す」は未保存の変更のまま。比べ先は `dirty` と同じく宣言の在る項目だけ。
-        saved["values"] = as_shown(dict((k, last["values"][k]) for k in found
-                                        if k in last["values"]))
-
-    def close():
-        modtool.save_window(root_dir, mod_dir, root)
-        if dirty():
-            answer = messagebox.askyesnocancel("未保存の変更", "変更を保存してから閉じますか？", parent=root)
-            if answer is None:
-                return
-            if answer and not save():
-                return
-        root.destroy()
-
-    ttk.Button(footer, text="閉じる", command=close).pack(side="right")
-    ttk.Button(footer, text="保存", style="Accent.TButton", command=save).pack(side="right", padx=(0, 6))
-    ttk.Button(footer, text="既定に戻す", command=reset).pack(side="right", padx=(0, 12))
-    root.protocol("WM_DELETE_WINDOW", close)
+    win.finish(everything, set_values, missing=missing)
     return root
 
 

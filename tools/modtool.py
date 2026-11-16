@@ -686,11 +686,11 @@ def shown(value, decl=None):
     if value is None or value == "":
         return "（空）"
     if decl is not None and decl["type"] == "choice":
-        return _choice_text(decl, value)
+        return choice_text(decl, value)
     return str(value)
 
 
-def _choice_text(decl, value):
+def choice_text(decl, value):
     """choice の値 -> 画面の文字（`config.choice_text`）。
 
     宣言（`decls`）を読んだ時点でローダは `sys.path` に載っているので、ここでは引くだけ。
@@ -699,7 +699,7 @@ def _choice_text(decl, value):
     return config.choice_text(decl, value)
 
 
-def _choice_value(decl, text):
+def choice_value(decl, text):
     """画面の文字 -> choice の値の文字列（`config.choice_value`）。"""
     from instantale_modloader import config
     return config.choice_value(decl, text)
@@ -828,7 +828,7 @@ def save_world_settings(root, path, found, base, values):
     return write_json(root, path, record, indent=2)
 
 
-def _scrollable(parent):
+def scrollable(parent):
     """縦にスクロールする枠。項目が窓に収まらない MOD（`314_` は 16 項目）のため。
 
     Canvas の中に Frame を置き、幅は Canvas に合わせ、高さは中身に任せる。
@@ -878,7 +878,7 @@ def _scrollable(parent):
     return inner
 
 
-class _Form(object):
+class Form(object):
     """宣言から作る入力欄の一組。bool は Checkbutton、choice は Combobox、他は Entry。
 
     `note_of(key)` は項目の説明の後ろに足す一言（既定や一括設定の値）。
@@ -935,7 +935,7 @@ class _Form(object):
                 # 欄には表示名（`value_labels`）を出す。値との行き来は `get` / `set`。
                 var = tk.StringVar()
                 ttk.Combobox(parent, textvariable=var,
-                             values=[_choice_text(decl, v) for v in decl["values"]],
+                             values=[choice_text(decl, v) for v in decl["values"]],
                              state="readonly").grid(row=row, column=1, sticky="ew", pady=(6, 0))
             elif key in editors:
                 var = tk.StringVar()
@@ -961,7 +961,7 @@ class _Form(object):
 
     def get(self):
         """入力欄のいまの値。`bool` 以外は文字列（`coerce_all` に渡す形）。choice は表示名を値に戻す。"""
-        return dict((key, _choice_value(self.decls[key], var.get())
+        return dict((key, choice_value(self.decls[key], var.get())
                      if self.decls[key]["type"] == "choice" else var.get())
                     for key, var in self.vars.items())
 
@@ -976,9 +976,297 @@ class _Form(object):
             if isinstance(var, tk.BooleanVar):
                 var.set(values[key])
             elif self.decls[key]["type"] == "choice":
-                var.set(_choice_text(self.decls[key], values[key]))
+                var.set(choice_text(self.decls[key], values[key]))
             else:
                 var.set(str(values[key]))
+
+
+# ----------------------------------------------------------------- 設定画面の土台
+#: 下の欄に最初に出す一言。
+RESTART_NOTE = "ゲームを起動し直すと効きます"
+
+
+def as_shown(values):
+    """比べるための形。`bool` 以外は文字列にする（入力欄は文字列を返すので、読んだ値と揃える）。"""
+    return dict((key, value if isinstance(value, bool) else str(value)) for key, value in values.items())
+
+
+def text_style(theme, padx=8, pady=6):
+    """`tk.Text` に渡す色と枠。`setup_theme` の戻り（`gui`）の配色を借りる。借りられなければ空。
+
+    文の欄は ttk ではないので、設定画面の配色が自動では乗らない。
+    """
+    palette = getattr(theme, "PALETTE", None) if theme is not None else None
+    if not isinstance(palette, dict):
+        return {}
+    style = {"background": palette.get("surface"), "foreground": palette.get("text"),
+             "insertbackground": palette.get("text"), "relief": "flat", "bd": 0,
+             "highlightthickness": 1, "highlightbackground": palette.get("control_edge"),
+             "highlightcolor": palette.get("control_edge"), "padx": padx, "pady": pady}
+    return dict((key, value) for key, value in style.items() if value is not None)
+
+
+class SettingsFooter(object):
+    """宣言の設定の出し入れと、下の欄（一言・既定に戻す・保存・閉じる）。
+
+    画面に置く欄は道具ごとに違うので、値の出し入れは2つの関数で受ける:
+
+        get_values()        画面のいまの値 `{設定名: 値}`（文字列のままでよい）
+        set_values(values)  宣言の全項目を持つ `values` を画面に入れる
+
+    宣言はあるのに画面に置いていない項目は、ファイルに在る値のまま保存する
+    （置いていない項目を `None` にすると `coerce_all` が保存を断る）。
+    比べるのは宣言の在る項目だけ。
+
+    `saved_values` は**ファイルに在る値**（`load_settings`）。これを画面に入れた直後の画面の値を
+    「未保存の変更が無い」状態として覚える（読んだ値と画面の文字の見せ方が違っても、開いた途端に未保存にならない）。
+    保存した後は、その時点の画面の値を覚え直す。
+    画面に最初に出す値が違うとき（取り込んだ直後など）は `shown_values` に渡す。そのときは開いた時点で未保存の変更になる。
+    画面を道具の側で組み終えていて値を入れ直したくないときは `fill=False`（そのときの画面の値を覚える）。
+
+    道具に独自の保存物があるときは `before_save(values)`（False を返すと保存をやめる）と
+    `extra_dirty()`（独自の保存物に未保存の変更があれば True）で足す。
+    `after_save(values)` は保存が済んだ後に呼ぶ。
+    """
+
+    def __init__(self, window, frame, mod_dir, root_dir, found, saved_values, get_values, set_values, *,
+                 shown_values=None, fill=True, note=RESTART_NOTE, missing=(), reset_label="既定に戻す",
+                 before_save=None, after_save=None, extra_dirty=None):
+        from tkinter import ttk
+
+        self.window = window
+        self.mod_dir = mod_dir
+        self.root_dir = root_dir
+        self.found = found
+        self.get_values = get_values
+        self.set_values = set_values
+        self.before_save = before_save
+        self.after_save = after_save
+        self.extra_dirty = extra_dirty
+        self.last = self._complete(saved_values)    # ファイルに在る値。保存のたびに差し替える
+        if fill:
+            self.set_values(self.last)
+        self.saved = as_shown(self.everything())    # 未保存の変更が無いときの画面の値
+        if fill and shown_values is not None:
+            self.set_values(self._complete(shown_values))
+        if missing:
+            note = "{}  ※ 宣言が無い項目: {}".format(note, ", ".join(missing))
+        self.status = ttk.Label(frame, style="Faint.TLabel", text=note)
+        self.status.pack(side="left")
+        ttk.Button(frame, text="閉じる", command=self.close).pack(side="right")
+        ttk.Button(frame, text="保存", style="Accent.TButton", command=self.save).pack(side="right", padx=(0, 6))
+        ttk.Button(frame, text=reset_label, command=self.reset).pack(side="right", padx=(0, 12))
+        window.protocol("WM_DELETE_WINDOW", self.close)
+        window._iml_settings_footer = self      # 検査が保存・既定に戻す・閉じるを押す
+
+    def _complete(self, values):
+        """宣言の全項目を持つ形にする。無い項目は宣言の既定。"""
+        values = values or {}
+        return dict((key, values.get(key, decl["default"])) for key, decl in self.found.items())
+
+    def store_path(self):
+        return config_module(self.root_dir, self.mod_dir).store_path(os.path.join(self.root_dir, "runtime"))
+
+    def everything(self):
+        """保存する値。画面の値に、画面に置いていない項目のファイルの値を足す。宣言の在る項目だけ。"""
+        values = dict(self.last)
+        values.update((key, value) for key, value in self.get_values().items() if key in self.found)
+        return values
+
+    def dirty(self):
+        if as_shown(self.everything()) != self.saved:
+            return True
+        return bool(self.extra_dirty and self.extra_dirty())
+
+    def save(self):
+        from tkinter import messagebox
+        import time
+
+        values, bad = coerce_all(self.mod_dir, self.everything(), self.root_dir)
+        if bad:
+            messagebox.showerror("設定を確かめてください", bad, parent=self.window)
+            return False
+        if self.before_save is not None and self.before_save(values) is False:
+            return False
+        try:
+            save_settings(self.root_dir, self.mod_dir, values, strict=True)
+        except Exception as exc:
+            messagebox.showerror("保存に失敗しました", "{}\n{}: {}".format(
+                self.store_path(), type(exc).__name__, exc), parent=self.window)
+            return False
+        self.last = self._complete(values)
+        self.saved = as_shown(self.everything())
+        self.status.configure(text="保存しました {}  {}".format(time.strftime("%H:%M:%S"), self.store_path()))
+        if self.after_save is not None:
+            self.after_save(values)
+        return True
+
+    def reset(self):
+        """画面を宣言の既定に戻す。ファイルの値と違えば、保存するまでは未保存の変更のまま。"""
+        self.set_values(self._complete({}))
+
+    def close(self):
+        from tkinter import messagebox
+
+        save_window(self.root_dir, self.mod_dir, self.window)
+        if self.dirty():
+            answer = messagebox.askyesnocancel("未保存の変更", "変更を保存してから閉じますか？", parent=self.window)
+            if answer is None:
+                return
+            if answer and not self.save():
+                return
+        self.window.destroy()
+
+
+class SettingsWindow(object):
+    """宣言から組む設定画面の窓。場所・設定・窓の記憶・配色・題・下の欄の枠まで。
+
+        win = modtool.SettingsWindow(MOD_DIR, geometry="980x680", minsize=(820, 560), subtitle="…")
+        … win.outer に画面の中身を置く …
+        win.finish(get_values, set_values)     # 下の欄を付けて、ファイルの値を画面に入れる
+        return win.root
+
+    `finish` は中身を置いた後に呼ぶ（下の欄は `set_values` で画面に値を入れるため）。
+    """
+
+    def __init__(self, mod_dir, geometry="900x640", minsize=(820, 560), subtitle="", subtitle_wrap=920):
+        import tkinter as tk
+        from tkinter import ttk
+
+        self.mod_dir = mod_dir
+        info = manifest(mod_dir)
+        self.title = (info.get("name") or {}).get("ja") or mod_name(mod_dir)
+        self.root_dir, self.state_dir, self.game_dir = locate(mod_dir)
+        self.found = decls(mod_dir, self.root_dir)
+        self.current = load_settings(self.root_dir, mod_dir)
+        self.root = tk.Tk()
+        self.root.title(self.title)
+        self.root.minsize(*minsize)
+        restore_window(self.root_dir, mod_dir, self.root, geometry)
+        self.theme = setup_theme(self.root, self.root_dir)
+        self.outer = ttk.Frame(self.root, padding=12)
+        self.outer.pack(fill="both", expand=True)
+        ttk.Label(self.outer, text=self.title, style="Title.TLabel").pack(anchor="w")
+        if subtitle:
+            ttk.Label(self.outer, style="Sub.TLabel", wraplength=subtitle_wrap, justify="left",
+                      text=subtitle).pack(anchor="w", pady=(0, 8))
+        else:
+            ttk.Frame(self.outer, height=8).pack()
+        self.footer_frame = ttk.Frame(self.outer)
+        self.footer_frame.pack(side="bottom", fill="x")
+        ttk.Separator(self.outer).pack(side="bottom", fill="x", pady=8)
+        self.footer = None
+
+    def note_of(self, key):
+        """`Form` に渡す一言（宣言の既定）。"""
+        return "既定: " + shown(self.found[key]["default"], self.found[key])
+
+    def form(self, parent, keys):
+        """宣言の在る `keys` だけで `Form` を組む。"""
+        return Form(parent, dict((key, self.found[key]) for key in keys if key in self.found), self.note_of)
+
+    def text_style(self, padx=8, pady=6):
+        return text_style(self.theme, padx, pady)
+
+    def finish(self, get_values, set_values, **options):
+        """下の欄を付けて、ファイルの値を画面に入れる。`options` は `SettingsFooter` へ。"""
+        self.footer = SettingsFooter(self.root, self.footer_frame, self.mod_dir, self.root_dir, self.found,
+                                     self.current, get_values, set_values, **options)
+        return self.footer
+
+
+def state_files(state_dir, dirname):
+    """`state\\<dirname>\\` の控え `[(表示名, パス)]`。新しく書かれた順。表示名は拡張子を除いたファイル名。"""
+    folder = os.path.join(state_dir, dirname)
+    try:
+        names = [name for name in os.listdir(folder) if name.endswith(".json")]
+    except OSError:
+        return []
+    stamped = []
+    for name in names:
+        path = os.path.join(folder, name)
+        try:
+            stamped.append((os.path.getmtime(path), path))
+        except OSError:
+            continue                    # 一覧を取った後に消えた（ゲームや別の窓が消した）
+    stamped.sort(reverse=True)
+    return [(os.path.basename(path)[:-5], path) for _mtime, path in stamped]
+
+
+class RecordsPage(object):
+    """`state\\<dirname>\\` の控えを1つずつ読む頁。選ぶ欄・中身の欄・読み直す・記録を消す。
+
+    `describe(path)` は控え1つを読む用の文にする。`erase_question` は消す前の確認の文（`{name}` が表示名）。
+    `extra_buttons` は `[(文字, 関数(page))]`。「記録を消す」の左に並ぶ。
+    """
+
+    def __init__(self, notebook, window, state_dir, dirname, describe, *, title="記録", note="",
+                 empty="記録はまだありません。", erase_question="「{name}」の記録を消しますか？",
+                 extra_buttons=(), style=None):
+        import tkinter as tk
+        from tkinter import ttk
+
+        self.window = window
+        self.state_dir = state_dir
+        self.dirname = dirname
+        self.describe = describe
+        self.empty = empty
+        self.erase_question = erase_question
+        self.rows = []
+        page = ttk.Frame(notebook, padding=(4, 8, 4, 4))
+        notebook.add(page, text=title)
+        if note:
+            ttk.Label(page, style="Sub.TLabel", wraplength=920, justify="left", text=note).pack(
+                anchor="w", pady=(0, 6))
+        picker_row = ttk.Frame(page)
+        picker_row.pack(fill="x")
+        ttk.Label(picker_row, text="記録").pack(side="left", padx=(0, 8))
+        self.picked = tk.StringVar()
+        self.picker = ttk.Combobox(picker_row, textvariable=self.picked, state="readonly", width=60)
+        self.picker.pack(side="left", fill="x", expand=True)
+        self.view = tk.Text(page, wrap="char", height=20, **(style or {}))
+        self.view.pack(fill="both", expand=True, pady=(8, 0))
+        self.picker.bind("<<ComboboxSelected>>", self.show)
+        buttons = ttk.Frame(page)
+        buttons.pack(fill="x", pady=(6, 0))
+        ttk.Button(buttons, text="読み直す", command=self.reload).pack(side="left")
+        ttk.Button(buttons, text="記録を消す", command=self.erase).pack(side="right")
+        for text, command in extra_buttons:
+            ttk.Button(buttons, text=text, command=lambda fn=command: fn(self)).pack(side="right", padx=(0, 8))
+
+    def selected(self):
+        """選んでいる控え `(表示名, パス)`。無ければ `(表示名, None)`。"""
+        name = self.picked.get()
+        return name, dict(self.rows).get(name)
+
+    def show(self, *_args):
+        _name, path = self.selected()
+        self.view.configure(state="normal")
+        self.view.delete("1.0", "end")
+        self.view.insert("1.0", self.empty if path is None else self.describe(path) + "\n\n" + path)
+        self.view.configure(state="disabled")
+
+    def reload(self):
+        self.rows = state_files(self.state_dir, self.dirname)
+        names = [name for name, _path in self.rows]
+        self.picker.configure(values=names)
+        if self.picked.get() not in names:
+            self.picked.set(names[0] if names else "")
+        self.show()
+
+    def erase(self):
+        from tkinter import messagebox
+
+        name, path = self.selected()
+        if path is None:
+            return
+        if not messagebox.askyesno("記録を消す", self.erase_question.format(name=name), parent=self.window):
+            return
+        try:
+            os.remove(path)
+        except OSError as exc:
+            messagebox.showerror("消せませんでした", "{}\n{}".format(path, exc), parent=self.window)
+        self.reload()
 
 
 def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None, editors=None):
@@ -990,7 +1278,7 @@ def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None, ed
     `extra_tabs(tabs, root_dir)` を渡すと、2つのタブの後ろに MOD が自分のタブを足せる
     （`128_` の画像一覧。設定の保存とは関わらない見るだけのタブに使う）。
 
-    `editors` は項目ごとの入力部品（`_Form`）。2段のどちらの組にも同じものを置く。
+    `editors` は項目ごとの入力部品（`Form`）。2段のどちらの組にも同じものを置く。
     """
     # tkinter は関数の中で import する。
     # `modtool` を import しただけで tkinter を要求しないため（`--dump` の道など）。
@@ -1053,7 +1341,7 @@ def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None, ed
     bulk_bottom.pack(side="bottom", fill="x", pady=(6, 0))
     body = ttk.Frame(bulk, padding=(0, 0, 6, 0))    # 入力欄は grid、外は pack。混ぜないための子枠
     body.pack(fill="both", expand=True)
-    shared_form = _Form(_scrollable(body), found, lambda k: "既定: " + shown(found[k]["default"], found[k]),
+    shared_form = Form(scrollable(body), found, lambda k: "既定: " + shown(found[k]["default"], found[k]),
                         editors=editors)
     shared_form.set(shared)
     ttk.Button(bulk_bottom, text="既定に戻す", command=lambda: shared_form.set(
@@ -1080,7 +1368,7 @@ def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None, ed
                            if worlds else "世界が見つかりません: " + store)
     body = ttk.Frame(per_world, padding=(0, 0, 6, 0))
     body.pack(fill="both", expand=True)
-    world_form = _Form(_scrollable(body), found, lambda k: "一括設定: " + shown(shared[k], found[k]),
+    world_form = Form(scrollable(body), found, lambda k: "一括設定: " + shown(shared[k], found[k]),
                        editors=editors)
     ttk.Button(world_bottom, text="一括設定に戻す",
                command=lambda: world_form.set(shared)).pack(side="right")
@@ -1108,7 +1396,7 @@ def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None, ed
     def as_shown(values):
         """型のある値を、入力欄が返す形（`bool` 以外は文字列）に揃える。
 
-        比較の前に必ず通す。`_Form.get()` は `"7"` を返すのに `saved` は `7` を
+        比較の前に必ず通す。`Form.get()` は `"7"` を返すのに `saved` は `7` を
         持っているので、素で比べると**開いた直後から「未保存の変更あり」になる。**
         """
         return shown_values(values)

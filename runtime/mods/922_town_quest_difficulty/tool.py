@@ -240,7 +240,7 @@ def build_window(mod_dir=MOD_DIR, base=""):
     footer.pack(side="bottom", fill="x")
     ttk.Separator(outer).pack(side="bottom", fill="x", pady=8)
 
-    body = modtool._scrollable(outer)
+    body = modtool.scrollable(outer)
     table = ttk.Frame(body, padding=(0, 6, 0, 0))
     table.grid(row=0, column=0, sticky="ew")
     headings = ("番号", "名前", "規模", "つながる街", "ゲームの範囲", "今の依頼", "下限", "上限", "固定", "適正Lv")

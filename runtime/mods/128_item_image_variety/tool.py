@@ -177,7 +177,7 @@ def gallery_tab(tabs, root_dir):
     hint.pack(side="left", fill="x", expand=True)
     body = ttk.Frame(page, padding=(0, 0, 6, 0))
     body.pack(fill="both", expand=True)
-    grid = modtool._scrollable(body)
+    grid = modtool.scrollable(body)
     shown = {"photos": [], "cells": [], "subs": [None], "folders": []}
 
     def background():
@@ -273,7 +273,7 @@ def gallery_tab(tabs, root_dir):
             total += len(cells)
         relayout()
         hint.configure(text="{} 枚".format(total))
-        # 分類や部位を替えたら一番上から見せる（`_scrollable` の枠は Canvas の中の Frame）
+        # 分類や部位を替えたら一番上から見せる（`scrollable` の枠は Canvas の中の Frame）
         grid.master.yview_moveto(0)
 
     def relayout(_event=None):
@@ -369,7 +369,7 @@ def genre_tab(tabs, root_dir):
     status.pack(side="left", fill="x", expand=True)
     body_frame = ttk.Frame(page, padding=(0, 0, 6, 0))
     body_frame.pack(fill="both", expand=True)
-    grid = modtool._scrollable(body_frame)
+    grid = modtool.scrollable(body_frame)
 
     ttk.Label(grid, text="分類", style="Group.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 12))
     for j, (_g, glabel) in enumerate(genres):

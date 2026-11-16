@@ -132,17 +132,11 @@ def changed_count(keys, found, values):
 
 def build_window(mod_dir=MOD_DIR):
     """窓を組んで返す（`mainloop()` は呼ばない。検査が中を数えるため）。"""
-    import time
-    import tkinter as tk
-    from tkinter import messagebox, ttk
+    from tkinter import ttk
 
-    info = modtool.manifest(mod_dir)
-    title = (info.get("name") or {}).get("ja") or modtool.mod_name(mod_dir)
-    root_dir, _state_dir, _game_dir = modtool.locate(mod_dir)
-    runtime = os.path.join(root_dir, "runtime")
-    config = modtool.config_module(root_dir, mod_dir)
-    found = modtool.decls(mod_dir, root_dir)
-    current = modtool.load_settings(root_dir, mod_dir)
+    win = modtool.SettingsWindow(mod_dir, geometry="1040x700", minsize=(860, 560),
+                                 subtitle="左で機能を選ぶ。入切は右の先頭の項目", subtitle_wrap=980)
+    found = win.found
     grouped = group_keys(found)
     extra = orphans(found)
     sections = [g for g in GROUPS if grouped[g[0]]]
@@ -150,24 +144,7 @@ def build_window(mod_dir=MOD_DIR):
         sections.append(("other", "その他", None, (), "どの機能にも入らない項目"))
         grouped["other"] = extra
 
-    root = tk.Tk()
-    root.title(title)
-    root.minsize(860, 560)
-    modtool.restore_window(root_dir, mod_dir, root, "1040x700")
-    modtool.setup_theme(root, root_dir)
-
-    outer = ttk.Frame(root, padding=12)
-    outer.pack(fill="both", expand=True)
-    ttk.Label(outer, text=title, style="Title.TLabel").pack(anchor="w")
-    ttk.Label(outer, style="Sub.TLabel", wraplength=980, justify="left",
-              text="左で機能を選ぶ。入切は右の先頭の項目"
-              ).pack(anchor="w", pady=(0, 8))
-
-    footer = ttk.Frame(outer)
-    footer.pack(side="bottom", fill="x")
-    ttk.Separator(outer).pack(side="bottom", fill="x", pady=8)
-
-    main = ttk.Frame(outer)
+    main = ttk.Frame(win.outer)
     main.pack(fill="both", expand=True)
 
     # ---- 左: 機能の一覧
@@ -194,7 +171,7 @@ def build_window(mod_dir=MOD_DIR):
     head_title.pack(side="left", anchor="w")
     head_blurb = ttk.Label(pane, style="Sub.TLabel", wraplength=680, justify="left")
     head_blurb.pack(side="top", anchor="w", pady=(2, 6))
-    body = modtool._scrollable(pane)
+    body = modtool.scrollable(pane)
     body.columnconfigure(0, weight=1)
 
     forms = {}
@@ -202,13 +179,11 @@ def build_window(mod_dir=MOD_DIR):
     for section in sections:
         gkey = section[0]
         frame = ttk.Frame(body, padding=(0, 0, 6, 0))
-        subset = dict((key, found[key]) for key in grouped[gkey])
-        forms[gkey] = modtool._Form(frame, subset,
-                                    lambda k: "既定: " + modtool.shown(found[k]["default"], found[k]))
+        forms[gkey] = win.form(frame, grouped[gkey])
         frames[gkey] = frame
         tree.insert("", "end", iid=gkey, text=section[1])
 
-    # 項目の説明は `_Form` が自分の枠の幅で折り返すが、枠は選んだ機能のものしか置かれていない。
+    # 項目の説明は `Form` が自分の枠の幅で折り返すが、枠は選んだ機能のものしか置かれていない。
     # 機能を選び直した直後にも幅が合うよう、欄の幅から見出しの列を引いた幅でここでも折り返し直す。
     notes = dict((gkey, [w for w in frame.grid_slaves(column=1)
                          if isinstance(w, ttk.Label) and str(w.cget("style")) == "Faint.TLabel"])
@@ -275,66 +250,16 @@ def build_window(mod_dir=MOD_DIR):
         for var in form.vars.values():
             var.trace_add("write", refresh_list)
 
-    def as_shown(values):
-        return dict((k, v if isinstance(v, bool) else str(v)) for k, v in values.items())
-
-    saved = {"values": {}}
-    # ファイルに在る値。「すべて既定に戻す」の後の比べ先で、保存のたびに差し替える。
-    last = {"values": current}
-
-    def load_values(values):
+    def set_values(values):
         for gkey, form in forms.items():
             form.set(dict((k, values[k]) for k in grouped[gkey]))
-        saved["values"] = as_shown(dict((k, values[k]) for k in found))
         refresh_list()
 
-    load_values(current)
+    win.finish(everything, set_values, reset_label="すべて既定に戻す")
     if sections:
         tree.selection_set(sections[0][0])
         show(sections[0][0])
-
-    def dirty():
-        return as_shown(everything()) != saved["values"]
-
-    status = ttk.Label(footer, style="Faint.TLabel", text="ゲームを起動し直すと効きます")
-    status.pack(side="left")
-
-    def save():
-        values, bad = modtool.coerce_all(mod_dir, everything(), root_dir)
-        if bad:
-            messagebox.showerror("設定を確かめてください", bad, parent=root)
-            return False
-        try:
-            modtool.save_settings(root_dir, mod_dir, values, strict=True)
-        except Exception as exc:
-            messagebox.showerror("保存に失敗しました", "{}\n{}: {}".format(
-                config.store_path(runtime), type(exc).__name__, exc), parent=root)
-            return False
-        saved["values"] = as_shown(values)
-        last["values"] = values
-        status.configure(text="保存しました {}  {}".format(
-            time.strftime("%H:%M:%S"), config.store_path(runtime)))
-        return True
-
-    def reset_all():
-        load_values(dict((k, d["default"]) for k, d in found.items()))
-        saved["values"] = as_shown(last["values"])  # 「すべて既定に戻す」は未保存の変更のまま
-
-    def close():
-        modtool.save_window(root_dir, mod_dir, root)
-        if dirty():
-            answer = messagebox.askyesnocancel("未保存の変更", "変更を保存してから閉じますか？", parent=root)
-            if answer is None:
-                return
-            if answer and not save():
-                return
-        root.destroy()
-
-    ttk.Button(footer, text="閉じる", command=close).pack(side="right")
-    ttk.Button(footer, text="保存", style="Accent.TButton", command=save).pack(side="right", padx=(0, 6))
-    ttk.Button(footer, text="すべて既定に戻す", command=reset_all).pack(side="right", padx=(0, 12))
-    root.protocol("WM_DELETE_WINDOW", close)
-    return root
+    return win.root
 
 
 def main():

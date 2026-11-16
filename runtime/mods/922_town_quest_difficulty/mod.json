@@ -10,7 +10,7 @@
     "en": "The game draws a town's quest difficulties from a range fixed by the town's slot, and towns past the ninth (added by bulk generation or the editor) get the whole 1-76 range, so a village next to the start can hand out level 70 quests. A settings screen reads the world and lists every town with its roads, the game's range and the quests it has now, and lets you set each town's range, or smooth the whole map along the roads from the start town to the farthest ones. The range is used where the game draws the number, for the three quests made on the first visit and for each quest found by searching, so the prompt, the save and 318's growth all see the same number. Quests that already exist are left as they are",
     "ja": "ゲームは街の依頼の難易度を街の番号で決まった範囲から引き、9番目より後の街（一括生成やエディタで足した街）は 1〜76 の全域から引く。開始の隣の村からレベル70の依頼が出ることもある。設定画面で世界を読み込み、街ごとの道のつながり・ゲームの範囲・今の依頼を並べ、街ごとに範囲を決められる。開始の街から最も遠い街まで道に沿ってなだらかにするボタンもある。決めた範囲はゲームが数を引く所で使う（初めて訪ねたときの3件と、クエストを探したときの1件）。LLM への指示・セーブ・318 の育ちがどれも同じ数を見る。すでにある依頼は変えない"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "state": ["town_quest_difficulty"],
   "settings": {
