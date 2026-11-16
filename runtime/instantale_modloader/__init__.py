@@ -1050,16 +1050,65 @@ RENAMED_MODS = {
     "406_gemini_user_role_fix": "406_user_role_fix",        # v1.16.0（Claude でも効くようにした）
 }
 
+#: ローダに取り込んだ MOD（フォルダ名 → 取り込んだローダのモジュール）。
+#: 残る理由は `RENAMED_MODS` と同じで、残ると取り込んだ機能と二重に当たる。
+#: 取り込んだ機能は設定を持たないので、`settings/mod_settings.json` の値も外す。
+ABSORBED_MODS = {
+    "126_ui_title_version": "title_version",                # v1.21.1（切ると注入の確かめ方が成り立たない）
+}
+
+
+def _drop_absorbed(mods_dir: str) -> list[str]:
+    """ローダに取り込んだ MOD の古いフォルダ・順序ファイルの行・設定値を外す。消したフォルダ名を返す。
+
+    取り込んだモジュールがこのローダに無ければ何もしない（`RENAMED_MODS` の「新しいフォルダが在るか」と同じ守り）。
+    """
+    from . import config as _config
+    dropped = []
+    here = os.path.dirname(os.path.abspath(__file__))
+    runtime_dir = os.path.dirname(os.path.abspath(mods_dir))
+    for old, module in ABSORBED_MODS.items():
+        if not os.path.isfile(os.path.join(here, module + ".py")):
+            continue
+        source = os.path.join(mods_dir, old)
+        if os.path.isdir(source):
+            try:
+                shutil.rmtree(source)
+            except OSError:
+                log_exc("cannot remove the absorbed mod {}".format(source))
+                continue
+            dropped.append(old)
+        path = order_path(mods_dir)
+        data = read_json(path)
+        if isinstance(data, dict):
+            order = [name for name in data.get("order") or [] if name != old]
+            disabled = [name for name in data.get("disabled") or [] if name != old]
+            if order != (data.get("order") or []) or disabled != (data.get("disabled") or []):
+                write_json(path, dict(data, order=order, disabled=disabled), indent=2)
+        try:
+            store = _config.load_store_for_write(runtime_dir)
+        except ValueError:
+            log_exc("cannot drop the settings of the absorbed mod {}".format(old))
+            continue
+        if old in store:
+            store.pop(old)
+            try:
+                _config.save_store(runtime_dir, store)
+            except Exception:
+                log_exc("cannot drop the settings of the absorbed mod {}".format(old))
+    return dropped
+
 
 def drop_renamed(mods_dir: str) -> list[str]:
     """改名した MOD の古いフォルダを消し、順序ファイルの入切を新しい名前へ移す。消した古い名前を返す。
 
     新しい名前のフォルダ（`mod.json`）が無ければ何もしない（古い版の zip で戻したときなど）。
     古い名前を切っていたら新しい名前も切り、順序ファイルから古い名前を外す。
+    ローダに取り込んだ MOD（`ABSORBED_MODS`）の古いフォルダも同じ所で消し、名前を戻りに含める。
     GUI の起動・更新の展開・watcher の起動で呼ぶ。v1.15.0 の GUI の更新はこれを持たないので、
     更新の後に開き直した GUI が片付ける。
     """
-    dropped = []
+    dropped = _drop_absorbed(mods_dir)
     for old, new in RENAMED_MODS.items():
         if not os.path.isfile(os.path.join(mods_dir, new, MANIFEST_NAME)):
             continue
@@ -2346,6 +2395,17 @@ def _boot(out_dir: str) -> dict:
         _keep_save_gates(ctx)
     except BaseException:
         log_exc("cannot keep the save gates")
+    # タイトル画面の右上の版の1行（title_version.py。v1.21.0 までは `126_ui_title_version`）。
+    # 飾りは `on_ready` で流れるので、MOD の前後どちらで積んでも並びは `order` で決まる。
+    try:
+        from . import title_version as _title_version
+        _registry.begin_mod("(loader)")
+        try:
+            _title_version.install(ctx)
+        finally:
+            _registry.end_mod()
+    except BaseException:
+        log_exc("cannot install the title version")
     # 作業スレッドが死んだときに待機のまま止めない（stalls.py）。MOD の層より後に当てる。
     try:
         from . import stalls as _stalls

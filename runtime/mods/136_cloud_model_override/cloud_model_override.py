@@ -63,8 +63,8 @@ API の既定を「high（既定）」のように出す）。
 `TITLE_MODEL_UNSWAPPED` をオンにすると、差し替えていないときもゲームが選んだモデルとゲームが組む推論量を出す。
 どの LLM が選ばれているかは `config.json` から読む（`llm.game_choice`。切り替えるとゲームが起動し直すので、
 注入の時に1回読めば足りる）。
-置き方は `126_` と同じローダの部品（`ui.on_title_screen` / `ui.corner_label`）で、
-右上では `126_` の版の行の下に積む。
+置き方はローダの版の1行（`title_version`）と同じ部品（`ui.on_title_screen` / `ui.corner_label`）で、
+右上では版の行の下に積む。
 表示名は `mod.json` の `value_labels` から引き、設定画面と同じ名前にする。
 
 ## 割り切り
@@ -143,7 +143,7 @@ TITLE_MODEL = True
 # 素のゲームの画面に足すことになるので、既定は出さない。
 TITLE_MODEL_UNSWAPPED = False
 
-#: タイトル画面に足すラベルの印と、右上に積む中での並び（`126_` の版の行が 0）。
+#: タイトル画面に足すラベルの印と、右上に積む中での並び（ローダの版の行が 0）。
 TITLE_LABEL_ATTR = ui.MOD_WIDGET_PREFIX + "cloud_model"
 TITLE_ORDER = 10
 TITLE_FONT_SIZE = 14

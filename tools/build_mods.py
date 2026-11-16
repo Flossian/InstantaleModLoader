@@ -101,7 +101,6 @@ BANDS = (
         "001_crash_recorder",
     )),
     ("fix", "## 修正（1xx）", (
-        "126_ui_title_version",
         "100_fix_kivy_shutdown",
         "101_fix_npc_employ_price",
         "102_fix_prompt_dedup",

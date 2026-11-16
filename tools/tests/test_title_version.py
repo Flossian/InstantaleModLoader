@@ -1,56 +1,38 @@
 # -*- coding: utf-8 -*-
-"""126_ui_title_version をゲーム抜きで通す。
+"""ローダの `title_version`（タイトル画面の版の1行）をゲーム抜きで通す。
 
-    python tools/tests/test_ui_title_version.py
+    python tools/tests/test_title_version.py
 
 偽の Kivy（Label / Window）と偽の `scripts.hud.hud_start:StartScreen` を差し込み、
 次を確認する。
 
-  注入時     … もう出ているタイトル画面を窓から辿って見つけ、その場で足す
+  注入時     … もう出ているタイトル画面をウィンドウから辿って見つけ、その場で足す
   組み直し   … 後から組まれるタイトル画面にも足す（タイトルへ戻る経路）
   重ね置き   … 注入し直しても、ラベルは1枚のまま置き換わる
-  文字       … {version} と {mods} が実際の値に置き換わる
-  置き場所   … 設定した隅が隅の箱の pos_hint に出る。知らない名前なら右上へ落ちる
   積み       … 同じ隅の他の MOD の1行（`136_`）と同じ箱に縦に積み、この行が縁側
   フォント   … 画面のウィジェットからフォント名を写す（日本語が豆腐にならない）
   大きさ     … ラベルの箱を文字の大きさに合わせる（既定の 100x100 のままにしない）
   無傷       … ゲームが組んだ子には触らない。Kivy が引けなければ何もしない
+  片付け     … MOD だった頃の `126_ui_title_version` のフォルダ・順序ファイルの行・設定値を外す
 """
-import importlib.util
-import io
 import json
 import os
+import shutil
 import sys
+import tempfile
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
-MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml            # noqa: E402
+from instantale_modloader import title_version, ui   # noqa: E402
 
-
-def find_mod(suffix):
-    """mod を **番号を除いた名前** で探す（番号は振り直されることがある）。"""
-    matches = sorted(name for name in os.listdir(MODS_DIR)
-                     if name.endswith(suffix)
-                     and os.path.isfile(os.path.join(MODS_DIR, name, "mod.json")))
-    if not matches:
-        raise SystemExit("cannot find *{} in {}".format(suffix, MODS_DIR))
-    if len(matches) > 1:
-        raise SystemExit("ambiguous: {} in {}".format(matches, MODS_DIR))
-    folder = os.path.join(MODS_DIR, matches[0])
-    with io.open(os.path.join(folder, "mod.json"), encoding="utf-8") as fh:
-        entry = json.load(fh)["entry"]
-    return os.path.join(folder, entry)
-
-
-MOD = find_mod("_ui_title_version")
-MOD_NAME = "mod_ui_title_version"
 FONT = "NotoSansJP-Regular.ttf"
+OLD = "126_ui_title_version"
 
 failures = []
 checked = 0
@@ -85,7 +67,7 @@ class FakeWidget(object):
 
 
 class FakeLabel(FakeWidget):
-    """`Label` のうち、この mod が触る分だけ。文字の箱の配り方も本物に似せる。"""
+    """`Label` のうち、ここで触る分だけ。文字の箱の配り方も本物に似せる。"""
 
     def __init__(self, **kwargs):
         self.text = ""
@@ -124,11 +106,7 @@ class FakeImage(FakeWidget):
 
 
 class FakeDefaultFontLabel(FakeWidget):
-    """Kivy の既定フォントのまま置かれたウィジェット。
-
-    既定（Roboto）に日本語は無いので、これを写しても写さなかったのと同じ。
-    見つけても採らず、先を見に行くこと。
-    """
+    """Kivy の既定フォントのまま置かれたウィジェット。見つけても採らず、先を見に行くこと。"""
 
     def __init__(self):
         FakeWidget.__init__(self)
@@ -145,7 +123,6 @@ class FakeStartScreen(FakeWidget):
     def __init__(self, *callbacks, **kwargs):
         FakeWidget.__init__(self, **kwargs)
         # 先に足したものほど後ろに残る＝フォントを探すとき最初に当たる。
-        # 既定フォントのウィジェットとロゴを、本物のボタンより手前に置いてある。
         self.add_widget(FakeDefaultFontLabel())
         self.add_widget(FakeImage())
         for text in ("開始する", "続きから", "世界", "設定"):
@@ -157,7 +134,7 @@ PRISTINE_INIT = FakeStartScreen.__init__
 
 
 def install_fake_kivy():
-    """mod は Kivy を関数の中で遅延 import する。sys.modules に偽物を置く。"""
+    """部品は Kivy を関数の中で遅延 import する。sys.modules に偽物を置く。"""
     kivy = types.ModuleType("kivy")
     uix = types.ModuleType("kivy.uix")
     label_mod = types.ModuleType("kivy.uix.label")
@@ -210,7 +187,7 @@ class FakeCtx(object):
         return decorate
 
     def patch(self, target, **kw):
-        raise AssertionError("this mod should not use ctx.patch")
+        raise AssertionError("title_version should not use ctx.patch")
 
     def log(self, msg, level="INFO"):
         self.logs.append((level, msg))
@@ -223,32 +200,17 @@ class FakeCtx(object):
         return True
 
 
-def load_mod():
-    spec = importlib.util.spec_from_file_location(
-        MOD_NAME, MOD, submodule_search_locations=[os.path.dirname(MOD)])
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[MOD_NAME] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-def install(generation="gen1", **settings):
-    """注入をやり直す。**ラッパを重ねない**（本物は世代管理で置き換える）。"""
+def install(generation="gen1"):
+    """注入をやり直す。**ラッパーを重ねない**（本物は世代管理で置き換える）。"""
     FakeStartScreen.__init__ = PRISTINE_INIT
-    sys.modules.pop(MOD_NAME, None)
-    module = load_mod()
-    for name, value in settings.items():
-        if not hasattr(module, name):
-            raise SystemExit("設定 {!r} がモジュールに無い".format(name))
-        setattr(module, name, value)
     ctx = FakeCtx(generation)
-    module.apply(ctx)
-    return module, ctx
+    title_version.install(ctx)
+    return ctx
 
 
-def labels_of(screen, mod, attr=None):
-    """画面の隅の箱に積まれた、この MOD のラベル。"""
-    attr = attr or mod.LABEL_ATTR
+def labels_of(screen, attr=None):
+    """画面の隅の箱に積まれた版の1行。"""
+    attr = attr or title_version.LABEL_ATTR
     found = []
     for holder in [screen] + list(screen.children):
         found.extend(child for child in holder.children
@@ -256,11 +218,43 @@ def labels_of(screen, mod, attr=None):
     return found
 
 
+def check_drop_absorbed():
+    print("\n[片付け]")
+    root = tempfile.mkdtemp(prefix="iml_absorbed_")
+    try:
+        mods = os.path.join(root, "runtime", "mods")
+        os.makedirs(os.path.join(mods, OLD))
+        os.makedirs(os.path.join(mods, "100_keep"))
+        for name in (OLD, "100_keep"):
+            ml.write_json(os.path.join(mods, name, "mod.json"), {"entry": "x.py"})
+        ml.write_json(os.path.join(mods, ml.ORDER_NAME),
+                      {"order": ["001_a", OLD, "100_keep"], "disabled": [OLD, "100_keep"]})
+        os.makedirs(os.path.join(root, "settings"))
+        store = os.path.join(root, "settings", "mod_settings.json")
+        ml.write_json(store, {OLD: {"CORNER": "左下"}, "100_keep": {"X": 1}})
+
+        dropped = ml.drop_renamed(mods)
+        check("取り込んだ MOD の名前を返す", OLD in dropped, dropped)
+        check("旧フォルダが消える", not os.path.isdir(os.path.join(mods, OLD)))
+        check("他の MOD のフォルダは残る", os.path.isdir(os.path.join(mods, "100_keep")))
+        with open(os.path.join(mods, ml.ORDER_NAME), encoding="utf-8") as fh:
+            order = json.load(fh)
+        check("順序ファイルの行が消え、他は並びのまま",
+              order["order"] == ["001_a", "100_keep"], order["order"])
+        check("切っていた印も消え、他の MOD の印は残る",
+              order["disabled"] == ["100_keep"], order["disabled"])
+        with open(store, encoding="utf-8") as fh:
+            values = json.load(fh)
+        check("設定値が消え、他の MOD の設定は残る",
+              values == {"100_keep": {"X": 1}}, values)
+        check("2回目は何もしない", ml.drop_renamed(mods) == [])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def run():
     install_fake_kivy()
     install_fake_game()
-    # `status()` が数える相手（この注入で当たった mod）。
-    ml._state["mods"] = {"100_a": "ok", "101_b": "ok", "102_c": "apply-error"}
 
     # -- 注入した時点で出ている画面 -----------------------------------------
     print("\n[注入時]")
@@ -269,14 +263,16 @@ def run():
     root.add_widget(open_screen)
     FakeWindow.children = [root]
 
-    mod, ctx = install()
-    check("apply() だけでは画面に触らない", not labels_of(open_screen, mod))
+    ctx = install()
+    check("install() だけでは画面に触らない", not labels_of(open_screen))
     for _key, fn in ctx.ready:
         fn()
-    found = labels_of(open_screen, mod)
+    found = labels_of(open_screen)
     check("もう出ているタイトル画面を辿って足す", len(found) == 1, open_screen.children)
     check("文字はローダの版", found and found[0].text == "modloader v9.9.9",
           found and found[0].text)
+    check("右上に置く", bool(found) and found[0].parent.pos_hint == ui.CORNERS["右上"],
+          found and found[0].parent.pos_hint)
     check("ゲームが組んだ子はそのまま残る",
           open_screen.children[1:] == open_screen.built, open_screen.children)
     check("足すのはいちばん手前の隅の箱（描画は最後）",
@@ -288,72 +284,50 @@ def run():
     # -- タイトルへ戻ったときに組み直される画面 -----------------------------
     print("\n[組み直し]")
     fresh = FakeStartScreen()
-    check("後から組まれた画面にも足す", len(labels_of(fresh, mod)) == 1, fresh.children)
+    check("後から組まれた画面にも足す", len(labels_of(fresh)) == 1, fresh.children)
     check("ゲームの子は全部揃っている", len(fresh.children) == len(fresh.built) + 1)
 
     # -- 注入し直し ---------------------------------------------------------
     print("\n[重ね置き]")
-    mod, ctx = install(generation="gen2")
+    ctx = install(generation="gen2")
     for _key, fn in ctx.ready:
         fn()
     for _key, fn in ctx.ready:
         fn()                      # 当て直し（TECH.md §3.4）で2回流れても
-    check("注入し直してもラベルは1枚", len(labels_of(open_screen, mod)) == 1,
+    check("注入し直してもラベルは1枚", len(labels_of(open_screen)) == 1,
           open_screen.children)
     check("ゲームの子は増えも減りもしない",
           open_screen.children[1:] == open_screen.built, open_screen.children)
 
-    # -- 文字 ---------------------------------------------------------------
-    print("\n[文字]")
-    mod, ctx = install(TEXT="MOD {mods} 本 / v{version}")
-    text = labels_of(FakeStartScreen(), mod)[0].text
-    check("{mods} は当たった mod の本数（失敗したものは数えない）",
-          text == "MOD 2 本 / v9.9.9", text)
-
-    # -- 置き場所と見た目 ---------------------------------------------------
-    print("\n[置き場所]")
-    from instantale_modloader import ui
-
-    mod, ctx = install(CORNER="左下", FONT_SIZE=20, ALPHA=0.3)
-    corner = labels_of(FakeStartScreen(), mod)[0]
-    check("設定した隅が隅の箱の pos_hint に出る", corner.parent.pos_hint == ui.CORNERS["左下"],
-          corner.parent.pos_hint)
-    check("左の隅は左寄せ", corner.pos_hint == {"x": 0}, corner.pos_hint)
-    check("濃さと大きさが効く",
-          corner.color == (1.0, 1.0, 1.0, 0.3) and corner.font_size == 20.0,
-          (corner.color, corner.font_size))
-
-    mod, ctx = install(CORNER="まんなか")
-    fallback = labels_of(FakeStartScreen(), mod)[0]
-    check("知らない隅の名前は右上へ落ちる", fallback.parent.pos_hint == ui.CORNERS["右上"],
-          fallback.parent.pos_hint)
-
     print("\n[フォントと大きさ]")
-    mod, ctx = install()
-    label = labels_of(FakeStartScreen(), mod)[0]
+    install()
+    label = labels_of(FakeStartScreen())[0]
     check("画面のウィジェットからフォントを写す（Kivy の既定は採らない）",
           label.font_name == FONT, label.font_name)
     check("箱を文字の大きさに合わせる（既定の 100x100 で隅に寄らない）",
           label.size == label.texture_size, (label.size, label.texture_size))
+    check("濃さと大きさは MOD だった頃の既定値",
+          label.color == (1.0, 1.0, 1.0, 0.55) and label.font_size == 14.0,
+          (label.color, label.font_size))
 
     # -- 同じ隅の他の MOD の1行と積む -----------------------------------------
     print("\n[積み]")
-    mod, ctx = install()
+    install()
     screen = FakeStartScreen()
     other = ui.corner_label(screen, "_instantale_other", "LLM: X", corner="右上", order=10)
-    mine = labels_of(screen, mod)[0]
+    mine = labels_of(screen)[0]
     check("同じ隅の1行は同じ箱に入る", other.parent is mine.parent, screen.children)
-    check("この MOD の行が縁側（上の隅なら上＝先に足した側）",
+    check("版の行が縁側（上の隅なら上＝先に足した側）",
           mine.parent.children[-1] is mine, [c.text for c in mine.parent.children])
     check("右の隅は右寄せ", mine.pos_hint == {"right": 1}, mine.pos_hint)
     box = mine.parent
     check("箱は2行を収める大きさ",
           box.size == (max(mine.size[0], other.size[0]), mine.size[1] + other.size[1]), box.size)
-    ui.corner_label(screen, mod.LABEL_ATTR, "again", corner="右上")
+    ui.corner_label(screen, title_version.LABEL_ATTR, "again", corner="右上")
     check("置き直しても1枚のまま、他の MOD の行は残る",
-          len(labels_of(screen, mod)) == 1 and other.parent is box, box.children)
+          len(labels_of(screen)) == 1 and other.parent is box, box.children)
     ui.remove_corner_label(screen, "_instantale_other")
-    check("他の MOD が外すと自分の行だけ残る", len(box.children) == 1, box.children)
+    check("他の MOD が外すと版の行だけ残る", len(box.children) == 1, box.children)
 
     # -- Kivy が引けない環境 -------------------------------------------------
     print("\n[無傷]")
@@ -361,10 +335,12 @@ def run():
     sys.modules["kivy.uix.label"] = None      # import が失敗する形
     try:
         bare = FakeStartScreen()
-        check("Label が作れなければ何も足さない", not labels_of(bare, mod), bare.children)
+        check("Label が作れなければ何も足さない", not labels_of(bare), bare.children)
         check("ゲームの子はそのまま", bare.children == bare.built)
     finally:
         sys.modules["kivy.uix.label"] = saved
+
+    check_drop_absorbed()
 
     print()
     if failures:

@@ -383,6 +383,7 @@ def extract_release(zip_path: str, dest: str = ROOT) -> int:
     新しい版で無くなった MOD は、配る側がデバッグモード限定か読み込まない形にして
     出す約束（消す判断をここでしない）。ただし改名した MOD（`ml.RENAMED_MODS`）の古いフォルダは、
     新しい名前のフォルダが届いたら消し、入切を新しい名前へ移す（`ml.drop_renamed`）。
+    ローダに取り込んだ MOD（`ml.ABSORBED_MODS`）のフォルダも同じ所で消す。
 
     開発の作業ツリーで押すと、配布物の中身で作業中の変更が上書きされる
     （実際に起きた。git で戻せるが、戻す前に何を失ったか見ること）。
@@ -1724,13 +1725,20 @@ class App(ttk.Frame):
         # 次に開いたときに画面いっぱいの「普通の窓」になってしまうので分けて持つ。
         self.geom = master.geometry()
 
-        # 改名した MOD の古いフォルダは一覧を読む前に消す。
+        # 改名した MOD とローダに取り込んだ MOD の古いフォルダは一覧を読む前に消す。
         # 前の版の GUI の「更新」と、zip の手での展開は古いフォルダを残すので、ここで片付ける。
         dropped = ml.drop_renamed(MODS_DIR)
         self._build()
         self.reload()
         if dropped:
-            self._set_status("名前の変わった MOD の古いフォルダを消しました: {}".format("、".join(dropped)))
+            absorbed = [name for name in dropped if name in ml.ABSORBED_MODS]
+            renamed = [name for name in dropped if name not in ml.ABSORBED_MODS]
+            notes = []
+            if renamed:
+                notes.append("名前の変わった MOD の古いフォルダを消しました: {}".format("、".join(renamed)))
+            if absorbed:
+                notes.append("ローダに取り込んだ MOD のフォルダを消しました: {}".format("、".join(absorbed)))
+            self._set_status(" / ".join(notes))
         threading.Thread(target=self._check_update, daemon=True).start()
         threading.Thread(target=self._check_notes, args=(read_config(),),
                          daemon=True).start()
