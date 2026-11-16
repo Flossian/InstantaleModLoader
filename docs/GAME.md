@@ -2880,6 +2880,71 @@ process_choice(AreaMoveManager,       '馬車(1000G)' / '徒歩(3ヵ月)')
 - `current_hp` が `max_hp` を超えている状態を観測している（2591 > 1560）。
   HP を条件に使うなら `current_hp <= max_hp` を前提にしないこと
 
+#### 2.19.1 怪我（`body_parts`）
+
+`Character.body_parts` は6部位の辞書で、並びは `head` `body` `arms` `legs` `organs` `sanity`。
+各部位は `injury`（怪我の重さ）・`stage`（段階）・`state`・`description` を持つ。
+セーブに残る。
+
+```python
+player.body_parts = {"head": {"injury": 0, "stage": "intact", "state": "", "description": ""}, ...}
+```
+
+段階は `InstantaleApp.check_body_damage(character)` が `injury` から決め直す。
+重くなる向きにも軽くなる向きにも動く（`injury` を下げて呼ぶと段階も戻る）。
+
+| `injury` | `stage` | 体力の上限への倍率 |
+| --- | --- | --- |
+| 10 未満 | `intact` | なし |
+| 10 から | `hurt` | ×0.97 |
+| 30 から | `damaged` | ×0.95 |
+| 60 から | `disabled` | ×0.9 |
+| 100 から | `lost` | ×0.85 |
+
+`lost` は倍率がいちばん重いだけの段階で、部位が無くなる処理も死亡の処理も無い。
+
+`check_body_damage` は段階を決めた後に `update_max_physical_integrity` `update_max_hp` `update_ability_scores` を呼ぶ。
+能力値への倍率は部位と段階で決まる。
+
+| 部位 | `hurt` | `damaged` | `disabled` | `lost` |
+| --- | --- | --- | --- | --- |
+| `arms` | 器用 ×0.95 | 筋力 ×0.95・器用 ×0.85 | 筋力 ×0.85・器用 ×0.75 | 筋力 ×0.75・器用 ×0.75 |
+| `legs` | 器用 ×0.95 | 耐久 ×0.95・器用 ×0.85 | 耐久 ×0.85・器用 ×0.75 | 耐久 ×0.75・器用 ×0.75 |
+| `body` | 耐久 ×0.95 | 筋力 ×0.95・耐久 ×0.85 | 筋力 ×0.85・耐久 ×0.75 | 筋力 ×0.75・耐久 ×0.75 |
+| `head` | 魅力 ×0.95 | 知力 ×0.95・魅力 ×0.85 | 知力 ×0.85・魅力 ×0.75 | 知力 ×0.75・魅力 ×0.75 |
+| `organs` | 耐久 ×0.95 | 耐久 ×0.85 | 耐久 ×0.75 | 耐久 ×0.75 |
+| `sanity` | 判断 ×0.95 | 知力 ×0.95・判断 ×0.85 | 知力 ×0.85・判断 ×0.75 | 知力 ×0.75・判断 ×0.75 |
+
+- 能力値は `original_ability_scores` から計算し直す（呼ぶたびに重ねて下がることはない）。
+  同じ能力値を複数の部位が下げるときは `body_parts` の並びの順に掛け、1つ掛けるごとに `round` で丸める
+  （.5 は偶数へ）。
+  腕が重傷・脚が軽傷のとき、器用は 30 → 26 → 25。
+  胴体が `disabled`・腕が `damaged` のとき、筋力は 30 → 26 → 25
+- 体力の上限は `update_max_physical_integrity` を呼ぶたびに、今の上限へ重ねて掛かる（1部位ごとに丸める）。
+  上限が下がると今の体力も上限まで下がる。
+  怪我が治って上限が戻っても、今の体力は戻らない
+- 最大 HP に段階の倍率は無い。
+  体力が上限より減ったぶんだけ下がる（§2.19）
+- 読み込み直すと能力値は元の値に戻る。
+  `body_parts` の段階は残るが、`Character.__init__` が `ability_scores` を作り直すときに倍率を掛けない。
+  次に `check_body_damage` が走るまで、怪我は能力値に効いていない。
+  体力の上限はセーブに残るので下がったまま。
+  `149_fix_injury_after_load` が読み込みの後に `update_ability_scores` を呼んで直す
+- 怪我が付くのは依頼の出来事の判定（`QuestEventManager.method_1` → `check_body_damage`）。
+  1回で `injury` が 3 か 9 増えた（記録は3件）。
+  戦闘の審判の応答にも `body_part_damage` の枠があるが、記録に残った4回はどれも空だった
+- `injury` の初めの値は主人公によって 0 と 9 がある（理由は分かっていない）。
+  9 始まりの主人公は、3 増える怪我1回で `hurt` になる
+- 治療は医療施設の `MedicalTreatmentManager`（3ヵ月の入院）。
+  `injury` がいくつ戻るかは測っていない
+- プロフィール欄の健康状態は、段階が `intact` でない部位を `arms: hurt, ` の形で並べる。
+  部位も段階も英語のままで、末尾にカンマが残る。
+  `121_ui_character_sheet` が日本語の行に書き直す
+
+測り方は、主人公の `body_parts` を書き換えて `check_body_damage` を呼び、段階と能力値を読んでから元の値へ戻す形
+（VERIFICATION.md §3.131）。
+倍率の表としきい値の 10・30・100 は exe の定数にもある。
+
 ### 2.20 手配度（`area_history` の `lawfulness`）
 
 治安上の立場は土地ごとに持たれている。

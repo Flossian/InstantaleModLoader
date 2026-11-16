@@ -16,6 +16,9 @@
    特性はゲームが作って一度も使っていない箱（`character_sheet_empty`）を借り、
    手配度とスキルは Label を2枚足す。
    何を出すかは `sheet.py`。
+3. 健康状態の欄を書き直す。
+   ゲームが英語のまま並べた部位と段階を日本語の行にし、
+   下がっている能力値は欄にマウスを乗せたときの説明の窓に出す（GAME.md §2.19.1）。
 
 ### なぜ開くたびに書くのか
 
@@ -416,10 +419,40 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("character sheet: could not place the reroll button")
 
+    def write_health(hud, character):
+        """健康状態の欄を、部位と段階を日本語にした行で書き直す。怪我が無ければゲームの文に任せる。
+
+        ゲームはこの欄を開くたびに書き直すが、書き直さないままこちらの塗りだけが走ることもある
+        （`write_epithet` と同じ）。怪我が治った後にこちらの行が残っていたら、ゲームの文へ戻す。
+        """
+        box = frames.attr(hud, sheet.HEALTH_BOX, None)
+        if box is None:
+            return
+        text = sheet.health_text(frames.attr(character, "body_parts", None))
+        written = getattr(box, MARK + "_health", None)
+        if text is None:
+            if written is not None and frames.text_of(box, "text") == written:
+                text = sheet.health_fine_text()
+            else:
+                return
+        try:
+            box.text = text
+        except Exception:
+            return
+        setattr(box, MARK + "_health", text)
+
+    def health_details(character):
+        """健康状態の説明の行。能力値は補正を足す前の値で比べる（補正はローダの連携 API が後から足す）。"""
+        return sheet.health_details(
+            frames.attr(character, "body_parts", None),
+            frames.attr(character, "original_ability_scores", None),
+            abilities.raw(character, "ability_scores"))
+
     def paint(app, hud, boxes, reroll=None):
         character = sheet_character(app, hud)
         if character is None:
             return
+        write_health(hud, character)
         boxes["wanted"].text = wanted_text(app, character)
         epithet = epithet_text(app, character)
         write_epithet(hud, epithet)
@@ -445,6 +478,7 @@ def apply(ctx):
         state["details"] = {
             "traits": sheet.trait_details(traits, trait_effects(app, character)),
             "skills": sheet.skill_details(skills),
+            "health": health_details(character),
         }
 
     # ------------------------------------------------------------ マウスオーバーの説明
@@ -520,6 +554,13 @@ def apply(ctx):
             width = float(Window.width) * sheet.DETAIL_WIDTH
             label.text_size = (width - 2 * pad, None)
             label.texture_update()
+            # 行が多くて画面の高さを超えるときは、収まるまで文字を小さくする
+            # （6部位が全部怪我のときの健康状態の説明は30行を超える）。
+            for _shrink in range(sheet.DETAIL_SHRINKS):
+                if label.texture_size[1] + 2 * pad <= float(Window.height):
+                    break
+                label.font_size = float(label.font_size) * sheet.DETAIL_SHRINK
+                label.texture_update()
             height = label.texture_size[1] + 2 * pad
             widget.size = (width, height)
             label.size = (width - 2 * pad, height - 2 * pad)
@@ -538,7 +579,7 @@ def apply(ctx):
             return False
 
     def on_mouse(_window, pos):
-        """マウスが特性かスキルの箱の上に在れば説明を出し、外れたら消す。"""
+        """マウスが特性・スキル・健康状態の箱の上に在れば説明を出し、外れたら消す。"""
         try:
             hud = state.get("hud")
             layout = frames.attr(hud, "character_sheet_layout", None) if hud is not None else None
@@ -548,7 +589,8 @@ def apply(ctx):
                 return
             boxes = state.get("boxes") or {}
             for key, box in (("traits", frames.attr(hud, sheet.TRAITS_BOX, None)),
-                             ("skills", boxes.get("skills"))):
+                             ("skills", boxes.get("skills")),
+                             ("health", frames.attr(hud, sheet.HEALTH_BOX, None))):
                 if over(box, pos):
                     show_detail(hud, key, pos)
                     return

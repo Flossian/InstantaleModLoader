@@ -1,0 +1,15 @@
+{
+  "entry": "fix_injury_after_load.py",
+  "api": 1,
+  "kind": "fix",
+  "name": {
+    "en": "Injuries keep lowering your abilities after you load a save",
+    "ja": "セーブを読み込んだ後も怪我が能力値に効き続ける"
+  },
+  "description": {
+    "en": "An injured body part lowers your abilities, but after loading a save the game rebuilds them without the injuries, so they are back to full until the next injury check during a quest. The abilities are now rebuilt once more right after loading, with the injuries applied.",
+    "ja": "怪我をした部位は能力値を下げるが、セーブを読み込むとゲームは怪我を掛けずに能力値を作り直すので、依頼で次の怪我の判定が走るまで能力値が元の値に戻っていた。読み込みの直後に、怪我を掛けた能力値へ組み直す。"
+  },
+  "version": "1",
+  "author": "R01/Flossian"
+}

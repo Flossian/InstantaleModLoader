@@ -148,6 +148,194 @@ def trait_effect_texts(data):
     return found
 
 
+# ---------------------------------------------------------------- 健康状態
+# 素のゲームは怪我のある部位を `arms: hurt, ` と英語のまま並べ、何が下がったかはどこにも出さなかった。
+# 欄には部位と段階を日本語で1行ずつ書き、下がった能力値はマウスを乗せたときの説明の窓に出す。
+# 値の出どころと測り方は GAME.md §2.19.1。
+
+#: 健康状態の箱（ゲーム自身のウィジェット）。
+HEALTH_BOX = "character_sheet_health_condition"
+
+HEALTH_HEADING = "健康状態:"
+
+#: 怪我が無いときのゲーム自身の文。こちらが書いた行が残ったまま怪我が治ったときに戻す先。
+HEALTH_FINE = "特に問題はない。"
+
+#: 部位の名前。並びはゲームが能力値へ倍率を掛ける順（`body_parts` の並び）。
+PART_NAMES = {"head": "頭", "body": "胴体", "arms": "腕", "legs": "脚", "organs": "内臓", "sanity": "精神"}
+
+#: 段階の言葉は部位の性質で3組に分ける。
+#: ゲームの `lost` は倍率がいちばん重いだけの段階で、欠損にも死亡にもならない。
+#: 治っても不自然でない言葉にしてある。
+PART_GROUPS = {"arms": "limb", "legs": "limb", "head": "vital", "body": "vital", "organs": "vital",
+               "sanity": "mind"}
+STAGE_NAMES = {
+    "limb": {"hurt": "軽傷", "damaged": "重傷", "disabled": "麻痺", "lost": "使用不能"},
+    "vital": {"hurt": "軽傷", "damaged": "重傷", "disabled": "重体", "lost": "危篤"},
+    "mind": {"hurt": "軽い不調", "damaged": "重い不調", "disabled": "衰弱", "lost": "錯乱"},
+}
+
+#: 段階の並びと、その段階になる怪我の重さ（`injury`）。
+STAGES = ("hurt", "damaged", "disabled", "lost")
+STAGE_AT = {"hurt": 10, "damaged": 30, "disabled": 60, "lost": 100}
+
+ABILITY_NAMES = {"strength": "筋力", "dexterity": "器用", "constitution": "耐久",
+                 "intelligence": "知力", "wisdom": "判断", "charisma": "魅力"}
+
+#: 部位と段階ごとに、ゲームが能力値へ掛ける倍率。
+_TWO = ((0.95,), (0.95, 0.85), (0.85, 0.75), (0.75, 0.75))
+
+
+def _effects(first, second):
+    """1段階目は `second` だけ、2段階目からは `first` と `second` の両方が下がる部位の表。"""
+    table = {"hurt": ((second, _TWO[0][0]),)}
+    for stage, rates in zip(STAGES[1:], _TWO[1:]):
+        table[stage] = ((first, rates[0]), (second, rates[1]))
+    return table
+
+
+PART_EFFECTS = {
+    "arms": _effects("strength", "dexterity"),
+    "legs": _effects("constitution", "dexterity"),
+    "body": _effects("strength", "constitution"),
+    "head": _effects("intelligence", "charisma"),
+    "sanity": _effects("intelligence", "wisdom"),
+    "organs": {"hurt": (("constitution", 0.95),), "damaged": (("constitution", 0.85),),
+               "disabled": (("constitution", 0.75),), "lost": (("constitution", 0.75),)},
+}
+
+#: 段階ごとに、ゲームが体力（スタミナ）の上限へ掛ける倍率。部位によらない。
+STAMINA_RATES = {"hurt": 0.97, "damaged": 0.95, "disabled": 0.9, "lost": 0.85}
+STAMINA_NAME = "体力の上限"
+
+#: 効果の行の条件。能力値に出ていない倍率は、説明の窓でいまの場面に無い効果と同じ色にする。
+HEALTH_APPLIED = "always"
+HEALTH_IDLE = "health_idle"
+
+
+def _whole(value):
+    """整数として読めた値。読めなければ None（`bool` は数にしない）。"""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value) if float(value) == int(value) else value
+
+
+def _rate_text(rate):
+    return "×{:g}".format(rate)
+
+
+def injured_parts(body_parts):
+    """怪我のある部位 `[(部位, 段階, 怪我の重さ)]`。並びは `body_parts` のまま。
+
+    段階が `intact` の部位と、形の読めない部位は入れない。
+    """
+    if not isinstance(body_parts, dict):
+        return []
+    found = []
+    for part, info in body_parts.items():
+        stage = info.get("stage") if isinstance(info, dict) else getattr(info, "stage", None)
+        if not isinstance(stage, str) or not stage.strip() or stage == "intact":
+            continue
+        injury = info.get("injury") if isinstance(info, dict) else getattr(info, "injury", None)
+        found.append((str(part), stage, _whole(injury)))
+    return found
+
+
+def part_name(part):
+    """部位の表示名。表に無い部位はゲームの値のまま。"""
+    return PART_NAMES.get(part, part)
+
+
+def stage_name(part, stage):
+    """段階の表示名。表に無い部位・段階はゲームの値のまま。"""
+    return STAGE_NAMES.get(PART_GROUPS.get(part), {}).get(stage, stage)
+
+
+#: 健康状態の欄に、見出しの下で入る行数。3行目は欄の下で落ちた（実機。脚の行が出なかった）。
+HEALTH_LINES = 2
+#: 1行に複数の部位を並べるときの区切り。
+HEALTH_GAP = "　"
+
+
+def health_text(body_parts):
+    """健康状態の欄の文。怪我が無ければ None（ゲームの文に任せる）。
+
+    部位は1行に1つ。欄に入る行数（`HEALTH_LINES`）を超えるときは、1行に並べる数を増やして収める。
+    """
+    parts = injured_parts(body_parts)
+    if not parts:
+        return None
+    cells = ["{}: {}".format(part_name(part), stage_name(part, stage)) for part, stage, _injury in parts]
+    per_line = -(-len(cells) // HEALTH_LINES)
+    lines = [HEALTH_GAP.join(cells[start:start + per_line]) for start in range(0, len(cells), per_line)]
+    return "\n".join([HEALTH_HEADING] + lines)
+
+
+def health_fine_text():
+    return HEALTH_HEADING + "\n" + HEALTH_FINE
+
+
+def _injury_line(part, stage, injury):
+    """`怪我の重さ 12（30 で重傷）`。次の段階が無ければ数だけ、数が読めなければ空。"""
+    if injury is None:
+        return ""
+    line = "怪我の重さ {}".format(injury)
+    if stage in STAGES and stage != STAGES[-1]:
+        following = STAGES[STAGES.index(stage) + 1]
+        line += "（{} で{}）".format(STAGE_AT[following], stage_name(part, following))
+    return line
+
+
+def health_details(body_parts, original, current):
+    """健康状態の説明の行 `[{"name", "effects", "text"}]`（`detail_pieces` に渡す形）。
+
+    `original` は元の能力値、`current` はゲームが組み直した後の能力値（補正を足す前）。
+    ゲームと同じ順（`body_parts` の並び）で倍率を掛け、1つ掛けるごとに丸める。
+    その結果が `current` と合えば `耐久 30 → 28（×0.95）` と書く。
+    `current` が元の値のままなら倍率だけを書き、条件を `HEALTH_IDLE` にする
+    （読み込み直した後は、次に怪我の判定が走るまで能力値が元の値に戻っている）。
+    どちらでもなければ倍率だけを書く。
+    """
+    parts = injured_parts(body_parts)
+    if not parts:
+        return []
+    original = original if isinstance(original, dict) else {}
+    current = current if isinstance(current, dict) else {}
+    values = dict(original)
+    steps = {}
+    for part, stage, _injury in parts:
+        rows = []
+        for ability, rate in PART_EFFECTS.get(part, {}).get(stage, ()):
+            before = _whole(values.get(ability))
+            after = round(before * rate) if before is not None else None
+            if after is not None:
+                values[ability] = after
+            rows.append((ability, rate, before, after))
+        steps[part] = rows
+    touched = {ability for rows in steps.values() for ability, _rate, _before, _after in rows}
+    known = bool(touched) and all(_whole(original.get(a)) is not None and _whole(current.get(a)) is not None
+                                  for a in touched)
+    applied = known and all(current[a] == values[a] for a in touched)
+    idle = known and not applied and all(current[a] == original[a] for a in touched)
+
+    found = []
+    for part, stage, injury in parts:
+        effects = []
+        for ability, rate, before, after in steps[part]:
+            name = ABILITY_NAMES.get(ability, ability)
+            if applied:
+                text = "{} {} → {}（{}）".format(name, before, after, _rate_text(rate))
+            else:
+                text = "{} {}".format(name, _rate_text(rate))
+            effects.append({"text": text, "condition": HEALTH_IDLE if idle else HEALTH_APPLIED})
+        if stage in STAMINA_RATES:
+            effects.append({"text": "{} {}".format(STAMINA_NAME, _rate_text(STAMINA_RATES[stage])),
+                            "condition": HEALTH_APPLIED})
+        found.append({"name": "{}　{}".format(part_name(part), stage_name(part, stage)),
+                      "effects": effects, "text": _injury_line(part, stage, injury)})
+    return found
+
+
 # ---------------------------------------------------------------- マウスオーバーの説明
 # 特性とスキルの箱は狭く、名前が1行ぶんしか見えない（2件目は箱の下で落ちる。実機）。
 # 箱にマウスを乗せたら、全件の名前・効果・説明を並べた窓を出す。
@@ -156,6 +344,10 @@ def trait_effect_texts(data):
 #: 最初の 0.26 は 1920px で1行が全角約18字になり、長い特質の説明が18行まで伸びた（実機）。
 DETAIL_WIDTH = 0.36
 DETAIL_GAP = 16.0
+
+#: 説明の窓が画面の高さを超えるときに、文字へ掛ける倍率と、掛ける回数の上限。
+DETAIL_SHRINK = 0.9
+DETAIL_SHRINKS = 6
 
 
 def _text_of(item, name):

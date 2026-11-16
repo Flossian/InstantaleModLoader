@@ -654,6 +654,113 @@ def run():
           and sheet.detail_pos((1800, 100), (300, 200), (1920, 1000), 16) == (1484, 116))
     check("特性の効果の経路で例外を出していない", not ctx.errors, ctx.errors[:2])
 
+    print("\n[健康状態] 部位と段階を日本語で並べ、下がった能力値は説明の窓に出す")
+    health = hud.character_sheet_health_condition
+    fine = "健康状態:\n特に問題はない。"
+    check("怪我が無ければゲームの文のまま", health.text == fine, health.text)
+    intact = {"injury": 0, "stage": "intact", "state": "", "description": ""}
+    player.body_parts = {part: dict(intact) for part in ("head", "body", "arms", "legs", "organs", "sanity")}
+    player.body_parts["body"].update({"injury": 12, "stage": "hurt"})
+    player.body_parts["arms"].update({"injury": 35, "stage": "damaged"})
+    player.original_ability_scores = {"strength": 30, "dexterity": 30, "constitution": 30,
+                                      "intelligence": 16, "wisdom": 22, "charisma": 30}
+    player.ability_scores = dict(player.original_ability_scores, strength=28, dexterity=26, constitution=28)
+    health.text = "健康状態:\nbody: hurt, arms: damaged, "       # ゲームが開くたびに書く文
+    toggle()
+    toggle()
+    check("部位ごとに1行、日本語で書く", health.text == "健康状態:\n胴体: 軽傷\n腕: 重傷", health.text)
+    toggle()
+    toggle()
+    check("開き直しても同じ", health.text == "健康状態:\n胴体: 軽傷\n腕: 重傷", health.text)
+    player.body_parts["body"].update({"injury": 0, "stage": "intact"})
+    player.body_parts["arms"].update({"injury": 0, "stage": "intact"})
+    toggle()
+    toggle()
+    check("治った後にこちらの行が残っていたらゲームの文へ戻す", health.text == fine, health.text)
+    health.text = "Health:\nNo problem."
+    toggle()
+    toggle()
+    check("怪我が無く、ゲームが書いた文ならそのまま", health.text == "Health:\nNo problem.", health.text)
+    health.text = fine
+    check("段階の言葉は部位の組で変える",
+          [sheet.stage_name(part, "disabled") for part in ("arms", "legs", "head", "body", "organs", "sanity")]
+          == ["麻痺", "麻痺", "重体", "重体", "重体", "衰弱"]
+          and [sheet.stage_name(part, "lost") for part in ("arms", "head", "sanity")] == ["使用不能", "危篤", "錯乱"]
+          and sheet.stage_name("sanity", "hurt") == "軽い不調" and sheet.stage_name("legs", "hurt") == "軽傷")
+    hurt = {"injury": 12, "stage": "hurt"}
+    names = ("head", "body", "arms", "legs", "organs", "sanity")
+    check("3部位からは1行に複数並べて、見出しの下の2行に収める",
+          sheet.health_text({part: dict(hurt) for part in names[:3]})
+          == "健康状態:\n頭: 軽傷　胴体: 軽傷\n腕: 軽傷"
+          and sheet.health_text({part: dict(hurt) for part in names[:4]})
+          == "健康状態:\n頭: 軽傷　胴体: 軽傷\n腕: 軽傷　脚: 軽傷"
+          and sheet.health_text({part: dict(hurt) for part in names})
+          == "健康状態:\n頭: 軽傷　胴体: 軽傷　腕: 軽傷\n脚: 軽傷　内臓: 軽傷　精神: 軽い不調",
+          sheet.health_text({part: dict(hurt) for part in names}))
+    check("表に無い部位・段階はゲームの値のまま",
+          sheet.health_text({"tail": {"injury": 5, "stage": "broken"}}) == "健康状態:\ntail: broken"
+          and sheet.health_text({"arms": {"stage": "intact"}}) is None and sheet.health_text(None) is None
+          and sheet.health_text({"arms": "壊れ"}) is None)
+    base = {"strength": 30, "dexterity": 30, "constitution": 30, "intelligence": 16, "wisdom": 22, "charisma": 30}
+
+    def body_of(**stages):
+        parts = {part: dict(intact) for part in ("head", "body", "arms", "legs", "organs", "sanity")}
+        for part, (injury, stage) in stages.items():
+            parts[part].update({"injury": injury, "stage": stage})
+        return parts
+
+    def lines_of(rows):
+        return [(row["name"], [(e["text"], e["condition"]) for e in row["effects"]], row["text"]) for row in rows]
+
+    one = sheet.health_details(body_of(body=(12, "hurt")), base, dict(base, constitution=28))
+    check("説明: 下がった能力値を元の値・今の値・倍率で書く",
+          lines_of(one) == [("胴体　軽傷", [("耐久 30 → 28（×0.95）", "always"), ("体力の上限 ×0.97", "always")],
+                             "怪我の重さ 12（30 で重傷）")], lines_of(one))
+    # 実測（GAME.md §2.19.1）: 腕が重傷・脚が軽傷で器用 30 → 26 → 25、筋力 28。
+    two = sheet.health_details(body_of(arms=(35, "damaged"), legs=(12, "hurt")), base,
+                               dict(base, strength=28, dexterity=25))
+    check("説明: 同じ能力値は部位の並びの順に掛け、1つごとに丸める",
+          lines_of(two) == [
+              ("腕　重傷", [("筋力 30 → 28（×0.95）", "always"), ("器用 30 → 26（×0.85）", "always"),
+                            ("体力の上限 ×0.95", "always")], "怪我の重さ 35（60 で麻痺）"),
+              ("脚　軽傷", [("器用 26 → 25（×0.95）", "always"), ("体力の上限 ×0.97", "always")],
+               "怪我の重さ 12（30 で重傷）")], lines_of(two))
+    # 実測: 胴体が重体・腕が重傷で筋力 30 → 26 → 25（胴体が先）。
+    three = sheet.health_details(body_of(body=(70, "disabled"), arms=(35, "damaged")), base,
+                                 dict(base, strength=25, dexterity=26, constitution=22))
+    check("説明: 胴体は腕より先",
+          lines_of(three)[0][1][0] == ("筋力 30 → 26（×0.85）", "always")
+          and lines_of(three)[1][1][0] == ("筋力 26 → 25（×0.95）", "always"), lines_of(three))
+    idle = sheet.health_details(body_of(body=(12, "hurt")), base, dict(base))
+    check("説明: 能力値が元の値のままなら倍率だけを書き、効いていない色にする",
+          lines_of(idle)[0][1] == [("耐久 ×0.95", sheet.HEALTH_IDLE), ("体力の上限 ×0.97", "always")],
+          lines_of(idle))
+    check("説明: 効いていない倍率は灰色",
+          ("\n・耐久 ×0.95", "inactive") in sheet.detail_pieces(idle, {"always"})
+          and ("\n・耐久 30 → 28（×0.95）", "effect") in sheet.detail_pieces(one, {"always"})
+          and sheet.detail_pieces(one, {"always"})[-1] == ("\n怪我の重さ 12（30 で重傷）", "text"))
+    odd = sheet.health_details(body_of(body=(12, "hurt")), base, dict(base, constitution=20))
+    check("説明: 計算と合わないときは倍率だけを書く", lines_of(odd)[0][1][0] == ("耐久 ×0.95", "always"),
+          lines_of(odd))
+    last = sheet.health_details(body_of(sanity=(120, "lost"), organs=(9, "hurt")), base,
+                                dict(base, intelligence=12, wisdom=16, constitution=28))
+    check("説明: いちばん重い段階は次の段階を書かない。段階と重さが食い違っても段階で書く",
+          lines_of(last) == [
+              ("内臓　軽傷", [("耐久 30 → 28（×0.95）", "always"), ("体力の上限 ×0.97", "always")],
+               "怪我の重さ 9（30 で重傷）"),
+              ("精神　錯乱", [("知力 16 → 12（×0.75）", "always"), ("判断 22 → 16（×0.75）", "always"),
+                              ("体力の上限 ×0.85", "always")], "怪我の重さ 120")], lines_of(last))
+    check("説明: 能力値が読めなくても倍率は出す。怪我が無ければ空",
+          lines_of(sheet.health_details(body_of(head=(40, "damaged")), None, None))
+          == [("頭　重傷", [("知力 ×0.95", "always"), ("魅力 ×0.85", "always"), ("体力の上限 ×0.95", "always")],
+               "怪我の重さ 40（60 で重体）")]
+          and sheet.health_details(body_of(), base, base) == [] and sheet.health_details(None, base, base) == []
+          and lines_of(sheet.health_details({"tail": {"injury": "x", "stage": "broken"}}, base, base))
+          == [("tail　broken", [], "")])
+    check("段階の境目は軽い順に並ぶ",
+          [sheet.STAGE_AT[stage] for stage in sheet.STAGES] == [10, 30, 60, 100])
+    check("健康状態の経路で例外を出していない", not ctx.errors, ctx.errors[:2])
+
     buttons = [child for child in layout.children
                if isinstance(child, FakeButton)]
     check("引き直しボタンが1つ在る", len(buttons) == 1,
