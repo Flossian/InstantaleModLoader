@@ -26,6 +26,8 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
 """
 import sys
 
+from . import alive
+
 STORE_ATTR = "_instantale_talk_affinity"
 
 
@@ -47,22 +49,12 @@ def withdraw(owner):
     _store()["limits"].pop(str(owner), None)
 
 
-def _alive(ctx):
-    superseded = getattr(ctx, "superseded", None)
-    if not callable(superseded):
-        return True
-    try:
-        return not superseded()
-    except Exception:
-        return True
-
-
 def ceiling(app, npc_id, default):
     """`(上限, 決めた持ち主)`。誰も狭めなければ `(default, None)`。"""
     store = _store()
     value, by = default, None
     for owner, (ctx, fn) in list(store["limits"].items()):
-        if not _alive(ctx):
+        if not alive(ctx):
             continue
         try:
             got = fn(app, str(npc_id))
@@ -79,7 +71,7 @@ def ceiling(app, npc_id, default):
 
 def owners():
     """いま数えている登録の持ち主。ログ用。"""
-    return [owner for owner, (ctx, _fn) in _store()["limits"].items() if _alive(ctx)]
+    return [owner for owner, (ctx, _fn) in _store()["limits"].items() if alive(ctx)]
 
 
 def reset():

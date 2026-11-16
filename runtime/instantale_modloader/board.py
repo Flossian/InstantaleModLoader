@@ -20,6 +20,8 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
 """
 import sys
 
+from . import alive
+
 STORE_ATTR = "_instantale_board"
 
 
@@ -29,16 +31,6 @@ def _store():
         store = {"kept_off": {}, "errors": []}
         setattr(sys, STORE_ATTR, store)
     return store
-
-
-def _alive(ctx):
-    superseded = getattr(ctx, "superseded", None)
-    if not callable(superseded):
-        return True
-    try:
-        return not superseded()
-    except Exception:
-        return True
 
 
 def declare_kept_off(owner, ctx, fn):
@@ -56,7 +48,7 @@ def kept_off(app):
     store = _store()
     found = set()
     for owner, (ctx, fn) in list(store["kept_off"].items()):
-        if not _alive(ctx):
+        if not alive(ctx):
             continue
         try:
             got = fn(app)
@@ -72,7 +64,7 @@ def kept_off(app):
 
 def owners():
     """いま数えている登録の持ち主。ログ用。"""
-    return [owner for owner, (ctx, _fn) in _store()["kept_off"].items() if _alive(ctx)]
+    return [owner for owner, (ctx, _fn) in _store()["kept_off"].items() if alive(ctx)]
 
 
 def reset():

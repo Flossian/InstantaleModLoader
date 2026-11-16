@@ -18,6 +18,8 @@ MOD どうしは import しない（TECH.md §3.2.3）。
 """
 import sys
 
+from . import alive
+
 STORE_ATTR = "_instantale_value_limits"
 
 #: ゲームの上限（`scripts.functions.QUEST_DIFFICULTY_VALUE_MAX`）。読めないときの値。
@@ -50,21 +52,11 @@ def game_max():
     return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else GAME_MAX
 
 
-def _alive(ctx):
-    superseded = getattr(ctx, "superseded", None)
-    if not callable(superseded):
-        return True
-    try:
-        return not superseded()
-    except Exception:
-        return True
-
-
 def _offers():
     store = _store()
     out = []
     for owner, (ctx, fn) in list(store["providers"].items()):
-        if not callable(fn) or not _alive(ctx):
+        if not callable(fn) or not alive(ctx):
             continue
         try:
             got = fn()

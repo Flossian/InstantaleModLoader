@@ -23,6 +23,8 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
 """
 import sys
 
+from . import alive
+
 STORE_ATTR = "_instantale_quest_clients"
 
 
@@ -34,16 +36,6 @@ def _store():
     store.setdefault("clients", {})
     store.setdefault("errors", [])
     return store
-
-
-def _alive(ctx):
-    superseded = getattr(ctx, "superseded", None)
-    if not callable(superseded):
-        return True
-    try:
-        return not superseded()
-    except Exception:
-        return True
 
 
 def declare(owner, ctx, fn):
@@ -61,7 +53,7 @@ def clients(app):
     store = _store()
     out = []
     for owner, (ctx, fn) in list(store["clients"].items()):
-        if not _alive(ctx):
+        if not alive(ctx):
             continue
         try:
             got = fn(app)
@@ -94,7 +86,7 @@ def client_of(app, quest_id):
 
 def owners():
     """いま数えている登録の持ち主。ログ用。"""
-    return [owner for owner, (ctx, _fn) in _store()["clients"].items() if _alive(ctx)]
+    return [owner for owner, (ctx, _fn) in _store()["clients"].items() if alive(ctx)]
 
 
 def reset():

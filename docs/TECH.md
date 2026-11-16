@@ -1069,6 +1069,7 @@ MOD 同梱の設定画面（`tool.py`。§3.12）はゲームの中では走ら�
 | 設定画面の JSON の読み方 | `modtool.read_json`（§3.12） | 2本（`322_` / `324_` の `tool.py`）と `modtool` の中の4か所 |
 | 施設の選択肢の画面かの判定・いま居る施設の引き当て | `ui.is_facility_screen` / `current_facility` | 6本 / 10本。施設 id を str だけ引き当てる版と int も引き当てる版、見つからないときに None を返す版と id を返す版に分かれていた |
 | 好感度の読み書き（実行時の人物とセーブの素データ） | `npcs.affinity_value` / `affinity_of` / `set_affinity`（GAME.md §2.25） | 9か所 / 2本。float を通す版・int だけの版・int に切り捨てる版、実行時の名簿だけを見る版と素データまで見る版に分かれていた |
+| 窓口が持つ登録の ctx が用済みでないかの確かめ | `instantale_modloader.alive`（`gates.alive` は同じ関数） | 17本（窓口の14モジュールと `gates`・`holdings`・`hudicons`）。新しい窓口を作るたびに写されていた |
 
 ```python
 from instantale_modloader import state

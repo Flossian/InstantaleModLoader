@@ -27,6 +27,8 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
 """
 import sys
 
+from . import alive
+
 STORE_ATTR = "_instantale_quest_claims"
 
 AIMING = "aiming"
@@ -42,16 +44,6 @@ def _store():
     store.setdefault("urgent", {})
     store.setdefault("errors", [])
     return store
-
-
-def _alive(ctx):
-    superseded = getattr(ctx, "superseded", None)
-    if not callable(superseded):
-        return True
-    try:
-        return not superseded()
-    except Exception:
-        return True
 
 
 def declare(owner, ctx, fn):
@@ -75,7 +67,7 @@ def _rows(kind, app):
     store = _store()
     out = []
     for owner, (ctx, fn) in list(store[kind].items()):
-        if not _alive(ctx):
+        if not alive(ctx):
             continue
         try:
             got = fn(app)
@@ -118,8 +110,8 @@ def urgent(app):
 def owners():
     """いま数えている登録の持ち主（片付ける側・急ぎを置く側）。ログ用。"""
     store = _store()
-    return ([owner for owner, (ctx, _fn) in store["claims"].items() if _alive(ctx)],
-            [owner for owner, (ctx, _fn) in store["urgent"].items() if _alive(ctx)])
+    return ([owner for owner, (ctx, _fn) in store["claims"].items() if alive(ctx)],
+            [owner for owner, (ctx, _fn) in store["urgent"].items() if alive(ctx)])
 
 
 def reset():

@@ -40,7 +40,7 @@
 import os
 import sys
 
-from . import hudicons, log_exc, panels, ui
+from . import alive, hudicons, log_exc, panels, ui
 
 STORE_ATTR = "_instantale_holdings"
 HOUSES = "houses"
@@ -76,15 +76,6 @@ def tone(name, default=panels.TEXT):
     return TONES.get(name, default)
 
 
-def _alive(entry):
-    ctx = entry.get("ctx")
-    superseded = getattr(ctx, "superseded", None)
-    try:
-        return not (callable(superseded) and superseded())
-    except Exception:
-        return True
-
-
 def provide(ctx, side, build, write=None):
     """`side`（`HOUSES` / `FACILITIES`）の札の中身を返す `build(app)` を置く。同じ側は差し替え。"""
     if side not in SIDES:
@@ -99,7 +90,7 @@ def provide(ctx, side, build, write=None):
 def sides():
     """いまの世代で置かれている側（`SIDES` の順）。"""
     found = _store()["sides"]
-    return [side for side in SIDES if side in found and _alive(found[side])]
+    return [side for side in SIDES if side in found and alive(found[side].get("ctx"))]
 
 
 def notify(playthrough=None):

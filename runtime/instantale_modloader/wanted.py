@@ -29,7 +29,7 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
 """
 import sys
 
-from . import ui
+from . import alive, ui
 
 STORE_ATTR = "_instantale_wanted"
 
@@ -84,22 +84,12 @@ def withdraw(owner):
     _store()["hunted"].pop(str(owner), None)
 
 
-def _alive(ctx):
-    superseded = getattr(ctx, "superseded", None)
-    if not callable(superseded):
-        return True
-    try:
-        return not superseded()
-    except Exception:
-        return True
-
-
 def hunted_line(app):
     """`(線, 決めた持ち主)`。誰も線を置いていなければ `(None, None)`。"""
     store = _store()
     line, by = None, None
     for owner, (ctx, fn) in list(store["hunted"].items()):
-        if not _alive(ctx):
+        if not alive(ctx):
             continue
         try:
             got = fn(app)
@@ -119,7 +109,7 @@ def hunted_line(app):
 
 def owners():
     """いま数えている登録の持ち主。ログ用。"""
-    return [owner for owner, (ctx, _fn) in _store()["hunted"].items() if _alive(ctx)]
+    return [owner for owner, (ctx, _fn) in _store()["hunted"].items() if alive(ctx)]
 
 
 # --------------------------------------------------------------------------
@@ -148,7 +138,7 @@ def hunt_ended(app, hunt):
     store = _store()
     reached = []
     for owner, (ctx, fn) in list(store.setdefault("hunt_end", {}).items()):
-        if not _alive(ctx):
+        if not alive(ctx):
             continue
         try:
             fn(app, dict(hunt or {}))
@@ -183,7 +173,7 @@ def shop_pressure(app):
     store = _store()
     rate, by = 0.0, None
     for owner, (ctx, fn) in list(store.setdefault("pressure", {}).items()):
-        if not _alive(ctx):
+        if not alive(ctx):
             continue
         try:
             got = fn(app)
@@ -207,7 +197,7 @@ def take_shop_pressure(owner, ctx):
 def shop_pressure_taker():
     """店の値の圧を引き受けた持ち主。居なければ None（率を置いた側が自分で掛ける）。"""
     for owner, ctx in sorted(_store().setdefault("taker", {}).items()):
-        if _alive(ctx):
+        if alive(ctx):
             return owner
     return None
 

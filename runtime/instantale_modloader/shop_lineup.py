@@ -24,6 +24,8 @@ MOD どうしは import しない（TECH.md §3.2.3）。
 """
 import sys
 
+from . import alive
+
 STORE_ATTR = "_instantale_shop_lineup"
 
 
@@ -45,16 +47,6 @@ def provide(owner, ctx, fn, exclude=None):
 def withdraw(owner):
     """登録を下げる。"""
     _store()["providers"].pop(str(owner), None)
-
-
-def _alive(ctx):
-    superseded = getattr(ctx, "superseded", None)
-    if not callable(superseded):
-        return True
-    try:
-        return not superseded()
-    except Exception:
-        return True
 
 
 def lineup_of(facility):
@@ -88,7 +80,7 @@ def _parts(entry):
 
 def _ask(store, owner, ctx, fn, facility):
     """登録の関数を1つ呼ぶ。用済みの ctx・投げた関数は None（投げたら `errors` に残す）。"""
-    if not callable(fn) or not _alive(ctx):
+    if not callable(fn) or not alive(ctx):
         return None
     try:
         return fn(facility)
@@ -100,7 +92,7 @@ def _ask(store, owner, ctx, fn, facility):
 
 def owners():
     """いま聞いている登録の持ち主。ログ用。"""
-    return [owner for owner, entry in _store()["providers"].items() if _alive(entry[0])]
+    return [owner for owner, entry in _store()["providers"].items() if alive(entry[0])]
 
 
 def reset():

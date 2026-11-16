@@ -76,7 +76,7 @@ import sys
 import threading
 import weakref
 
-from . import ui
+from . import alive, ui
 
 STORE_ATTR = "_instantale_choices"
 REFRESH_TARGET = "__main__:InstantaleApp.refresh_choice_buttons"
@@ -132,16 +132,6 @@ def _same_world(mark, world):
     if isinstance(mark, int):           # 弱参照を作れない世界と、前の版が控えた番地
         return mark == id(world)
     return mark() is world
-
-
-def _alive(ctx):
-    superseded = getattr(ctx, "superseded", None)
-    if not callable(superseded):
-        return True
-    try:
-        return not superseded()
-    except Exception:
-        return True
 
 
 def _log(ctx, line):
@@ -239,7 +229,7 @@ def providers():
     """いま生きている登録の持ち主（登録した順）。"""
     store = _store()
     return [key for key in store["order"]
-            if key in store["providers"] and _alive(store["providers"][key]["ctx"])]
+            if key in store["providers"] and alive(store["providers"][key]["ctx"])]
 
 
 def refreshing():
@@ -719,12 +709,12 @@ def _exclusive(app, view):
         provider = store["providers"].get(row.get("owner"))
         fn = (provider.get("screens") or {}).get(row.get("name")) if provider is not None else None
         changed = row.get("game") is not None and signature(view.buttons) != row["game"]
-        if callable(fn) and _alive(provider["ctx"]) and changed:
+        if callable(fn) and alive(provider["ctx"]) and changed:
             # 下のゲームの一覧が替わった（ゲームが別の画面へ進んだ）。MOD だけの画面はもう前提が無い
             close_screen(app, row["owner"], repaint_now=False)
             _log(provider["ctx"], "closed the screen {!r} of {} (the game moved on: {} -> {})".format(
                 row["name"], row["owner"], row["game"], signature(view.buttons)))
-        elif callable(fn) and _alive(provider["ctx"]):
+        elif callable(fn) and alive(provider["ctx"]):
             found = _call_builder(row["owner"], provider, "screen {!r}".format(row["name"]), fn,
                                   app, view, row.get("data"))
             if found:
@@ -778,7 +768,7 @@ def _press_ours(app, entry):
     info = entry[CHOICE_KEY]
     choice = info.get("choice")
     provider = store["providers"].get(info.get("owner"))
-    if provider is None or not _alive(provider["ctx"]) or not isinstance(choice, Choice):
+    if provider is None or not alive(provider["ctx"]) or not isinstance(choice, Choice):
         # 持ち主が居ない（切った・注入し直しの途中）。無害な spec をゲームに渡すと会話の途中でも
         # 素の画面へ戻るので、握って組み直す
         _log(_any_ctx(), "pressed {!r} of {} that is gone; refreshed".format(entry.get("text"), info.get("owner")))

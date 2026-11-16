@@ -73,7 +73,7 @@ import time
 import traceback
 import uuid
 
-__version__ = "1.21.0"
+__version__ = "1.22.0"
 
 # mod との契約。`mod.json` の "api" がこれと突き合わされる。
 #
@@ -492,6 +492,22 @@ def log_exc(msg: str) -> None:
     except 節の中から呼ぶこと。
     """
     log(msg + "\n" + traceback.format_exc(), level="ERROR")
+
+
+def alive(ctx) -> bool:
+    """登録した ctx がまだ用済みでないか（`ModContext.superseded` の裏返し）。
+
+    窓口は MOD の登録を `ctx` と組で持ち、呼ぶ前にこれで確かめる。
+    注入し直した後、前の世代の登録が効き続けないようにするため。
+    `superseded` を持たない ctx（検査の偽物）と、`superseded` が例外を出した ctx は生きているとみなす。
+    """
+    superseded = getattr(ctx, "superseded", None)
+    if not callable(superseded):
+        return True
+    try:
+        return not superseded()
+    except Exception:
+        return True
 
 
 # --------------------------------------------------------------------------

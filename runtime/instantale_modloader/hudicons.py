@@ -51,7 +51,7 @@ import os
 import sys
 import threading
 
-from . import frames, log_exc, panels, ui
+from . import alive, frames, log_exc, panels, ui
 from . import state as _state_keys
 
 STORE_ATTR = "_instantale_hud_icons"
@@ -217,7 +217,7 @@ def _shown(entry, app):
 
 def menu_entries(app=None):
     """一覧に並べる登録（生きていて、`visible(app)` が真のものだけ。`order`・`key` の順）。"""
-    return sorted((entry for entry in _store()["icons"].values() if _alive(entry) and _shown(entry, app)),
+    return sorted((entry for entry in _store()["icons"].values() if alive(entry.get("ctx")) and _shown(entry, app)),
                   key=lambda entry: (entry.get("order", 0), entry["key"]))
 
 
@@ -244,15 +244,6 @@ def marked(key, app=None):
 def has_attention(app=None):
     """一覧に並ぶ登録のどれかに、いまの周回で見せる知らせの印が付いているか。"""
     return any(marked(entry["key"], app) for entry in menu_entries(app))
-
-
-def _alive(entry):
-    ctx = entry.get("ctx")
-    superseded = getattr(ctx, "superseded", None)
-    try:
-        return not (callable(superseded) and superseded())
-    except Exception:
-        return True
 
 
 def _number(value, default=None):
@@ -796,7 +787,7 @@ def settle():
     ここで外さないと、押しても何も開かない MOD 用のボタンと、右へずれたゲームの4つが残る。
     """
     store = _store()
-    gone = sorted(key for key, entry in store["icons"].items() if not _alive(entry))
+    gone = sorted(key for key, entry in store["icons"].items() if not alive(entry.get("ctx")))
     for key in gone:
         store["icons"].pop(key, None)
         store["attention"].pop(key, None)

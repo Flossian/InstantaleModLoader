@@ -32,7 +32,7 @@
 import sys
 import time
 
-from . import log, log_exc, ui
+from . import alive, log, log_exc, ui
 
 END_MANAGER_CLS = "BattleEndManager"
 ESCAPED_END_TYPE = "escaped"
@@ -74,16 +74,6 @@ def _error(owner, exc):
     del errors[:-20]
 
 
-def _alive(ctx):
-    superseded = getattr(ctx, "superseded", None)
-    if not callable(superseded):
-        return True
-    try:
-        return not superseded()
-    except Exception:
-        return True
-
-
 def declare(owner, ctx, decide):
     """倒れた戦闘を引き受けるかを決める関数を登録する。同じ持ち主の登録は差し替える。"""
     _state()["owners"][str(owner)] = (ctx, decide)
@@ -107,7 +97,7 @@ def fallen(app):
 def _claim(app):
     """`(持ち主, 答え)`。どの登録も引き受けなければ `(None, None)`。"""
     for owner, (ctx, decide) in list(_state()["owners"].items()):
-        if not _alive(ctx):
+        if not alive(ctx):
             continue
         try:
             answer = decide(app)

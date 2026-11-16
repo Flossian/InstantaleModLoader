@@ -20,6 +20,8 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
 """
 import sys
 
+from . import alive
+
 STORE_ATTR = "_instantale_confinement"
 
 
@@ -29,16 +31,6 @@ def _store():
         store = {"confiners": {}, "errors": []}
         setattr(sys, STORE_ATTR, store)
     return store
-
-
-def _alive(ctx):
-    superseded = getattr(ctx, "superseded", None)
-    if not callable(superseded):
-        return True
-    try:
-        return not superseded()
-    except Exception:
-        return True
 
 
 def declare(owner, ctx, fn):
@@ -55,7 +47,7 @@ def why(app):
     """`(理由, 閉じ込めている持ち主)`。誰も閉じ込めていなければ `(None, None)`。"""
     store = _store()
     for owner, (ctx, fn) in list(store["confiners"].items()):
-        if not _alive(ctx):
+        if not alive(ctx):
             continue
         try:
             got = fn(app)
@@ -70,7 +62,7 @@ def why(app):
 
 def owners():
     """いま数えている登録の持ち主。ログ用。"""
-    return [owner for owner, (ctx, _fn) in _store()["confiners"].items() if _alive(ctx)]
+    return [owner for owner, (ctx, _fn) in _store()["confiners"].items() if alive(ctx)]
 
 
 def reset():

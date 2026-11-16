@@ -30,7 +30,7 @@ VERIFICATION.md §3.113）。ゲームの更新で名前や引数が変わると
 """
 import sys
 
-from . import log_exc
+from . import alive, log_exc
 
 #: 作った関所の全部と、窓口が自分で持つ包みの印（`durations` の日数の関所・`arrivals` の番号の包み）。
 #: `reset_all` が忘れる先。
@@ -56,17 +56,6 @@ def reset_all():
     for attr in _INSTALL_ATTRS:
         if hasattr(sys, attr):
             delattr(sys, attr)
-
-
-def alive(ctx):
-    """登録した ctx がまだ用済みでないか。`superseded` を持たない ctx（検査の偽物）は生きているとみなす。"""
-    superseded = getattr(ctx, "superseded", None)
-    if not callable(superseded):
-        return True
-    try:
-        return not superseded()
-    except Exception:
-        return True
 
 
 class Call(object):

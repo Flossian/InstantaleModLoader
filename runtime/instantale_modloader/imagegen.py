@@ -26,7 +26,7 @@ import os
 import sys
 import threading
 
-from . import saves
+from . import alive, saves
 
 #: `sd_backend.name` → `image_generation.` の下のパッケージ名。
 FAMILIES = {
@@ -144,16 +144,6 @@ def _method_store():
     return store
 
 
-def _alive(ctx):
-    superseded = getattr(ctx, "superseded", None)
-    if not callable(superseded):
-        return True
-    try:
-        return not superseded()
-    except Exception:
-        return True
-
-
 def declare_methods(owner, ctx, fn):
     """`owner` が出せる描き方を返す関数を登録する。同じ持ち主の登録は差し替える。"""
     _method_store()["providers"][str(owner)] = (ctx, fn)
@@ -172,7 +162,7 @@ def methods(kind):
     store = _method_store()
     found = set()
     for owner, (ctx, fn) in list(store["providers"].items()):
-        if not _alive(ctx):
+        if not alive(ctx):
             continue
         try:
             found.update(str(method) for method in (fn(kind) or ()))

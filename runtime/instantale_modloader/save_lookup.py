@@ -40,6 +40,8 @@ import contextlib
 import sys
 import threading
 
+from . import alive
+
 STORE_ATTR = "_instantale_save_lookup"
 ATTR = "world_dict"
 SAVE_ATTR = "save_data_dict"
@@ -58,16 +60,6 @@ def _store():
                  "lock": threading.RLock(), "guarded": 0, "errors": []}
         setattr(sys, STORE_ATTR, store)
     return store
-
-
-def _alive(ctx):
-    superseded = getattr(ctx, "superseded", None)
-    if not callable(superseded):
-        return True
-    try:
-        return not superseded()
-    except Exception:
-        return True
 
 
 # ---------------------------------------------------------------- 名乗りと問い合わせ
@@ -111,7 +103,7 @@ def covered(site):
         return None
     owner, ctx = entry[0], entry[1]
     targets, mod = (entry[2], entry[3]) if len(entry) >= 4 else ((), owner)
-    if not _alive(ctx):
+    if not alive(ctx):
         return None
     return owner if _landed(ctx, mod, targets) else None
 

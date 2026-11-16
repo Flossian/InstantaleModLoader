@@ -23,6 +23,8 @@ id 9 以降の街には範囲が無く、1〜76 の全域から引く。
 """
 import sys
 
+from . import alive
+
 STORE_ATTR = "_instantale_quest_bands"
 
 
@@ -46,16 +48,6 @@ def withdraw(owner):
     _store()["providers"].pop(str(owner), None)
 
 
-def _alive(ctx):
-    superseded = getattr(ctx, "superseded", None)
-    if not callable(superseded):
-        return True
-    try:
-        return not superseded()
-    except Exception:
-        return True
-
-
 def _band(value):
     """`(下限, 上限)` の形なら整数の組、違えば None。逆さまは並べ直す。"""
     if not isinstance(value, (list, tuple)) or len(value) != 2:
@@ -70,7 +62,7 @@ def band_of(app, area_id):
     """`((下限, 上限), 決めた持ち主)`。誰も口を出さなければ `(None, None)`。"""
     store = _store()
     for owner, (ctx, fn) in reversed(list(store["providers"].items())):
-        if not callable(fn) or not _alive(ctx):
+        if not callable(fn) or not alive(ctx):
             continue
         try:
             got = _band(fn(app, None if area_id is None else str(area_id)))
@@ -85,7 +77,7 @@ def band_of(app, area_id):
 
 def owners():
     """いま聞いている登録の持ち主。ログ用。"""
-    return [owner for owner, entry in _store()["providers"].items() if _alive(entry[0])]
+    return [owner for owner, entry in _store()["providers"].items() if alive(entry[0])]
 
 
 def reset():

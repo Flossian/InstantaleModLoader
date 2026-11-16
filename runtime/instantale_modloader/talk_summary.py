@@ -45,7 +45,7 @@ import re
 import sys
 import threading
 
-from . import llm, ui
+from . import alive, llm, ui
 
 RESOLVER_TARGET = "scripts.llm.llm_manager:conversation_resolver"
 SEND_TARGET = "scripts.llm.llm_manager:send_request"
@@ -85,19 +85,9 @@ def withdraw(owner):
     _store()["riders"].pop(str(owner), None)
 
 
-def _alive(ctx):
-    superseded = getattr(ctx, "superseded", None)
-    if not callable(superseded):
-        return True
-    try:
-        return not superseded()
-    except Exception:
-        return True
-
-
 def owners():
     """いま数えている登録の持ち主（乗る順）。ログ用。"""
-    return [owner for owner, rider in _store()["riders"].items() if _alive(rider["ctx"])]
+    return [owner for owner, rider in _store()["riders"].items() if alive(rider["ctx"])]
 
 
 def reset():
@@ -290,7 +280,7 @@ def install(ctx, write=None):
         """この要約に乗る MOD。`(job, ...)` を作る。誰も乗らなければ None。"""
         riding, fields = [], {}
         for owner, rider in list(_store()["riders"].items()):
-            if not _alive(rider["ctx"]):
+            if not alive(rider["ctx"]):
                 continue
             clash = [name for name in rider["fields"] if name in fields]
             if clash:
