@@ -1591,18 +1591,13 @@ def build_window(model):
             model.source_path, summary()))
         show_warnings()
 
+    def save_and_check():
+        """保存できたか。`save()` は戻り値を持たないので、保存の後も変更が残っていれば失敗とみなす。"""
+        save()
+        return not model.dirty()
+
     def close():
-        modtool.save_window(model.root, MOD_DIR, root)
-        if model.dirty():
-            answer = messagebox.askyesnocancel(
-                "未保存の変更", "変更を保存してから閉じますか？", parent=root)
-            if answer is None:
-                return
-            if answer:
-                save()
-                if model.dirty():
-                    return                 # 保存に失敗した。閉じない
-        root.destroy()
+        modtool.close_window(root, model.root, MOD_DIR, model.dirty, save_and_check)
 
     ttk.Button(footer, text="閉じる", command=close).pack(side="right")
     ttk.Button(footer, text="保存", style="Accent.TButton",

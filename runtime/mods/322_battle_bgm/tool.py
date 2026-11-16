@@ -567,15 +567,7 @@ def build_window(model):
                                  "{} に書けませんでした。".format(model.playlist_path), parent=root)
 
     def close():
-        modtool.save_window(model.root, MOD_DIR, root)
-        if model.dirty():
-            answer = messagebox.askyesnocancel(
-                "未保存の変更", "変更を保存してから閉じますか？", parent=root)
-            if answer is None:
-                return
-            if answer and not model.save():
-                return
-        root.destroy()
+        modtool.close_window(root, model.root, MOD_DIR, model.dirty, model.save)
 
     ttk.Button(footer, text="閉じる", command=close).pack(side="right")
     ttk.Button(footer, text="保存", style="Accent.TButton",

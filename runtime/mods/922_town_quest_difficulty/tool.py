@@ -357,12 +357,7 @@ def build_window(mod_dir=MOD_DIR, base=""):
 
     def ask_unsaved():
         """未保存の変更があれば聞く。続けてよければ True。"""
-        if not dirty():
-            return True
-        answer = messagebox.askyesnocancel("未保存の変更", "変更を保存してから続けますか？", parent=root)
-        if answer is None:
-            return False
-        return save() if answer else True
+        return modtool.confirm_unsaved(root, dirty, save, "変更を保存してから続けますか？")
 
     def pick(_event=None):
         name = world_var.get()
@@ -433,10 +428,7 @@ def build_window(mod_dir=MOD_DIR, base=""):
         return True
 
     def close():
-        modtool.save_window(root_dir, mod_dir, root)
-        if not ask_unsaved():
-            return
-        root.destroy()
+        modtool.close_window(root, root_dir, mod_dir, dirty, save)
 
     picker.bind("<<ComboboxSelected>>", pick)
     smooth_button.configure(command=do_smooth)

@@ -1106,16 +1106,30 @@ class SettingsFooter(object):
         self.set_values(self._complete({}))
 
     def close(self):
-        from tkinter import messagebox
+        close_window(self.window, self.root_dir, self.mod_dir, self.dirty, self.save)
 
-        save_window(self.root_dir, self.mod_dir, self.window)
-        if self.dirty():
-            answer = messagebox.askyesnocancel("未保存の変更", "変更を保存してから閉じますか？", parent=self.window)
-            if answer is None:
-                return
-            if answer and not self.save():
-                return
-        self.window.destroy()
+
+def confirm_unsaved(window, dirty, save, question="変更を保存してから閉じますか？"):
+    """未保存の変更があれば、保存するかを聞く。続けてよければ True。
+
+    変更が無い・「いいえ」（保存せずに続ける）・「はい」で保存できた、のときに True。
+    「キャンセル」と、保存できなかったときは False。`save()` は保存できたら真を返すこと。
+    """
+    from tkinter import messagebox
+
+    if not dirty():
+        return True
+    answer = messagebox.askyesnocancel("未保存の変更", question, parent=window)
+    if answer is None:
+        return False
+    return bool(save()) if answer else True
+
+
+def close_window(window, root_dir, mod_dir, dirty, save):
+    """道具の窓を閉じる。窓の大きさを覚え、未保存の変更があれば保存するかを聞いてから。"""
+    save_window(root_dir, mod_dir, window)
+    if confirm_unsaved(window, dirty, save):
+        window.destroy()
 
 
 class SettingsWindow(object):
@@ -1495,14 +1509,7 @@ def build_world_settings_window(mod_dir, title="", blurb="", extra_tabs=None, ed
         「保存してから閉じますか？」を取り消しても**窓の大きさは残る** ―
         ずらした位置を覚えるのは閉じるかどうかと関係がない。
         """
-        save_window(root_dir, mod_dir, root)
-        if dirty():
-            answer = messagebox.askyesnocancel("未保存の変更", "変更を保存してから閉じますか？", parent=root)
-            if answer is None:
-                return                 # 取り消し（閉じない）
-            if answer and not save():
-                return                 # 保存を選んだが失敗した。閉じずに直させる
-        root.destroy()
+        close_window(root, root_dir, mod_dir, dirty, save)
 
     ttk.Button(footer, text="閉じる", command=close).pack(side="right")
     ttk.Button(footer, text="保存", style="Accent.TButton", command=save).pack(side="right", padx=(0, 6))
