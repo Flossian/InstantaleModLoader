@@ -546,7 +546,7 @@ def end(bucket, event, day, by, rest_days=None, by_name=None):
 
 
 def trim(bucket, limit=HISTORY_LIMIT):
-    """終わった出来事は直近の `limit` 件だけ残す（`339_` が「前回から」を読むため。VERIFICATION.md §3.97「控えの形」）。"""
+    """終わった出来事は直近の `limit` 件だけ残す（`339_` が「前回から」を読むため。VERIFICATION.md §3.97「保存データの形」）。"""
     events = events_of(bucket)
     ended = [event for event in events if event.get("status") == ENDED]
     if len(ended) <= limit:

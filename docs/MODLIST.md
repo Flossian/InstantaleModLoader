@@ -169,50 +169,50 @@
 | `200_probe_bug_sites` | 未解決のクラッシュ地点を、失敗時だけでなく毎回計測する |
 | `201_probe_missing_attr` | `FreeInputStart` の欠落属性を読んでいる箇所を特定する |
 | `202_probe_summarizers` | サマライザ／ファシリテータの引数を測り、空 `Literal[]` の発生源を追う |
-| `203_probe_create_model` | pydantic モデル生成の瞬間に空 `Literal[]` を捕らえ、呼び出し元まで記録する |
-| `204_probe_prompt_bloat` | EVENTLOG / DEDUP / サイドカー起動という3つのプロンプト肥大化挙動と、ローカル LLM の頼みごとの頼みと出力のトークン数・窓あふれを測る |
+| `203_probe_create_model` | pydantic モデル生成の瞬間に空 `Literal[]` を検出し、呼び出し元まで記録する |
+| `204_probe_prompt_bloat` | EVENTLOG / DEDUP / サイドカー起動という3つのプロンプト肥大化挙動と、ローカル LLM のリクエストごとのプロンプトと出力のトークン数・コンテキスト長あふれを測る |
 | `205_probe_player_events` | プレイヤーの行動をトリガーにしたイベントの差し込み場所を特定する |
 | `206_probe_quest_flow` | クエストの受注経路と、選択肢ボタンの登録方法を特定する |
-| `207_probe_battle_bgm` | BGM を鳴らす・止める呼び出しと、鳴っているミキサーの本数（うち曲の本数）を見張る（戦闘BGMの直しが退行していないかの見張り） |
-| `208_probe_item_detail` | アイテム説明欄の opacity の上げ下げを見張り、閉じた後も残る原因を測る（寸法は最初の数品だけ写す） |
-| `209_probe_free_facility` | シーン記述エンジンの中身（ステップ・フラグのスコープ・プログラムの出どころ）を写し取り、MOD から使えるかを測る |
-| `210_probe_character_state` | NPC の死亡の印を特定し、誰がその NPC を参照しているかを数えて、印だけで安全に退場させられるかを測る |
+| `207_probe_battle_bgm` | BGM を鳴らす・止める呼び出しと、鳴っているミキサーの本数（うち曲の本数）を監視する（戦闘BGMの直しが退行していないかの監視） |
+| `208_probe_item_detail` | アイテム説明欄の opacity の上げ下げを監視し、閉じた後も残る原因を測る（寸法は最初の数品だけ記録する） |
+| `209_probe_free_facility` | シーン記述エンジンの中身（ステップ・フラグのスコープ・プログラムの出所）を記録し、MOD から使えるかを測る |
+| `210_probe_character_state` | NPC の死亡のフラグを特定し、誰がその NPC を参照しているかを数えて、フラグだけで安全に退場させられるかを測る |
 | `211_probe_text_speed` | 本文の1文字ごとの間隔・`app.text_speed`・フレームレート・ラベルのテクスチャ作り直しの重さを測る |
-| `212_probe_character_sheet` | プレイヤーの人物欄の実寸と組み立てを写し取り、載せられる値（手配度・スキル・特性）の在り処を確かめる |
+| `212_probe_character_sheet` | プレイヤーの人物欄の実寸と組み立てを記録し、載せられる値（手配度・スキル・特性）の在り処を確かめる |
 | `213_probe_npc_memory` | ゲーム自身が NPC ごとに覚えるもの（`memory`・`life_log`・`relationship`・`knowledge`）の実体を測る |
-| `214_probe_new_character` | 新規作成したキャラクタが経験値0のままレベル60で始まる経路を写す |
-| `215_probe_event_roll` | クエスト中のミニイベントの成否判定を写す |
+| `214_probe_new_character` | 新規作成したキャラクタが経験値0のままレベル60で始まる経路を調べる |
+| `215_probe_event_roll` | クエスト中のミニイベントの成否判定を記録する |
 | `216_probe_llm_overlap` | LLM リクエストの多重送信をプロセス内で数える（`127_` の `--parallel 1` によるキュー待ちが実プレイでどれだけ起こるか） |
 | `217_probe_area_move` | エリア移動の未実測部分を録る |
 | `218_probe_vacation` | 宿の宿泊の未実測部分を録る |
-| `219_probe_crash_log` | 本体のクラッシュ記録が壊れる退行を見張る |
+| `219_probe_crash_log` | 本体のクラッシュ記録が壊れる退行を監視する |
 | `220_probe_bounty_hunter` | 手配度に応じて追手を出す MOD（`316_`）を書くための下調べ |
 | `221_probe_item_level` | 品物のレベルを誰が決めているかを録る |
 | `222_probe_battle_mechanics` | 戦闘の数の作られ方を録る |
-| `223_probe_party_equipment` | 本体のアイテム popup と `ItemEquipManager` / `ItemUnequipManager` の入口を観測し、素のゲームが実際に誰の `equipments` を書き換えるかを測る |
+| `223_probe_party_equipment` | 本体のアイテム popup と `ItemEquipManager` / `ItemUnequipManager` の入口を観測し、MOD なしのゲームが実際に誰の `equipments` を書き換えるかを測る |
 | `224_probe_npc_carryover` | ロードのどの地点から世界へ NPC を入れられるかを測る |
-| `225_probe_area_quest_difficulty` | 街を初めて訪ねたとき、依頼の難易度を誰がどう決めるかを録る |
+| `225_probe_area_quest_difficulty` | 街を初めて訪ねたとき、依頼の難易度を誰がどう決めるかを記録する |
 | `226_probe_item_consume` | 回復アイテムを使ったとき、何が誰にどれだけ効くかを録る |
 | `227_probe_shop_stock` | 買った品が店の棚へ戻るのはどこかを録る |
 | `228_probe_area_move_reject` | エリア移動の拒否（`area_move_rejector`）が、同行者の何を読んで決めているかを録る |
 | `229_probe_mod_npc` | ローダの `modnpc`（MOD だけが持つ NPC と、正規 NPC への被せ）を実機に通す |
-| `230_probe_image_generation` | 画像生成のバックエンドと出口を録る |
+| `230_probe_image_generation` | 画像生成のバックエンドと出口を記録する |
 | `231_probe_training` | 施設での訓練の暦を録る |
 | `232_probe_facility_choices` | 宿屋だけ `出る` が先頭に並ぶ原因を測る |
 | `233_probe_colosseum` | 闘技場の試合を録る |
 | `234_probe_busy_display` | 待機表示（選択肢の枠の「…」）を録る |
-| `235_probe_sound_effects` | 効果音を録る |
-| `236_probe_enemy_stats` | 敵と味方の強さの出どころを録る |
+| `235_probe_sound_effects` | 効果音を記録する |
+| `236_probe_enemy_stats` | 敵と味方の強さの出所を録る |
 | `237_probe_affinity` | NPC のプレイヤーへの好感度（`relationship.player.affinity`）がいつ・どれだけ動くかを録る |
 | `238_probe_prison` | 逮捕・裁判・服役・釈放の流れを録る |
-| `239_probe_game_flags` | ゲームの「〜の最中」の旗 7 つ（`in_battle` / `in_boss_battle` / `in_colosseum_battle` / `in_conversation` / `in_free_input` / `in_action_in_conversation` / `in_shopping`）を録る |
-| `240_probe_stamina` | 主人公と同行者のスタミナ（`physical_integrity` / `max_physical_integrity`）と疲労の旗（`exhausted`）が変わるたびに、呼び出し元の連鎖と、依頼や戦闘の最中かを録る |
-| `241_probe_world_bulk` | 世界の一括生成（main_026 から、世界→一括生成）で、残りの仕事の種類ごとの件数、仕事1件の時間と、そのうち絵を描いた時間（GPU）・CPU・待ち（主に LLM）を録る |
-| `242_probe_world_reads` | 遊んでいる最中にゲームが世界の素データ（`app.world_dict` |
+| `239_probe_game_flags` | ゲームの「〜の最中」のフラグ 7 つ（`in_battle` / `in_boss_battle` / `in_colosseum_battle` / `in_conversation` / `in_free_input` / `in_action_in_conversation` / `in_shopping`）を録る |
+| `240_probe_stamina` | 主人公と同行者のスタミナ（`physical_integrity` / `max_physical_integrity`）と疲労のフラグ（`exhausted`）が変わるたびに、呼び出し元の連鎖と、依頼や戦闘の最中かを記録する |
+| `241_probe_world_bulk` | 世界の一括生成（main_026 から、世界→一括生成）で、残りの仕事の種類ごとの件数、仕事1件の時間と、そのうち画像を描いた時間（GPU）・CPU・待ち（主に LLM）を録る |
+| `242_probe_world_reads` | 遊んでいる最中にゲームが世界の生データ（`app.world_dict` |
 | `243_probe_value_curves` | 難易度と品の価値から数を作るゲームの関数が、76 を超えたときにどう振る舞うかを録る |
 | `244_probe_ability_reads` | ゲームが能力値をどこで読み、そこから作る値（攻撃力・魔力・防御・最大 HP）をいつ組み直すかを録る |
-| `245_probe_shop_negotiation` | 店の売買の窓で値切ったとき、決まった額が品のどこに書かれ、いつまで残るかを録る |
-| `246_probe_charamake_traits` | キャラ作成画面が特質をどこに持ち、特質の窓が何でできているかを録る |
+| `245_probe_shop_negotiation` | 店の売買の画面で値切ったとき、決まった額が品のどこに書かれ、いつまで残るかを録る |
+| `246_probe_charamake_traits` | キャラ作成画面が特質をどこに持ち、特質のウィンドウが何でできているかを録る |
 
 ---
 

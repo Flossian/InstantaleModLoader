@@ -71,7 +71,7 @@ LOG_BASENAME = "town_factions.log"
 STATE_DIRNAME = "town_factions_ledger"
 #: ワールド個別の設定（`tools\modtool.py` がフォルダ名から決める名前）。
 SETTINGS_DIRNAME = "town_factions"
-#: 338 の控え（読むだけ。VERIFICATION.md §3.97「控えの形」）。
+#: 338 の控え（読むだけ。VERIFICATION.md §3.97「保存データの形」）。
 INCIDENTS_DIRNAME = "town_incidents"
 STORE_ATTR = "_instantale_town_factions"
 SETTINGS_STORE_ATTR = "_instantale_town_factions_settings"

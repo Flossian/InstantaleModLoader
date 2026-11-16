@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """勢力と情勢の窓に出す中身を組む。ゲームにも Kivy にも触らない（辞書と文字列だけを扱う）。
 
-窓の見た目と言葉は VERIFICATION.md §3.98「勢力と情勢の窓」。
+窓の見た目と言葉は VERIFICATION.md §3.98「勢力と情勢のウィンドウ」。
 色は段階（-2〜+2）で渡し、描く側（`window.py`）が段階の色に塗る。
 
     model = view.build(ledger, day=…, here=…, area_names=…, laws=…)

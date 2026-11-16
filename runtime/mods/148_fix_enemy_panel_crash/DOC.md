@@ -12,4 +12,4 @@
 | 症状 | 見るところ |
 | --- | --- |
 | 戦闘中に持ち物を開くとまだ落ちる | `crash_log.txt` の最後が `update_enemy_display` の `ZeroDivisionError` か。`out\enemy_panel_crash.log` に `updated while folded` の行があるか |
-| 持ち物を閉じても敵の欄が古いまま | 同じログに `redrew the enemy panel` の行があるか。次の手の後には素のゲームの更新でも直る |
+| 持ち物を閉じても敵の欄が古いまま | 同じログに `redrew the enemy panel` の行があるか。次の手の後にはゲーム本体の更新でも直る |
