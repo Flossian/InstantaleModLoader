@@ -234,20 +234,8 @@ def apply(ctx):
             return "-"
         return "{}({})".format(name_of(obtainer), frames.attr(obtainer, "id", "?"))
 
-    def facility_of(app):
-        """プレイヤーが今いる施設。ロード直後は id の文字列なので引き直す。"""
-        location = frames.attr(frames.attr(app, "player", None), "location", None)
-        if location is None:
-            return None
-        if not isinstance(location, str):
-            return location
-        try:
-            return ui.find_facility(ui.current_area(app), location)[0]
-        except Exception:
-            return None
-
     def shop_owner(app):
-        facility = facility_of(app)
+        facility = ui.current_facility(app)
         owner = frames.attr(facility, "owner", None) if facility is not None else None
         if owner is None:
             return None
@@ -255,7 +243,7 @@ def apply(ctx):
 
     def goods_brief(app):
         """今の施設の品揃えの雛形。買って減るのかを見るのが目的。"""
-        facility = facility_of(app)
+        facility = ui.current_facility(app)
         config = frames.attr(facility, "config", None) if facility is not None else None
         if not isinstance(config, dict):
             return None

@@ -89,23 +89,16 @@ def apply(ctx):
     wanted.take_shop_pressure(owner, ctx)
 
     # -------------------------------------------------- いまの店
-    def current_facility(app):
-        location = getattr(getattr(app, "player", None), "location", None)
-        if isinstance(location, (str, int)):
-            facility, _node = ui.find_facility(ui.current_area(app), str(location))
-            return facility
-        return location
-
     def keeper_of(app):
         """いま居る施設の `(主の id, 主)`。主がいなければ `(None, None)`。"""
-        owner_id = getattr(current_facility(app), "owner", None)
+        owner_id = getattr(ui.current_facility(app), "owner", None)
         if owner_id is None:
             return None, None
         return str(owner_id), ui.character_of(app, str(owner_id))
 
     def judgeable_shop(app):
         """判定を頼む店なら `(主の id, 主)`。店でない・主が MOD の人物なら None。"""
-        choices = getattr(current_facility(app), "choices", None)
+        choices = getattr(ui.current_facility(app), "choices", None)
         if not isinstance(choices, dict) or SHOP_CHOICE not in choices:
             return None
         keeper_id, keeper = keeper_of(app)

@@ -313,15 +313,6 @@ def apply(ctx):
         """品揃えに傾向を付ける施設か（ゲームの店）。"""
         return ui.facility_type_of(facility) in LINEUPS and is_game_facility(facility)
 
-    def current_facility(app):
-        """プレイヤーが今いる施設。ロード直後は id の文字列なので引き当て直す。"""
-        location = _get(_get(app, "player"), "location")
-        if location is None:
-            return None
-        if not isinstance(location, str):
-            return location
-        return ui.find_facility(ui.current_area(app), location)[0]
-
     def where(facility):
         return "{} {}".format(ui.facility_type_of(facility), facility_id(facility))
 
@@ -517,7 +508,7 @@ def apply(ctx):
         """
         try:
             sweep(app)
-            facility = current_facility(app)
+            facility = ui.current_facility(app)
             if facility is None or not takes_entry(facility):
                 return
             if in_world_dict(app, facility) is False and not save_lookup.covered(SHOP_SITE):
@@ -541,7 +532,7 @@ def apply(ctx):
     def selling_owner(character):
         """`character` が今いる宿屋・鍛冶屋の主で、入口を出している施設なら、その施設の種類。"""
         app = ui.find_app()
-        facility = current_facility(app)
+        facility = ui.current_facility(app)
         if facility is None or not takes_entry(facility):
             return None
         found = _get(facility, "choices")
@@ -590,7 +581,7 @@ def apply(ctx):
         app = _get(self, "app") or ui.find_app()
         facility = None
         try:
-            facility = current_facility(app)
+            facility = ui.current_facility(app)
         except Exception:
             ctx.log_exc("shop lineup: cannot read the current facility")
         if facility is None or not has_lineup(facility):
@@ -796,7 +787,7 @@ def apply(ctx):
         if before is not None and not before and not batch.get("filled"):
             try:
                 app = _get(self, "app") or ui.find_app()
-                facility = current_facility(app)
+                facility = ui.current_facility(app)
                 tier = frames.arg(args, kwargs, "next_tier", 1)
                 if batch["dropped"] or template_gear(facility, tier):
                     batch["filled"] = True

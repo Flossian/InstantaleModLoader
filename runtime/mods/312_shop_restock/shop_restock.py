@@ -302,17 +302,6 @@ def apply(ctx):
         app = getattr(manager, "app", None)
         return app if app is not None else ui.find_app()
 
-    def facility_of(app):
-        """プレイヤーが今いる施設。ロード直後は id の文字列なので引き当て直す。"""
-        location = getattr(getattr(app, "player", None), "location", None)
-        if location is None:
-            return None
-        if not isinstance(location, str):
-            return location
-        # `find_facility` は `(施設, ノード)` を返す。
-        # 施設だけを取る。
-        return ui.find_facility(ui.current_area(app), location)[0]
-
     def inventory_of(character):
         """持ち物の実体（`{item_id: アイテム}`）。毎回引き直すこと。
 
@@ -332,7 +321,7 @@ def apply(ctx):
 
     def shop_owner(app):
         """今の施設の主を (id, Character) で返す。引けなければ (None, None)。"""
-        facility = facility_of(app)
+        facility = ui.current_facility(app)
         if facility is None:
             return None, None
         owner = getattr(facility, "owner", None)
@@ -364,7 +353,7 @@ def apply(ctx):
         if RESTOCK_DAYS <= 0:
             return
 
-        facility = facility_of(app)
+        facility = ui.current_facility(app)
         owner_id, owner = shop_owner(app)
         if owner is None:
             write("skip: cannot resolve the shop owner "
@@ -474,7 +463,7 @@ def apply(ctx):
         inventory = inventory_of(owner)
         if inventory is None:
             return None
-        facility = facility_of(app)
+        facility = ui.current_facility(app)
         if not always and never_stocked(facility):
             return None
         if not inventory and (store["fresh"] or never_stocked(facility)):

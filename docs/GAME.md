@@ -668,7 +668,7 @@ app.world.characters     -> {id: Character}    Facility.owner はこの id（str
 > 「新しい世界では動くのに、セーブをロードすると動かない」の原因はこれ。
 > 施設の種類で出し分けるボタンがロード直後だけ出ず、
 > どこかへ移動して入り直すと直るので原因が分かりにくい（実際に起きた）。
-> 施設を引くときは `player.location` を直接使わず、id でも引き当てる関数を通す。
+> 施設を引くときは `player.location` を直接使わず、id でも引き当てる関数を通す（エリアは `ui.current_area`、施設は `ui.current_facility`）。
 
 フラグも同じで、セーブに保存されて下りないことがある
 （ロード後にギルドへ入っても `app.in_shopping` が True のままだった実測がある）。

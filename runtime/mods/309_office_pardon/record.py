@@ -39,22 +39,6 @@ lawfulness_of = ui.lawfulness_of
 set_lawfulness = ui.set_lawfulness
 
 
-def current_facility(app):
-    """いま居る施設。引き当てられなければ `None`。
-
-    `player.location` は施設のオブジェクトとは限らない。
-    セーブでは `"0"` という
-    id の文字列だった（`ui.current_area` が同じ理由で両対応になっている）。
-    """
-    player = getattr(app, "player", None)
-    if player is None:
-        return None
-    location = getattr(player, "location", None)
-    if isinstance(location, (str, int)):
-        facility, _node = ui.find_facility(ui.current_area(app), str(location))
-        return facility
-    return location
-
 
 def refresh_status(app):
     """所持金の表示を今の値に合わせる。効かなくても処理は続ける。

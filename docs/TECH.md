@@ -3286,6 +3286,8 @@ ui.find_app() / ui.find_hud(app) / ui.cls_of(...) / ui.IDLE_SIGNALS / ui.SAFE_CL
 ui.current_area(app) / ui.world_areas(...) / ui.nodes_of(...) / ui.facilities_of(...)
 ui.find_guild(area) / ui.find_facility(area, id) / ui.facility_name(app, facility)
 ui.facility_type_of(...) / ui.GUILD_FACILITY_TYPE
+ui.current_facility(app)      # いま居る施設。`player.location` が id の文字列でも引き当てる。引けなければ None
+ui.is_facility_screen(buttons)  # 施設の選択肢の画面か（施設から出るボタン `ui.MOVE_PHASE_CLS` が1つでもある）
 ui.choices_painted(app)   # いまの選択肢（`app.to_display_buttons`）を HUD が描画し終えたか。読めなければ True
 ui.battle_on_screen(app)  # いま並んでいるボタンが戦闘のものか（ロードの直後に戦闘の続きへ戻ったかの見分け。`107_` / `336_`）
 ui.put_back_party(app, [(id, 実体)]) / ui.return_escaped(app)   # 一覧に居ない者を預かりから戻す（主人公は先頭へ）。戻した id と引けなかった id を返す

@@ -1915,11 +1915,6 @@ def apply(ctx):
         save_soon(app, "case closed")
 
     # ------------------------------------------------------------ ボタン
-    def is_facility_screen(buttons):
-        if not isinstance(buttons, (list, tuple)):
-            return False
-        return any(ui.spec_cls_name(entry) == FACILITY_MARK for entry in buttons)
-
     def decline(app, why, buttons=None):
         """ボタンを出さなかった理由を残す。同じ理由は繰り返さない。
 
@@ -1959,12 +1954,12 @@ def apply(ctx):
         旗はセーブに焼かれて残る。
 
         旗は「別の画面が出ている」ことの当て推量にすぎず、
-        こちらには `is_facility_screen` という直接の判定がある。
+        こちらには `ui.is_facility_screen` という直接の判定がある。
         施設の選択肢が現に出ているなら、旗のほうが古い。
         挿す先はその選択肢そのものなので、別の画面へ紛れ込む心配も無い。
         """
         flags = [flag for flag in BUSY_FLAGS if getattr(app, flag, False)]
-        if flags and is_facility_screen(buttons):
+        if flags and ui.is_facility_screen(buttons):
             if state.get("ignored") != tuple(flags):
                 state["ignored"] = tuple(flags)
                 write("[{}] {} is set but the facility choices are on screen; "
@@ -1974,7 +1969,7 @@ def apply(ctx):
 
     def gate(app, buttons):
         """自前の選択肢を出してよい画面か。だめなら理由を1行残して False。"""
-        if not is_facility_screen(buttons):
+        if not ui.is_facility_screen(buttons):
             return decline(app, "not a facility screen", buttons)
         stuck = busy_reasons(app, buttons)
         if stuck:
@@ -2015,7 +2010,7 @@ def apply(ctx):
             buttons[:] = [entry for entry in buttons if not any(entry is gone for gone in old)]
             write("dropped {} button(s) with the older mark: {}".format(
                 len(old), [entry.get("text") for entry in old]))
-        if not is_facility_screen(buttons) or busy_reasons(app, buttons) or state.get("writing"):
+        if not ui.is_facility_screen(buttons) or busy_reasons(app, buttons) or state.get("writing"):
             return
         # 告発の画面から出たら畳む。**施設を移ったときも告発は畳む**。
         # 別の場所で告発の途中が生き残っていると、戻ってきたときに何をしていたか分からない。

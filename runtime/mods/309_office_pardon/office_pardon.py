@@ -187,21 +187,15 @@ def apply(ctx):
 
     def at_office(app):
         """いま役場に立っているか。"""
-        facility = record.current_facility(app)
+        facility = ui.current_facility(app)
         return ui.facility_type_of(facility) == OFFICE_FACILITY_TYPE
 
     def busy(app):
         """ボタンを出す前提が崩れている理由の一覧（無ければ空）。"""
         return [flag for flag in BUSY_FLAGS if getattr(app, flag, False)]
 
-    def is_facility_screen(buttons):
-        """いま施設の選択肢が出ているか。文字列ではなく spec で見る。"""
-        if not isinstance(buttons, (list, tuple)):
-            return False
-        return any(ui.spec_cls_name(entry) == FACILITY_MARK for entry in buttons)
-
     def facility_key(app):
-        facility = record.current_facility(app)
+        facility = ui.current_facility(app)
         return (ui.area_id_of(ui.current_area(app)),
                 str(getattr(facility, "id", "")))
 
@@ -212,7 +206,7 @@ def apply(ctx):
         ゲームが組んだ一覧に足すだけで、組み直さない。
         """
         buttons = view.buttons
-        if not buttons or not is_facility_screen(buttons):
+        if not buttons or not ui.is_facility_screen(buttons):
             return None
         if not at_office(app):
             state["announced"] = None   # 役場を出たら、次に入ったときに知らせ直す

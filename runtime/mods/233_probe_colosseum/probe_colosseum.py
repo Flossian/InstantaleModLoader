@@ -174,16 +174,6 @@ def apply(ctx):
         return [v for v in (values or [])
                 if isinstance(v, (int, float)) and not isinstance(v, bool)]
 
-    def facility_of(app):
-        """立っている施設（`player.location`）。id だけなら街から引く（`232_` と同じ）。"""
-        player = getattr(app, "player", None) if app is not None else None
-        location = getattr(player, "location", None)
-        if location is None or isinstance(location, (str, int)):
-            area = ui.current_area(app)
-            found, _node = ui.find_facility(area, location) if area is not None else (None, None)
-            return found
-        return location
-
     def rank_of(value):
         """敵データ（`{"type":..., "data":{... "rank": N}}` の形）からランクだけ。"""
         if not isinstance(value, dict):
@@ -223,7 +213,7 @@ def apply(ctx):
 
     def arena_here(app):
         """立っている施設が闘技場ならその写し。よそなら None。"""
-        facility = facility_of(app)
+        facility = ui.current_facility(app)
         if facility is None or ui.facility_type_of(facility) != ARENA_TYPE:
             return None
         return arena_brief(facility)

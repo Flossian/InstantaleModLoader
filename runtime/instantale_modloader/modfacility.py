@@ -2062,10 +2062,8 @@ def our_labels(app):
 
 
 def is_facility_screen(buttons):
-    """施設の選択肢の画面か（ゲームの移動のボタンが1つでもある）。"""
-    if not isinstance(buttons, list):
-        return False
-    return any(ui.spec_cls_name(entry) == MOVE_CLS for entry in buttons)
+    """施設の選択肢の画面か。判定の本体は `ui.is_facility_screen`。"""
+    return ui.is_facility_screen(buttons)
 
 
 #: ゲームが施設の**最初の画面**に並べる入口の spec。

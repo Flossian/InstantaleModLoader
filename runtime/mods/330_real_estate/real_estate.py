@@ -192,9 +192,6 @@ OFFICE_SCREEN = "office"
 #: 役場の `facility_type`（実セーブで確認。GAME.md §2.7）。
 OFFICE_FACILITY_TYPE = "administrative_office"
 
-#: 施設の選択肢であることの目印。移動のボタンがある画面だけに足す（`309_` と同じ）。
-MOVE_CLS = "MovePhaseManager"
-
 #: 宿泊の入口。実測の署名は `(app, months, quality)`（GAME.md §2.17）。
 STAY_CLS = "VacationStartManager"
 
@@ -1915,19 +1912,13 @@ def apply(ctx):
         write("stay menu: uncovered ({})".format(why))
         screen.schedule(lambda: screen.busy_off(app))
 
-    def is_facility_screen(buttons):
-        """施設の選択肢の画面か（移動のボタンが1つでもある）。"""
-        if not isinstance(buttons, list):
-            return False
-        return any(ui.spec_cls_name(entry) == MOVE_CLS for entry in buttons)
-
     def offer(app, view):
         """役場の窓口のボタン（窓口 `choices` の `offer`。組み直しのたびに呼ばれる）。
 
         建物の中の選択肢・出口・建物への道は**ローダが出す**（TECH.md §5.8）。
         ここに残るのは、ゲームの施設（役場）に足す1つだけ。
         """
-        if state.get("free_stay") is not None or not is_facility_screen(view.buttons):
+        if state.get("free_stay") is not None or not ui.is_facility_screen(view.buttons):
             return None
         if not landlord.at_facility_type(app, OFFICE_FACILITY_TYPE):
             return None

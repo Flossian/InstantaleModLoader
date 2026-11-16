@@ -103,9 +103,6 @@ WARMED_KEY = "keeper_warmed"
 #: 役場の `facility_type`（実セーブで確認。GAME.md §2.7）。
 OFFICE_FACILITY_TYPE = "administrative_office"
 
-#: 施設の選択肢であることの目印。移動のボタンがある画面だけに足す（`309_` と同じ）。
-MOVE_CLS = "MovePhaseManager"
-
 #: 店の種類。中身はどれも売買（`shopping_start_method_1`）。
 SHOP_KINDS = ("general_store", "specialty_shop", "blacksmith")
 
@@ -1256,11 +1253,6 @@ def apply(ctx):
                            fallback=lambda: run_action(app, action, facility_id=facility_id))
 
     # ------------------------------------------------------------ 役場のボタン
-    def is_facility_screen(buttons):
-        if not isinstance(buttons, list):
-            return False
-        return any(ui.spec_cls_name(entry) == MOVE_CLS for entry in buttons)
-
     def at_office(app):
         location = getattr(getattr(app, "player", None), "location", None)
         if location is None or isinstance(location, (str, int)):
@@ -1269,7 +1261,7 @@ def apply(ctx):
 
     def offer(app, view):
         """役場に「出資する」を出す（窓口 `choices` の `offer`）。建物の中はローダが出す。"""
-        if not is_facility_screen(view.buttons) or modfacility.game_is_busy(app):
+        if not ui.is_facility_screen(view.buttons) or modfacility.game_is_busy(app):
             # 会話・戦闘・自由入力の最中は足さない（建物の選択肢と同じ判定。TECH.md §5.8）。
             return None
         if not at_office(app):

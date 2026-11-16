@@ -217,6 +217,17 @@ def find_spec_button(buttons, cls_name):
     return None
 
 
+#: 施設から出るボタンが呼ぶクラス。施設の選択肢の画面にだけ並ぶ。
+MOVE_PHASE_CLS = "MovePhaseManager"
+
+
+def is_facility_screen(buttons):
+    """施設の選択肢の画面か（施設から出るボタンが1つでもある）。"""
+    if not isinstance(buttons, (list, tuple)):
+        return False
+    return any(spec_cls_name(entry) == MOVE_PHASE_CLS for entry in buttons)
+
+
 #: 戦闘の画面のボタンが呼ぶクラス（`攻撃` / `スキル・防御` / `発言する` と、スキルを選んでいる最中の `やめる`）。
 BATTLE_BUTTON_CLASSES = ("BattlePhaseManager", "SkillChoicePhaseManager",
                          "UtteranceChoiceInBattleManager", "UtteranceInBattleManager",
@@ -1644,6 +1655,20 @@ def find_facility(area, facility_id):
             if str(key) == target or str(getattr(facility, "id", "")) == target:
                 return facility, node
     return None, None
+
+
+def current_facility(app):
+    """いまプレイヤーが居る施設。**id で持っている場合も引き当てる。** 引けなければ None。
+
+    `player.location` は施設のオブジェクトとは限らない。
+    ロード直後は施設 id の文字列で、遊んでいる最中にその施設へ入ると Facility そのものに置き換わる。
+    `current_area` と同じく、持ち方は決めつけずにどちらでも引き当てる。
+    """
+    where = getattr(getattr(app, "player", None), "location", None)
+    if isinstance(where, bool) or not isinstance(where, (str, int)):
+        return where
+    facility, _node = find_facility(current_area(app), str(where))
+    return facility
 
 
 def find_guild(area, facility_type=GUILD_FACILITY_TYPE):

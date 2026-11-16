@@ -370,19 +370,9 @@ def apply(ctx):
             return 1
         return max(1, int(value))
 
-    def facility_of(app):
-        """立っている施設。id しか持っていない作りなら街から引く。"""
-        player = frames.attr(app, "player", None)
-        location = frames.attr(player, "location", None)
-        if location is None or isinstance(location, (str, int)):
-            area = ui.current_area(app)
-            found, _node = ui.find_facility(area, location) if area is not None else (None, None)
-            return found
-        return location
-
     def arena_of(app):
         """立っている施設が闘技場ならそれ。よそなら None。"""
-        facility = facility_of(app)
+        facility = ui.current_facility(app)
         if facility is None or ui.facility_type_of(facility) != ARENA_TYPE:
             return None
         return facility

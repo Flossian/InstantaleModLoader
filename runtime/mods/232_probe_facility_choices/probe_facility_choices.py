@@ -61,16 +61,6 @@ def apply(ctx):
         state = {"env": False}
         setattr(sys, ONCE_MARK, state)
 
-    def facility_of(app):
-        """立っている施設（`player.location`）。id だけなら街から引く。"""
-        player = getattr(app, "player", None)
-        location = getattr(player, "location", None)
-        if location is None or isinstance(location, (str, int)):
-            area = ui.current_area(app)
-            found, _node = ui.find_facility(area, location) if area is not None else (None, None)
-            return found
-        return location
-
     def env_once():
         if state["env"]:
             return
@@ -93,7 +83,7 @@ def apply(ctx):
 
     def record(app, why):
         env_once()
-        facility = facility_of(app)
+        facility = ui.current_facility(app)
         if facility is None:
             write("{}: no facility under the player".format(why))
             return

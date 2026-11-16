@@ -89,10 +89,7 @@ def _store():
     return store
 
 
-def is_facility_screen(buttons):
-    """施設の選択肢か（出口のボタンがある）。"""
-    return isinstance(buttons, (list, tuple)) and any(
-        ui.spec_cls_name(entry) == FACILITY_MARK for entry in buttons)
+is_facility_screen = ui.is_facility_screen
 
 
 def drop_old_marks(buttons):
@@ -285,11 +282,7 @@ class Env(object):
             updater()
 
     def current_facility(self, app):
-        location = getattr(getattr(app, "player", None), "location", None)
-        if isinstance(location, (str, int)):
-            facility, _node = ui.find_facility(ui.current_area(app), str(location))
-            return facility
-        return location
+        return ui.current_facility(app)
 
     # ---------------------------------------------------- 画面の部品
     def back_to_shop(self, app, why):

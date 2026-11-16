@@ -46,33 +46,9 @@ def world_name(app):
     return "" if key == UNKNOWN_WORLD else key
 
 
-def current_facility(app):
-    """いま居る施設。id で持っている場合も引き当てる。
-
-    `player.location` は施設のオブジェクトとは限らない。
-    セーブでは施設 id の文字列（`'106'`）で、遊んでいる最中にその施設へ入ると Facility そのものに置き換わる。
-
-    ロード直後は前者のままなので、`facility_type_of` が空文字を返し、**ギルドに立っているのにボタンが出なかった**（実機）。
-    「新しい世界では動くのに、セーブをロードすると動かない」の正体。
-
-    `ui.current_area` は同じ理由で既に両方を引き当てている（そちらの註）。
-    施設側にも同じ手当てが要った。
-    """
-    where = getattr(getattr(app, "player", None), "location", None)
-    if where is None or ui.facility_type_of(where):
-        return where                    # もうオブジェクト。そのまま使う
-    area = ui.current_area(app)
-    if area is None:
-        return where
-    try:
-        found, _node = ui.find_facility(area, ui.element_id(where))
-    except Exception:
-        return where
-    return found if found is not None else where
-
 
 def facility_type(app):
-    return ui.facility_type_of(current_facility(app))
+    return ui.facility_type_of(ui.current_facility(app))
 
 
 def area_id(app):
@@ -80,7 +56,7 @@ def area_id(app):
 
 
 def facility_name(app, limit=40):
-    return ui.facility_name(app, current_facility(app), limit=limit)
+    return ui.facility_name(app, ui.current_facility(app), limit=limit)
 
 
 def owner_ids(app, max_areas=40):
