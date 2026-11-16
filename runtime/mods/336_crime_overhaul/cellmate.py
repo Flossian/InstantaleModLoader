@@ -176,29 +176,6 @@ def install(env):
                 mate.update(changes)
                 worlds.save(playthrough)
 
-    # ---------------------------------------------------- 好感度
-    def affinity_of(app, npc_id):
-        character = ui.character_of(app, npc_id)
-        relationship = getattr(character, "relationship", None)
-        row = relationship.get("player") if isinstance(relationship, dict) else None
-        value = row.get("affinity") if isinstance(row, dict) else None
-        return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
-
-    def write_affinity(app, npc_id, value):
-        """実行時の人物と素データの両方へ書く（`337_` と同じ。保存のときゲームは実行時の値を写す）。"""
-        targets = [getattr(ui.character_of(app, npc_id), "relationship", None)]
-        for where, holder in npcs.npc_stores(app):
-            if "characters" in where.rsplit(".", 1)[-1]:
-                continue
-            data = holder.get(str(npc_id)) if isinstance(holder, dict) else None
-            if isinstance(data, dict):
-                targets.append(data.get("relationship"))
-        for relationship in targets:
-            if isinstance(relationship, dict):
-                row = relationship.setdefault("player", {})
-                if isinstance(row, dict):
-                    row["affinity"] = value
-
     # ---------------------------------------------------- 作る
     def area_notes(area):
         notes = frames.attr(area, "descriptions", None)
@@ -336,9 +313,9 @@ def install(env):
             found = jailed(app) if app is not None else None
             if found is not None:
                 npc_id, mate = found
-                before = affinity_of(app, npc_id)
+                before = npcs.affinity_of(app, npc_id)
                 after = raised_affinity(before, cfg.CELLMATE_AFFINITY_PER_YEAR)
-                write_affinity(app, npc_id, after)
+                npcs.set_affinity(app, npc_id, after)
                 set_mate(app, npc_id, years=int(mate.get("years") or 0) + 1)
                 write("cellmate: a year with {} ({}); affinity {} -> {}".format(
                     npc_id, mate.get("name"), before, after))
@@ -483,7 +460,7 @@ def install(env):
         if found is None:
             return
         npc_id, mate = found
-        affinity = affinity_of(app, npc_id)
+        affinity = npcs.affinity_of(app, npc_id)
         if affinity is None or affinity < cfg.CELLMATE_ASSIST_AFFINITY:
             write("cellmate: {} stays in the cell (affinity {} < {})".format(
                 npc_id, affinity, cfg.CELLMATE_ASSIST_AFFINITY))

@@ -21,7 +21,7 @@
 """
 import threading
 
-from instantale_modloader import arrivals, durations, prices, ui, wanted
+from instantale_modloader import arrivals, durations, npcs, prices, ui, wanted
 
 from . import rules
 
@@ -53,7 +53,7 @@ def install(env):
     def friendly_keeper(app):
         """委縮しない店の主 `(主, 好感度)`。委縮するなら None。"""
         keeper = keeper_of(app)
-        affinity = rules.affinity_of(keeper) if keeper is not None else None
+        affinity = npcs.affinity_value(keeper) if keeper is not None else None
         if rules.keeper_unafraid(affinity, cfg.INTIMIDATION_FRIEND_AFFINITY):
             return keeper, affinity
         return None

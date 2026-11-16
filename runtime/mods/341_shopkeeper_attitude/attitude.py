@@ -119,16 +119,6 @@ def parse(data):
     return value, clean(data.get("reason"), REASON_LIMIT), clean(data.get("line"), LINE_LIMIT)
 
 
-def affinity_of(character):
-    """人物のプレイヤーへの好感度（`relationship["player"]["affinity"]`）。読めなければ None。"""
-    relationship = getattr(character, "relationship", None)
-    row = relationship.get("player") if isinstance(relationship, dict) else None
-    value = row.get("affinity") if isinstance(row, dict) else None
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return value
-
-
 def fallback(mode, affinity, threshold):
     """判定が無いときの応じ方。手配中は好感度が `threshold` 以上なら動じない、下なら怯える。平時は普段どおり。"""
     if mode == WANTED and affinity is not None and affinity >= threshold:

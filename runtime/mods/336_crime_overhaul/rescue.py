@@ -23,7 +23,7 @@ import time
 
 from instantale_modloader import choices, npcs, ui
 
-from . import common, rules, underworld
+from . import common, underworld
 
 DEATH_SPEC = "ExecutionPhaseManager"
 #: MOD の人物の id の頭。パーティに入れられないので手引き役に選ばない。
@@ -52,7 +52,7 @@ BRIEF_TEXT = (
 )
 
 
-affinity_of = rules.affinity_of
+affinity_of = npcs.affinity_value
 
 
 def rescuer_of(app, threshold):

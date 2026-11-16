@@ -54,6 +54,7 @@ README の「MOD を消せば完全に元通り」からは外れる性質なの
 """
 
 import copy
+import math
 import sys
 
 from . import frames, ids, ui
@@ -259,6 +260,72 @@ def save_npcs(app):
             if isinstance(data, dict):
                 merged.setdefault(str(npc_id), data)
     return merged
+
+
+# --------------------------------------------------------------------------
+# プレイヤーへの好感度（GAME.md §2.25）
+# --------------------------------------------------------------------------
+# 置き場所は `relationship["player"]["affinity"]`。実行時の Character では属性、
+# セーブの素データでは辞書の項目だが、中の形は同じ。
+
+def _player_row(holder):
+    relationship = (holder.get("relationship") if isinstance(holder, dict)
+                    else getattr(holder, "relationship", None))
+    row = relationship.get("player") if isinstance(relationship, dict) else None
+    return row if isinstance(row, dict) else None
+
+
+def affinity_value(holder):
+    """人物の好感度。実行時の Character でもセーブの辞書でも読む。読めなければ None。
+
+    ゲームと MOD が書くのは整数だけだが、float が入っていても None にはしない。
+    None を返すと、読めないものとして0から数え直して書き戻す MOD があり、値を失う。
+    float は小数点以下を切り捨てた int で返す（0 の方向。書き換えはしない）。
+    """
+    row = _player_row(holder)
+    value = row.get("affinity") if row is not None else None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and math.isfinite(value):
+        return int(value)
+    return None
+
+
+def affinity_of(app, npc_id):
+    """その NPC の好感度。実行時の人物を先に、読めなければセーブの素データ。
+
+    ロード直後の実行時の名簿（`world.characters`）はほとんど空なので（`npc_stores` の註）、
+    名簿に居ない相手は素データから読む。
+    """
+    value = affinity_value(ui.character_of(app, npc_id))
+    if value is None:
+        value = affinity_value(save_npcs(app).get(str(npc_id)))
+    return value
+
+
+def set_affinity(app, npc_id, value, character=None):
+    """好感度を書く。実行時の人物（`character` を渡せばそれも）と、素データの心当たり全部。
+
+    `player` の欄が無い所には書かない（好感度だけの欄を作ると `affinity_text` などが欠ける）。
+    保存のときゲームは実行時の値を写すが、名簿に居ない相手は素データにしか居ないので両方に書く。
+    書いた所の数を返す。
+    """
+    rows = [_player_row(character), _player_row(ui.character_of(app, npc_id))]
+    for where, holder in npc_stores(app):
+        if "characters" in where.rsplit(".", 1)[-1]:
+            continue                    # 実行時の名簿。素データではない
+        rows.append(_player_row(holder.get(str(npc_id)) if isinstance(holder, dict) else None))
+    written = 0
+    seen = set()
+    for row in rows:
+        if row is None or id(row) in seen:
+            continue
+        seen.add(id(row))
+        row["affinity"] = value
+        written += 1
+    return written
 
 
 def index_stores(app):

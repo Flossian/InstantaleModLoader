@@ -37,7 +37,7 @@ import re
 import sys
 import time
 
-from instantale_modloader import (arrivals, choices, durations, frames, jobs, llm, loads, modfacility, modnpc,
+from instantale_modloader import (arrivals, choices, durations, frames, jobs, llm, loads, modfacility, modnpc, npcs,
                                   quest_claims, state as loader_state, talk_affinity, ui)
 from instantale_modloader import board as quest_board   # 包みの関数 `board`（掲示板を開く）と名前が重なるので別名
 from instantale_modloader.npcs import npc_stores, save_npcs
@@ -293,12 +293,6 @@ def apply(ctx):
 
     def in_party(app, npc_id):
         return str(npc_id) in {str(member) for member in ui.party_member_ids(app)}
-
-    def affinity_of(app, npc_id):
-        relationship = raw_of(app, npc_id, "relationship")
-        row = relationship.get("player") if isinstance(relationship, dict) else None
-        value = row.get("affinity") if isinstance(row, dict) else None
-        return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
     def adventurers(app):
         """名簿（`Area.adventurer_npcs`）に載っている冒険者の id。土地の順。"""
@@ -873,7 +867,7 @@ def apply(ctx):
             key, bucket = ledger(app)
             rival = bucket.get("rival")
             if isinstance(rival, dict) and str(info.get("npc_id")) == str(rival.get("id")):
-                floor = rivalry.stance_from_affinity(affinity_of(app, rival.get("id")),
+                floor = rivalry.stance_from_affinity(npcs.affinity_of(app, rival.get("id")),
                                                      AFFINITY_PER_STANCE)
                 if soften(app, bucket, floor, "affinity"):
                     worlds.save(key)

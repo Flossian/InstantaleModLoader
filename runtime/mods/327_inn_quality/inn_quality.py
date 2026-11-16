@@ -68,7 +68,7 @@ import os
 import random
 import sys
 
-from instantale_modloader import choices, durations, frames, llm, loads, ui
+from instantale_modloader import choices, durations, frames, llm, loads, npcs, ui
 from instantale_modloader.state import WorldStore
 
 LOG_BASENAME = "inn_quality.log"
@@ -182,13 +182,6 @@ def regular_line(record, app):
         rooms=rooms_text(record.get("by_quality") or {}), ago=ago)
 
 
-def affinity_of(character):
-    player = getattr(character, "relationship", None)
-    player = player.get("player") if isinstance(player, dict) else None
-    value = player.get("affinity") if isinstance(player, dict) else None
-    return value if isinstance(value, int) and not isinstance(value, bool) else None
-
-
 def area_npc_ids(app):
     """いまのエリアの施設の名簿と主に載っている NPC の id（生成済み＝`world.characters` に居る）。"""
     found = []
@@ -217,7 +210,7 @@ def pick_partner(app, rng=RNG):
         if tier == "party" and party:
             return rng.choice(party), tier
         if tier == "friends":
-            scored = [(affinity_of(ui.character_of(app, n)), n) for n in others]
+            scored = [(npcs.affinity_value(ui.character_of(app, n)), n) for n in others]
             scored = [(a, n) for a, n in scored if a is not None and a >= int(FRIEND_AFFINITY)]
             if scored:
                 best = max(a for a, _n in scored)
@@ -451,11 +444,10 @@ def apply(ctx):
             gain = min(setting("AFFINITY_", quality, 0),
                        int(AFFINITY_CAP) - int(record.get("granted", 0)))
             if gain > 0:
-                player = getattr(ui.character_of(app, owner), "relationship", None)
-                player = player.get("player") if isinstance(player, dict) else None
-                affinity = player.get("affinity") if isinstance(player, dict) else None
-                if isinstance(affinity, int) and not isinstance(affinity, bool):
-                    player["affinity"] = affinity + gain
+                keeper = ui.character_of(app, owner)
+                affinity = npcs.affinity_value(keeper)
+                if affinity is not None:
+                    keeper.relationship["player"]["affinity"] = affinity + gain
                     record["granted"] = int(record.get("granted", 0)) + gain
                     write("regular: {} affinity {} -> {} (granted {}/{})".format(
                         record["name"], affinity, affinity + gain,

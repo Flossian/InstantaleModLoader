@@ -16,7 +16,7 @@ import os
 import sys
 import threading
 
-from instantale_modloader import arrivals, llm, prices, ui, wanted
+from instantale_modloader import arrivals, llm, npcs, prices, ui, wanted
 from instantale_modloader import state as loader_state
 
 from . import attitude
@@ -128,7 +128,7 @@ def apply(ctx):
         """使える控えの判定。無ければ None。"""
         with worlds.lock:
             entry = worlds.load(worlds.playthrough(app)).get(keeper_id)
-        if attitude.fresh(entry, mode, lawfulness_here(app), attitude.affinity_of(keeper),
+        if attitude.fresh(entry, mode, lawfulness_here(app), npcs.affinity_value(keeper),
                           ui.game_day(app), JUDGE_DAYS):
             return entry
         return None
@@ -156,7 +156,7 @@ def apply(ctx):
         relationship = getattr(keeper, "relationship", None)
         row = relationship.get("player") if isinstance(relationship, dict) else None
         row = row if isinstance(row, dict) else {}
-        affinity = attitude.affinity_of(keeper)
+        affinity = npcs.affinity_value(keeper)
         lawfulness = lawfulness_here(app)
         text = attitude.prompt(
             mode, area=getattr(ui.current_area(app), "name", None), player=getattr(player, "name", None),
@@ -231,7 +231,7 @@ def apply(ctx):
             entry = stored_entry(app, mode, keeper_id, keeper)
             if entry is not None:
                 return entry["stance"], entry
-        return attitude.fallback(mode, attitude.affinity_of(keeper), FRIEND_AFFINITY), None
+        return attitude.fallback(mode, npcs.affinity_value(keeper), FRIEND_AFFINITY), None
 
     # -------------------------------------------------- 値段
     def layer(item, key, price):
@@ -294,7 +294,7 @@ def apply(ctx):
         pct = int(round(rate * 100))
         write("shop [{}] lawfulness {} keeper {} ({}) {} [{}] affinity {} -> {}".format(
             mode, lawfulness_here(app), name, keeper_id, attitude.NAMES[mode][value], how,
-            attitude.affinity_of(keeper), attitude.rate_text(value, pct, SELL) or "normal prices"))
+            npcs.affinity_value(keeper), attitude.rate_text(value, pct, SELL) or "normal prices"))
         line = ""
         if entry is not None and not entry.get("told") and entry.get("line"):
             # 平時の普段どおりは知らせない（店に入るたびに1文が出ると煩い）。手配中は動じないことも知らせる。

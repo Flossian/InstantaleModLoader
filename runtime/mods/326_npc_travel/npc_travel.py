@@ -73,7 +73,7 @@ import random
 import re
 import sys
 
-from instantale_modloader import arrivals, choices, durations, loads, modnpc, state as loader_state, ui
+from instantale_modloader import arrivals, choices, durations, loads, modnpc, npcs, state as loader_state, ui
 from instantale_modloader.npcs import npc_stores, save_npcs
 
 from . import travel
@@ -398,13 +398,6 @@ def apply(ctx):
         return "{}の{}".format(town, name) if name else town
 
     # ------------------------------------------------------------ 冒険者を数える
-    def affinity_of(app, npc_id, character):
-        value = travel.affinity_value(getattr(character, "relationship", None))
-        if value is None:
-            value = travel.affinity_value(
-                (save_npcs(app).get(str(npc_id)) or {}).get("relationship"))
-        return value
-
     def guild_members(app, area, area_id, trips, day):
         """`(一覧に出る人数, 出発できる id の並び)`。
 
@@ -435,7 +428,7 @@ def apply(ctx):
             present.append(npc_id)
             if npc_id in trips:
                 continue                # 同じ街に出ている最中。数えるが、また出さない
-            affinity = affinity_of(app, npc_id, character)
+            affinity = npcs.affinity_of(app, npc_id)
             if affinity is None or affinity < AFFINITY_MIN:
                 continue
             if travel.is_resting(rest, npc_id, day):

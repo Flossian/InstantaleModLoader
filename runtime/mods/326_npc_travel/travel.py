@@ -282,23 +282,6 @@ def pick_spot(rng, spots):
     return rng.choice(sorted(spot for spot in here if spot[2] == kind))
 
 
-def affinity_value(relationship):
-    """`relationship["player"]["affinity"]` を int で。読めなければ None。
-
-    `relationship` は実行時の `Character.relationship` でもセーブの辞書でも同じ形
-    （GAME.md §2.25）。
-    """
-    if not isinstance(relationship, dict):
-        return None
-    player = relationship.get("player")
-    if not isinstance(player, dict):
-        return None
-    value = player.get("affinity")
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return int(value)
-
-
 def format_context(template, **fields) -> str:
     """設定の文型に値を入れる。鍵が足りなくても落とさない（空にする）。"""
     if not isinstance(template, str) or not template.strip():

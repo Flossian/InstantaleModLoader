@@ -44,7 +44,7 @@ import sys
 import threading
 import time
 
-from instantale_modloader import frames, ui
+from instantale_modloader import frames, npcs, ui
 
 LOG_BASENAME = "affinity.log"
 RECORD_BASENAME = "affinity.jsonl"
@@ -70,15 +70,6 @@ CALLER_DEPTH = 6
 CALLER_SAMPLES = 5
 
 
-def affinity_of(character):
-    relationship = getattr(character, "relationship", None)
-    row = relationship.get("player") if isinstance(relationship, dict) else None
-    value = row.get("affinity") if isinstance(row, dict) else None
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return value
-
-
 def snapshot(app):
     """`{id: 好感度}`。実行時の名簿（`world.characters`）の全員。プレイヤーは除く。"""
     characters = getattr(getattr(app, "world", None), "characters", None)
@@ -88,7 +79,7 @@ def snapshot(app):
     for npc_id, character in list(characters.items()):
         if str(npc_id) == "player":
             continue
-        value = affinity_of(character)
+        value = npcs.affinity_value(character)
         if value is not None:
             found[str(npc_id)] = value
     return found

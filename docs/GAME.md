@@ -3498,6 +3498,8 @@ llm_manager:conversation_facilitator_after_retrieval(..., retrieved_knowledge)
   2件目の要約は1件目の全文を含んだ累積形だった
   ＝ 会話を重ねるほど `current_log` が同じ文を二重三重に持つ
 - `relationship`（dict）… `{"player": {affinity, affinity_text[], relationship[], conversation_count}}`
+  実行時の `Character` でもセーブの素データでも同じ形。
+  好感度（`affinity`）の読み書きはローダの `npcs.affinity_value` / `affinity_of` / `set_affinity` を通す
 
 > 要約は必ずしも走らない。
 > 呼び出し元は `ConversationEndManager.execute → finish_conversation →

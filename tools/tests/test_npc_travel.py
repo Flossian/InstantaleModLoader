@@ -1101,9 +1101,6 @@ def scene_pure():
     check("文型の鍵が足りなくても落ちない",
           travel.format_context("{name}が{nothing}に", name="x") == "xがに")
     check("空の文型は空", travel.format_context("", name="x") == "")
-    check("friendliness は int", travel.affinity_value({"player": {"affinity": 25}}) == 25
-          and travel.affinity_value({"player": {"affinity": True}}) is None
-          and travel.affinity_value(None) is None)
 
 
 def main():

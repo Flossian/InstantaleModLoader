@@ -45,8 +45,7 @@ LLM を別に呼ばない。
 
 import sys
 
-from instantale_modloader import frames, state as loader_state, talk_affinity, talk_summary, ui
-from instantale_modloader.npcs import npc_stores
+from instantale_modloader import frames, npcs, state as loader_state, talk_affinity, talk_summary, ui
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
@@ -153,37 +152,12 @@ def apply(ctx):
         store["worlds"] = loader_state.WorldStore(ctx, STATE_DIRNAME, write=write)
     worlds = store["worlds"].rebind(ctx, write)
 
-    def affinity_of(character):
-        relationship = getattr(character, "relationship", None)
-        row = relationship.get("player") if isinstance(relationship, dict) else None
-        value = row.get("affinity") if isinstance(row, dict) else None
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            return None
-        return value
-
-    def write_affinity(app, npc_id, character, value):
-        """好感度を書く。実行時の人物と、素データの心当たり全部（`npcs.npc_stores`）。"""
-        targets = [character, ui.character_of(app, npc_id)]
-        for target in targets:
-            relationship = getattr(target, "relationship", None)
-            row = relationship.get("player") if isinstance(relationship, dict) else None
-            if isinstance(row, dict):
-                row["affinity"] = value
-        for where, holder in npc_stores(app):
-            if "characters" in where.rsplit(".", 1)[-1]:
-                continue                # 実行時の名簿。素データではない
-            data = holder.get(str(npc_id))
-            relationship = data.get("relationship") if isinstance(data, dict) else None
-            row = relationship.get("player") if isinstance(relationship, dict) else None
-            if isinstance(row, dict):
-                row["affinity"] = value
-
     def begin(talk):
         """この要約に判定を足すなら決まりの文、足さないなら None。"""
         npc_id, name, character = talk["npc_id"], talk["name"], talk["character"]
         if not npc_id or npc_id.startswith(MOD_NPC_PREFIX) or npc_id == "player":
             return None
-        if affinity_of(character) is None:
+        if npcs.affinity_value(character) is None:
             write("skip: {} ({}) has no affinity".format(name, npc_id))
             return None
         if not player_engaged(talk["messages"]):
@@ -207,7 +181,7 @@ def apply(ctx):
                 name, npc_id, answer.get(CHANGE_FIELD)))
             return
         # 要約を待つ間にゲームが足した分（依頼のクリアの +20 など）を消さないよう、足す元はここで読む。
-        before = affinity_of(character)
+        before = npcs.affinity_value(character)
         if before is None:
             return
         day = ui.game_day(app)
@@ -225,7 +199,7 @@ def apply(ctx):
             " [ceiling {} by {}]".format(ceiling, limited_by) if limited_by else ""))
         if after == before:
             return
-        write_affinity(app, npc_id, character, after)
+        npcs.set_affinity(app, npc_id, after, character=character)
         if why == "gain" and day is not None:
             with worlds.lock:
                 bucket = worlds.load(key)
