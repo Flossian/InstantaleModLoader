@@ -16,11 +16,17 @@ import io
 import json
 import os
 import shutil
+import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
+if RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, RUNTIME_DIR)            # 控えの書き込みはローダの write_json
 FACES_PATH = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime", "mods",
                                            "343_stable_diffusion", "faces.py"))
+if os.path.dirname(FACES_PATH) not in sys.path:
+    sys.path.insert(0, os.path.dirname(FACES_PATH))     # 隣の img2img（道具画面と同じ読み方）
 _spec = importlib.util.spec_from_file_location("faces_under_test", FACES_PATH)
 faces = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(faces)
@@ -48,7 +54,9 @@ check("mod.json に設定が3つあり、既定は切・空・0.4",
 check("既定の値では動かない", faces.config(faces.derive({}), MODELS) is None)
 on = faces.derive({faces.SWITCH: True, faces.PRESET: " WAI ", faces.STRENGTH: 0.35})
 check("設定の値を読む（プリセットの名前の前後の空白は外す）",
-      on == {"on": True, "preset": "WAI", "strength": 0.35}, on)
+      on == {"on": True, "preset": "WAI", "strength": 0.35, "existing": False}, on)
+check("既存の立ち絵にもかけるは既定で切、入れれば読む",
+      decls[faces.EXISTING]["default"] is False and faces.derive({faces.EXISTING: True})["existing"] is True)
 check("強さの範囲の外と読めない値は既定、1 を超える値は 1",
       [faces.derive({faces.STRENGTH: v})["strength"] for v in (0, -1, "x", None, float("nan"), 3)]
       == [0.4, 0.4, 0.4, 0.4, 0.4, 1.0])
@@ -144,6 +152,56 @@ if Image is not None:
           and faces.replace_first(base, out) is out)
 else:
     print("skip 貼る（PIL が無い）")
+
+# ------------------------------------------------------------------ 済んだ立ち絵の控え
+import tempfile
+with tempfile.TemporaryDirectory() as temp:
+    path = os.path.join(temp, "stable_diffusion", faces.DONE_NAME)
+    check("控えが無ければ空で、誰も済んでいない", faces.load_done(path) == {}
+          and not faces.is_done(faces.load_done(path), "w", "Ana", "aaa"))
+    check("書ける", faces.record_done(path, "w", "Ana", "aaa", faces.REDRAWN)
+          and faces.record_done(path, "w", "Bob", "bbb", faces.NO_FACE)
+          and faces.record_done(path, "v", "Ana", "ccc", faces.REDRAWN))
+    rows = faces.load_done(path)
+    check("世界と名前と印が合えば済んでいる（顔が見つからなかった人物も）",
+          faces.is_done(rows, "w", "Ana", "aaa") and faces.is_done(rows, "w", "Bob", "bbb")
+          and faces.is_done(rows, "v", "Ana", "ccc"))
+    check("印が違えば（立ち絵が描き直された）済んでいない、世界が違っても別",
+          not faces.is_done(rows, "w", "Ana", "zzz") and not faces.is_done(rows, "x", "Ana", "aaa"))
+    check("印が無ければ書かない・済んでいない", not faces.record_done(path, "w", "Cid", None, faces.REDRAWN)
+          and not faces.is_done(rows, "w", "Ana", None))
+    faces.READ_RETRY_WAIT = 0
+    io.open(path, "w", encoding="utf-8").write("{壊れた")
+    check("在るのに読めない控えは None（空とみなさない）で、誰も済んでいない",
+          faces.load_done(path) is None and not faces.is_done(None, "w", "Ana", "aaa"))
+    check("読めない控えには書かない（ほかの人物の控えを消さない）",
+          not faces.record_done(path, "w", "Dan", "ddd", faces.REDRAWN)
+          and io.open(path, encoding="utf-8").read() == "{壊れた")
+    _again = importlib.util.module_from_spec(importlib.util.spec_from_file_location("faces_again", FACES_PATH))
+    _again.__spec__.loader.exec_module(_again)
+    check("控えを書く錠は読み込み直しをまたいで同じ（注入し直した後の古い世代の仕事と重ねない）",
+          _again._done_lock() is faces._done_lock())
+    check("書いた後に一時ファイルを残さない",
+          sorted(os.listdir(os.path.dirname(path))) == [faces.DONE_NAME], os.listdir(os.path.dirname(path)))
+
+# ------------------------------------------------------------------ 切り出しの位置
+try:
+    import cv2  # noqa: F401
+    import numpy  # noqa: F401
+except ImportError:
+    cv2 = None
+if Image is not None and cv2 is not None:
+    import random
+    rnd = random.Random(1)
+    full = Image.new("RGBA", (120, 200))
+    full.putdata([(rnd.randrange(256), rnd.randrange(256), rnd.randrange(256), 255) for _ in range(120 * 200)])
+    piece = full.crop((30, 50, 94, 114))
+    check("切り出した位置を返す", faces.locate(full, piece) == (30, 50), faces.locate(full, piece))
+    check("立ち絵より大きい絵は None", faces.locate(piece, full) is None)
+    other = Image.new("RGBA", (64, 64), (1, 2, 3, 255))
+    check("どこにも無い絵は None", faces.locate(full, other) is None)
+else:
+    print("skip 切り出しの位置（PIL か cv2 が無い）")
 
 print("\n失敗 {} 件".format(len(failures)))
 if failures:

@@ -7,12 +7,13 @@
     "ja": "Stable Diffusionの各種差し替え"
   },
   "description": {
-    "en": "Raises the generation resolution and overrides the sampler at the single exit every backend goes through, separately for portraits, enemies and backgrounds, keeping the aspect ratio. The checkpoint, TAESD, VAE and LoRA folder can be pointed elsewhere (for an SDXL model) because they are written before the pipeline is built. The advanced tab can also redraw only the portrait's face, which fixes eyes of mismatched color or shape. Every default is the game's own value, and a setting left at its default is never written",
-    "ja": "どのバックエンドでも通る1つの出口で、生成解像度を上げ、サンプラーを上書きする。立ち絵・敵・背景で別々に指定でき、縦横比は保つ。チェックポイント・TAESD・VAE・LoRA の置き場も差し替えられる（パイプラインが建つ前に書くため。SDXL のモデルへ移る用）。高度設定で、立ち絵の顔だけを描き直して、左右で色や形のずれた目を直すこともできる。既定値はすべてゲームの値で、既定のままの項目は書き換えない"
+    "en": "Raises the generation resolution and overrides the sampler at the single exit every backend goes through, separately for portraits, enemies and backgrounds, keeping the aspect ratio. The checkpoint, TAESD, VAE and LoRA folder can be pointed elsewhere (for an SDXL model) because they are written before the pipeline is built. The advanced tab can also redraw only the portrait's face, which fixes eyes of mismatched color or shape. When a mod that shows conversation expressions (347 and so on) is installed, it also draws expression variants of portraits (smiling, angry, sad, surprised). Every default is the game's own value, and a setting left at its default is never written",
+    "ja": "どのバックエンドでも通る1つの出口で、生成解像度を上げ、サンプラーを上書きする。立ち絵・敵・背景で別々に指定でき、縦横比は保つ。チェックポイント・TAESD・VAE・LoRA の置き場も差し替えられる（パイプラインが建つ前に書くため。SDXL のモデルへ移る用）。高度設定で、立ち絵の顔だけを描き直して、左右で色や形のずれた目を直すこともできる。会話の表情を見せる MOD（347 など）が入っていれば、立ち絵の表情差分（笑う・怒る・悲しむ・驚く）も描く。既定値はすべてゲームの値で、既定のままの項目は書き換えない"
   },
   "version": "30",
   "author": "R01/Flossian",
   "state": ["stable_diffusion"],
+  "after": ["131_sharp_portrait"],
   "settings": {
     "PORTRAIT_SHORT": {
       "type": "int",
@@ -783,6 +784,106 @@
       "note": {
         "ja": "顔をどこまで描き変えるか。小さいほど元の顔が残る。既定の 0.4 は目の崩れが直り、表情と顔立ちが変わらなかった値（0.5 では表情や目の形が変わり始めた）",
         "en": "How far the face moves away from the original. Lower keeps more of it. The default 0.4 fixed broken eyes without changing the expression or features (at 0.5 the expression and eye shape began to change)"
+      }
+    },
+    "FACE_REDRAW_EXISTING": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "既存の立ち絵にも顔の描き直しをかける",
+        "en": "Also redraw the face of existing portraits"
+      },
+      "note": {
+        "ja": "入にすると、一括生成の最後に、既に在る立ち絵のうち顔を描き直していない人物へ、顔の描き直しをかける（主人公は除く）。顔の描き直しが入のときだけ効く。立ち絵・背景を抜いた絵・会話の立ち絵・顔アイコンを書き直し、顔の外は変わらない。1人あたり顔の周りを1回描くぶん（SDXL で約7秒）。済んだ人物は控えて二度かけない（立ち絵が描き直されたら、その人物はまた対象になる）。表情差分は元の絵が変わるので描き直される",
+        "en": "When on, the end of bulk generation redraws the face of existing portraits that have not had it yet (not the player). Works only while the face redraw is on. Rewrites the portrait, its cut-out, the conversation portrait and the face icon; nothing outside the face changes. Each person takes one face-sized pass (about 7 seconds with SDXL). People already done are remembered and skipped (a redrawn portrait makes that person a target again). Expression variants are redrawn because the original picture changes"
+      }
+    },
+    "EXPRESSION_STRENGTH_SD15": {
+      "type": "float",
+      "default": 0.5,
+      "min": 0.05,
+      "max": 1.0,
+      "label": {
+        "ja": "表情差分の強さ（SD1.5 のモデル）",
+        "en": "Expression strength (SD1.5 models)"
+      },
+      "note": {
+        "ja": "会話の表情を見せる MOD（347 など）が入っているときに描く、立ち絵の表情差分の強さ。顔を描くモデルが SD1.5 のときに使う。顔の周りを表情のタグを足して描き直す。大きいほど表情がはっきりするが、顔立ちや目の色も元の立ち絵から離れる。既定 0.5",
+        "en": "Strength of the expression variants of portraits, drawn when a mod that shows conversation expressions (347 and so on) is installed. Used when the model that draws the face is SD1.5. The area around the face is redrawn with the expression tags added. Higher makes the expression clearer but moves the features and eye colour away from the portrait. Default 0.5"
+      }
+    },
+    "EXPRESSION_STRENGTH": {
+      "type": "float",
+      "default": 0.35,
+      "min": 0.05,
+      "max": 1.0,
+      "label": {
+        "ja": "表情差分の強さ（SDXL・その他のモデル）",
+        "en": "Expression strength (SDXL and other models)"
+      },
+      "note": {
+        "ja": "顔を描くモデルが SD1.5 でないとき（SDXL・系統の読めないモデル）の表情差分の強さ。大きいほど表情がはっきりするが、顔立ちや目の色も元の立ち絵から離れる。既定 0.35",
+        "en": "Strength of the expression variants when the model that draws the face is not SD1.5 (SDXL, or a model whose family cannot be read). Higher makes the expression clearer but moves the features and eye colour away from the portrait. Default 0.35"
+      }
+    },
+    "EXPRESSION_STRENGTH_BY_MODEL": {
+      "type": "str",
+      "default": "",
+      "label": {
+        "ja": "表情差分の強さ（モデル名で分ける）",
+        "en": "Expression strength (by model name)"
+      },
+      "note": {
+        "ja": "同じ系統の中でもモデルごとに強さを変えたいときに書く。「チェックポイントのファイル名の一部=強さ」を ; で区切って並べ、前から見て最初に当たった行を使う。SD1.5・SDXL の欄より先に見る。書き方はプロンプトの規則のモデルの列と同じで、/ でどれか、! で除く。sd15 / sdxl と書くと系統を指す。既定は空",
+        "en": "Fill this in to use different strengths for models of the same family. List \"part of the checkpoint file name=strength\" separated by ; and the first matching line wins. Checked before the SD1.5 and SDXL settings. Written like the model column of the prompt rules: / means any of, ! excludes, and sd15 / sdxl name a family. Empty by default"
+      }
+    },
+    "EXPRESSION_SMILE": {
+      "type": "str",
+      "default": "light smile, closed mouth",
+      "label": {
+        "ja": "笑う顔のタグ",
+        "en": "Tags for the smiling face"
+      },
+      "note": {
+        "ja": "笑う顔の差分を描くときに足すタグ。空にすると、この表情の差分を描かない",
+        "en": "Tags added when drawing the smiling variant. Leave empty to skip this expression"
+      }
+    },
+    "EXPRESSION_ANGRY": {
+      "type": "str",
+      "default": "annoyed, slight frown",
+      "label": {
+        "ja": "怒る顔のタグ",
+        "en": "Tags for the angry face"
+      },
+      "note": {
+        "ja": "怒る顔の差分を描くときに足すタグ。空にすると、この表情の差分を描かない",
+        "en": "Tags added when drawing the angry variant. Leave empty to skip this expression"
+      }
+    },
+    "EXPRESSION_SAD": {
+      "type": "str",
+      "default": "sad, worried",
+      "label": {
+        "ja": "悲しむ顔のタグ",
+        "en": "Tags for the sad face"
+      },
+      "note": {
+        "ja": "悲しむ顔の差分を描くときに足すタグ。空にすると、この表情の差分を描かない",
+        "en": "Tags added when drawing the sad variant. Leave empty to skip this expression"
+      }
+    },
+    "EXPRESSION_SURPRISED": {
+      "type": "str",
+      "default": "surprised, :o",
+      "label": {
+        "ja": "驚く顔のタグ",
+        "en": "Tags for the surprised face"
+      },
+      "note": {
+        "ja": "驚く顔の差分を描くときに足すタグ。空にすると、この表情の差分を描かない",
+        "en": "Tags added when drawing the surprised variant. Leave empty to skip this expression"
       }
     }
   },

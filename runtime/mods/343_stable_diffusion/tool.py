@@ -31,7 +31,7 @@ TECH.md §3.12 の契約で動く（`131_sharp_portrait` の道具と同じ）�
 | 完全置き換え | 完全置き換え | 同じ |
 | サンプラー | サンプラー | 種類ではなく段（1段目 / 2段目 / LCM の段）で持つ |
 | （無し） | モデル別 | 版26。`model` の付いた行と、モデルの系統に合わせたプロンプトの雛形（`profiles.py`） |
-| （無し） | 高度設定 | 今の絵を下絵にした描き直し（img2img）と、2つのモデルで続けて描く（txt2img→img2img）。部品は `img2img.py`。版29 で立ち絵の顔だけの描き直し（`faces.py`）を足した |
+| （無し） | 高度設定 | 今の絵を下絵にした描き直し（img2img）と、2つのモデルで続けて描く（txt2img→img2img）。部品は `img2img.py`。版29 で立ち絵の顔だけの描き直し（`faces.py`）、版30 で表情差分の強さ（SD1.5・SDXL・その他・モデル名で分ける）とタグ（`variants.py`）と、顔を描くモデルの決まり方の表示（`outlook.expression_models`）を足した |
 | （無し） | 次に描く絵（タブの上の帯） | 種類ごとのモデル・寸法・サンプラーと、効いていない設定。計算は `outlook.py`（VERIFICATION.md §3.65） |
 
 一覧の行は「選択行を削除」ではなく行ごとの `×` で消す（Tk の表に合わせた）。
@@ -68,6 +68,7 @@ import outlook   # noqa: E402  自分の隣（次に描く絵の見通し）
 import presets   # noqa: E402  自分の隣（SD1.5 / SDXL のプリセット）
 import profiles  # noqa: E402  自分の隣（モデルの系統に合わせたプロンプトの雛形）
 import rules as rulebook  # noqa: E402  自分の隣（本体と共通の規則）
+import variants  # noqa: E402  自分の隣（表情差分の設定名）
 import sizes    # noqa: E402  自分の隣（本体と共通の計算）
 import tagbook  # noqa: E402  自分の隣（Danbooru のタグ一覧）
 
@@ -427,6 +428,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
     """
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
+    from tkinter import font as tkfont
 
     root_dir, state_dir, game_dir = modtool.locate(MOD_DIR)
     decls = modtool.decls(MOD_DIR, root_dir)
@@ -466,8 +468,8 @@ def build_window(rules_in=None, settings_in=None, note=""):
     log_path = os.path.join(root_dir, "out", LOG_BASENAME)
     band_log = {"stamp": None, "value": {"last": {}, "built": None}}
 
-    def band_refresh(raw):
-        """帯を組み直す。ログは変わったときだけ読み直す。"""
+    def band_refresh(raw, custom, model):
+        """帯を組み直す。ログは変わったときだけ読み直す。`custom`・`model` は refresh で読んだもの。"""
         try:
             stamp = (os.path.getmtime(log_path), os.path.getsize(log_path))
         except OSError:
@@ -476,8 +478,7 @@ def build_window(rules_in=None, settings_in=None, note=""):
             band_log["stamp"], band_log["value"] = stamp, outlook.read_log(log_path)
         merged = dict(values)
         merged.update(raw)
-        got = outlook.build(merged, presets.load_custom(state_dir), game_config(), game_model(),
-                            band_log["value"], game_dir)
+        got = outlook.build(merged, custom, game_config(), model, band_log["value"], game_dir)
         for cells, row in zip(band_cells, got["rows"]):
             for cell, text in zip(cells, row):
                 cell.configure(text=text)
@@ -1172,11 +1173,80 @@ def build_window(rules_in=None, settings_in=None, note=""):
         ["入にすると、描き終えた立ち絵の顔を探し、顔の周りを切り出して大きく描き直し、元の絵へ貼り戻す。",
          "左右の目の色や形がずれた顔が直る。顔の外は変わらない。",
          "立ち絵だけに効く。1枚あたり、顔の周りを1回描くぶん時間が延びる（SDXL で約7秒）。",
-         "強さは、小さいほど元の顔が残る（既定 0.4）。"],
+         "強さは、小さいほど元の顔が残る（既定 0.4）。",
+         "下の欄を入にすると、一括生成の最後に、既に在る立ち絵（主人公を除く）にもかける。済んだ人物には二度かけない。"],
         ("プリセット", "強さ"))
     var_for(faces.PRESET)
     preset_box(grid, faces.PRESET, 1, 0, FACE_SAME_LABEL)
     ttk.Entry(grid, textvariable=var_for(faces.STRENGTH), width=8).grid(row=1, column=1, sticky="w")
+    ttk.Checkbutton(grid, text="既存の立ち絵にもかける（一括生成の最後に）", variable=var_for(faces.EXISTING)).grid(
+        row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
+    # 表情差分は入切の設定を持たない（描くかは、表情を見せる MOD が入っているかで決まる）
+    expression_frame = ttk.LabelFrame(tab, text="立ち絵の表情差分（会話の表情を見せる MOD があるときに描く）",
+                                      padding=8)
+    expression_frame.pack(fill="x", pady=(0, 12))
+    ttk.Label(expression_frame, wraplength=900, justify="left", text="\n".join([
+        "会話の表情を見せる MOD（347 など）が入っているときだけ、立ち絵の顔の周りを描き直して表情差分を作る。ここでは入切しない。",
+        "強さが大きいほど表情ははっきりするが、顔立ちや目の色も元の立ち絵から離れる。"])).pack(anchor="w")
+    bold = tkfont.nametofont("TkDefaultFont").copy()
+    bold.configure(weight="bold")
+    # 顔を描くモデルの決まり方（上から順に、最初に当てはまるもの）と、いま当てはまる行（`outlook.expression_models`）
+    ttk.Label(expression_frame, text="顔を描くモデル（上から順に、最初に当てはまるもの）", font=bold).pack(
+        anchor="w", pady=(10, 2))
+    model_grid = ttk.Frame(expression_frame)
+    model_grid.pack(anchor="w", padx=(14, 0))
+    expression_cells = []
+    for index, (_key, label) in enumerate(outlook.EXPRESSION_STEPS):
+        cells = (ttk.Label(model_grid, text="{}.".format(index + 1)), ttk.Label(model_grid, text=label),
+                 ttk.Label(model_grid, text=""), ttk.Label(model_grid, text=""))
+        for column, cell in enumerate(cells):
+            cell.grid(row=index, column=column, sticky="w", padx=(0, 12), pady=1)
+        expression_cells.append(cells)
+    ttk.Label(expression_frame, style="Faint.TLabel", wraplength=900, justify="left",
+              text="再生成のボタンの img2img・txt2img→img2img で描いた立ち絵は、1 が無ければそのボタンの描き方のモデルで描く。").pack(
+        anchor="w", padx=(14, 0), pady=(2, 0))
+    # 強さ（モデル名で分ける行 → 系統の欄の順。variants.strength_for）
+    ttk.Label(expression_frame, text="強さ", font=bold).pack(anchor="w", pady=(10, 2))
+    strength_grid = ttk.Frame(expression_frame)
+    strength_grid.pack(anchor="w", padx=(14, 0))
+    for index, (key, label, width, note) in enumerate((
+            (variants.STRENGTH_SD15, variants.LABEL_SD15, 8, "既定 {}".format(variants.DEFAULT_SD15)),
+            (variants.STRENGTH, variants.LABEL_OTHER, 8, "既定 {}".format(variants.DEFAULT_STRENGTH)),
+            (variants.BY_MODEL, variants.LABEL_BY_NAME, 40,
+             "チェックポイントのファイル名の一部=強さ（; で区切る）。上の2つより先に見る"))):
+        ttk.Label(strength_grid, text=label).grid(row=index, column=0, sticky="w", padx=(0, 10), pady=2)
+        cell = ttk.Frame(strength_grid)          # 注記は欄のすぐ右（長い欄に列の幅を引っ張られない）
+        cell.grid(row=index, column=1, sticky="w")
+        ttk.Entry(cell, textvariable=var_for(key), width=width).pack(side="left")
+        ttk.Label(cell, text=note, style="Faint.TLabel").pack(side="left", padx=(10, 0))
+    ttk.Label(expression_frame, text="表情ごとに足すタグ（画像生成の英語のタグ。空にした表情は描かない）", font=bold).pack(
+        anchor="w", pady=(10, 2))
+    tag_grid = ttk.Frame(expression_frame)
+    tag_grid.pack(anchor="w", padx=(14, 0))
+    for index, ((_expression, key), label) in enumerate(zip(variants.TAGS, ("笑う", "怒る", "悲しむ", "驚く"))):
+        ttk.Label(tag_grid, text=label).grid(row=index, column=0, sticky="w", padx=(0, 10), pady=2)
+        ttk.Entry(tag_grid, textvariable=var_for(key), width=40).grid(row=index, column=1, sticky="w")
+
+    def expression_refresh(raw, custom, model):
+        """顔を描くモデルの決まり方の各行と、いま当てはまる行の強さを書き直す（`band_refresh` の後に呼ぶ）。"""
+        merged = dict(values)
+        merged.update(raw)
+        rows = outlook.expression_models(merged, custom, outlook.game_of(model, band_log["value"]), game_dir)
+        conf = variants.derive(merged)
+        for cells, row in zip(expression_cells, rows):
+            if row["model"] is None:
+                cells[2].configure(text="（使っていない）", style="Faint.TLabel", font="")
+                cells[3].configure(text="")
+                continue
+            family = {"sd15": "SD1.5", "sdxl": "SDXL"}.get(row["family"], "系統を読めない")
+            cells[2].configure(text="{}（{}）".format(row["model"], family),
+                               style="TLabel" if row["used"] else "Faint.TLabel", font=bold if row["used"] else "")
+            if row["used"]:
+                strength, how = variants.strength_for(conf, (row["family"], row["path"]))
+                cells[3].configure(text="← いまはこれ。強さ {}（{}）".format(strength, how), font=bold)
+            else:
+                cells[3].configure(text="")
+
     human_check = ttk.Checkbutton(tab, text="人間の敵（闘技場の相手など）を立ち絵の描き方で描く",
                                   variable=var_for("HUMAN_ENEMY_AS_PORTRAIT"))
     human_frame = ttk.LabelFrame(tab, labelwidget=human_check, padding=8)
@@ -1206,7 +1276,9 @@ def build_window(rules_in=None, settings_in=None, note=""):
             r"書き換えた値は out\stable_diffusion.log に出る",
         ]))
         widgets["preview"].configure(text="\n".join(preview_lines(raw)))
-        band_refresh(raw)
+        custom, model = presets.load_custom(state_dir), game_model()
+        band_refresh(raw, custom, model)
+        expression_refresh(raw, custom, model)
 
     for var in entries.values():
         var.trace_add("write", refresh)

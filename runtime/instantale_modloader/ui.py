@@ -989,6 +989,28 @@ def clamp_into_window(widget):
 
 
 # --------------------------------------------------------------------------
+# 今出ている画面（ゲームの ScreenManager）
+# --------------------------------------------------------------------------
+#: キャラを作る画面の、ゲームの ScreenManager での名前（GAME.md §2.35）。
+CHARACTER_CREATE_SCREEN = "character_create"
+
+
+def screen_name(app=None):
+    """ゲームの ScreenManager（`app.root`）で今出ている画面の名前。引けなければ None。"""
+    app = app if app is not None else find_app()
+    name = frames.attr(frames.attr(app, "root", None), "current", None)
+    return name if isinstance(name, str) else None
+
+
+def on_character_create(app=None):
+    """キャラを作る画面が出ているか。
+
+    作成画面の「戻る」は世界の一覧へ戻るだけで `return_to_title` を通らないので、開け閉めのフックでは追えない。
+    """
+    return screen_name(app) == CHARACTER_CREATE_SCREEN
+
+
+# --------------------------------------------------------------------------
 # タイトル画面の隅に出す1行（ローダの `title_version` と `136_` が共有する）
 # --------------------------------------------------------------------------
 #: タイトル画面。`StartScreen.__init__` で組み上がる。
@@ -2093,6 +2115,20 @@ def describe_stores(app):
     """名簿の在り処と中身を1行で。切り分けのときこれが頼りになる。"""
     return "; ".join("{}={}".format(label, store_ids(store))
                      for label, store in party_stores(app)) or "(no party store found)"
+
+
+def reload_image(widget):
+    """Kivy の画像の部品のキャッシュを捨てて読み直す。`reload` の無い版では source を付け直す。
+
+    同じファイル名へ描き直した絵（立ち絵・表情差分）は、source が同じなので Kivy が古い絵を出し続ける。
+    """
+    reload = getattr(widget, "reload", None)
+    if callable(reload):
+        reload()
+        return
+    source = widget.source
+    widget.source = ""
+    widget.source = source
 
 
 def character_of(app, character_id):

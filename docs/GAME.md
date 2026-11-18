@@ -3814,12 +3814,14 @@ scripts.llm.batch_worker（RequestWorker / batch_requests）   送信の失敗�
 | 01:52〜01:56 | 検証用の世界（作った直後） | `npc_detail_generater` 58件（`llm_manager`）・`settlement_quest_generator` 5件（`llm_manager_world_generate`） |
 | 11:48〜11:55 で中断 | 世界K（主人公で30日遊んだ後） | `create_settlement_detail` 6件・`settlement_quest_generator` 5件（どちらも `llm_manager_world_generate`） |
 
-- 始めるときに `set_ai_models` が走り、送信関数が作り直される（§2.12）
+- 始めるときに `set_ai_models` が走り、送信関数が作り直される（§2.12）。仕事が1件も無い回は走らず、画像生成のモジュールも読み込まれないまま終わる。一括生成を済ませた世界では `plan_tasks` も呼ばれない（2026-11-17。VERIFICATION.md §3.132）
 - 画面にはエリアの名前と「完了 N 件 ／ 残り N 件 ／ 失敗 N 件」が出る。2回目は残りが 374 から 420 に増えた（集落の詳細を作ると、その中の人物や依頼が残りに足されるとみられる）
 - 「中断する」で止まり、「中断しました。次回は残りから再開できます。」と出る
 - 2回目は約6分で6件しか進まなかった。全部流すと数時間と相応の推論費用がかかる見込み
 - 住人は街を作るのと同じ `save_area_json:write_area_data_to_world_dict` で生データへ書かれるが、遊ぶ前なので人物の組み立て（`World.generate_character`）は起きない。組み立てのときに名前の重複を直す `120_` は、版8から一括生成の間の書き込みも直す（作られた39人に重複2組が残っていた。VERIFICATION.md §3.101）
 - リクエストは遊んでいるときと同じ送信関数を通り、MOD の書き換えが届いた（`144_` の役の一文・`132_` の住人の外見の種・`111_` の規則。VERIFICATION.md §3.100）
+- `run_world_bulk_generation` の引数は `(self, world_path, stop_event, progress)`。「中断する」は `stop_event` を立てる
+- 画面の件数は `progress(state)` で渡る（`WorldBulkScreen.start` の中の関数で、`Clock` で `update_progress` へ回すのでどのスレッドから呼んでもよい）。`state` の鍵は `status`（`running` など）・`completed`・`remaining`・`failed`・`kind`・`label`。`kind` が `portrait`、`label` が名前なら「NPCの画像: 名前」の行になる（2026-11-17、`343_` の差分だけ描くで渡して確かめた。VERIFICATION.md §3.132）
 
 ##### 仕事の種類と時間（`241_probe_world_bulk`）
 
@@ -4371,6 +4373,7 @@ AIManager.set_ai_models (instantale.py:510〜516)   一族を import する行�
 `generate_image` が関数の中で作った進捗のコールバック（exe の平文に `StableDiffusion.generate_image.<locals>.sd_progress_callback`）を `sd_cpp.sd_set_progress_callback` で DLL に登録したまま返り、モデルの読み込みの途中でそれが呼ばれるため。
 構築の前に `sd_cpp.sd_set_progress_callback(None, None)` で解除すれば構築できる（`sd_cpp` は部品のクラスのモジュールの属性。VERIFICATION.md §3.65）。
 落ちた後に構築し直しを繰り返すと、ゲームの部品の `generate_image` も `access violation reading 0x0000000000000048` で描けなくなる。
+構築しなくても、ゲームの外から `generate_image` を `progress_callback` を渡さずに呼ぶと、前にゲームが登録したまま消えたコールバックを DLL が呼び、`generate_image` の中で `access violation writing 0x0000000000000000` になる（2026-11-17、一括生成の後に `343_` が差分だけ描いた回。ゲームは描くたびに `progress_callback` を渡すので、ゲームの呼び方をそのまま使えば起きない。解除すれば描ける。VERIFICATION.md §3.132）。
 
 > バックエンドを切り替えても画質の設定は付いてこない。
 > `diffusers_openvino` の manager には `image_to_image_anime` が無いのに、
@@ -4429,6 +4432,11 @@ AIManager.set_ai_models (instantale.py:510〜516)   一族を import する行�
 
 キャラを作る画面は `scripts.create_world:StoryApp(screen_manager, start_game_callback, world_name, generate_character_image_callback)`。
 世界名は受け取っていて、`self.world_name` に持つ（2026-10-11 の実機。ランダム作成のボタンの押下のラッパーで読めた）。
+`StoryApp` は Kivy の `App` の子クラスで、画面は渡された ScreenManager（ゲームの app の `root`）の `character_create`。
+作成画面が出ている間は `root.current` が `'character_create'`、左下の「戻る」を押すと `'world_choice'`（世界の一覧）になる。
+「戻る」は `InstantaleApp.return_to_title` を通らない。
+立ち絵は `generate_character_image_callback`（画像生成のモジュールの `generate_character_image(world_name, name, category, prompt)`）で、
+世界の立ち絵のフォルダ `characters\<名前>` に描かれる（2026-11-18 の実機）。
 ランダム作成（`on_dice_press` → `generate_random_character`）が呼ぶのは
 `scripts.llm.llm_manager_character_create:create_character(talent_point_left)` で、引数は才能点だけ。
 

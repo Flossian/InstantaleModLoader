@@ -36,6 +36,10 @@ r"""Stable Diffusion の解像度・サンプラー・モデル・プロンプ�
 （txt2img→img2img）も行う。今の絵は入口で読んで印と一緒に控え、出口で寸法を合わせて渡す。
 決め方と下絵の形は `img2img.py`。
 
+同じ出口で、会話の立ち絵の表情差分も描く（`variants.py`）。表情を見せる MOD がローダの窓口 `expressions` に
+宣言しているときだけ、描き終えた立ち絵の顔の周りを表情のタグを足して描き直し、立ち絵のフォルダに置く。
+一括生成では立ち絵に続けて描き、ほかの場面では立ち絵を先に返して裏で描く。
+
 版28: `img2img.py` の `hasattr` を既定値付きの `getattr` に替えた（TECH.md §6）。設定の窓のフックの第1引数を
 `self` と書くようにした（受けていたのは HUD そのもので、働きは変わらない）。使っていない import を外した（`iniimport.py`）。
 """
@@ -45,8 +49,10 @@ import sys
 import threading
 import time
 
+from instantale_modloader import expressions
 from instantale_modloader import frames
 from instantale_modloader import imagegen
+from instantale_modloader import patch as loader_patch
 from instantale_modloader import saves
 from instantale_modloader import ui
 
@@ -58,6 +64,7 @@ from . import live as hot
 from . import presets
 from . import rules as rulebook
 from . import sizes
+from . import variants
 from . import tagbook
 
 LOG_BASENAME = "stable_diffusion.log"
@@ -140,6 +147,14 @@ DIFFUSERS_RESIZE = False
 
 # ------------------------------------------------------------------------
 
+#: ゲームの用意（`set_ai_models`）をメインスレッドで走らせるとき、取られるのを待つ間に様子を見る間隔（秒）。
+#: 待つのは最長でこの 30 倍（`ctx.run_on_main_thread`）。
+PREPARE_WAIT = 5.0
+
+#: ゲームが一括生成の画面へ件数を1回も渡さずに終えた回に、差分だけ描いた後で渡す終わりの形
+#: （ゲームが終わりに渡す形と同じ鍵。GAME.md の一括生成）。
+BULK_FINAL = {"status": "complete", "completed": 0, "remaining": 0, "failed": 0}
+
 #: 出口の候補。生きたパイプラインの型が自分の MRO の中に持つものだけ包む。
 EXIT_METHODS = ("generate_image", "__call__")
 
@@ -194,6 +209,36 @@ HUMAN_ENEMY_AS_PORTRAIT = False
 FACE_REDRAW = False
 FACE_REDRAW_PRESET = ""
 FACE_REDRAW_STRENGTH = faces.DEFAULT_STRENGTH
+FACE_REDRAW_EXISTING = False
+
+#: 会話の立ち絵の表情差分の強さとタグ（variants.py）。描くかは設定でなく、
+#: 表情を見せる MOD がローダの窓口 `expressions` に宣言しているかで決まる。sdcpp 系だけ。
+#: 強さは「モデル名で分ける」の行（`条件=強さ`）の最初に当たったもの、無ければ系統で SD1.5 か SDXL・その他。
+EXPRESSION_STRENGTH_SD15 = 0.5
+EXPRESSION_STRENGTH = 0.35
+EXPRESSION_STRENGTH_BY_MODEL = ""
+EXPRESSION_SMILE = "light smile, closed mouth"
+EXPRESSION_ANGRY = "annoyed, slight frown"
+EXPRESSION_SAD = "sad, worried"
+EXPRESSION_SURPRISED = "surprised, :o"
+
+#: 一括生成の本体（`InstantaleApp`）。走っているあいだは、表情差分を立ち絵に続けて描く（裏へ回さない）。
+BULK_TARGET = "__main__:InstantaleApp.run_world_bulk_generation"
+
+#: 一括生成が走っている数（`depth`）と、一括生成の後に差分だけ描く関数（`backfill`）。
+#: `sys` に置いて当て直しをまたぐ（一括生成を始めた後にローダが MOD を当て直す。variants.shared）。
+BULK = variants.shared()
+
+#: 表情差分を通すゲームの工程（`image_generation_creature` の写し。GAME.md §2.30）。
+VARIANT_STEPS = ("pixel_art_process", "reduce_image_colors")
+#: `InstantaleApp` が `AIManager` を持つ属性（綴りの違う2つが在った。`210_probe_character_state` の属性の記録）。先頭が、組んだときに置く先。
+AI_MANAGER_ATTRS = ("ai_manager", "ai_mamanger")
+#: ゲームの用意を呼んだ後、ローダの当て直しを待つ秒数の上限（当て直しは用意の数秒後に来る）。
+REAPPLY_WAIT = 60.0
+
+#: ゲームが立ち絵の工程に渡した引数（モジュール名 → {関数名: (位置引数, 名前つき引数)}。絵を除く）。
+#: 表情差分を同じ引数で通すために、立ち絵の入口の中の最初の1回を控える（当て直しをまたぐ）。
+STEP_CALLS = BULK["steps"]
 
 #: ゲームが部品を建てたときの引数。種類ごとの部品を同じ作りで建てるために控える。
 #: 部品のクラスに持たせる（注入のたびにモジュールは作り直されるが、クラスは同じ）。
@@ -321,6 +366,26 @@ def unwrapped(func):
     return func
 
 
+def below_ours(func):
+    """出口の包みの連鎖のうち、この MOD の層のすぐ下（ふだんの描き方で出口の包みに `orig` として渡る物）。
+
+    差分だけ描くときは出口を通さずに `draw` を呼ぶ。素の関数（`unwrapped`）を渡すと、この MOD より下に
+    ほかの MOD やローダが掛けた層を素通りするので、ふだんの描き方と同じ層を渡す。
+    この MOD の層が無い・その下にもこの MOD の層が残っている（前の世代の層）なら素の関数。
+    """
+    current, mine = func, None
+    for _ in range(32):
+        if current is None or not loader_patch.is_ours(current):
+            break
+        if getattr(current, loader_patch.HOOK_MODULE_MARK, None) == __name__:
+            if mine is not None:
+                return unwrapped(func)
+            mine = current
+        current = getattr(current, "__original__", None)
+    below = getattr(mine, "__original__", None) if mine is not None else None
+    return below if below is not None else unwrapped(func)
+
+
 class _LoaderProxy(object):
     """本物のローダに被せて、モジュールの本体が走り終えた直後に知らせる器。"""
 
@@ -442,6 +507,36 @@ def apply(ctx):
     if no_vae:
         write("material (次に建てるとき) vae_path -> '' (VAE を渡さない)")
 
+    #: ゲームが立ち絵を描いたときの呼び方の控え（一括生成で差分だけ描くときに使う。variants.TEMPLATE_NAME）。
+    #: 置き場は apply の間に決める（ctx の値はフックの中では読めない）。
+    template_path = os.path.join(ctx.state_dir, presets.CUSTOM_DIRNAME, variants.TEMPLATE_NAME)
+    template = {"value": variants.load_template(template_path)}
+    #: この登録がゲームの用意（set_ai_models）を呼んだか（呼んだ回は、描く前にローダの当て直しを待つ）。
+    prepared = {"now": False}
+    #: 顔の描き直しを済ませた立ち絵の控え（一括生成で既存の立ち絵にかけ直さないため。faces.DONE_NAME）。
+    done_path = os.path.join(ctx.state_dir, presets.CUSTOM_DIRNAME, faces.DONE_NAME)
+    #: sdcpp の出口ごとの描く関数（`make_exit_hook` の `draw`）。差分だけ描くときに出口を通さず呼ぶ。
+    exit_draws = {}
+    #: 呼び方の控えの読み合わせと書き戻しの錠（立ち絵の出口と工程のフックが別のスレッドから呼ぶ）。
+    template_lock = threading.Lock()
+
+    def remember_template(stage=None, arguments=None, steps=None):
+        """呼び方の控えを更新する。変わったときだけ書く。"""
+        try:
+            with template_lock:
+                now = dict(template["value"] or {})
+                if stage is not None:
+                    now["stage"] = stage
+                    now["params"] = variants.template_params(arguments)
+                if steps:
+                    merged = dict(now.get("steps") or {})
+                    merged.update((name, row) for name, row in steps.items() if row is not None)
+                    now["steps"] = merged
+                if now != template["value"] and variants.save_template(template_path, now):
+                    template["value"] = now
+        except Exception:
+            ctx.log_exc("image quality: remembering the portrait call failed")
+
     def owner_of(cls, name):
         """`name` を自分の MRO の中に持っているクラス。無ければ None。"""
         for base in frames.attr(cls, "__mro__", (cls,)):
@@ -492,27 +587,78 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 印を立てる
 
-    def make_kind_hook(kind, func_name=None):
+    def make_kind_hook(kind, func_name=None, module_name=None):
         """入口で種類の印を立てる。描き直しが入の種類なら、今の絵もここで読んで控える。
 
         入口で読むのは、世界と名前（場所）が入口の引数にしか無く、出口では分からないため。
         ゲームは描き終えてから同じ名前で絵を書き直すので、入口の時点では今の絵が残っている（GAME.md §2.30）。
         今の絵を探さない入口（`img2img.ENTRANCES` に無い）は、外側の控えを持ち越さない。
+
+        立ち絵の入口は、ゲームが絵を保存し終えた後（入口を抜けるとき）に表情差分の仕事を始める
+        （出口の `finish` が描く材料を `MARKS.variant` に控えた回だけ）。
+        顔を描き直した回（`MARKS.refined`）は、保存された絵の印を控え（`faces.DONE_NAME`）に書く
+        （一括生成で既存の立ち絵へ二重にかけない）。
         """
         entrance = img2img.ENTRANCES.get(func_name)
 
         def hook(orig, *args, **kwargs):
             before = frames.attr(MARKS, "kind", None)
             before_source = frames.attr(MARKS, "source", None)
+            before_variant = frames.attr(MARKS, "variant", None)
+            before_steps = frames.attr(MARKS, "steps", None)
+            before_refined = frames.attr(MARKS, "refined", None)
             MARKS.kind = kind
             MARKS.source = None
+            MARKS.variant = None
+            MARKS.steps = set()
+            MARKS.refined = None
             if entrance is not None:
                 MARKS.source = current_image(kind, args, kwargs, entrance)
+            # 作成画面かは描き始めに見る（描いている間に「人生を始める」「戻る」で画面が替わりうる）
+            creating = kind == "portrait" and ui.on_character_create()
+            captured = None
+            refined = None
             try:
-                return orig(*args, **kwargs)
+                result = orig(*args, **kwargs)
+                captured = frames.attr(MARKS, "variant", None)
+                refined = frames.attr(MARKS, "refined", None)
+                return result
             finally:
                 MARKS.kind = before
                 MARKS.source = before_source
+                MARKS.variant = before_variant
+                MARKS.steps = before_steps
+                MARKS.refined = before_refined
+                if refined and kind == "portrait":
+                    try:
+                        world = frames.arg(args, kwargs, "world_name", 0)
+                        name = frames.arg(args, kwargs, "name", 1)
+                        folder = expressions.character_dir(world, name)
+                        remember_done(world, name, expressions.stamp(folder), refined)
+                    except Exception:
+                        ctx.log_exc("image quality: recording the face redraw failed")
+                if captured is not None:
+                    try:
+                        start_variants(module_name, frames.arg(args, kwargs, "world_name", 0),
+                                       frames.arg(args, kwargs, "name", 1), captured, creating)
+                    except Exception:
+                        ctx.log_exc("image quality: starting the expression variants failed")
+        return hook
+
+    def make_step_hook(module_name, step):
+        """立ち絵の工程（縮小・減色）の引数を、立ち絵の入口の中の最初の1回だけ控える。働きは変えない。
+
+        `131_` より外側に置く（mod.json の `after`）。`131_` の高画質化は減色の元の関数を呼ばずに返すので、
+        内側に居ると減色の呼び方が控えられない（VERIFICATION.md §3.132）。
+        """
+        def hook(orig, image, *args, **kwargs):
+            steps = frames.attr(MARKS, "steps", None)
+            if frames.attr(MARKS, "kind", None) == "portrait" and isinstance(steps, set) \
+                    and step not in steps:
+                steps.add(step)
+                STEP_CALLS.setdefault(module_name, {})[step] = (tuple(args), dict(kwargs))
+                remember_template(steps={step: variants.step_call(args, kwargs)})
+            return orig(image, *args, **kwargs)
         return hook
 
     def current_image(kind, args, kwargs, entrance):
@@ -993,6 +1139,7 @@ def apply(ctx):
         return hook
 
     def make_exit_hook(label, sig, diffusers):
+        """出口の包み。sdcpp の出口なら `hook.draw` に描く関数を付ける（差し込んだときだけ `exit_draws` に置く）。"""
         self_name = next(iter(sig.parameters)) if sig is not None else "self"
 
         def draw(orig, self, args, kwargs, kind, stage, route, extra=None, mode=""):
@@ -1083,39 +1230,32 @@ def apply(ctx):
                 return result
             if found is None:
                 write("顔の描き直し [{}/{}]: 顔が見つからないので描き直さない".format(kind, stage))
+                MARKS.refined = faces.NO_FACE
                 return result
-            box, grow = found
-            left, top, size = faces.square(box, grow, image.size[0], image.size[1])
             if conf["preset"]:
                 route = method_route(conf["preset"], "顔の描き直し")
-            family = route["model"][0] if route else FAMILY.get("name")
-            side = faces.side_for(family)
-            from PIL import Image
-            crop = image.convert("RGB").crop((left, top, left + size, top + size)).resize(
-                (side, side), Image.LANCZOS)
-
-            def extra(params, changes):
-                got = {"width": side, "height": side, "init_image": crop, "strength": conf["strength"]}
-                prompt = changes.get("prompt", params.get("prompt"))
-                if isinstance(prompt, str):
-                    got["prompt"] = faces.face_prompt(prompt)
-                return got
+            captured = {"draw": draw, "orig": orig, "self": self, "args": args, "kwargs": kwargs,
+                        "stage": stage, "kind": kind}
             try:
-                face = img2img.first_image(draw(orig, self, args, kwargs, kind, stage, route, extra,
-                                                "顔の描き直し"))
+                full, (_left, _top, size, side) = redraw_face(captured, image, found, route, conf["strength"],
+                                                              "顔の描き直し")
             except Exception as exc:
                 ctx.log_exc("image quality: redrawing the face failed")
                 warn("face-redraw-failed", "顔を描き直せなかったので、元の絵のままにする（{}: {}）".format(
                     type(exc).__name__, exc))
                 return result
-            if face is None:
+            if full is None:
                 return result
             write("顔の描き直し [{}/{}]: 顔 {} を {} 四方で切り出し {} 四方で描き直した（強さ {}、{:.1f} 秒）".format(
-                kind, stage, box, size, side, conf["strength"], time.time() - started))
-            return faces.replace_first(result, faces.paste(image, face, left, top, size))
+                kind, stage, found[0], size, side, conf["strength"], time.time() - started))
+            # 入口を抜けるとき（ゲームが絵を保存した後）に控えへ書く（`make_kind_hook`）
+            MARKS.refined = faces.REDRAWN
+            return faces.replace_first(result, full)
 
         def hook(orig, self, *args, **kwargs):
-            result = run(orig, self, *args, **kwargs)
+            # 1枚描くあいだは描く順番を持つ（裏で描く表情差分と重ねない。variants.Turn）
+            with variants.turn().game():
+                result = run(orig, self, *args, **kwargs)
             if diffusers or sig is None:
                 return result
             try:
@@ -1149,6 +1289,18 @@ def apply(ctx):
                 # 立ち絵の最後の段（ゲームの2段の1段目は除く）だけ、顔を描き直す
                 if not sdcpp or kind != "portrait" or stage == "stage1":
                     return result
+                # 表情差分を描く材料を控える（入口を抜けるときに仕事を始める。`make_kind_hook`）。
+                # 入口の中（入口の印が立っている）だけ。入口を包めていない回に控えると、受け取る者が無くスレッドに残る
+                if expressions.wanted() and frames.attr(MARKS, "kind", None) == "portrait":
+                    MARKS.variant = {"draw": draw, "orig": orig, "self": self, "args": args,
+                                     "kwargs": kwargs, "stage": stage, "route": route}
+                # 一括生成で差分だけ描く・既存の立ち絵の顔を描き直すときのために、ゲームの呼び方を控える
+                # （文と絵は除く）。表情を見せる MOD が無くても、既存の立ち絵の顔の描き直しが使う
+                try:
+                    remember_template(stage=stage, arguments=dict(
+                        sig.bind_partial(self, *args, **kwargs).arguments))
+                except Exception:
+                    ctx.log_exc("image quality: reading the portrait call failed")
                 try:
                     return refine(orig, self, args, kwargs, kind, stage, result, route)
                 except Exception:
@@ -1199,15 +1351,17 @@ def apply(ctx):
             # 種類にプリセットを割り当てていれば、その部品と値で描く（sdcpp だけ）。
             route = kind_route(pick) if sdcpp else None
             return finish(draw(orig, self, args, kwargs, kind, stage, route), route)
+        if sig is not None and not diffusers:
+            hook.draw = draw
         return hook
 
     # ------------------------------------------------------- 当てる・当て直す
 
-    def install(target, hook):
+    def install(target, hook, **options):
         if target in seen:
             return 0
         seen.add(target)
-        ctx.wrap(target, required=False, safe=True)(hook)
+        ctx.wrap(target, required=False, safe=True, **options)(hook)
         write("wrapped {}".format(target))
         return 1
 
@@ -1233,7 +1387,13 @@ def apply(ctx):
             for fn, kind in KIND_FUNCS.items():
                 if frames.attr(mod, fn, None) is None:
                     continue
-                added += install("{}:{}".format(name, fn), make_kind_hook(kind, fn))
+                added += install("{}:{}".format(name, fn), make_kind_hook(kind, fn, name))
+            # 表情差分を同じ引数で通すため、立ち絵の工程の引数を控える（このモジュールの写しだけ）
+            for step in VARIANT_STEPS:
+                if frames.attr(mod, step, None) is None:
+                    continue
+                added += install("{}:{}".format(name, step), make_step_hook(name, step),
+                                 alias_scan=False)
         for name in background_modules():
             mod = sys.modules.get(name)
             for fn in BACKGROUND_FUNCS:
@@ -1271,7 +1431,11 @@ def apply(ctx):
                     except Exception:
                         sig = None
                     diffusers = method == "__call__"
-                    added += install(target, make_exit_hook(target, sig, diffusers))
+                    hook = make_exit_hook(target, sig, diffusers)
+                    got = install(target, hook)
+                    if got and getattr(hook, "draw", None) is not None:
+                        exit_draws[target] = hook.draw
+                    added += got
                 # 部品を建てたときの引数を控える（種類ごとのプリセットで同じ作りの部品を建てる）。
                 base = owner_of(cls, "__init__")
                 if base is not None and EARLY_EXIT_METHOD in methods:
@@ -1426,6 +1590,621 @@ def apply(ctx):
     install_observer()
     HANDOFF["attach"] = attach
     attach()
+
+    # ------------------------------------------------- 会話の立ち絵の表情差分
+
+    @ctx.wrap(BULK_TARGET, required=False, safe=True)
+    def bulk_generation(orig, *args, **kwargs):
+        """一括生成のあいだは、表情差分を立ち絵に続けて描く（`start_variants`）。
+
+        ゲームの仕事が済んだ後に、立ち絵が既にある人物へ差分だけ描く（`backfill_variants`）。
+        引数は `(self, world_path, stop_event, progress)`。一括生成を始めた後の当て直しで
+        この包みは古い世代のまま走り続けるので、差分だけ描く関数は置き場（`BULK`）から最新のものを引く。
+        """
+        BULK["depth"] += 1
+        try:
+            # ゲームが画面へ最後に渡した件数を控える（差分だけ描いた後に、画面をゲームの終わりの表示へ戻す）
+            progress = frames.arg(args, kwargs, "progress", 3)
+            last = {}
+            if callable(progress):
+                def recording(state, *more, **named):
+                    if isinstance(state, dict):
+                        last.clear()
+                        last.update(state)
+                    return progress(state, *more, **named)
+                if len(args) > 3:
+                    args = args[:3] + (recording,) + tuple(args[4:])
+                elif "progress" in kwargs:
+                    kwargs = dict(kwargs, progress=recording)
+            result = orig(*args, **kwargs)
+            backfill = BULK.get("backfill")
+            if callable(backfill):
+                stop_event = frames.arg(args, kwargs, "stop_event", 2)
+                reported = False
+                try:
+                    reported = backfill(frames.arg(args, kwargs, "world_path", 1), stop_event, progress)
+                except Exception:
+                    ctx.log_exc("image quality: drawing the missing expression variants failed")
+                if reported and callable(progress):
+                    # 差分だけ描く間に渡した「実行中」のまま残さない（画面が止まって見える。VERIFICATION.md §3.132）。
+                    # ゲームが件数を1回も渡さずに終えた回は、ゲームの終わりの形（件数 0）を渡す。
+                    # 差分だけ描いている途中で「中断する」が押されたら、中断の表示にする
+                    final = dict(last) if last else dict(BULK_FINAL)
+                    if stopped(stop_event) and final.get("status") == "complete":
+                        final["status"] = "stopped"
+                    try:
+                        progress(final)
+                    except Exception:
+                        ctx.log_exc("image quality: restoring the bulk progress failed")
+            return result
+        finally:
+            BULK["depth"] = max(0, BULK["depth"] - 1)
+
+    def stopped(stop_event):
+        is_set = frames.attr(stop_event, "is_set", None)
+        return callable(is_set) and bool(is_set())
+
+    def portrait_route():
+        """差分だけ描くときの、立ち絵を描いたのと同じ組（ゲームの通常の生成と同じ選び方）。
+
+        続けて描くを通常の生成でも使う立ち絵なら2つ目、種類ごとのプリセットがあればそれ、無ければゲームの部品。
+        顔だけ描き直すのプリセットがあれば、`variant_job` がそちらへ替える。
+        """
+        if live.img2img["chain_on"] and "portrait" in live.img2img["chain_auto"]:
+            conf = img2img.conf_for(live.img2img, "chain", "portrait")
+            return method_route(conf["second"], "表情差分（続けて描く2つ目）")
+        return kind_route("portrait")
+
+    def prepare_image_generation():
+        """ゲームの画像生成がまだ用意されていなければ、ゲーム自身の用意（`AIManager.set_ai_models`）を呼ぶ。
+
+        ゲームは画像生成のモジュールを `set_ai_models` の中で読み込み、部品を建てる。
+        一括生成はゲームの仕事が1件も無いとこれを呼ばないので、立ち絵が揃った世界を
+        起動直後に一括生成へ掛けると、差分だけ描く時点でモジュールも部品も無い（VERIFICATION.md §3.132）。
+        用意できなかった理由（できたら None）を返す。
+        """
+        if imagegen.creature_module() is not None:
+            return None
+        app = ui.find_app()
+        if app is None:
+            return "ゲームの画像生成がまだ用意されておらず、ゲームの本体が見つからない"
+        prepare = None
+        for name in AI_MANAGER_ATTRS:
+            candidate = frames.attr(frames.attr(app, name, None), "set_ai_models", None)
+            if callable(candidate):
+                prepare = candidate
+                break
+
+        def build():
+            """ゲームの用意を呼ぶ（メインスレッドで）。用意できなかった理由（呼べたら None）。"""
+            try:
+                if prepare is not None:
+                    prepare()
+                    return None
+                # 題の画面から始めた回は `AIManager` がまだ組まれていない。ゲームと同じ引数で組む
+                # （`__init__` が `set_ai_models` を呼ぶ）
+                cls = ui.cls_of("AIManager")
+                config = frames.attr(frames.attr(app, "auto_configuration_screen", None), "config", None)
+                if config is None:
+                    # 予備の `app.config` は辞書のときだけ（Kivy の App が持つ設定の ConfigParser は渡さない）
+                    config = frames.attr(app, "config", None)
+                    config = config if isinstance(config, dict) else None
+                if cls is None or config is None:
+                    return "ゲームの画像生成がまだ用意されておらず、用意の処理（AIManager）も呼べない"
+                setattr(app, AI_MANAGER_ATTRS[0], cls(app, config))
+                return None
+            except Exception:
+                ctx.log_exc("image quality: preparing the game's image generation failed")
+                return "ゲームの画像生成の用意（set_ai_models）が失敗した"
+        # ゲームは `set_ai_models` をメインスレッドで呼ぶ（部品を組み、送信関数を作り直す。GAME.md §2.12）ので、
+        # 一括生成のスレッドからは呼ばず、メインスレッドで走らせて終わるまで待つ
+        ran, why = ctx.run_on_main_thread(build, timeout=PREPARE_WAIT)
+        if not ran:
+            return "ゲームの画像生成の用意（set_ai_models）をメインスレッドで走らせられなかった"
+        if why:
+            return why
+        if imagegen.creature_module() is None:
+            return "ゲームの画像生成の用意（set_ai_models）を呼んだが、画像生成のモジュールが読み込まれなかった"
+        write("表情差分（一括生成）: ゲームの画像生成が用意されていなかったので、ゲームの用意（set_ai_models）を呼んだ")
+        prepared["now"] = True
+        attach()
+        return None
+
+    def backfill_materials():
+        """差分だけ描く材料。`(材料, None)` か `(None, 揃わない理由)`。
+
+        部品はゲームの立ち絵の部品、描く関数は sdcpp の出口の `draw`、引数は控え（`remember_template`）。
+        """
+        if str(imagegen.backend() or "").startswith("diffusers"):
+            return None, "画像生成の方式が diffusers 系（下絵の口が無い）"
+        saved = template["value"] or variants.load_template(template_path)
+        if not saved or not isinstance(saved.get("params"), dict) or not saved.get("stage"):
+            return None, "ゲームが立ち絵を描いたときの呼び方の控えが無い（立ち絵を1枚描くと控えができる）"
+        why = prepare_image_generation()
+        if why:
+            return None, why
+        module = imagegen.creature_module()
+        module_name = frames.attr(module, "__name__", None)
+        # 工程は1つずつ、この起動の控え、無ければ保存した控えから（片方だけ控えた起動でも、保存した方で揃える）
+        here = STEP_CALLS.get(module_name or "") or {}
+        steps = {}
+        for step in VARIANT_STEPS:
+            got = here.get(step) or (variants.steps_from(saved, (step,)) or {}).get(step)
+            if got is not None:
+                steps[step] = got
+        if module is None or len(steps) < len(VARIANT_STEPS) \
+                or not all(callable(frames.attr(module, s, None)) for s in VARIANT_STEPS):
+            return None, "ゲームの立ち絵の工程（縮小・減色）の呼び方の控えが無い"
+        pipe = None
+        for name in managers():
+            manager = sys.modules.get(name)
+            pipe = frames.attr(manager, "txt2img_pipe", None)
+            build = frames.attr(manager, PIPELINE_FUNC, None)
+            if pipe is None and callable(build):
+                build()
+                pipe = frames.attr(manager, "txt2img_pipe", None)
+            if pipe is not None:
+                break
+        base = owner_of(type(pipe), EARLY_EXIT_METHOD) if pipe is not None else None
+        if base is None:
+            return None, "ゲームの画像生成の部品が建っていない"
+        target = "{}:{}.{}".format(frames.attr(base, "__module__", "?"),
+                                   frames.attr(base, "__qualname__", base.__name__), EARLY_EXIT_METHOD)
+        draw = exit_draws.get(target)
+        if draw is None:
+            return None, "画像生成の出口（{}）を包んでいない".format(target)
+        return {"draw": draw, "orig": below_ours(base.__dict__.get(EARLY_EXIT_METHOD)), "self": pipe,
+                "stage": saved["stage"], "params": dict(saved["params"]),
+                "module": module_name, "steps": steps}, None
+
+    def reapply_face(materials, folder, name, world, captured, stop_event=None):
+        """既に在る立ち絵の顔を描き直し、ゲームの立ち絵の5枚（顔アイコンまで）を書き直す。
+
+        描き方は立ち絵を描くときの顔の描き直し（`refine`）と同じ（検出・切り出し・強さ・プリセット）。
+        背景を抜いた形は今の `no_bg_image.png` の透明度を使い、縮小と減色はゲームの工程を通す（差分と同じ）。
+        顔アイコンは、今のアイコンを切り出した位置（`faces.locate`）で、描き直した立ち絵から切り直す。
+        元の絵（`generated_image.png`）は最後に書く（途中で止まっても、次の回に元の絵から描き直せる）。
+        `faces.REDRAWN`・`faces.NO_FACE`（顔が見つからない。控えに書いて次から外す）・None（描けなかった）を返す。
+        """
+        started = time.time()
+        try:
+            conf = faces.config(live.faces, face_models)
+            if conf is None:
+                return None
+            module = sys.modules.get(materials["module"] or "")
+            funcs = [frames.attr(module, step, None) for step in VARIANT_STEPS]
+            calls = materials["steps"]
+            if not all(callable(func) for func in funcs) or any(step not in calls for step in VARIANT_STEPS):
+                warn("face-existing-no-steps", "ゲームの立ち絵の工程（縮小・減色）が見つからないので、既存の立ち絵の顔を描き直さない")
+                return None
+            source_path = os.path.join(folder, expressions.SOURCE)
+            stamp = expressions.stamp(folder)
+            if stamp is None:
+                return None
+            source = img2img.load_image(source_path)
+            image = source.convert("RGB")
+            found = faces.find(image, conf)
+            if found is None:
+                write("顔の描き直し [{}]: 顔が見つからないので描き直さない".format(name))
+                remember_done(world, name, stamp, faces.NO_FACE)
+                return faces.NO_FACE
+            route = captured["route"]
+            if conf["preset"]:
+                route = method_route(conf["preset"], "顔の描き直し")
+            if stopped(stop_event):
+                return None
+            with variants.turn().job():
+                full, (_left, _top, size, side) = redraw_face(captured, image, found, route, conf["strength"],
+                                                              "顔の描き直し（既存の立ち絵）")
+            if full is None:
+                write("顔の描き直し [{}]: 絵が返らなかった".format(name))
+                return None
+            if expressions.stamp(folder) != stamp:
+                write("顔の描き直し [{}]: 描いている間に立ち絵が描き直されたので書かない".format(name))
+                return None
+            cutout_path = os.path.join(folder, img2img.SOURCES["portrait"][1])
+            cutout = img2img.load_image(cutout_path) if os.path.isfile(cutout_path) else None
+            rgba = variants.with_alpha(full, cutout) if cutout is not None else full.convert("RGBA")
+            small, shown = variants.in_fresh_thread(
+                lambda: variants.game_step_images(rgba, funcs[0], funcs[1], calls[VARIANT_STEPS[0]],
+                                                  calls[VARIANT_STEPS[1]]))
+            shown_path = os.path.join(folder, faces.SHOWN_NAME)
+            icon_path = os.path.join(folder, faces.ICON_NAME)
+            icon = None
+            if os.path.isfile(icon_path) and os.path.isfile(shown_path):
+                old_icon = img2img.load_image(icon_path)
+                old_shown = img2img.load_image(shown_path)
+                # 寸法が違えば（立ち絵を描いた後に 131_ の高画質化を切り替えた）、探した位置は新しい絵に当たらない
+                at = faces.locate(old_shown, old_icon) if old_shown.size == shown.size else None
+                if old_shown.size != shown.size:
+                    write("顔の描き直し [{}]: 会話の立ち絵の寸法が前と違う（{} → {}）ので、顔アイコンは元のまま".format(
+                        name, old_shown.size, shown.size))
+                elif at is None:
+                    write("顔の描き直し [{}]: 顔アイコンを切り出した位置が分からないので、顔アイコンは元のまま".format(name))
+                else:
+                    icon = shown.convert("RGBA").crop((at[0], at[1], at[0] + old_icon.size[0],
+                                                       at[1] + old_icon.size[1]))
+            if cutout is not None:
+                variants.save_replacing(rgba, cutout_path)
+            variants.save_replacing(small, os.path.join(folder, faces.SMALL_NAME))
+            variants.save_replacing(shown, shown_path)
+            if icon is not None:
+                variants.save_replacing(icon, icon_path)
+            variants.save_replacing(full.convert(source.mode), source_path)
+            remember_done(world, name, expressions.stamp(folder), faces.REDRAWN)
+            write("顔の描き直し [{}]: 既存の立ち絵の顔 {} を {} 四方で切り出し {} 四方で描き直した（強さ {}、{:.1f} 秒）".format(
+                name, found[0], size, side, conf["strength"], time.time() - started))
+            return faces.REDRAWN
+        except Exception as exc:
+            ctx.log_exc("image quality: redrawing the face of an existing portrait failed")
+            warn("face-existing-failed", "既存の立ち絵の顔を描き直せなかった（{}: {}: {}）".format(
+                name, type(exc).__name__, exc))
+            return None
+
+    def captured_for(materials, route, folder):
+        """控えた呼び方と人物のフォルダの `prompts.json` から、描く材料を組む。文が無ければ None。"""
+        prompts = variants.read_prompts(folder)
+        if prompts is None:
+            return None
+        kwargs = dict(materials["params"], prompt=prompts[0], negative_prompt=prompts[1])
+        return {"draw": materials["draw"], "orig": materials["orig"], "self": materials["self"],
+                "args": (), "kwargs": kwargs, "stage": materials["stage"], "route": route}
+
+    def in_worker(materials, job):
+        """1人ぶんの仕事を新しいスレッドで走らせて待つ（`variants.in_fresh_thread`）。
+
+        ゲームが最後に描いたときに DLL へ登録した進み具合のコールバックを先に外す。
+        ゲームの呼び方なら毎回生きたコールバックが渡るが、控えた呼び方には無く（数と文字列だけ）、
+        DLL が消えたコールバックを呼ぶと access violation になる（VERIFICATION.md §3.132）。
+        新しいスレッドで描くのは、`131_` がスレッドに残す工程の控えを持ち込まないため（start_variants と同じ）。
+        """
+        clear_progress_callback(type(materials["self"]))
+        return variants.in_fresh_thread(job, name="mod343-expressions")
+
+    def redraw_face(captured, image, found, route, strength, mode, prompt_of=None, cut=None):
+        """顔の周りを切り出して描き直し、元の絵へ貼った写しを返す（`refine`・`reapply_face`・`variant_job`）。
+
+        `captured` は描く材料（`draw`・`orig`・`self`・`args`・`kwargs`・`stage`、あれば `kind`）。
+        `route` は描く組（None はゲームの部品）。切り出しを拡大する一辺は、描くモデルの系統で決める。
+        `prompt_of` はプロンプトの直し方（既定は顔の寄り。`faces.redraw_args`）。
+        `cut` は切り出し（`face_cut` の戻り値）。同じ顔を何度も描くとき（表情差分）は1回作って渡す。
+        `(貼った絵, (左, 上, 一辺, 拡大した一辺))`。絵が返らなければ貼った絵は None。
+        """
+        left, top, size, side, crop = cut or face_cut(image, found, route)
+        face = img2img.first_image(captured["draw"](
+            captured["orig"], captured["self"], captured["args"], captured["kwargs"],
+            captured.get("kind", "portrait"), captured["stage"], route,
+            faces.redraw_args(side, crop, strength, prompt_of), mode))
+        full = faces.paste(image, face, left, top, size) if face is not None else None
+        return full, (left, top, size, side)
+
+    def face_cut(image, found, route):
+        """顔の切り出し（`faces.cut`）。拡大する一辺は描く組（None はゲームの部品）のモデルの系統で決める。"""
+        return faces.cut(image, found, route["model"][0] if route else FAMILY.get("name"))
+
+    def remember_done(world, name, stamp, result):
+        """顔の描き直しの控えに1人ぶん書く。書けなければ警告する（次の一括生成でまた描き直すことになる）。"""
+        if not faces.record_done(done_path, world, name, stamp, result):
+            warn("face-done-unwritten", "顔の描き直しの控え（{}）に書けなかった（{}）".format(faces.DONE_NAME, name))
+
+    def backfill_variants(world_path, stop_event, progress, handed=False):
+        """一括生成の後に、立ち絵が既に在る人物へ、顔の描き直しと表情差分だけ描く（主人公は除く）。
+
+        顔の描き直しは、高度設定の顔の描き直しと「既存の立ち絵にもかける」が入のときだけ、
+        控え（`faces.DONE_NAME`）が今の絵に合わない人物へかける。描き直すと元の絵が変わるので、差分はその後に数える。
+        差分は、表情を見せる MOD が居るときだけ、差分の無い人物へ描く。
+        人物は世界の骨格とセーブの名簿から。文は人物のフォルダの `prompts.json`。
+        「中断する」で止まり、次の一括生成で残りから描く（済んだ人物は控えと印で外れる）。
+        描いている間は一括生成の画面に件数を渡す（`variants.progress_state`）。
+        画面へ件数を渡したか（呼んだ側が、終わった後にゲームの終わりの表示へ戻す）を返す。
+        `handed` は、当て直しの前の世代から残りを受け取った回（描かずに戻るなら理由を残す）。
+        """
+        reported = False
+        live.refresh()
+        face_conf = faces.config(live.faces, face_models) if live.faces["existing"] else None
+        if (face_conf is None and not expressions.wanted()) or stopped(stop_event):
+            if handed and not stopped(stop_event):
+                write("一括生成: 前の世代から受け取ったが、表情を見せる MOD の宣言が無いので描かない")
+            return reported
+        # 表情を見せる MOD が居た回か（当て直しの間は宣言が数えられないので、受け渡しの前に戻るのを待つ）
+        wanted_at_start = expressions.wanted()
+        world_dir = os.path.dirname(str(world_path or ""))
+        world = os.path.basename(world_dir)
+        if not world:
+            return reported
+        try:
+            with open(os.path.join(world_dir, "world_data.json"), "rb") as fh:
+                world_data = saves.decode(fh.read())
+        except OSError:
+            world_data = None
+        try:
+            save_data = saves.read_save(world)
+        except Exception:
+            save_data = None
+        player_data = save_data.get("player_data") if isinstance(save_data, dict) else None
+        player = player_data.get("name") if isinstance(player_data, dict) else None
+        # 文（`prompts.json`）の無い人物は描けないので先に外す（数えると、一括生成のたびにゲームの用意へ進んで空振りする）
+        people, no_text = [], 0
+        for name in variants.world_npc_names(world_data, save_data):
+            folder = expressions.character_dir(world, name)
+            if name == player or folder is None:
+                continue
+            if variants.read_prompts(folder) is None:
+                no_text += expressions.stamp(folder) is not None
+                continue
+            people.append((name, folder))
+        if no_text:
+            write("一括生成 [{}]: {} の無い立ち絵 {} 人は、顔の描き直しと表情差分から外す".format(
+                world, variants.PROMPTS_NAME, no_text))
+        redo = []
+        if face_conf is not None:
+            rows = faces.load_done(done_path)
+            if rows is None:
+                # 読めない控えを空とみなすと、全員の顔をもう一度描き直す
+                warn("face-done-unreadable", "顔の描き直しの控え（{}）が読めないので、既存の立ち絵の顔を描き直さない"
+                     "（壊れていれば消すと作り直す）".format(faces.DONE_NAME))
+                face_conf = None
+            for name, folder in people if face_conf is not None else ():
+                stamp = expressions.stamp(folder)
+                if stamp is not None and not faces.is_done(rows, world, name, stamp):
+                    redo.append((name, folder))
+
+        def variant_blocked():
+            """差分を1人も描けない理由（描けるなら None）。`variant_job` が描かずに返す条件と同じ。"""
+            if not live.variants["tags"]:
+                return "表情のタグが全部空なので描かない"
+            if faces.config(dict(live.faces, on=True), face_models) is None:
+                return "顔の検出器が見つからないので描かない"
+            return None
+
+        def variant_todo():
+            # 描けない設定なら数えない（ゲームの用意へ進んで、全員を「描けなかった」と数えないため）
+            if not expressions.wanted() or variant_blocked() is not None:
+                return []
+            return [(name, folder) for name, folder in people if variants.needs_variants(folder, expressions)]
+        todo = variant_todo()
+        if not redo and not todo:
+            if face_conf is not None:
+                write("顔の描き直し（一括生成）[{}]: 描き直していない立ち絵は無い".format(world))
+            if expressions.wanted():
+                blocked = variant_blocked()
+                write("表情差分（一括生成）[{}]: {}".format(
+                    world, "差分の無い人物は居ない" if blocked is None else blocked))
+            return reported
+        materials, why = backfill_materials()
+        if materials is None:
+            if redo:
+                warn("face-existing-unready",
+                     "一括生成で、既存の立ち絵 {} 人の顔を描き直せなかった（{}）".format(len(redo), why))
+            if todo:
+                warn("expression-backfill-unready",
+                     "一括生成で、立ち絵のある {} 人に表情差分だけ描けなかった（{}）".format(len(todo), why))
+            return reported
+        route = portrait_route()
+
+        def handed_off():
+            # 描いている間に当て直されたら、残りは新しい登録に任せる（済んだ人物は控えと印で外れる）。
+            # ゲームの用意を呼んだ回は、読み込まれたモジュールを見てローダが当て直す
+            newest = BULK.get("backfill")
+            if not callable(newest) or newest is backfill_variants:
+                return None
+            # 当て直しが始まると前の世代の宣言は数えられなくなり、表情を見せる MOD（`347_`）はこの MOD より後に
+            # 宣言し直す。新しい登録に渡すのは宣言が戻ってから（上限の後はそのまま渡す。VERIFICATION.md §3.132）
+            limit = time.time() + REAPPLY_WAIT
+            while wanted_at_start and not expressions.wanted() and time.time() < limit and not stopped(stop_event):
+                time.sleep(0.2)
+            return newest
+
+        def hand_over(newest):
+            return bool(newest(world_path, stop_event, progress, handed=True)) or reported
+
+        if prepared["now"]:
+            # 用意で読み込まれたモジュールを見てローダが MOD を当て直す。当て直しの前に描くと、
+            # ほかの MOD（`131_` の縮小の素通しなど）がまだ新しいモジュールに掛かっていない（VERIFICATION.md §3.132）
+            prepared["now"] = False
+            write("一括生成 [{}]: ゲームの用意で読み込まれたモジュールにローダが当て直すのを待ってから描く".format(world))
+            limit = time.time() + REAPPLY_WAIT
+            while time.time() < limit and not stopped(stop_event):
+                newest = handed_off()
+                if newest is not None:
+                    write("一括生成 [{}]: 当て直されたので、新しい登録で描く".format(world))
+                    return hand_over(newest)
+                time.sleep(0.2)
+            if stopped(stop_event):
+                return reported
+            write("一括生成 [{}]: {:.0f} 秒待っても当て直されなかったので、このまま描く".format(world, REAPPLY_WAIT))
+
+        def report(done, remaining, failed, name, what):
+            if callable(progress):
+                try:
+                    progress(variants.progress_state(done, remaining, failed, name, what))
+                    return True
+                except Exception:
+                    ctx.log_exc("image quality: reporting the expression progress failed")
+            return False
+
+        if redo:
+            write("顔の描き直し（一括生成）[{}]: 既存の立ち絵 {} 人の顔を描き直す".format(world, len(redo)))
+            started, done, missed, failed = time.time(), 0, 0, 0
+            for index, (name, folder) in enumerate(redo):
+                newest = handed_off()
+                if newest is not None:
+                    write("顔の描き直し（一括生成）[{}]: {} 人描き直したところで当て直されたので、残りは新しい登録で描く".format(
+                        world, done))
+                    return hand_over(newest)
+                if stopped(stop_event):
+                    write("顔の描き直し（一括生成）[{}]: 中断した（{} 人描き直して、残り {} 人）".format(
+                        world, done, len(redo) - index))
+                    return reported
+                reported = report(done, len(redo) - index, failed, name, variants.PROGRESS_FACE) or reported
+                captured = captured_for(materials, route, folder)
+                if captured is None:
+                    write("顔の描き直し（一括生成）[{}]: {} が無いので描き直さない".format(name, variants.PROMPTS_NAME))
+                    failed += 1
+                    continue
+                got = in_worker(materials, lambda folder=folder, name=name, captured=captured: reapply_face(
+                    materials, folder, name, world, captured, stop_event=stop_event))
+                if got == faces.REDRAWN:
+                    done += 1
+                elif got == faces.NO_FACE:
+                    missed += 1
+                else:
+                    failed += 1
+            write("顔の描き直し（一括生成）[{}]: {} 人の顔を描き直した（顔が見つからない {} 人、描けなかった {} 人、計 {:.0f} 秒）".format(
+                world, done, missed, failed, time.time() - started))
+            todo = variant_todo()
+        if not todo:
+            return reported
+        write("表情差分（一括生成）[{}]: 立ち絵のある {} 人に差分だけ描く".format(world, len(todo)))
+        started, done, missed, failed = time.time(), 0, 0, 0
+        for index, (name, folder) in enumerate(todo):
+            newest = handed_off()
+            if newest is not None:
+                write("表情差分（一括生成）[{}]: {} 人描いたところで当て直されたので、残りは新しい登録で描く".format(
+                    world, done))
+                return hand_over(newest)
+            if stopped(stop_event):
+                write("表情差分（一括生成）[{}]: 中断した（{} 人描いて、残り {} 人）".format(
+                    world, done, len(todo) - index))
+                return reported
+            reported = report(done, len(todo) - index, failed, name, variants.PROGRESS_VARIANTS) or reported
+            captured = captured_for(materials, route, folder)
+            if captured is None:
+                write("表情差分（一括生成）[{}]: {} が無いので描かない".format(name, variants.PROMPTS_NAME))
+                failed += 1
+                continue
+            got = in_worker(materials, lambda folder=folder, name=name, captured=captured: variant_job(
+                materials["module"], folder, name, captured, steps=materials["steps"],
+                how="一括生成で差分だけ描いた", stop_event=stop_event))
+            if got is True:
+                done += 1
+            elif got == faces.NO_FACE:
+                missed += 1
+            else:
+                failed += 1
+        write("表情差分（一括生成）[{}]: {} 人に描いた（顔が見つからない {} 人、描けなかった {} 人、計 {:.0f} 秒）".format(
+            world, done, missed, failed, time.time() - started))
+        return reported
+
+    # 一括生成の包み（古い世代のまま走り続けることがある）が最新の関数を呼ぶように置く
+    if not ctx.superseded():
+        BULK["backfill"] = backfill_variants
+
+    def is_player(name, creating=False):
+        """主人公の立ち絵か（主人公の立ち絵は会話の相手に出ないので、差分を描かない）。
+
+        `creating` は、立ち絵の入口でキャラを作る画面が出ていたか（`ui.on_character_create`）。
+        作成画面で描く立ち絵は主人公のもの（`app.player` はまだ無いか前の主人公なので、名前では分からない）。
+        """
+        if creating:
+            return True
+        player = frames.attr(ui.find_app(), "player", None)
+        return bool(name) and frames.attr(player, "name", None) == name
+
+    def start_variants(module_name, world, name, captured, creating=False):
+        """立ち絵を保存し終えた後に、表情差分の仕事を始める。
+
+        一括生成のあいだは終わるまで待つ（立ち絵に続けて描く）。ほかは待たずに返し、裏で描く。
+        どちらも新しいスレッドで描く（`131_` がスレッドに残す工程の控えを持ち込まないため。variants.in_fresh_thread）。
+        """
+        folder = expressions.character_dir(world, name)
+        if folder is None or not expressions.wanted() or is_player(name, creating):
+            return
+        worker = threading.Thread(target=variant_job, args=(module_name, folder, name, captured),
+                                  name="mod343-expressions", daemon=True)
+        worker.start()
+        if BULK["depth"] > 0:
+            worker.join()
+
+    def variant_job(module_name, folder, name, captured, steps=None, how=None, stop_event=None):
+        """1人ぶんの表情差分を描いて置く。描き終えて印を書けたら True、顔が見つからなければ `faces.NO_FACE`、
+        ほかは False。
+
+        顔が見つからないときは差分の無い印を書く（一括生成のたびに数え直して、ゲームの用意と顔の検出を
+        繰り返さないため。立ち絵が描き直されれば印が外れて、また描く）。
+        描けない・途中で立ち絵が描き直された・`stop_event` が立ったときは印を書かない。
+        `steps` は工程の引数（無ければこの起動で控えたもの）、`how` はログの描いた場面。
+        """
+        started = time.time()
+        try:
+            conf = live.variants
+            if not conf["tags"]:
+                return False
+            detector = faces.config(dict(live.faces, on=True), face_models)
+            if detector is None:
+                warn("expression-no-detector", "顔の検出器が見つからないので、表情差分を描かない")
+                return False
+            stamp = expressions.stamp(folder)
+            if stamp is None:
+                write("表情差分 [{}]: 元の絵（{}）が無いので描かない".format(name, expressions.SOURCE))
+                return False
+            module = sys.modules.get(module_name or "")
+            funcs = [frames.attr(module, step, None) for step in VARIANT_STEPS]
+            calls = steps or STEP_CALLS.get(module_name or "", {})
+            if not all(callable(func) for func in funcs) or any(step not in calls for step in VARIANT_STEPS):
+                warn("expression-no-steps", "ゲームの立ち絵の工程（縮小・減色）の呼び方が控えられていないので、"
+                     "表情差分を描かない（注入より先に描いていた立ち絵）")
+                return False
+            base = img2img.load_image(os.path.join(folder, expressions.SOURCE)).convert("RGB")
+            cutout_path = os.path.join(folder, img2img.SOURCES["portrait"][1])
+            cutout = img2img.load_image(cutout_path) if os.path.isfile(cutout_path) else None
+            found = faces.find(base, detector)
+            if found is None:
+                expressions.clear(folder)
+                expressions.seal(folder, stamp, names=[])
+                write("表情差分 [{}]: 顔が見つからないので描かない（この立ち絵には次から描かない）".format(name))
+                return faces.NO_FACE
+            route = captured["route"]
+            if live.faces["on"] and live.faces["preset"]:
+                route = method_route(live.faces["preset"], "表情差分")
+            model = route["model"] if route else (FAMILY.get("name"), FAMILY.get("path"))
+            # 強さは描くモデルで決める（モデル名で分ける行、無ければ系統の欄。variants.strength_for）
+            strength, matched = variants.strength_for(conf, model)
+            cut = face_cut(base, found, route)          # 4表情とも同じ切り出し
+            expressions.clear(folder)
+            done, drawn, wanted = [], [], [e for e in expressions.VARIANTS if conf["tags"].get(e)]
+            for expression in wanted:
+                tags = conf["tags"][expression]
+                if expressions.stamp(folder) != stamp:
+                    write("表情差分 [{}]: 描いている間に立ち絵が描き直されたので止める".format(name))
+                    return False
+                if stopped(stop_event):
+                    write("表情差分 [{}]: 一括生成が中断されたので止める（印を書かない）".format(name))
+                    return False
+                one = time.time()
+                with variants.turn().job():
+                    full, _cut = redraw_face(captured, base, found, route, strength, "表情差分 " + expression,
+                                             lambda prompt, tags=tags: variants.expression_prompt(prompt, tags),
+                                             cut=cut)
+                if full is None:
+                    write("表情差分 [{}]: {} は絵が返らなかった".format(name, expression))
+                    continue
+                # 描いている間（約7秒）に立ち絵が描き直されたら、新しい立ち絵の仕事の置き場へ古い差分を書かない
+                if expressions.stamp(folder) != stamp:
+                    write("表情差分 [{}]: 描いている間に立ち絵が描き直されたので止める".format(name))
+                    return False
+                rgba = variants.with_alpha(full, cutout) if cutout is not None else full.convert("RGBA")
+                shown = variants.in_fresh_thread(
+                    lambda: variants.game_steps(rgba, funcs[0], funcs[1], calls[VARIANT_STEPS[0]],
+                                                calls[VARIANT_STEPS[1]]))
+                variants.save_replacing(shown, expressions.variant_path(folder, expression))
+                drawn.append(expression)
+                done.append("{} {:.1f}秒".format(expression, time.time() - one))
+            # 欠けた表情があれば、描けた分を見せつつ描き揃っていない印にする（次の一括生成で描き直す）
+            whole = len(drawn) == len(wanted)
+            if drawn and expressions.stamp(folder) == stamp \
+                    and expressions.seal(folder, stamp, names=drawn, complete=whole):
+                write("表情差分 [{}]: {}（計 {:.1f} 秒、{}、強さ {}{}）{}".format(
+                    name, "、".join(done), time.time() - started,
+                    how or ("一括生成なので続けて描いた" if BULK["depth"] > 0 else "裏で描いた"), strength,
+                    "（{}）".format(matched),
+                    "" if whole else "。描けなかった表情があるので、次の一括生成で描き直す"))
+                return whole
+            return False
+        except Exception as exc:
+            ctx.log_exc("image quality: drawing the expression variants failed")
+            warn("expression-failed", "表情差分を描けなかった（{}: {}: {}）".format(name, type(exc).__name__, exc))
+            return False
 
     # ------------------------------------- 再生成のボタンを描き方ごとに分ける
 

@@ -927,6 +927,17 @@ class ModContext:
         """
         return write_text(path, text, report=self.log_exc)
 
+    def run_on_main_thread(self, fn, *, timeout: float = 5.0, give_up: float | None = None):
+        """`fn()` をメインスレッド（Kivy の Clock）で走らせ、終わるまで待つ。`(走ったか, 戻り値)` を返す。
+
+        自前のスレッドから、ゲームがメインスレッドで呼ぶ関数（部品を組む・送信関数を作り直すなど）を
+        呼ぶときに使う。既にメインスレッドに居るとき・ゲームの外では、この場で走らせる。
+        メインループが回っている間は取られるまで待つ。止まっていたか、`give_up` 秒（既定 `timeout` の 30 倍）
+        待っても取られなければ、走らせずに諦めて `(False, None)`。
+        `fn` の例外はローダのログに残して `(True, None)`（理由を返したいなら `fn` の中で受ける）。
+        """
+        return _run_on_main_thread(fn, timeout, give_up)
+
     def _adopt_from_out(self, parts: tuple, path: str) -> None:
         """`out/<同じ名前>` が在れば `state/` へ移す（移設の跡はログに残す）。
 

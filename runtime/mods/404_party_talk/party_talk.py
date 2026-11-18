@@ -45,14 +45,19 @@ MOD 専用プロンプトで LLM を1回だけ呼ぶ。返答のうちアンカ�
   選択肢はローダの窓口 `choices` の宣言型の口に預ける（TECH.md §3.3.14）。パーティー会話の画面は `claim` で、
   ゲームのボタンの写しと「会話を終了する」の写し（文言だけ「話し合いを終了する」）だけを出すので、
   ほかの MOD のボタンは窓口が出さない。ゲームのボタンの文言は書き換えないので、セーブには「会話を終了する」が残る。
+- 表情を見せる MOD（`347_`）がローダの窓口 `expressions` に宣言していれば、LLM に返させる各要素に
+  表情（`expression`）を足し、RULES に説明を1行足す。喋った仲間の枠をその表情の差分に替え、
+  喋らなかった仲間はふだんの顔に戻す。差分の無い人物・印の合わない差分はゲームの立ち絵のまま（窓口の `image`）。
+  ゲームが相手枠を出し直したときに備え、並べ直すたびに控えた表情を当て直す。
 
 もとは MoririnJP 氏の `404_party_talk` v6（提供元の README.txt は work フォルダ）。
 """
+import os
 import random
 import sys
 import typing
 
-from instantale_modloader import choices, frames, llm, ui
+from instantale_modloader import choices, expressions, frames, llm, ui
 from instantale_modloader.state import WorldStore, world_key
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
@@ -162,6 +167,25 @@ JSONオブジェクト1つだけ。説明・コードフェンス禁止。
 """
 
 
+#: 表情を見せる MOD（`347_`）が入っているときに RULES へ足す、表情の説明（`with_expressions`）。
+EXPRESSION_ITEM = ("各要素はspeaker（【参加NPC】の名前）とstatement（返答文または（行動描写））。",
+                   "各要素はspeaker（【参加NPC】の名前）とstatement（返答文または（行動描写））とexpression（そのNPCの表情）。")
+EXPRESSION_GUIDE = "- 表情: あわせて、各NPCが返答文を言うときの表情(expression)を出力する。" + expressions.GUIDE
+EXPRESSION_EXAMPLE = ('"statement":"返答文または（行動描写）"}',
+                      '"statement":"返答文または（行動描写）","expression":"neutral"}')
+
+
+def with_expressions(rules):
+    """RULES に表情の欄の説明を足した文。見出しが見つからない部分は飛ばす（足せた分だけ足す）。"""
+    got = rules.replace(EXPRESSION_ITEM[0], EXPRESSION_ITEM[1], 1)
+    got = got.replace(EXPRESSION_EXAMPLE[0], EXPRESSION_EXAMPLE[1])
+    head = "\n\n【出力形式】"
+    at = got.find(head)
+    if at < 0:
+        return got.rstrip("\n") + "\n\n" + EXPRESSION_GUIDE + "\n"
+    return got[:at] + "\n" + EXPRESSION_GUIDE + got[at:]
+
+
 def _field(record, key):
     """dict の1項目を、前後の空白を落とした文字列で返す。無ければ空文字。"""
     value = record.get(key) if isinstance(record, dict) else None
@@ -192,6 +216,7 @@ def apply(ctx):
         st = {"active": False, "anchor": None, "round": 0, "pending": [], "extras": []}
         setattr(sys, STORE, st)
     st.setdefault("frames", {})
+    st.setdefault("expressions", {})   # 参加者ごとのいまの表情（id -> 表情。表情を見せる MOD があるときだけ）
     st.setdefault("talk_list", False)   # 「会話する」の相手一覧を開いている（DisplayTalkChoice の旗）
 
     # ------------------------------------------------------------ 構造化応答
@@ -233,14 +258,20 @@ def apply(ctx):
         })
 
     def llm_response_structure():
-        """LLM へ要求する形。本体へ返す形とは分ける。"""
-        item = structure("PartyTalkLLMItem", {
-            "speaker": (str, ...),
-            "statement": (str, ...),
-        })
+        """LLM へ要求する形。本体へ返す形とは分ける。
+
+        表情を見せる MOD が入っていれば、各要素に表情（`expression`）を足した別の型にする。
+        表情は `str` で受けて、受け取った側で一覧に照らす（`expressions.name_of`）。
+        """
+        with_faces = expressions.wanted()
+        fields = {"speaker": (str, ...), "statement": (str, ...)}
+        if with_faces:
+            fields["expression"] = (str, ...)
+        suffix = "WithExpression" if with_faces else ""
+        item = structure("PartyTalkLLMItem" + suffix, fields)
         if item is None:
             return None
-        return structure("PartyTalkLLMResponse", {
+        return structure("PartyTalkLLMResponse" + suffix, {
             "content_violation": (str, ...),
             "responses": (typing.List[item], ...),
         })
@@ -389,7 +420,7 @@ def apply(ctx):
         # 本体の facilitator と同じ見出しで載せる（【基本情報】- 世界観:）。
         world = "" if worldview is None else "\n\n【基本情報】\n- 世界観: " + frames.short(worldview, None)
         anchor = "\n\n【アンカーNPC】\n- id={} / 名前={}".format(anchor_id, anchor_name) if anchor_id else ""
-        head = (RULES + world
+        head = ((with_expressions(RULES) if expressions.wanted() else RULES) + world
                 + "\n\n【プレイヤーキャラ】\n- 名前: " + player_name(app)
                 + "\n\n【参加NPC】\n" + index + anchor + "\n\n")
         tail = "\n\n【直近の対話ログ】\n" + (history(app) or "（会話開始直後）")
@@ -485,17 +516,20 @@ def apply(ctx):
                 dropped.append("duplicate:" + speaker)
                 continue
             seen.add(speaker)
-            accepted.append((speaker, statement))
+            accepted.append((speaker, statement, expressions.name_of(row.get("expression"))))
 
         # 本体は会話相手1人の statement を表示するので、アンカーの分だけそこへ載せる。
         anchor_statement = ""
+        anchor_expression = expressions.NEUTRAL
         pending = []
-        for speaker, statement in accepted:
+        for speaker, statement, expression in accepted:
             if speaker == anchor_name and not anchor_statement:
                 anchor_statement = statement
+                anchor_expression = expression
             else:
                 pending.append({"id": str(name_to_id.get(speaker, "")),
-                                "speaker": speaker, "statement": statement})
+                                "speaker": speaker, "statement": statement,
+                                "expression": expression})
         if not anchor_statement:
             anchor_statement = "（黙って話を聞いている）"
             dropped.append("anchor-missing:fallback-silent")
@@ -503,6 +537,15 @@ def apply(ctx):
         st["round"] = int(st.get("round", 0)) + 1
         write("round {} anchor={!r} extras={} dropped={}".format(
             st["round"], anchor_name, [x["speaker"] for x in pending], dropped))
+        if expressions.wanted():
+            # 喋らなかった仲間はふだんの顔に戻し、アンカーは返す台詞の表情にする。
+            # 仲間の表情は台詞を出すときに替える（`flush_extras`）。
+            for cid in ids:
+                if cid != anchor_id:
+                    set_expression(cid, expressions.NEUTRAL)
+            set_expression(anchor_id, anchor_expression)
+            write("round {} expressions anchor={} extras={}".format(
+                st["round"], anchor_expression, [(x["speaker"], x["expression"]) for x in pending]))
         return conv_cls(content_violation=False,
                         action=action_cls(type="casual_response", accepted=None,
                                           statement=anchor_statement, call_free_action=False))
@@ -591,6 +634,8 @@ def apply(ctx):
             line = "{}: {}".format(speaker, statement)
             try:
                 show_portrait(cid)
+                if cid and expressions.wanted():
+                    set_expression(cid, str(item.get("expression") or expressions.NEUTRAL))
                 add(line)
                 st["extras"].append({"at": at, "text": line})
                 write("extra displayed speaker={!r} id={!r}".format(speaker, cid))
@@ -599,7 +644,10 @@ def apply(ctx):
             except Exception:
                 ctx.log_exc("party talk: extra NPC display failed")
         # 次のラウンドの会話相手（アンカー）へ立ち絵を戻す。
-        show_portrait(str(st.get("anchor") or ""))
+        anchor = str(st.get("anchor") or "")
+        show_portrait(anchor)
+        if anchor and not SIDE_BY_SIDE and expressions.wanted():
+            set_expression(anchor, st["expressions"].get(anchor, expressions.NEUTRAL))
 
     # ------------------------------------------------------------ 立ち絵を並べる
     # 本体の会話画面には相手1人ぶんの枠（`hud.character_image`）しか無い。
@@ -608,11 +656,34 @@ def apply(ctx):
     # 会話が終わったら自前の枠を外し、相手枠を元の位置へ戻す。
 
     def portrait_src(app, cid):
-        """立ち絵の画像パス。Character の `image_src` は dict（"fullbody" 等）か文字列。無ければ None。"""
-        npc = ui.character_of(app, cid)
-        src = getattr(npc, "image_src", None)
-        path = src.get("fullbody") if isinstance(src, dict) else src
-        return path if isinstance(path, str) and path.strip() else None
+        """立ち絵の画像パス（`expressions.portrait_path`）。無ければ None。"""
+        return expressions.portrait_path(ui.character_of(app, cid))
+
+    def expression_widget(app, cid):
+        """その人物の立ち絵を出している枠。並べているときはアンカーが相手枠、ほかは自前の枠。"""
+        anchor = str(st.get("anchor") or "")
+        if SIDE_BY_SIDE and cid != anchor:
+            return st["frames"].get(cid)
+        return anchor_frame(app)[1]
+
+    def show_expression(app, cid):
+        """控えた表情の差分（無ければゲームの立ち絵）をその人物の枠に出す。メインスレッドから呼ぶ。
+
+        枠がほかの人物の絵を出しているとき（切り替え方式で別の人物を出している間）は触らない。
+        """
+        widget = expression_widget(app, cid)
+        base = portrait_src(app, cid)
+        if widget is None or not base:
+            return
+        expressions.show(widget, os.path.dirname(base), st["expressions"].get(cid, expressions.NEUTRAL), base)
+
+    def set_expression(cid, expression):
+        """表情を控え、次のフレームでその人物の枠に出す（ワーカースレッドから呼べる）。"""
+        if not cid:
+            return
+        st["expressions"][str(cid)] = expression
+        app = ui.find_app()
+        screen.schedule(lambda: show_expression(app, str(cid)), 0)
 
     def anchor_frame(app):
         """(HUD, 本体の相手枠)。相手枠が引けなければ (HUD, None)。"""
@@ -799,6 +870,10 @@ def apply(ctx):
             place(widget, x, center_y)
         for cid in [c for c in list(st["frames"]) if c not in shown]:
             detach(st["frames"].pop(cid))
+        # 作り直した枠と、ゲームが出し直した相手枠に、控えた表情を当て直す
+        for cid in shown:
+            if cid in st["expressions"]:
+                show_expression(app, cid)
 
     def detach(widget):
         """自前の枠を親から外す。"""
@@ -850,6 +925,7 @@ def apply(ctx):
         st["round"] = 0
         st["pending"] = []
         st["extras"] = []
+        st["expressions"] = {}
         if st["frames"] or SIDE_BY_SIDE:
             app = ui.find_app()
             screen.schedule(lambda: remove_portraits(app), 0)
@@ -952,6 +1028,7 @@ def apply(ctx):
         st["round"] = 0
         st["pending"] = []
         st["extras"] = []
+        st["expressions"] = {}
         write("party talk start anchor={} participants={}".format(
             ui.character_name(app, anchor, fallback=anchor),
             [ui.character_name(app, i, fallback=i) for i in ids]))

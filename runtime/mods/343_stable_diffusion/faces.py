@@ -15,13 +15,24 @@ YuNet は写実寄りの顔（年配・ひげ・眼鏡）も拾う。lbpcascade 
 開けないので、中身を読んでから渡す（131_sharp_portrait の `faces.read_yunet` と同じ）。
 """
 import io
+import json
 import os
+import sys
+import threading
+import time
+
+try:
+    from . import img2img
+except ImportError:          # 道具画面（tool.py）は隣のファイルを直に import する
+    import img2img
 
 #: 設定の名前（mod.json）。`live.py` が生成のたびに読み直す。
 SWITCH = "FACE_REDRAW"
 PRESET = "FACE_REDRAW_PRESET"
 STRENGTH = "FACE_REDRAW_STRENGTH"
-NAMES = (SWITCH, PRESET, STRENGTH)
+#: 一括生成で、既に在る立ち絵にも顔の描き直しをかけるか（顔の描き直しが入のときだけ効く）。
+EXISTING = "FACE_REDRAW_EXISTING"
+NAMES = (SWITCH, PRESET, STRENGTH, EXISTING)
 
 #: 強さの既定（mod.json と同じ値）。0.5 では表情や目の形が下絵から離れ始めた。
 DEFAULT_STRENGTH = 0.4
@@ -66,21 +77,16 @@ def yunet_path(models):
 
 
 def strength_of(value):
-    """強さを 0 より大きく 1 以下に収める。読めなければ既定。"""
-    try:
-        got = float(value)
-    except (TypeError, ValueError):
-        return DEFAULT_STRENGTH
-    if got != got or got <= 0:              # NaN と 0 以下
-        return DEFAULT_STRENGTH
-    return min(got, 1.0)
+    """強さを 0 より大きく 1 以下に収める。読めなければ既定（`img2img.strength_of`）。"""
+    return img2img.strength_of(value, DEFAULT_STRENGTH)
 
 
 def derive(values):
     """設定の値を出口で使う形に組む。`{"on": 真偽, "preset": 名前, "strength": 強さ}`。"""
     return {"on": bool(values.get(SWITCH)),
             "preset": str(values.get(PRESET) or "").strip(),
-            "strength": strength_of(values.get(STRENGTH))}
+            "strength": strength_of(values.get(STRENGTH)),
+            "existing": bool(values.get(EXISTING))}
 
 
 def config(settings, models):
@@ -233,6 +239,133 @@ def paste(base, face, left, top, size, feather=FEATHER):
         mask = mask.filter(ImageFilter.GaussianBlur(pad / 2.0))
     out.paste(patch, (left, top), mask)
     return out
+
+
+def cut(image, found, family):
+    """見つけた顔（`find` の戻り値）の周りを正方形に切り出し、系統の得意な一辺へ拡大する。
+
+    `(左, 上, 一辺, 拡大した一辺, 切り出した絵)`。立ち絵の顔の描き直し・既存の立ち絵の描き直し・表情差分で共通。
+    """
+    from PIL import Image
+
+    box, grow = found
+    left, top, size = square(box, grow, image.size[0], image.size[1])
+    side = side_for(family)
+    crop = image.convert("RGB").crop((left, top, left + size, top + size)).resize((side, side), Image.LANCZOS)
+    return left, top, size, side, crop
+
+
+def redraw_args(side, crop, strength, prompt_of=None):
+    """切り出しを描き直すときに出口へ足す引数を返す関数（出口の `draw` の `extra`）。
+
+    寸法・下絵・強さと、プロンプトを `prompt_of`（既定は `face_prompt`）で顔の寄りに直したもの。
+    """
+    prompt_of = prompt_of or face_prompt
+
+    def extra(params, changes):
+        got = {"width": side, "height": side, "init_image": crop, "strength": strength}
+        prompt = changes.get("prompt", params.get("prompt"))
+        if isinstance(prompt, str):
+            got["prompt"] = prompt_of(prompt)
+        return got
+    return extra
+
+
+# ---- 顔の描き直しを済ませた立ち絵の控え ------------------------------------------
+
+#: 控えのファイル（`state\stable_diffusion\` の下）。`{世界: {名前: {"sha1": 元の絵の印, "result": 結果}}}`。
+#: 印は描き直した後の `generated_image.png` の SHA-1（ローダの `expressions.stamp`）。
+#: 印が今の絵と合う人物には、一括生成で既存の立ち絵へかけ直さない（立ち絵が描き直されたら印が外れる）。
+DONE_NAME = "face_redraw_done.json"
+
+#: ゲームの立ち絵のファイル（人物のフォルダの下。GAME.md §2.30）。背景を抜いた絵は `img2img.SOURCES`。
+SMALL_NAME = "pixelated_image_original.png"
+SHOWN_NAME = "reduced_color_image.png"
+ICON_NAME = "face_image.png"
+
+#: 控えに書く結果。
+REDRAWN = "redrawn"
+NO_FACE = "no-face"
+
+#: 控えを書く錠の置き場（`sys` の属性。注入し直した後も、走り続ける古い世代の仕事と同じ錠を使う）。
+DONE_LOCK_ATTR = "_mod343_face_done_lock"
+
+#: 控えが在るのに読めないときのやり直し（道具画面・ウイルス対策が開いている間の一時的な失敗）。
+READ_RETRIES = 5
+READ_RETRY_WAIT = 0.1
+
+
+def _done_lock():
+    return sys.__dict__.setdefault(DONE_LOCK_ATTR, threading.Lock())
+
+
+def load_done(path):
+    """控えを読む。無ければ空、在るのに読めなければ None（ロック・破損）。
+
+    読めない控えを空とみなすと、書く側はほかの人物の控えを消して書き戻し、決める側は全員を未処理と数える。
+    一時的なロックに備えて短くやり直す。
+    """
+    for attempt in range(READ_RETRIES):
+        try:
+            with io.open(path, encoding="utf-8-sig") as fh:
+                got = json.load(fh)
+            return got if isinstance(got, dict) else None
+        except FileNotFoundError:
+            return {}
+        except (OSError, ValueError):
+            if attempt + 1 < READ_RETRIES:
+                time.sleep(READ_RETRY_WAIT)
+    return None
+
+
+def is_done(done, world, name, stamp):
+    """今の元の絵（印 `stamp`）に、描き直しを済ませた（または顔が見つからなかった）控えがあるか。"""
+    if not isinstance(done, dict):
+        return False
+    row = (done.get(world) or {}).get(name) if isinstance(done.get(world), dict) else None
+    return bool(stamp) and isinstance(row, dict) and row.get("sha1") == stamp
+
+
+def record_done(path, world, name, stamp, result):
+    """控えに1人ぶん書く。書けたら True。
+
+    控えが在るのに読めなければ書かない（ほかの人物の控えを消さない）。
+    書き方はローダの `write_json`（ゲームの中でだけ呼ぶので、道具画面のためにここで import する）。
+    """
+    if not path or not world or not name or not stamp:
+        return False
+    from instantale_modloader import write_json
+    with _done_lock():
+        done = load_done(path)
+        if done is None:
+            return False
+        rows = done.get(world) if isinstance(done.get(world), dict) else {}
+        rows[name] = {"sha1": stamp, "result": result}
+        done[world] = rows
+        return write_json(path, done)
+
+
+#: 切り出しの位置を探すときの、1画素1色あたりの二乗誤差の上限（透明な画素の色の違いが残るので 0 にしない。
+#: 合う位置と合わない位置の差は桁で違う。VERIFICATION.md §3.132）。
+LOCATE_ERROR = 1.0
+
+
+def locate(full, piece):
+    """`piece` が `full` のどこを切り出した絵か。`(左, 上)`。大きさが合わない・見つからないなら None。
+
+    ゲームの顔アイコン（`face_image.png`）は立ち絵からの切り出しなので、描き直した立ち絵から同じ位置で切り直すのに使う。
+    """
+    import cv2
+    import numpy as np
+
+    big = np.asarray(full.convert("RGBA"), dtype=np.float32)
+    small = np.asarray(piece.convert("RGBA"), dtype=np.float32)
+    if small.shape[0] > big.shape[0] or small.shape[1] > big.shape[1] or small.size == 0:
+        return None
+    least, _most, at, _where = cv2.minMaxLoc(cv2.matchTemplate(big, small, cv2.TM_SQDIFF))
+    if least / small.size > LOCATE_ERROR:
+        return None
+    return int(at[0]), int(at[1])
 
 
 def replace_first(result, image):

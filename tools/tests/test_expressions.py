@@ -1,0 +1,184 @@
+# -*- coding: utf-8 -*-
+"""ローダの窓口 `expressions`（会話の立ち絵の表情差分）をゲーム抜きで通す。
+
+    python tools/tests/test_expressions.py
+
+  宣言   … 表情を見せる MOD が宣言すれば wanted が真。同じ持ち主は差し替え、用済みの宣言は数えない
+  置き場 … 立ち絵のフォルダの下の expressions\\<表情>.png
+  印     … 描き終えたら元の絵の印を書く。今の元の絵と合う差分だけ image が返す
+  消す   … clear は表情の一覧のファイルと印だけ消し、ほかの物は残す
+"""
+import io
+import os
+import shutil
+import sys
+import tempfile
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
+if RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, RUNTIME_DIR)
+
+from instantale_modloader import expressions  # noqa: E402
+
+failures = []
+
+
+def check(name, cond, detail=""):
+    print(("  ok   " if cond else "  FAIL ") + name
+          + ((" -- " + str(detail)) if detail and not cond else ""))
+    if not cond:
+        failures.append(name)
+
+
+class Ctx(object):
+    def __init__(self):
+        self.old = False
+
+    def superseded(self):
+        return self.old
+
+
+def write(path, body):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with io.open(path, "wb") as fh:
+        fh.write(body)
+
+
+def main():
+    expressions.reset()
+    print("宣言")
+    check("表情の一覧はふだんの顔が先頭で、差分はその後の4つ",
+          expressions.NAMES[0] == expressions.NEUTRAL == "neutral"
+          and expressions.VARIANTS == ("smile", "angry", "sad", "surprised"))
+    check("誰も宣言しなければ描かない", expressions.wanted() is False)
+    first, second = Ctx(), Ctx()
+    expressions.want("347", first)
+    check("宣言すれば描く", expressions.wanted() is True and expressions.wanters() == ["347"])
+    expressions.want("347", second)
+    first.old = True
+    check("同じ持ち主の宣言は差し替える（前の ctx が用済みでも数える）", expressions.wanted() is True)
+    second.old = True
+    check("用済みの ctx の宣言は数えない", expressions.wanted() is False)
+    expressions.want("347", Ctx())
+    expressions.withdraw("347")
+    check("withdraw で下げる", expressions.wanted() is False)
+    check("表情の名前の見分け", expressions.is_name("smile") and not expressions.is_name("happy")
+          and not expressions.is_name(None))
+
+    print("置き場")
+    base = tempfile.mkdtemp(prefix="expressions_test_")
+    try:
+        folder = expressions.character_dir("世界", "アリス", base)
+        check("立ち絵のフォルダは worlds\\<世界>\\characters\\<名前>",
+              folder == os.path.join(base, "worlds", "世界", "characters", "アリス"), folder)
+        check("世界か名前が空なら None",
+              expressions.character_dir("", "アリス", base) is None
+              and expressions.character_dir("世界", None, base) is None)
+        check("差分は expressions\\<表情>.png",
+              expressions.variant_path(folder, "smile") == os.path.join(folder, "expressions", "smile.png"))
+
+        print("印")
+        check("元の絵が無ければ印も無い", expressions.stamp(folder) is None)
+        source = os.path.join(folder, expressions.SOURCE)
+        write(source, b"first portrait")
+        stamp = expressions.stamp(folder)
+        check("印は元の絵の中身の SHA-1", isinstance(stamp, str) and len(stamp) == 40, stamp)
+        for name in expressions.VARIANTS:
+            write(expressions.variant_path(folder, name), name.encode())
+        check("印を書くまでは差分を返さない（描いている途中）", expressions.image(folder, "smile") is None)
+        check("印を書ける", expressions.seal(folder, stamp) is True and expressions.sealed(folder) == stamp)
+        check("印の合う差分を返す", expressions.image(folder, "smile") == expressions.variant_path(folder, "smile"))
+        check("ふだんの顔と一覧に無い表情は None（ゲームの立ち絵）",
+              expressions.image(folder, "neutral") is None and expressions.image(folder, "happy") is None)
+        os.remove(expressions.variant_path(folder, "sad"))
+        check("ファイルの無い表情は None", expressions.image(folder, "sad") is None)
+        time.sleep(0.01)
+        write(source, b"redrawn portrait")
+        check("元の絵が描き直されたら、前の差分は返さない", expressions.image(folder, "smile") is None)
+        check("印の無いフォルダには印を書かない", expressions.seal(folder, None) is False)
+        expressions.clear(folder)
+        now = expressions.stamp(folder)
+        check("差分の無い印も書ける（顔が見つからない人物。描く側が同じ元の絵に描き直しを繰り返さない）",
+              expressions.seal(folder, now) is True and expressions.sealed(folder) == now
+              and expressions.image(folder, "smile") is None)
+        write(expressions.variant_path(folder, "smile"), b"left by an older job")
+        check("印に載っていない表情の差分は、置き場に在っても返さない（前の立ち絵の仕事が後から書いた差分）",
+              expressions.image(folder, "smile") is None)
+        expressions.seal(folder, now, names=["smile"], complete=False)
+        check("描き揃わなかった印は complete が偽で、載せた表情は返す",
+              not expressions.complete(folder) and expressions.image(folder, "smile") is not None)
+        expressions.seal(folder, now, names=[])
+        check("印を書いた後に一時ファイルを残さない",
+              sorted(os.listdir(expressions.folder_of(folder))) == sorted([expressions.SEAL, "smile.png"]),
+              os.listdir(expressions.folder_of(folder)))
+
+        print("消す")
+        other = os.path.join(expressions.folder_of(folder), "note.txt")
+        write(other, b"keep")
+        expressions.clear(folder)
+        left = sorted(os.listdir(expressions.folder_of(folder)))
+        check("表情の一覧のファイルと印だけ消し、ほかの物は残す", left == ["note.txt"], left)
+        expressions.clear(os.path.join(base, "nowhere"))
+        check("無いフォルダを消しても投げない", True)
+
+        print("選ばせる・見せる")
+        check("LLM の返した表情は空白と大文字を均し、一覧に無い・読めない値はふだんの顔",
+              [expressions.name_of(v) for v in (" SAD ", "happy", None, 3)] == ["sad", "neutral", "neutral", "neutral"])
+        check("表情の説明は5つの表情を名指しする", all(name in expressions.GUIDE for name in expressions.NAMES))
+
+        class Character(object):
+            def __init__(self, src):
+                self.image_src = src
+        portrait = os.path.join(folder, "reduced_color_image.png")
+        check("立ち絵のパスは image_src の fullbody か文字列。無ければ None",
+              expressions.portrait_path(Character({"fullbody": portrait})) == portrait
+              and expressions.portrait_path(Character(portrait)) == portrait
+              and expressions.portrait_path(Character({"fullbody": " "})) is None
+              and expressions.portrait_path(None) is None)
+
+        class Widget(object):
+            def __init__(self, source):
+                self.source = source
+                self.reloads = 0
+
+            def reload(self):
+                self.reloads += 1
+        write(portrait, b"portrait")
+        stamp = expressions.stamp(folder)
+        for e in expressions.VARIANTS:
+            write(expressions.variant_path(folder, e), e.encode())
+        expressions.seal(folder, stamp)
+        widget = Widget(portrait)
+        got = expressions.show(widget, folder, "smile", portrait)
+        check("部品の絵を表情の差分に替える（初めて見せる絵は読み直さない）",
+              got == widget.source == expressions.variant_path(folder, "smile") and widget.reloads == 0,
+              (got, widget.source, widget.reloads))
+        check("同じ絵のままなら何もしない", expressions.show(widget, folder, "smile", portrait) is None
+              and widget.reloads == 0)
+        expressions.show(widget, folder, "neutral", portrait)
+        check("ふだんの顔ならゲームの立ち絵に戻す", widget.source == portrait, widget.source)
+        time.sleep(0.01)
+        write(expressions.variant_path(folder, "smile"), b"smile redrawn")
+        os.utime(expressions.variant_path(folder, "smile"), ns=(time.time_ns(), time.time_ns() + 10 ** 9))
+        expressions.show(widget, folder, "smile", portrait)
+        check("前に見せた後に描き直された差分は、キャッシュを捨てて読み直す",
+              widget.source == expressions.variant_path(folder, "smile") and widget.reloads == 1, widget.reloads)
+        other_widget = Widget(os.path.join(base, "w", "characters", "someone", "reduced_color_image.png"))
+        check("部品がほかの人物の絵を出しているときは触らない",
+              expressions.show(other_widget, folder, "smile", portrait) is None
+              and other_widget.source.endswith(os.path.join("someone", "reduced_color_image.png")))
+    finally:
+        shutil.rmtree(base, ignore_errors=True)
+        expressions.reset()
+
+    print()
+    if failures:
+        print("FAILED: {}".format(", ".join(failures)))
+        sys.exit(1)
+    print("all checks passed")
+
+
+if __name__ == "__main__":
+    main()

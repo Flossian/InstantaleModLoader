@@ -158,6 +158,7 @@ runtime/instantale_modloader/
     value_limits.py  品の価値と難易度が数に効く上限の連携 API。76 を超えて効かせる MOD が出し、品を作る MOD が切りに使う（§3.3.26）
     abilities.py  能力値の補正の連携 API。補正を置く MOD が答えか期限つきの補正を出し、ゲームが能力値を読む場面の間だけ足して見せる。ステータス画面に (+n) を出す（§3.3.27）
     battle_effects.py  戦闘の効果（会心・軽減・不屈など）の連携 API。効果を持つ MOD が人物ごとに答え、ローダが戦闘の一撃に効かせる（§3.3.28）
+    expressions.py  会話の立ち絵の表情差分の連携 API。表情を見せる MOD が宣言し、画像を描く MOD が差分を描いて置く。見せる側は元の絵と印の合う差分だけ引く（§3.3.29）
     sounds.py     曲の置き場所の探し方・戦闘曲の見分け方・重みの読み方（§5.10）
     imagegen.py   画像生成の方式（sdcpp の cuda / vulkan / cpu と diffusers_openvino）を隠して、人物の画像を描く関数をフックする（§5.11）
     stalls.py     作業スレッドが死んだときに本文の欄へ出して待機を終える。LLM の 4xx の送り直しを早めに打ち切る（§5.12）
@@ -826,6 +827,7 @@ def apply(ctx):
 | `ctx.game_dir` | ゲームの exe（`sys.executable`）の在るフォルダ |
 | `ctx.runtime_dir` | `runtime/` の場所（ローダと MOD の親） |
 | `ctx.on_ready(fn)` | プロセスにつき1回だけメインスレッドで実行（§3.6） |
+| `ctx.run_on_main_thread(fn)` | 自前のスレッドから `fn()` をメインスレッドで走らせ、終わるまで待つ。`(走ったか, 戻り値)`。ゲームがメインスレッドで呼ぶ関数（部品を組む・送信関数を作り直す）を呼ぶとき用。メインループが止まっているか、`timeout`（既定 5 秒）の 30 倍待っても取られなければ走らせずに `(False, None)` |
 | `ctx.superseded()` | 自分より新しい注入が来たか。自前のスレッド・`Clock` の繰り返しはこれを見て止める（§3.6.1） |
 | `ctx.refresh_status()` | `out/status.json` を書き直す。`apply()` を抜けた後に設置したときだけ（§3.7.3） |
 | `ctx.patches()` | 対象 → 適用した MOD の一覧。自分より前の分が見える（§3.7） |
@@ -1040,6 +1042,7 @@ MOD 同梱の設定画面（`tool.py`。§3.12）はゲームの中では走ら�
 | HUD への置き場所 | `ui.overlay_host`（§5.1.3） | 2本 |
 | 表示・ログ用の切り詰め | `frames.short` | 6本 |
 | 人物の引き方と表示名 | `ui.character_of` / `character_name` | 5本 |
+| 同じファイル名へ描き直した絵の読み直し（Kivy の画像のキャッシュを捨てる） | `ui.reload_image` | 2か所（`138_` と連携 API `expressions`） |
 | 戦闘の終わりに、預かり（`escaped_member_in_battle`）から一覧へ戻す | `ui.put_back_party` / `return_escaped` / `player_to_front` | 4か所（`107_` / `147_` / `334_` / 連携 API `defeat`）。主人公を先頭へ戻すのは `107_` だけで、ほかは末尾に足していた。ゲーム自身が戻した回も末尾なので、`defeat` は `player_to_front` で並べ直す |
 | 上限付きの記録・一度きりの警告 | `ctx.logger(cap=)` / `ctx.warner`（§3.11.2） | 5本 / 4本 |
 | 次のフレームで走らせる | `ui.scheduler` | 5本 |
@@ -2359,6 +2362,52 @@ battle_effects.text_of(kind, amount, target, lang)   # `ボス戦 +30%`・`受�
 行のログは `out\battle_effects.log`（会心・吸収・軽減・不屈などが効いたとき）。
 置き場は `sys` の属性（`_instantale_battle_effects`）。検査は `test_equipment_bonuses.py`（411 の品の効果を通す）、`test_player_trait_effects.py`（411 無しで特質の効果を通す）、`test_battle_effects.py`（品に付かない種類を偽の持ち主で通す）。
 
+#### 3.3.29 会話の立ち絵の表情差分も連携 API で分け合う（`expressions`）
+
+表情差分を描けるのは画像を描く MOD（`343_stable_diffusion`。出口のフックの中でゲームの部品を使う）で、
+表情を選んで見せるのは会話の MOD（`347_conversation_expressions`・`404_party_talk`）。
+描く処理を会話の MOD に移すと画像の部品の共有のための依存になり、見せる処理を `343_` に置くと画像の MOD が会話を持つ。
+そこで表情の一覧・差分の置き場・「描いてほしい」の宣言を `instantale_modloader/expressions.py` に置いた。
+
+```python
+# 見せる側（apply() の中）
+expressions.want(owner, ctx)                    # 差分を描いてほしいと宣言する
+# 描く側
+if expressions.wanted():                        # 宣言した MOD が居るときだけ描く
+    folder = expressions.character_dir(world, name)
+    stamp = expressions.stamp(folder)           # 元の絵（generated_image.png）の印。描き始める前に取る
+    expressions.clear(folder)
+    ...差分を expressions.variant_path(folder, "smile") などへ書く
+    expressions.seal(folder, stamp, names=描けた表情, complete=描き揃ったか)  # 描き終えたら印を書く（描けない人物は差分の無い印）
+# 見せる側（見せるとき）
+expressions.image(folder, "smile")              # 今の元の絵と印の合う差分。無ければ None（ゲームの立ち絵を見せる）
+base = expressions.portrait_path(character)     # 人物の立ち絵のパス（image_src の fullbody）
+expressions.show(widget, folder, "smile", base) # 部品の絵を差分（無ければ base）に替える。ほかの人物の絵なら触らない
+# 見せる側（選ばせるとき）
+expressions.GUIDE                               # LLM に渡す表情の説明（5つの表情と選び方）
+expressions.name_of(answer.get("expression"))   # 返った値を表情の名前に直す。一覧に無ければ neutral
+```
+
+表情は `expressions.NAMES`（`neutral` / `smile` / `angry` / `sad` / `surprised`）。`neutral` は差分を描かず、ゲームの立ち絵を見せる。
+
+| 決まり | 理由 |
+|---|---|
+| 差分の置き場は立ち絵のフォルダの `expressions\<表情>.png` | 名前で引く立ち絵の再利用（同じ名前の人物は同じフォルダ）と寿命を揃える |
+| 描き終えたら元の絵の SHA-1 を `source.json` に書き、`image` は今の元の絵と合うときだけ返す | 立ち絵はゲームの再生成のボタンやほかの MOD からも描き直される。どの経路でも古い差分を見せない |
+| 描いている途中は印を書かない（`clear` が前の印を消す） | 書きかけの4枚の一部だけを見せない |
+| 印には描けた表情を載せ、`image` は載った表情だけ返す | 前の立ち絵の仕事が、新しい仕事の `clear` の後に差分を書いても見せない |
+| 欠けた表情があれば、描けた分を載せて `complete=False` の印にする。描く側は `complete` が偽の人物を描き直す | 一度の描画の失敗で、その表情が立ち絵を描き直すまで欠けたままにならない。描けた分はそのあいだも見せる |
+| 顔が見つからない人物には差分の無い印を書く | 描く側が、同じ元の絵へ顔の検出と描画の用意を繰り返さない。立ち絵が描き直されれば印が外れて、また描く |
+| 印はローダの `write_json` で書く | 見せる側が返事のたびに `source.json` を開くので、差し替えが Windows で一時的に拒まれる。1回で諦めると、差分は在るのに印が無い |
+| 宣言は持ち主ごとに1つ。用済みの ctx の宣言は数えない | `talk_affinity` と同じ。見せる MOD を外した後に描き続けない |
+| 見せる処理（`show`）と表情の説明（`GUIDE`）・値の直し方（`name_of`）も窓口に置く | 会話（`347_`）とパーティー会話（`404_`）で同じ判定と説明を使う。片方だけ直して食い違わない |
+| `show` は前に見せたときと更新時刻が違う絵を読み直す | 差分は同じファイル名へ描き直されるので、Kivy の画像のキャッシュが古い差分を出し続ける（`138_` が立ち絵で直しているのと同じ） |
+| 返却型の表情の欄は `str` で受け、`name_of` で一覧に照らす | 型で縛ると、一覧に無い値で返事ごとゲームの検証に落ちて台詞が出ない。§5.3 の「構造化出力の型に `Literal` を使わない」と同じ |
+| 描く側の ON / OFF は持たない（宣言だけで決まる） | 見せる MOD が無いと差分は使われない。描く側に別の切り替えを置くと、片方だけ入れて効かない組み合わせができる |
+
+`343_` の描き方（描く時機・描く順番の錠・ゲームの工程の通し方）は `343_stable_diffusion/variants.py` の先頭の説明にある。
+置き場は `sys` の属性（`_instantale_expressions`）。検査は `test_expressions.py`（窓口）、`test_sd_variants.py`（描く側）、`test_conversation_expressions.py`（`347_`）、`test_party_talk.py` の「表情」の節（`404_`）。
+
 ### 3.4 まだ現れていない対象を狙う（保留と再適用）
 
 ゲームは `llama_cpp_runtime_completion` と `scripts.llm.llm_manager` を
@@ -2764,7 +2813,7 @@ GUI の1行に収めると「JSON を手で書く欄」になり、コードを�
 | `apply(ctx)` に渡る `ctx` | §3.1 / §3.6 / §3.8 / §3.11 |
 | `mod.json` のキー | §3.1 / §3.2 / §3.8 / §3.9 / §3.12 |
 | §5 の共通部品（`ui` / `frames` / `llm` / `state` / `jobs` / `modnpc` / `modfacility` / `prices` / `sounds` / `imagegen`） | §5 |
-| 使い方を書いた連携 API（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `loads` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons` / `quest_claims` / `quest_clients` / `holdings` / `save_lookup` / `shop_lineup` / `quest_bands` / `value_limits` / `abilities`） | §3.2.3 / §3.3 |
+| 使い方を書いた連携 API（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `loads` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons` / `quest_claims` / `quest_clients` / `holdings` / `save_lookup` / `shop_lineup` / `quest_bands` / `value_limits` / `abilities` / `battle_effects` / `expressions`） | §3.2.3 / §3.3 |
 
 これ以外は内部で、予告なく変わる。
 `patch.py` の `_defer_if_*` や `__init__.py` の `_order()` のような
@@ -3471,6 +3520,18 @@ ui.title_screens() / ui.font_from(screen)
 同じ `attr` の前の1行は外してから置くので、何度呼んでも1枚になる。
 フォントはタイトル画面からコピーする（Kivy の既定は日本語を持たない）。
 
+**今出ている画面**（`343_` の表情差分）:
+
+```python
+ui.screen_name(app=None)          # ゲームの ScreenManager（app.root）の current。引けなければ None
+ui.on_character_create(app=None)  # キャラを作る画面が出ているか（current が ui.CHARACTER_CREATE_SCREEN）
+```
+
+キャラを作る画面の「戻る」は世界の一覧（`world_choice`）へ戻るだけで `return_to_title` を通らない（GAME.md §2.35）。
+`StoryApp.__init__` で立てて題へ戻るときに下ろすフラグでは、作成画面を出た後も立ったままになる。
+フラグは `apply()` の中に置くと、作成画面が開いている間の当て直しで消える。
+画面の名前を、要る時点で読む。
+
 `paint_icon` は変わったときだけ引き直す（位置・大きさ・太さ・濃さと `key` を記録して比べる）。
 本文は1文字ずつ増え、パーティ欄は HP が動くたびに描画し直されるので、毎回引くと無駄が積み上がる。
 
@@ -3521,6 +3582,9 @@ ui.party_stores(app) / ui.store_ids(store) / ui.drop_from_store(store, id)
 ui.element_id(value) / ui.describe_stores(app)
 ui.character_of(app, id) / ui.character_name(app, id, fallback="その仲間")
 ```
+
+同じファイル名へ描き直した絵は、部品の source が同じなので Kivy が古い絵を出し続ける。
+`ui.reload_image(widget)` がキャッシュを捨てて読み直す（`reload` の無い版では source を付け直す）。
 
 `character_name` は引けないとき既定では id をそのまま返す（ログ向け。空にはしない）。
 文言に混ぜるときだけ `fallback=` で差し替える。

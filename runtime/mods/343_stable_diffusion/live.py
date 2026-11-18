@@ -31,6 +31,7 @@ from . import faces
 from . import img2img
 from . import rules as rulebook
 from . import sizes
+from . import variants
 
 #: 熱く読み直す設定の名前。ここに無いものは `apply()` の値のまま。
 HOT_NAMES = ("PORTRAIT_SHORT", "PORTRAIT_MAX_LONG",
@@ -41,7 +42,7 @@ HOT_NAMES = ("PORTRAIT_SHORT", "PORTRAIT_MAX_LONG",
              "LCM_METHOD", "LCM_STEPS", "LCM_CFG", "LCM_SCHEDULER",
              "STRIP_LORA", "MODEL_SAFETY", "DIFFUSERS_RESIZE",
              "KIND_PRESETS", "PORTRAIT_PRESET", "ENEMY_PRESET", "BACKGROUND_PRESET",
-             "HUMAN_ENEMY_AS_PORTRAIT") + img2img.NAMES + faces.NAMES
+             "HUMAN_ENEMY_AS_PORTRAIT") + img2img.NAMES + faces.NAMES + variants.NAMES
 
 #: 種類ごとに割り当てるカスタムプリセットの設定名（版26）。
 KIND_PRESET_NAMES = (("portrait", "PORTRAIT_PRESET"), ("enemy", "ENEMY_PRESET"),
@@ -141,6 +142,8 @@ class Live(object):
         self.img2img = img2img.derive(values)
         #: 顔だけ描き直す（`faces.derive`）。
         self.faces = faces.derive(values)
+        #: 表情差分（`variants.derive`）。描くかはローダの窓口 `expressions` で決まる。
+        self.variants = variants.derive(values)
 
     def hot(self):
         """読み直しができる状態か（場所が控えられていて、宣言も読めた）。"""
@@ -166,6 +169,13 @@ class Live(object):
         if self.faces["on"]:
             lines.append("顔だけ描き直す: preset={}, strength={}".format(
                 self.faces["preset"] or "（立ち絵を描いたプリセット）", self.faces["strength"]))
+        lines.append("表情差分（表情を見せる MOD があるとき）: SD1.5={}, SDXL・その他={}, モデル名で分ける=[{}], {}".format(
+            self.variants["sd15"], self.variants["strength"],
+            "; ".join("{}={}".format(c, s) for c, s in self.variants["by_model"]),
+            ", ".join("{}={}".format(e, t) for e, t in sorted(self.variants["tags"].items()))))
+        if self.variants["bad"]:
+            lines.append("表情差分の「モデル名で分ける」で読めない区切りを飛ばした: {}".format(
+                " / ".join(self.variants["bad"])))
         counts = sum(len(rows) for rows in self.rules.values())
         if counts:
             lines.append("rules: {} 行（{}）".format(

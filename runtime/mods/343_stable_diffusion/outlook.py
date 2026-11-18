@@ -276,6 +276,81 @@ def last_text(last):
     return "・".join(parts)
 
 
+def game_of(game_model, log):
+    """ゲーム既定のモデル `{"model": 名前, "family": 系統か None}`（系統はログの前回の構築から）。"""
+    built = (log or {}).get("built")
+    return {"model": game_model,
+            "family": built[0] if built and game_model and _stem(built[1]).lower() == str(game_model).lower()
+            else None}
+
+
+#: 表情差分の顔を描くモデルの決まり方（上から順に、最初に当てはまるもの。本体の `variant_job` と
+#: `portrait_route`。ふだんの生成で描いた立ち絵の場合）。
+EXPRESSION_STEPS = (("face", "顔だけ描き直すのプリセット"),
+                    ("chain", "txt2img→img2img の2つ目（通常の生成でも使うとき）"),
+                    ("kind", "種類ごとのプリセットの立ち絵"),
+                    ("game", "ゲーム既定のモデル"))
+
+
+def expression_models(values, custom, game, game_dir=""):
+    """表情差分の顔を描くモデルの決まり方を、上から順に1行ずつ。
+
+    `[{"key", "label", "model": 欄の中身（使わない欄は None）, "family": 系統か None, "path": チェックポイントか None,
+    "used": この行で決まるか}]`。`game` は `game_of` の戻り値。
+    顔だけ・続けて描くの2つ目は、欄が空かプリセットが見つからなければ、モデルの差し替えの前のゲームのモデルで描く
+    （本体の `method_route`）。種類ごとのプリセットが見つからなければ次の行へ進む（本体の `kind_route`）。
+    チェックポイントの無いプリセットも差し替えの前のゲームのモデルで描く（本体の `preset_route`）。
+    """
+    text = lambda key: str(values.get(key) or "").strip()
+    replaced = text("CHECKPOINT_PATH")
+    # ゲームの選んだモデル。名前はチェックポイントの名前なので、モデル名で分ける行の照合にも使う
+    original = {"model": game.get("model") or "ゲーム既定", "family": game.get("family"),
+                "path": game.get("model") or None}
+    if replaced:
+        game_row = {"model": _stem(replaced), "family": family_of(_full(replaced, game_dir)), "path": replaced}
+    else:
+        game_row = dict(original)
+
+    def preset(name, method):
+        """プリセットの欄の行。種類ごとのプリセットが見つからなければ None（次の行へ）。"""
+        entry = next((row for row in custom if row["name"] == name), None) if name else None
+        if entry is None:
+            if not method:
+                return None
+            if not name:
+                return dict(original, model="空なのでゲーム既定（{}）".format(original["model"]))
+            return dict(original, model="{}（見つからないのでゲーム既定）".format(name))
+        checkpoint = str(entry["values"].get("CHECKPOINT_PATH") or "").strip()
+        if not checkpoint:
+            return dict(original, model="{}（ゲーム既定のモデル）".format(name))
+        return {"model": name, "family": family_of(_full(checkpoint, game_dir)), "path": checkpoint}
+
+    picks = {"face": text("FACE_REDRAW_PRESET") if values.get("FACE_REDRAW") else "",
+             "chain": text("CHAIN_PORTRAIT_SECOND") if values.get("CHAIN") and values.get("CHAIN_PORTRAIT_AUTO")
+             else None,
+             "kind": text("PORTRAIT_PRESET") if values.get("KIND_PRESETS") else ""}
+    rows, decided = [], False
+    for key, label in EXPRESSION_STEPS:
+        if key == "game":
+            row = dict(game_row)
+            active = True
+        elif key == "chain":
+            active = picks["chain"] is not None       # 2つ目が空ならゲーム既定のモデルで描く
+            row = preset(picks["chain"], True) if active else {"model": None, "family": None, "path": None}
+        else:
+            active = bool(picks[key])
+            row = preset(picks[key], key == "face") if active else None
+            if active and row is None:                # 種類ごとのプリセットが見つからない: 次の行で決まる
+                active = False
+                row = {"model": "{}（見つからない）".format(picks[key]), "family": None, "path": None}
+            elif row is None:
+                row = {"model": None, "family": None, "path": None}
+        row.update(key=key, label=label, used=active and not decided)
+        decided = decided or active
+        rows.append(row)
+    return rows
+
+
 def method_model(name, custom, game_model):
     """描き直しと続けて描くのプリセットの欄が描くモデル。空か見つからないならゲーム既定（本体の `method_route`）。"""
     if name and any(row["name"] == name for row in custom):
@@ -375,10 +450,7 @@ def build(values, custom, backend, game_model, log, game_dir=""):
     `backend` はゲームの `config.json` の画像生成の欄（読めなければ空）。`log` は `read_log` の戻り値。
     """
     family = method_family(backend.get("name"))
-    built = log.get("built")
-    game = {"model": game_model,
-            "family": built[0] if built and game_model and _stem(built[1]).lower() == str(game_model).lower()
-            else None}
+    game = game_of(game_model, log)
     plans = {}
     rows = []
     last_rows = []

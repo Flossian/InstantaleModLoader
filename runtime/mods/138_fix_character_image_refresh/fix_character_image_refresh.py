@@ -59,17 +59,6 @@ def character_images(hud, name):
     return found
 
 
-def reload_image(widget):
-    """キャッシュを捨てて読み直す。`reload` の無い版では source を付け直す。"""
-    reload = getattr(widget, "reload", None)
-    if callable(reload):
-        reload()
-        return
-    source = widget.source
-    widget.source = ""
-    widget.source = source
-
-
 def refresh(app, name, write):
     """この人物の立ち絵と顔を読み直す。読み直した数を返す。"""
     hud = ui.find_hud(app) if app is not None else None
@@ -78,7 +67,7 @@ def refresh(app, name, write):
     refreshed = 0
     for widget in character_images(hud, name):
         try:
-            reload_image(widget)
+            ui.reload_image(widget)
         except Exception:
             write("could not reload {} for {}".format(type(widget).__name__, name))
             continue

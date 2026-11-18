@@ -768,6 +768,88 @@ ctx.hooks[REFRESH](lambda self, reset_page=False: None, APP)
 check("閉じた後、手が空いてから自前の一覧に戻る", (choices.opened(APP) or {}).get("name") == MOD.TALK_LIST_SCREEN
       and [e.get("text") for e in APP.buttons] == [MOD.START_LABEL, MOD.BACK_LABEL], [e.get("text") for e in APP.buttons])
 
+
+# ---------------------------------------------------------------- 表情（版13）
+print("表情（表情を見せる MOD が入っているとき）")
+from instantale_modloader import expressions  # noqa: E402
+
+
+class Owner(object):
+    def superseded(self):
+        return False
+
+
+expressions.reset()
+faces_dir = tempfile.mkdtemp(prefix="party_talk_faces_")
+folders = {}
+for cid in ("8", "15"):
+    folder = os.path.join(faces_dir, cid)
+    os.makedirs(os.path.join(folder, expressions.FOLDER))
+    io.open(os.path.join(folder, expressions.SOURCE), "wb").write(b"generated " + cid.encode())
+    io.open(os.path.join(folder, "reduced_color_image.png"), "wb").write(b"base")
+    for name in expressions.VARIANTS:
+        io.open(expressions.variant_path(folder, name), "wb").write(name.encode())
+    expressions.seal(folder, expressions.stamp(folder))
+    folders[cid] = folder
+
+MOD.SIDE_BY_SIDE = True
+ctx = fresh()
+store = getattr(sys, MOD.STORE)
+for cid, folder in folders.items():
+    APP.world.characters[cid].image_src = {"fullbody": os.path.join(folder, "reduced_color_image.png")}
+anchor_base = APP.world.characters["8"].image_src["fullbody"]
+APP.root.character_image.source = anchor_base
+store.update({"active": True, "anchor": "8"})
+answers.append({"content_violation": "false", "responses": [{"speaker": "アリス", "statement": "a"}]})
+facilitate(ctx, APP.world.characters["8"])
+check("表情を見せる MOD が無ければ、RULES に表情の説明を足さず表情も控えない",
+      MOD.EXPRESSION_GUIDE not in asked[-1] and store["expressions"] == {}, store["expressions"])
+
+expressions.want("347_conversation_expressions", Owner())
+answers.append({"content_violation": "false", "responses": [
+    {"speaker": "アリス", "statement": "a", "expression": "smile"},
+    {"speaker": "ハナ", "statement": "b", "expression": " Angry "}]})
+FakeClock.scheduled = []
+facilitate(ctx, APP.world.characters["8"])
+check("表情を見せる MOD があれば、RULES の【出力形式】の前に表情の説明を足し、例にも表情を入れる",
+      asked[-1].index(MOD.EXPRESSION_GUIDE) < asked[-1].index("【出力形式】")
+      and MOD.EXPRESSION_EXAMPLE[1] in asked[-1] and MOD.EXPRESSION_ITEM[1] in asked[-1])
+check("アンカーは返す台詞の表情、まだ喋っていない仲間はふだんの顔",
+      store["expressions"] == {"8": "smile", "15": "neutral"}, store["expressions"])
+check("仲間の表情は台詞と一緒に控える（大文字と空白は均す）",
+      [x.get("expression") for x in store["pending"]] == ["angry"], store["pending"])
+FakeClock.run_all()
+check("アンカーの相手枠はその表情の差分に替わる",
+      APP.root.character_image.source == expressions.variant_path(folders["8"], "smile"),
+      APP.root.character_image.source)
+turn(ctx, "「やあ」")
+FakeClock.run_all()
+FakeClock.run_all()
+frame = store["frames"].get("15")
+check("仲間の枠は台詞を出すときにその表情の差分に替わる",
+      frame is not None and frame.source == expressions.variant_path(folders["15"], "angry")
+      and store["expressions"]["15"] == "angry", (getattr(frame, "source", None), store["expressions"]))
+
+answers.append({"content_violation": "false", "responses": [
+    {"speaker": "アリス", "statement": "c", "expression": "happy"}]})
+facilitate(ctx, APP.world.characters["8"])
+FakeClock.run_all()
+check("一覧に無い表情はふだんの顔（ゲームの立ち絵）、喋らなかった仲間もふだんの顔に戻る",
+      APP.root.character_image.source == anchor_base and frame.source == APP.world.characters["15"].image_src["fullbody"],
+      (APP.root.character_image.source, frame.source))
+
+answers.append({"content_violation": "false", "responses": [
+    {"speaker": "アリス", "statement": "d", "expression": "sad"}]})
+io.open(os.path.join(folders["8"], expressions.SOURCE), "wb").write(b"redrawn")
+facilitate(ctx, APP.world.characters["8"])
+FakeClock.run_all()
+check("立ち絵が描き直されて印の合わない差分は使わず、ゲームの立ち絵のまま",
+      APP.root.character_image.source == anchor_base, APP.root.character_image.source)
+
+ctx.hooks[END](lambda self: None, object())
+check("会話を終えると表情の控えも捨てる", store["expressions"] == {}, store["expressions"])
+expressions.reset()
+
 print()
 if failures:
     print("FAILED: {}".format(", ".join(failures)))
