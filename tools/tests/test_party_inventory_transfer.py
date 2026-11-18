@@ -521,6 +521,44 @@ check("402 の窓でなければ書かない",
 check("例外を残さない（閉じる）", ctx.errors == [], ctx.errors)
 shutil.rmtree(out_dir, ignore_errors=True)
 
+# 外側を押して閉じる経路は close_shopping_window_process を通らない（GAME.md §2.13.1.3）。
+TURNOFF = "scripts.hud.new_hud:InstanTaleHUD.turnoff_window_visibility"
+print("\n[外側を押して閉じても1行残す]")
+_hud_module = types.ModuleType("scripts.hud.new_hud")
+
+
+class InstanTaleHUD(object):
+    def __init__(self):
+        self.visible_twin_inventory_data = {"TorF": True}
+
+
+_hud_module.InstanTaleHUD = InstanTaleHUD
+sys.modules["scripts.hud.new_hud"] = _hud_module
+ctx, app, out_dir = open_window()
+app.hud = InstanTaleHUD()
+ctx.notes[:] = []
+ctx.hooks[TURNOFF](lambda self, instance, data: None, app.hud, app.hud, {"TorF": False})
+FakeClock.run_all()
+check("別の小窓が消えただけ（受け渡しの窓は見えたまま）なら書かない",
+      not any(n.startswith("closed the window:") for n in ctx.notes), ctx.notes)
+
+
+def native_turnoff(self, instance, data):
+    data["TorF"] = False
+
+
+ctx.hooks[TURNOFF](native_turnoff, app.hud, app.hud, app.hud.visible_twin_inventory_data)
+FakeClock.run_all()
+closed = [n for n in ctx.notes if n.startswith("closed the window:")]
+check("外側を押して閉じても閉じた後の画面を1行残す", len(closed) == 1, ctx.notes)
+ctx.hooks[CLOSE](native_close, app)
+FakeClock.run_all()
+check("  → 続けて後始末が来ても二重に書かない",
+      len([n for n in ctx.notes if n.startswith("closed the window:")]) == 1, ctx.notes)
+check("例外を残さない（外側で閉じる）", ctx.errors == [], ctx.errors)
+sys.modules.pop("scripts.hud.new_hud", None)
+shutil.rmtree(out_dir, ignore_errors=True)
+
 
 # ---------------------------------------------------------------- 渡した先で鍵が重なるとき
 # 持ち物の鍵は世界全体で一意。渡した先に同じ鍵の別の品が居るときは、

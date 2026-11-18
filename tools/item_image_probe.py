@@ -462,8 +462,11 @@ class ClaudeSender(object):
     def generate(self, request, schema):
         systems = [m["content"] for m in request["messages"] if m["role"] == "system"]
         users = [m for m in request["messages"] if m["role"] == "user"]
-        # ゲームの型の指示（system の1つ目）は Claude では output_config に移る
-        system = systems[-1]
+        # ゲームの型の指示（system の1つ目）は Claude では output_config に移る。
+        # 残りは全部つなぐ（`effort_probe` と同じ）。最後の1つだけだと、3つ以上ある記録で間の指示が落ちる
+        if systems and FORMAT_HEAD in systems[0]:
+            systems = systems[1:]
+        system = "\n\n".join(systems)
         messages = [{"role": "user", "content": m["content"]} for m in users] or \
             [{"role": "user", "content": request.get("claude_user") or "＜生成＞"}]
         body = {"max_tokens": 16384, "messages": messages, "model": "claude-sonnet-5", "system": system,

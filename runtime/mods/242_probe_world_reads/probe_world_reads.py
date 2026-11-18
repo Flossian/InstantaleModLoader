@@ -498,11 +498,14 @@ def apply(ctx):
             if not isinstance(original, dict) or isinstance(original, _Rec):
                 return orig(self, *args, **kwargs)
             trace.label = label
-            holder[ATTR] = _Rec(original, (), sink)
+            recorder = _Rec(original, (), sink)
+            holder[ATTR] = recorder
             try:
                 return orig(self, *args, **kwargs)
             finally:
-                holder[ATTR] = original
+                # 窓の間にゲームが世界の辞書を差し替えたら、そちらを残す（元へ戻すのは写しが置かれたままのときだけ）
+                if holder.get(ATTR) is recorder:
+                    holder[ATTR] = original
                 trace.label = None
         return traced
 

@@ -664,22 +664,24 @@ def apply(ctx):
     @ctx.wrap("scripts.llm.llm_manager:narrator", required=False)
     def narrator(orig, *args, **kwargs):
         """`player_profile`（第3引数）にこの土地の情勢を素材として足す（`317_` と同じ形）。"""
+        # 組み直すのは引数だけ。orig は try の外で1回だけ呼ぶ（orig 自身の例外で推論を二度走らせない）。
+        call_args, call_kwargs = args, kwargs
         try:
             event = live_here(ui.find_app())
             if event is not None:
                 addition = PROFILE_NOTE.format(name=name_of(event), stage=stage_name(event),
                                                line=incidents.arrive_text(event))
                 if isinstance(kwargs.get("player_profile"), str):
-                    merged = dict(kwargs)
-                    merged["player_profile"] = kwargs["player_profile"].rstrip() + "\n\n" + addition
-                    return orig(*args, **merged)
-                if len(args) >= 3 and isinstance(args[2], str):
+                    call_kwargs = dict(kwargs)
+                    call_kwargs["player_profile"] = kwargs["player_profile"].rstrip() + "\n\n" + addition
+                elif len(args) >= 3 and isinstance(args[2], str):
                     merged = list(args)
                     merged[2] = args[2].rstrip() + "\n\n" + addition
-                    return orig(*merged, **kwargs)
+                    call_args = tuple(merged)
         except Exception:
             ctx.log_exc("town incidents: cannot add the situation to the narration")
-        return orig(*args, **kwargs)
+            call_args, call_kwargs = args, kwargs
+        return orig(*call_args, **call_kwargs)
 
     # ------------------------------------------------------------ 依頼
     def needs_quest(app, event):
@@ -942,7 +944,8 @@ def apply(ctx):
         day = ui.game_day(app)
         with worlds.lock:
             key, bucket = ledger(app)
-            if incidents.rewind(bucket, day):
+            if incidents.rewind(bucket, day, rest_days=REST_DAYS,
+                                roll_gap=ROLL_DAYS + ROLL_SPREAD_DAYS):
                 write("reconcile: forgot what happened after day {} (older save)".format(day))
             if retire_unknown(bucket, day):
                 clean_up(app, bucket)

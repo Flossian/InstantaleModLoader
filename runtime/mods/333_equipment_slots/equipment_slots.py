@@ -862,7 +862,13 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 控えとの突き合わせ
     def occupied_except(app, sc, item_key):
-        slots = current_slots(app, sc)
+        # 装備欄の辞書だけでなく持ち物の辞書の品も引く。ロード直後は装備欄の辞書が空で
+        # （world_loaded が空にする）、控えに位置のある品は持ち物の辞書に居るので、
+        # 装備欄の辞書だけで見ると埋まった部位を空きと読む。窓の間は控えと装備欄の辞書が揃っている。
+        _key, positions = positions_of(app, sc)
+        items = dict(inventory_of(sc["owner"]) or {})
+        items.update(sc["container"])
+        slots = rules.slots_from_positions(positions, items)
         return {name: held for name, held in slots.items() if held != item_key}
 
     def free_region(app, sc, item, item_key):

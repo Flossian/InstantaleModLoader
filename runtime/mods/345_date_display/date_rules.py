@@ -95,7 +95,8 @@ def format_date(template, elapsed, months, start_year):
         day_of_year=found["day_of_year"], elapsed=max(0, int(elapsed)))
     try:
         return str(template).format_map(values)
-    except (ValueError, IndexError, KeyError, AttributeError):
+    except (ValueError, IndexError, KeyError, AttributeError, TypeError):
+        # TypeError は数の値に添字を付けた書き方（`{year[0]}`）で出る。
         return DEFAULT_FORMAT.format_map(values)
 
 

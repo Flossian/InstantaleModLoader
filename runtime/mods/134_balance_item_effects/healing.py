@@ -374,11 +374,19 @@ class Silenced(object):
         return self
 
     def __exit__(self, *exc):
+        self.restore()
+        return False
+
+    def restore(self):
+        """元の値に戻す（抜けるときと、間にゲームが保存するとき）。"""
         if self.had:
             self.attributes[self.key] = self.old
         else:
             self.attributes.pop(self.key, None)
-        return False
+
+    def silence(self):
+        """もう一度 0 にする（保存の後）。"""
+        self.attributes[self.key] = 0
 
 
 class Hidden(object):

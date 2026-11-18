@@ -115,6 +115,13 @@ def scene_adjust():
     check("露見だけなら死刑は死刑のまま", (kind, years, reasons) == ("death", None, []))
     kind, years, _ = adjust("death", None, 15, effects(lawyer=True, bribe="caught"), CUTS, 20, 5)
     check("弁護人と露見なら、改めた懲役に足す（11＋5＝16年）", (kind, years) == ("imprisonment", 16))
+    kind, years, reasons = adjust("imprisonment", 5, 15, effects(lawyer=True, bribe="caught"), CUTS, 20, 5)
+    check("判事が既に軽ければ、効いていない弁護人を理由に挙げない（5＋5＝10年）",
+          (kind, years) == ("imprisonment", 10) and reasons == [trial.REASON_CAUGHT], (years, reasons))
+    check("  → 知らせる文は延びた分だけ",
+          trial.verdict_line("imprisonment", 5, kind, years, reasons, 5)
+          == "（贈賄の罪が加わり、刑は懲役5年から懲役10年に延びた）",
+          trial.verdict_line("imprisonment", 5, kind, years, reasons, 5))
     line = trial.verdict_line("imprisonment", 12, "imprisonment", 14,
                               [trial.REASON_LAWYER, trial.REASON_PLEA, trial.REASON_CAUGHT], 5)
     check("減らした分と贈賄の分を分けて知らせる",
@@ -307,6 +314,69 @@ def scene_cellmate():
           == ["young woman", "red hair", "scar"])
 
 
+def scene_cellmate_abort():
+    print("== 決行が始まらなかったとき、加勢に入った囚人を牢へ戻す（cellmate）")
+    import threading
+    handlers = {}
+    bucket = {"cellmates": {"77": {"name": "鉄拳のグレン", "area": "3", "guild": "g3",
+                                    "status": "breaking", "years": 2}}}
+    roster = ["5", "77"]
+    raw = ["77"]
+    party = {"player": object(), "77": object()}
+    moved = []
+
+    class Area:
+        adventurer_npcs = roster
+
+    class Guild:
+        pass
+
+    class App:
+        world_dict = {"areas": {"3": {"adventurer_npcs": raw}}}
+        save_data_dict = {}
+
+        def remove_party_member(self, npc_id):
+            party.pop(npc_id, None)
+
+        def move_npc_to_facility(self, npc_id, character, facility, node):
+            moved.append((npc_id, facility))
+
+    app = App()
+    character = types.SimpleNamespace(name="鉄拳のグレン")
+    guild = Guild()
+    saved = []
+    painted = []
+    env = types.SimpleNamespace(
+        ctx=types.SimpleNamespace(wrap=lambda *a, **k: (lambda fn: fn), log_exc=lambda *a: None),
+        write=lambda line: None,
+        screen=types.SimpleNamespace(paint_party=lambda a: painted.append(a), say=lambda *a: None,
+                                     when_idle=lambda *a, **k: None),
+        worlds=types.SimpleNamespace(playthrough=lambda a: "w", load=lambda key: bucket,
+                                     save=lambda key: saved.append(key), lock=threading.RLock()),
+        cfg=types.SimpleNamespace(CELLMATE_ENABLED=True), owner="336",
+        on_refresh=lambda h: None, on_offer=lambda h: None, on_labels=lambda h: None,
+        on_prison=lambda kind, h: handlers.setdefault(kind, h))
+    real = (cellmate.ui.character_of, cellmate.ui.party_member_ids, cellmate.ui.world_areas,
+            cellmate.ui.find_facility)
+    cellmate.ui.character_of = lambda a, npc_id: character if str(npc_id) == "77" else None
+    cellmate.ui.party_member_ids = lambda a: [k for k in party if k != "player"]
+    cellmate.ui.world_areas = lambda a: {"3": Area()}
+    cellmate.ui.find_facility = lambda area, fid: (guild, None)
+    try:
+        cellmate.install(env)
+        check("abort の受け口がある", "abort" in handlers)
+        handlers["abort"](app)
+    finally:
+        (cellmate.ui.character_of, cellmate.ui.party_member_ids, cellmate.ui.world_areas,
+         cellmate.ui.find_facility) = real
+    mate = bucket["cellmates"]["77"]
+    check("牢の中に戻る", mate.get("status") == "jailed", mate)
+    check("仲間から外れる", "77" not in party and painted, party)
+    check("冒険者の一覧から外れる（実行時と素データ）", "77" not in roster and "77" not in raw,
+          (roster, raw))
+    check("ギルドに置く", moved and moved[0][0] == "77" and moved[0][1] is guild, moved)
+
+
 def scene_acquittal():
     print("無罪")
     judge = "【裁判】\n'主人公'の釈明は'あの夜は宿に居た。宿の主人が証人だ'です。\n判決を下してください。"
@@ -340,6 +410,7 @@ def main():
     scene_capture()
     scene_stolen()
     scene_cellmate()
+    scene_cellmate_abort()
     print()
     if failures:
         print("FAILED: {}".format(failures))

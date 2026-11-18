@@ -14,7 +14,7 @@
 2. **宿の主が常連を覚える**。
    宿泊のたびに宿の主の好感度（`relationship["player"]["affinity"]`）が等級ぶん上がり、
    宿泊由来の累計は上限で止まる（泊まり続けて家族同然になるのは不自然）。
-   宿の主と話すときは、出ていく本文へ宿泊の履歴を1行足す。
+   宿の主と話すときは、会話の頼みに宿泊の履歴を1行足す。
    記録は `state\\inn_regular\\<世界名×主人公名>.json`（好感度と同じくセーブと同じ寿命なので周回の鍵。
    TECH.md §5.4）。
 3. **社交で会う相手を同行者から選ぶ**。
@@ -53,8 +53,10 @@
   `state\\` へ書く。ロードと新規開始（`World.__init__`）では、まだ書いていない分を捨てて読み直す。
   好感度はセーブに入り、記録は `state\\` に入るので、その場で書くと保存の前に落ちたときに
   記録だけが進み、実際には上がっていない好感度で上限を使い切る
-- 会話相手は `app.in_conversation`（`311_` と同じ読み方）。
-  1行は `llm.wrap_outgoing` で先頭の本文に足す。同じ行が既に在れば足さない
+- 1行はローダの `modnpc` の prompt の口で、宿の主との会話の頼みに足す。第一声（`conversation_starter*`）は
+  `messages` の最後、返事（`conversation_facilitator*`）は `response_prompt_instruction` の末尾。
+  相手の素性（notes）に置いた事実は第一声にも返事にも効かなかった（`301_` の比べ方。VERIFICATION.md §3.115）。
+  会話している間に出る、会話でない頼みには入らない
 - `311_` / `403_` / `300_` の控えは読みも書きもしない
 
 遊び方の説明は DOC.md、検証の経過は VERIFICATION.md §3.54。
@@ -68,7 +70,7 @@ import os
 import random
 import sys
 
-from instantale_modloader import choices, durations, frames, llm, loads, npcs, ui
+from instantale_modloader import choices, durations, frames, loads, modnpc, npcs, ui
 from instantale_modloader.state import WorldStore
 
 LOG_BASENAME = "inn_quality.log"
@@ -97,10 +99,16 @@ AFFINITY_LUXURY = 4
 # 好感度の段は 0/10/20/30/40（GAME.md §2.25.1）。20 で「嫌いではない」まで。
 AFFINITY_CAP = 20
 
-# 宿の主と話すとき、出ていく本文に足す1行。
+# 宿の主と話すとき、会話の頼みに足す1行。
 # {name} 宿の主 / {stays} 宿泊回数 / {rooms} 部屋ごとの内訳 / {ago} 最後の宿泊からの日数（読めなければ「不明」）
 REGULAR_LINE = ("【宿の客として】プレイヤーは{name}の宿にこれまで{stays}回泊まっている"
                 "（{rooms}）。最後の宿泊は{ago}日前。")
+
+# 1行を置く会話の関数（ローダの `modnpc` の prompt の口の site）。
+# 第一声は `messages` の最後、返事は `response_prompt_instruction` に足す（置き場所が効く。モジュールの説明）
+OPENING_SITES = ("conversation_starter", "conversation_starter_in_quest")
+REPLY_SITES = ("conversation_facilitator", "conversation_facilitator_after_retrieval",
+               "conversation_facilitator_in_quest")
 
 # 社交で会う相手を 同行者 → 好感度の高い NPC → ランダム の順で選ぶ（部屋を問わず）。
 # 切ると素のゲームのまま（宿の名簿から選ぶ）。
@@ -496,24 +504,42 @@ def apply(ctx):
 
     loads.on(mod_owner, ctx, (loads.WORLD,), after=world_init, write=write)
 
-    def rewrite_outgoing(texts, site):
-        if not REGULAR_MEMORY or not texts:
-            return None
-        app = ui.find_app()
-        npc = getattr(app, "in_conversation", None)
-        if not isinstance(npc, str) or not npc:
-            return None
-        bucket = worlds.load(worlds.playthrough(app))
-        record = bucket.get(npc)
-        if not isinstance(record, dict) or not record.get("stays"):
-            return None
-        line = regular_line(record, app)
-        if any(line in t for t in texts):
-            return None
-        write("prompt at {}: {}".format(site, line))
-        return [line + "\n" + texts[0]] + list(texts[1:])
+    def regular_prompt(info):
+        """宿の主との会話の頼みに1行足す（ローダの `modnpc` の prompt。会話の関数だけに入る）。
 
-    llm.wrap_outgoing(ctx, rewrite_outgoing, label="inn quality")
+        出ていく本文すべてを包む口（`llm.wrap_outgoing`）だと、宿の主と話している間に出る
+        会話でない頼み（`311_` の抽出・`301_` の依頼の生成など）にも入ってしまう。
+        置き場所は第一声なら `messages` の最後、返事なら `response_prompt_instruction`
+        （相手の素性に置いた事実は効かなかった。モジュールの説明）。引数は写しなので会話履歴には残らない。
+        """
+        if not REGULAR_MEMORY:
+            return
+        site, args = info.get("site"), info.get("args")
+        app = info.get("app") or ui.find_app()
+        npc = info.get("npc_id")
+        if app is None or not npc or not isinstance(args, dict):
+            return
+        record = worlds.load(worlds.playthrough(app)).get(str(npc))
+        if not isinstance(record, dict) or not record.get("stays"):
+            return
+        line = regular_line(record, app)
+        if site in OPENING_SITES:
+            messages = args.get("messages")
+            if (isinstance(messages, list) and messages and isinstance(messages[-1], dict)
+                    and isinstance(messages[-1].get("content"), str)):
+                if line in messages[-1]["content"]:
+                    return
+                last = dict(messages[-1], content=messages[-1]["content"] + "\n" + line)
+                args["messages"] = messages[:-1] + [last]
+                write("prompt at {}: {}".format(site, line))
+        elif site in REPLY_SITES:
+            text = args.get("response_prompt_instruction")
+            if isinstance(text, str) and line not in text:
+                args["response_prompt_instruction"] = text.rstrip() + "\n" + line
+                write("prompt at {}: {}".format(site, line))
+
+    modnpc.install(ctx, write=write)
+    modnpc.register(mod_owner, modnpc.ANY, prompt=regular_prompt, write=write)
 
     ctx.log("inn quality: actions {}/{}/{}/{} affinity cap {}".format(
         ACTIONS_KENNEL, ACTIONS_BUNK, ACTIONS_PRIVATE, ACTIONS_LUXURY, AFFINITY_CAP))

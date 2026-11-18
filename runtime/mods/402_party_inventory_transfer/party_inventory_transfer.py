@@ -768,17 +768,42 @@ def apply(ctx):
         result = orig(self, *args, **kwargs)
         if state["open"]:
             state["open"] = False
-
-            def report():
-                # 選択肢の塗り直しは閉じる処理の後に来ることがあるので、次のフレームで読む。
-                buttons = getattr(self, "buttons", None)
-                write("closed the window: in_conversation={!r} choices={}".format(
-                    getattr(self, "in_conversation", None),
-                    [spec_cls_name(entry) for entry in buttons]
-                    if isinstance(buttons, list) else None))
-
-            screen.schedule(report, 0)
+            # 選択肢の塗り直しは閉じる処理の後に来ることがあるので、次のフレームで読む。
+            screen.schedule(lambda: report_closed(self), 0)
         return result
+
+    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.turnoff_window_visibility", required=False,
+              safe=True)
+    def turnoff_window_visibility(orig, self, *args, **kwargs):
+        """外側を押して窓を消したときも、閉じた後の画面を1行残す。
+
+        外側を押して閉じる経路は `close_shopping_window_process` を通らない
+        （`_on_backdrop_touch` → `turnoff_window_visibility` → `on_backdrop_callback`。GAME.md §2.13.1.3）。
+        消した直後はまだ表示の辞書が書き換わっていないことがあるので、次のフレームで見る。
+        """
+        result = orig(self, *args, **kwargs)
+        if state["open"]:
+            app = ui.find_app()
+            if app is not None:
+                screen.schedule(lambda: closed_if_hidden(app), 0)
+        return result
+
+    def closed_if_hidden(app):
+        """受け渡しの窓が消えていれば閉じたものとして記録する。まだ見えているなら何もしない。"""
+        if not state["open"]:
+            return
+        data = getattr(ui.find_hud(app), "visible_twin_inventory_data", None)
+        if isinstance(data, dict) and data.get("TorF"):
+            return
+        state["open"] = False
+        report_closed(app)
+
+    def report_closed(app):
+        buttons = getattr(app, "buttons", None)
+        write("closed the window: in_conversation={!r} choices={}".format(
+            getattr(app, "in_conversation", None),
+            [spec_cls_name(entry) for entry in buttons]
+            if isinstance(buttons, list) else None))
 
     @ctx.wrap("__main__:ConversationStartManager.__init__", required=False)
     def conversation_start(orig, self, app, character_id, *args, **kwargs):

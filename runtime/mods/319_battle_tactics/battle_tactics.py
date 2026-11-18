@@ -1040,6 +1040,9 @@ def apply(ctx):
         if action is None:
             return None, None
         last = state["last_defense"]
+        # 防御値を聞くのは1発ごと（GAME.md §2.10.2）なので、読んだら消す。
+        # 残すと、同じ手の後の1発（防具の値で来る主人公の被弾）が偶然同じ値のとき前の持ち主に当たる
+        state["last_defense"] = None
         if last is not None and last[1] == defense:
             # 直前に防御値を聞かれた者が受け側（敵被弾の経路。GAME.md §2.10.2）。
             # 素点の照合が取れればその対象名、取れなくても持ち主は確かなので通す。
@@ -1298,7 +1301,9 @@ def apply(ctx):
                         amount = per_turn_amount(max_hp, power,
                                                  recipe.get("intensity", 3))
                         hp = frames.attr(character, "current_hp", None)
-                        if not isinstance(hp, (int, float)):
+                        # 倒れた者は動かさない。下の max(1, ...) や回復が体力0を1以上へ戻してしまう
+                        # （ローダの毒刃・再生も同じく除外する）
+                        if not isinstance(hp, (int, float)) or hp <= 0:
                             continue
                         if tick_kind == "instant_damage":
                             # 継続ダメージでは死なない。HP 1 で止める。

@@ -723,6 +723,47 @@ def scene_return():
     check("落ちていない", not ctx.errors, ctx.errors)
 
 
+def scene_return_lost():
+    print("[帰したことがセーブに届く前に落ちた]")
+    module, ctx = fresh_mod(DEPART_CHANCE_PERCENT=100, LOCAL_CHANCE_PERCENT=0, REST_DAYS=90)
+    app, fac = make_world(affinities=(30, 30, 30))
+    use(app)
+    elapse(ctx, app, 30)
+    npc_id, trip = next(iter(read_ledger().items()))
+    module.DEPART_CHANCE_PERCENT = 0
+    elapse(ctx, app, 100)
+    check("帰した（台帳から消えた）", npc_id not in read_ledger())
+
+    def away_save(days):
+        """帰す前の姿のセーブ（旅先に居て、元の一覧に居ない）。"""
+        app2, fac2 = make_world(days=days, affinities=(30, 30, 30))
+        character = app2.world.characters[npc_id]
+        character.location = fac2["1"][trip["dest_facility"]]
+        character.current_area = app2.world.areas["1"]
+        app2.world.areas["0"].adventurer_npcs.remove(npc_id)
+        return app2, fac2
+
+    # 落ちて起動し直し、帰す前の姿のセーブを読む。帰した日のままなので、読んだ後すぐ帰す。
+    module, ctx = restart(module, DEPART_CHANCE_PERCENT=0, LOCAL_CHANCE_PERCENT=0, REST_DAYS=90)
+    app2, fac2 = away_save(140)
+    use(app2)
+    ctx.hooks["__main__:InstantaleApp.load_game_new"](lambda self, name: None, app2, "w")
+    refresh(ctx, app2)
+    check("旅先に居るセーブなら旅を戻して帰し直す",
+          app2.world.characters[npc_id].location is fac2["0"][G0], app2.moved)
+    check("  → 元の一覧に戻る", npc_id in app2.world.areas["0"].adventurer_npcs)
+
+    # 帰したことがセーブに入っていれば（元の街に居れば）、何もしない。
+    module, ctx = restart(module, DEPART_CHANCE_PERCENT=0, LOCAL_CHANCE_PERCENT=0, REST_DAYS=90)
+    app3, fac3 = make_world(days=140, affinities=(30, 30, 30))
+    use(app3)
+    ctx.hooks["__main__:InstantaleApp.load_game_new"](lambda self, name: None, app3, "w")
+    refresh(ctx, app3)
+    check("帰したことがセーブに入っていれば旅を戻さない",
+          npc_id not in read_ledger() and not app3.moved, app3.moved)
+    check("落ちていない", not ctx.errors, ctx.errors)
+
+
 def read_rest():
     path = ledger_path()
     if not os.path.exists(path):
@@ -1115,6 +1156,7 @@ def main():
     scene_arrival()
     scene_in_the_way()
     scene_return()
+    scene_return_lost()
     scene_rest()
     scene_defer()
     scene_hired()

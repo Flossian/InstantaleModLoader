@@ -200,6 +200,32 @@ check("包む乱数の一覧が組めている（getattr の既定値で絞る�
       "random:randint" in MOD.RANDOM_TARGETS
       and "random:Random.choices" in MOD.RANDOM_TARGETS, MOD.RANDOM_TARGETS[:4])
 
+print("版11: generate_quest_area は next_area_id を街の id として読む")
+quest_hook = ctx.hooks["save_area_json:generate_quest_area"]
+world_quest_hook = ctx.hooks["__main__:World.generate_quest_area"]
+
+
+def orig_execute_quest_area(self, *args, **kwargs):
+    quest_hook(lambda *a, **k: None, app.world_dict, 120, "3")
+    world_quest_hook(lambda *a, **k: None, app.world, 140, "3")
+    build_hook(orig_build, app.world_dict, "3")
+
+
+before_count = len(rows)
+execute_hook(orig_execute_quest_area, manager)
+with io.open(os.path.join(ctx.out_dir, MOD.RECORD_BASENAME), encoding="utf-8") as fh:
+    rows = [json.loads(line) for line in fh if line.strip()]
+routes = {r["func"]: r for r in rows[before_count:] if r.get("phase") == "経路"}
+check("save_area_json の generate_quest_area は quest_value ではなく next_area_id",
+      (routes.get("generate_quest_area") or {}).get("after", {}).get("id") == "3",
+      routes.get("generate_quest_area"))
+check("World.generate_quest_area も同じ（self の次の quest_value を拾わない）",
+      [r["after"]["id"] for r in rows[before_count:]
+       if r.get("phase") == "経路" and r["func"].endswith("generate_quest_area")] == ["3", "3"],
+      [r.get("after") for r in rows[before_count:] if r.get("phase") == "経路"])
+check("write_area_data_to_world_dict は area_id",
+      (routes.get("write_area_data_to_world_dict") or {}).get("after", {}).get("id") == "3")
+
 if failures:
     print("\n{} failure(s)".format(len(failures)))
     sys.exit(1)

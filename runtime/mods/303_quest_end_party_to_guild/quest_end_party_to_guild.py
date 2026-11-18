@@ -274,11 +274,23 @@ def apply(ctx):
             # 死別・`302_` の会話からの別れ・その他。
             # こちらの管轄ではない。
             return orig(self, *args, **kwargs)
+        key = str(member_id)
+        before = state["pending"].get(key)
         try:
-            register(self, str(member_id), source)
+            register(self, key, source)
         except Exception:
             ctx.log_exc("quest-end guild: cannot register {!r}".format(member_id))
-        return orig(self, *args, **kwargs)
+        entry = state["pending"].get(key)
+        try:
+            return orig(self, *args, **kwargs)
+        except Exception:
+            # 外せなかった相手はまだパーティに居る。控えを残すと時間切れの置き直しが
+            # パーティの仲間をギルドへ置いて保存してしまうので、今回足した控えを下ろす。
+            if entry is not None and entry is not before and state["pending"].get(key) is entry:
+                state["pending"].pop(key, None)
+                write("{!r} ({}) was not removed (the game raised); guild placement dropped"
+                      .format(entry["name"], key))
+            raise
 
     @ctx.wrap("__main__:InstantaleApp.get_party_leave_facility", required=False)
     def get_party_leave_facility(orig, self, *args, **kwargs):

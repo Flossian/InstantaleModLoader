@@ -701,11 +701,11 @@ def apply(ctx):
 
     @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.place_crafted_item",
               safe=True, required=False)
-    def place_crafted_item(orig, self, generated_item=None, generated_item_id=None,
-                           *args, **kwargs):
+    def place_crafted_item(orig, self, *args, **kwargs):
         # 生成でグリッドの中身が変わる ＝ レイアウトが走り直す。
-        # 当て直す。
-        result = orig(self, generated_item, generated_item_id, *args, **kwargs)
+        # 当て直す。引数は受けた形のまま渡す（名前で来た引数を位置へ直したり、
+        # 渡されていない引数に None を詰めたりしない。docs/verification/3.104.md）
+        result = orig(self, *args, **kwargs)
         schedule(self)
         return result
 

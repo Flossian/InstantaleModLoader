@@ -169,6 +169,20 @@ referee(picks("通常攻撃"), "player", "log", "メイ", mei, "味方陣営", {
 referee(picks("強者への追従"), "player", "log", "メイ", mei, "味方陣営", {}, {})
 check("使った強化は次の手から duration の手番だけ外れ、その後また見える",
       ["強者への追従" in names for names in offered] == [True, False, False, True], offered)
+rewrite = ctx.hooks["scripts.llm.llm_manager_battle:referee_npc_rewrite"]
+ctx.hooks["__main__:BattleStartManager.start_battle"](lambda self: "go", object())   # 休みの数えを空にする
+offered[:] = []
+referee(picks("強者への追従"), "player", "log", "メイ", mei, "味方陣営", {}, {})
+referee(picks("通常攻撃"), "player", "log", "メイ", mei, "味方陣営", {}, {})
+rewrite(picks("通常攻撃"), "player", "log", "メイ", mei, "味方陣営", {}, {}, "cmd", "語り", [])
+referee(picks("通常攻撃"), "player", "log", "メイ", mei, "味方陣営", {}, {})
+check("書き直しの経路（referee_npc_rewrite）にも休ませている強化を見せず、手番の数も減らさない",
+      ["強者への追従" in names for names in offered] == [True, False, False, False]
+      and mei.skills.get("強者への追従") is not None, offered)
+used_up = types.SimpleNamespace(name="サキ", skills={"切り札": skill(0, 2), "通常攻撃": skill(16, 16)})
+offered[:] = []
+rewrite(picks("通常攻撃"), "player", "log", "サキ", used_up, "味方陣営", {}, {}, "cmd", "語り", [])
+check("書き直しの経路にも使い切ったスキルを見せない", offered and "切り札" not in offered[0], offered)
 check("外したことと休ませたことを記録する",
       any("used 強者への追従 (buff/debuff); resting it for 2 turn(s)" in line for line in ctx.lines)
       and any("spent=[] resting=['強者への追従']" in line for line in ctx.lines), ctx.lines)

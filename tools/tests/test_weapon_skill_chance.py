@@ -236,6 +236,14 @@ with shown:
     rows = list(hero_item.attributes)
 check("描く間だけ効果と使用回数", rows == ["item_detail", "攻撃力", "スキル", "効果", "使用回数", "売価"], rows)
 check("抜けたら戻す", list(hero_item.attributes) == ["item_detail", "攻撃力", "スキル", "売価"])
+# 内側の値段の関所（ローダの prices の説明欄の地点）が描く前に書いた額は戻さない
+price_before = hero_item.attributes["売価"]
+with mod.ShownEffect(hero_item):
+    hero_item.attributes["売価"] = price_before + 123
+check("内側が書いた売価は抜けても残す",
+      hero_item.attributes["売価"] == price_before + 123
+      and list(hero_item.attributes) == ["item_detail", "攻撃力", "スキル", "売価"], hero_item.attributes)
+hero_item.attributes["売価"] = price_before
 check("効果の文（自前の言い方）", "敵単体に中威力のダメージを与える。" in mod.effect_text(hero_item.skill))
 
 print("仲間")

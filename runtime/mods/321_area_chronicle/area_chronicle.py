@@ -463,7 +463,13 @@ def apply(ctx):
             return
 
         record = ui.area_record(getattr(app, "player", None), area_id)
-        fresh = achievements_of(record)[done:]
+        deeds = achievements_of(record)
+        # 控えの `done` は頼み文に渡した功績と同じ読みから数える。待ちの時点の数のままだと、
+        # その後にゲームが書き足した1件を頼み文に入れたのに未処理と数え、次の照合でもう一度織り込む
+        total = len(deeds)
+        if total <= done:
+            return
+        fresh = deeds[done:]
         keep = max(1, int(RECENT_DEEDS))
         if len(fresh) > keep:
             write("編纂: 新しい功績 {}件のうち直近{}件だけを渡す（{} / {}）".format(

@@ -253,9 +253,16 @@ def owners_ready() -> list[str]:
     ready = []
     for target in sorted(_pending_owners):
         try:
-            if _still_loading(split_target(target)[0]):
+            mod_name = split_target(target)[0]
+            if _still_loading(mod_name):
                 continue
-            resolve(target)
+            owner, name, _value = resolve(target)
+            # `__main__:X` の形（持ち主がモジュール自身）で葉がまだ無いときは、組み上がるまで待つ。
+            # `__main__` は `__spec__._initializing` を持たないので上では分からず、葉が無くても resolve が通る
+            # （クラスが持ち主なら、クラスが生えた時点で ready にしてよい）
+            if (mod_name == "__main__" and owner is sys.modules.get("__main__")
+                    and not hasattr(owner, name) and not _main_is_built()):
+                continue
         except Exception:
             continue
         ready.append(target)

@@ -332,6 +332,10 @@ def apply(ctx):
         _key, bucket = bucket_of(app)
         return travel.seen_of(bucket)
 
+    def returned_table(app):
+        _key, bucket = bucket_of(app)
+        return travel.returned_of(bucket)
+
     def start_rest(app, npc_id, name, day):
         """帰ってきた（解散した）日を控える。日が読めないときは休み無し。"""
         if day is None or REST_DAYS <= 0:
@@ -553,6 +557,11 @@ def apply(ctx):
             facility_drop(dest, npc_id)
         restore_rosters(app, npc_id, trip)
         trips.pop(npc_id, None)
+        # 出発は「セーブの日付 < 出発の日」で巻き戻せるが、帰したことは台帳から行が消えるので手掛かりが残らない。
+        # 次の save_game より前に落ちると、セーブでは旅先に居るのに旅の行が無く、誰も帰さない。
+        # 旅の写しを残し、次のロードで帰したことがセーブに届いていなければ旅を戻す（`reconcile`）。
+        returned_table(app)[str(npc_id)] = {"name": trip.get("name"), "home_day": ui.game_day(app),
+                                            "trip": dict(trip)}
         start_rest(app, npc_id, trip.get("name"), ui.game_day(app))
         write("return: {} ({}) -> {}/{} ({})".format(
             trip.get("name"), npc_id, trip["origin_area"], facility_id, reason))
@@ -752,13 +761,43 @@ def apply(ctx):
             send_off(app, day, 0, travel.LOCAL)
 
     # ------------------------------------------------------------ ロードの突き合わせ
+    def revive_returns(app, trips, day):
+        """帰したことがセーブに届いていない旅を台帳へ戻す。戻したら True。
+
+        届いていないとみなすのは、セーブの日付が帰した日より前か、その人がまだ旅先に居るとき
+        （施設での移動は日数が進まないので日付だけでは見分けられない）。
+        どちらでもなければ帰したことはセーブに入っているので、写しを捨てるだけ。
+        """
+        returned = returned_table(app)
+        if not returned:
+            return False
+        rest = rest_table(app)
+        for npc_id in sorted(returned, key=ui.id_sort_key):
+            row = returned.pop(npc_id)
+            trip = row.get("trip") if isinstance(row, dict) else None
+            if not isinstance(trip, dict) or npc_id in trips:
+                continue
+            character = ui.character_of(app, npc_id)
+            if character is None:
+                continue
+            home_day = row.get("home_day")
+            before_return = (day is not None and isinstance(home_day, int) and day < home_day)
+            still_away = (facility_of_character(character) == trip.get("dest_facility")
+                          and id_of(getattr(character, "current_area", None)) == trip.get("dest_area"))
+            if before_return or still_away:
+                trips[npc_id] = trip
+                rest.pop(npc_id, None)
+                write("reconcile: the return of {} ({}) did not reach the save; the trip is back"
+                      .format(trip.get("name"), npc_id))
+        return True
+
     def reconcile(app):
         key, trips = ledger(app)
-        if not trips and not hired_table(app) and not rest_table(app):
+        if not trips and not hired_table(app) and not rest_table(app) and not returned_table(app):
             return
         day = ui.game_day(app)
+        changed = revive_returns(app, trips, day)
         write("reconcile: playthrough {!r} day {} trips {}".format(key, day, len(trips)))
-        changed = False
         for npc_id in sorted(trips, key=ui.id_sort_key):
             trip = trips[npc_id]
             if not isinstance(trip, dict):

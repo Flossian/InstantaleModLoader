@@ -869,6 +869,10 @@ def _character_at(app, npc_id, world=None):
     characters = _roster(app, world)
     listed = characters.get(str(npc_id)) if isinstance(characters, dict) else None
     if isinstance(record, dict) and is_mod_npc(npc_id) and listed is not None:
+        if record.get("rebuild"):
+            # 注入し直して組み直しを待っている（`register`）。名簿の実体は前の世代の `build` で組んだもの。
+            # 記録に戻すと次の `spawn` が組み直さずに使い続けるので、読ませるだけにする
+            return listed
         if record.get("character") is not listed:
             record["character"] = listed
             record["built_in"] = getattr(patch, "_generation", None)
@@ -1135,6 +1139,12 @@ def _persist(app, owner, npc_id, **changes):
     key, bucket = _bucket(app)
     if key is None:
         return False
+    _put_entry(bucket, owner, npc_id, changes)
+    return store().save(key, bucket)
+
+
+def _put_entry(bucket, owner, npc_id, changes):
+    """控え `bucket` の1人ぶんを書き換える（書き出さない）。"""
     entry = bucket.setdefault(owner, {}).setdefault(
         str(npc_id), {"snapshot": None, "spawned": False, "place": None})
     if "snapshot" in changes:
@@ -1143,7 +1153,6 @@ def _persist(app, owner, npc_id, **changes):
         entry["spawned"] = bool(changes["spawned"])
     if "place" in changes:
         entry["place"] = list(changes["place"]) if changes["place"] else None
-    return store().save(key, bucket)
 
 
 def _drop_persisted(app, owner, npc_id):
@@ -1226,7 +1235,11 @@ def snapshot_all(app, write=None):
     正規 NPC はゲームがセーブに書く。MOD の NPC はそこに出さないので、
     同じ時点で同じ中身をこちらが控える（会話の記憶・HP・詳細生成の結果・`is_dead`）。
     """
-    done = []
+    # 写しを全員ぶん控えに入れてから1回だけ書き出す（1人ごとに書くと控えのファイル全体を人数ぶん書き直す）。
+    key, bucket = _bucket(app)
+    if key is None:
+        return []
+    taken = []
     for npc_id, record in list(registry().items()):
         if not is_mod_npc(npc_id):
             continue
@@ -1235,9 +1248,12 @@ def snapshot_all(app, write=None):
             continue
         if not (record.get("placed") or npc_id in (_roster(app) or {})):
             continue
-        snap = snapshot_of(character)
-        if _persist(app, owner_of_id(npc_id), npc_id, snapshot=snap):
-            done.append(npc_id)
+        owner = owner_of_id(npc_id)
+        if not owner:
+            continue
+        _put_entry(bucket, owner, npc_id, {"snapshot": snapshot_of(character)})
+        taken.append(npc_id)
+    done = taken if taken and store().save(key, bucket) else []
     # 控えは保存のたびに取るが、行は写した顔ぶれが変わったときだけ書く（`modfacility` と同じ）。
     if write and done and _changed("snapshot", tuple(done)):
         write("modnpc: snapshot of {} taken".format(", ".join(done)))
@@ -1420,11 +1436,13 @@ class Npc(object):
     def despawn(self, write=None):
         return despawn(self.app, self.npc_id, world=self.world, write=write)
 
-    def place(self, area_id, facility_id, owner=False, write=None):
-        return place(self.app, self.npc_id, area_id, facility_id, owner=owner, write=write)
+    def place(self, area_id, facility_id, owner=False, write=None, listed=True):
+        # 取っ手の世界も渡す（`spawn` / `despawn` と同じ。`World.__init__` の中では app.world がまだ前の世界）
+        return place(self.app, self.npc_id, area_id, facility_id, owner=owner, listed=listed,
+                     world=self.world, write=write)
 
     def unplace(self, write=None):
-        return unplace(self.app, self.npc_id, write=write)
+        return unplace(self.app, self.npc_id, world=self.world, write=write)
 
     def snapshot(self):
         """いまの実体の写し（`snapshot_of`）。控えには書かない。"""

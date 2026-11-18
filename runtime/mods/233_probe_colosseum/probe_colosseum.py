@@ -54,7 +54,7 @@ r"""計測: 闘技場の試合（相手の強さと報酬）。ゲームは変�
 窓の間の文言・日数・所持金の動きを窓に積み、閉じるときに1行にまとめる。
 
 所持金は**変わった地点で**録る（`add_text` / `elapse_days` / 各段の出入りで見張り、
-前回と違えば呼び出し元つきで1行）。窓が閉じた後も `WATCH_SECONDS` 秒は見張る。
+前回と違えば呼び出し元つきで1行）。窓が閉じた後も `WATCH_SECONDS` 秒は、闘技場に立っている間だけ見張る。
 `end_phase` の戻りだけを見ると、Clock の lambda で増えるビルドでは 0 に見える。
 
 報酬の文（`報酬として...Gを貰った。`）は窓の文言の上限とは別枠に採る。
@@ -88,6 +88,12 @@ r"""計測: 闘技場の試合（相手の強さと報酬）。ゲームは変�
   * `GameOverManager.__init__` の包みだけ闘技場の判定が無く、依頼や衛兵の戦闘で負けたときも
     呼び出し元と主人公の写しを組んで1行書いていた。版4の続きの方針に揃え、
     窓が開いているか `in_colosseum_battle` が立っているとき（`in_arena`）だけ録る
+
+## 版6（見直し）
+
+  * 窓が閉じた後の見張り（`WATCH_SECONDS`）の間は、まだ闘技場に立っているときだけ
+    報酬の文・敵の数値・所持金の動きを録る（`ours`）。版5までは見張りの間なら場所を見ず、
+    闘技場を出て受けた依頼の報酬と戦闘も録っていた
 """
 
 import datetime
@@ -249,6 +255,22 @@ def apply(ctx):
     def watching():
         return state["match"] is not None or time.monotonic() < state["watch_until"]
 
+    def ours(app):
+        """窓の中か、窓が閉じた後の見張りの間でまだ闘技場に立っているか（版6）。
+
+        見張りの秒数は Clock で遅れて来る所持金と報酬の文を捕まえるためのもの。
+        その間に闘技場を出て受けた依頼の報酬・戦闘は闘技場の物ではないので録らない。
+        `watching()` だけを見ていた版5まではそれも録っていた。
+        """
+        if state["match"] is not None:
+            return True
+        if time.monotonic() >= state["watch_until"]:
+            return False
+        try:
+            return arena_here(app) is not None
+        except Exception:
+            return False
+
     def in_arena(app):
         """闘技場の試合の中か（窓が開いているか、闘技場の戦闘の旗が立っている）。
 
@@ -264,6 +286,9 @@ def apply(ctx):
         before = state["gold"]
         state["gold"] = gold
         if not isinstance(gold, int) or not isinstance(before, int) or gold == before:
+            return
+        # 闘技場の外での動き（依頼の報酬など）は録らない。動いたときだけ見る（版6）。
+        if not ours(app):
             return
         row = {"at": now(), "phase": "gold_move", "where": where,
                "before": before, "after": gold, "moved": gold - before,
@@ -493,7 +518,7 @@ def apply(ctx):
             # 版4の続きで、受け取ったまま渡す形にした。
             result = orig(*args, **kwargs)
             try:
-                if state["match"] is not None or watching():
+                if watching() and ours(ui.find_app()):
                     tier = args[0] if args else kwargs.get("enemy_tier")
                     difficulty = (args[1] if len(args) > 1
                                   else kwargs.get("quest_difficulty"))
@@ -861,7 +886,9 @@ def apply(ctx):
             context = args[0] if args else kwargs.get("context")
             if isinstance(context, str) and context.strip():
                 # 版4の続き: 報酬の文は窓の中と見張りの間だけ（依頼の報酬の文は録らない）。
-                reward = watching() and any(mark in context for mark in REWARD_MARKS)
+                # 版6: 見張りの間は闘技場に立っているときだけ（`ours`）。目印を先に見る。
+                reward = (watching() and any(mark in context for mark in REWARD_MARKS)
+                          and ours(self))
                 match = state["match"]
                 if reward:
                     amount = ui.parse_coin(context)

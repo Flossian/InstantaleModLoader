@@ -161,32 +161,43 @@ def apply(ctx):
         """写しの中に入れた写し（relationship の player）は元に置き換えて書き戻す。"""
         return window["copies"].get(id(value), value)
 
-    def copy_back(original, copied, taken):
-        """写しの中身を元のオブジェクトへ移す。
+    def copy_back(original, copied, base):
+        """写しの中身を元のオブジェクトへ移す。`base` は写した時点の元の中身。
 
-        写した後に元へ直接入った書き込み（写す前から元を握っていた側の分）は残し、
-        写しから消えた鍵だけ元からも消す。写しの読みの印は通らない（`dict.items` を直に呼ぶ）。
+        写した時点から**写しの側で変わった分だけ**を元へ移す（3方向のマージ）。
+        写しで変わっていない鍵は、元へ直接入った書き込みや削除（写す前から元を握っていた側の分）を残す。
+        写しから消えた鍵は、元の側でも写した時点のままのときだけ消す。
+        配列は写しの側が変わったときだけ写しの並びにする。
+        写しの読みの印は通らない（`dict.items` / `list.__getitem__` を直に呼ぶ）。
         """
         if isinstance(original, dict):
-            items = [(key, original_of(value)) for key, value in dict.items(copied)]
-            kept = set(key for key, _ in items)
-            for key in taken:
-                if key not in kept:
+            seen = set()
+            for key, value in list(dict.items(copied)):
+                value = original_of(value)
+                seen.add(key)
+                if key in base and value is base[key]:
+                    continue
+                original[key] = value
+            for key, value in base.items():
+                if key not in seen and key in original and original[key] is value:
                     original.pop(key, None)
-            original.update(items)
         else:
-            original[:] = [original_of(value) for value in list.__getitem__(copied, slice(None))]
+            now = [original_of(value) for value in list.__getitem__(copied, slice(None))]
+            if len(now) != len(base) or any(a is not b for a, b in zip(now, base)):
+                original[:] = now
 
     def track(original, copied, get=None, put=None):
         """写しを戻しに積む。`get` / `put` があれば、まだ写しが置かれているときだけ元を置き直す
         （窓の間に本体が別のオブジェクトを置いたなら、そちらを残す）。"""
-        taken = set(dict.keys(original)) if isinstance(original, dict) else None
+        # 写した時点の中身は読みの印を通さずに取る
+        base = (dict(dict.items(original)) if isinstance(original, dict)
+                else list.__getitem__(original, slice(None)))
         window["copies"][id(copied)] = original
 
         def undo():
             if get is not None and get() is copied:
                 put(original)
-            copy_back(original, copied, taken)
+            copy_back(original, copied, base)
         window["undo"].append(undo)
 
     def disarm():

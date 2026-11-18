@@ -155,6 +155,18 @@ check("書き込みは前の読み口を通る", field.inner.writes[-1] == 50)
 check("raw は場面の中でも素の値", inside(lambda: abilities.raw(player, "attack_power")) == 50)
 player.attack_power = 30
 
+
+def injure_inside():
+    # 負傷の `update_ability_scores` がその場で書き換える形（original から計算し直して書く）
+    player.ability_scores["strength"] = 8
+    return player.ability_scores["strength"]
+
+
+check("場面の中で能力値をその場で書き換えても素の値へ入る（写しに入って消えない）",
+      inside(injure_inside) == 11 and player.__dict__["ability_scores"]["strength"] == 8)
+check("  → 補正は素の値に焼き付かない", player.ability_scores["strength"] == 8)
+player.ability_scores["strength"] = 10
+
 abilities.declare("reader", lambda a, h: {"dexterity": h.ability_scores["dexterity"] - 9}
                   if h is player else None)
 check("答える関数が同じ人物を読んでも回らない", inside(lambda: player.ability_scores["dexterity"]) == 11)
@@ -231,6 +243,10 @@ check("補正のある行だけ書き足す", abilities.sheet_text(text, {"stren
 once = abilities.sheet_text(text, {"strength": 4})
 check("開き直しても重ならない", abilities.sheet_text(once, {"strength": 5}).startswith("筋力: 30(+5)\n"))
 check("補正が無くなれば消す", abilities.sheet_text(once, {}) == text)
+half = abilities.sheet_text(text, {"strength": 2.5})
+check("小数の補正も開き直しで重ならない",
+      abilities.sheet_text(half, {"strength": 2.5}).startswith("筋力: 30(+2.5)\n")
+      and abilities.sheet_text(half, {}) == text)
 check("英語の行も引ける", abilities.sheet_text("Strength: 12\nCharisma: 9", {"charisma": 1.5})
       == "Strength: 12\nCharisma: 9(+1.5)")
 check("文字でなければそのまま", abilities.sheet_text(None, {"strength": 1}) is None)

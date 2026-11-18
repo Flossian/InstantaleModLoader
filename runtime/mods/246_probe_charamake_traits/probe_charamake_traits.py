@@ -134,18 +134,20 @@ def apply(ctx):
 
     def story_step(name):
         def hook(orig, self, *args, **kwargs):
-            before = None
+            # after の行を書くかは before の値ではなく「before の行を書いたか」で決める。
+            # character_vm がまだ無い回は before が None になり、枠だけ使って after が抜けるため。
+            recorded = False
             try:
                 if room():
-                    before = vm_traits(self)
                     write("{} args={} before={}".format(
                         name, [frames.repr_value(arg) for arg in args],
-                        before))
+                        vm_traits(self)))
+                    recorded = True
             except Exception:
                 ctx.log_exc("charamake traits: cannot record {}".format(name))
             result = orig(self, *args, **kwargs)
             try:
-                if before is not None:
+                if recorded:
                     write("{} after={} result={}".format(name, vm_traits(self), frames.repr_value(result)))
             except Exception:
                 ctx.log_exc("charamake traits: cannot record after {}".format(name))

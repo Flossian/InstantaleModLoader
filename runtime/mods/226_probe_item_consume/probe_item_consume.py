@@ -61,6 +61,8 @@ HP を `回復` ぶん戻す、と**読める**。
 - 版3 の時点で `134_` がこの probe より内側で本体の文を差し替えているので、
   `texts` に写るのは差し替える前の本体の文（VERIFICATION.md §3.51）
 - 版4: 自前の `arg_of` をやめ、ローダの `frames.arg` で引数を引く（読む値は同じ）
+- 版5: 文の控えを捨てるのは、いちばん外の呼び出しを抜けたときだけにした。
+  `execute` の中で `consume_item` が呼ばれると、内側が控えを捨てて外側の行の texts が空になっていた
 """
 
 import datetime
@@ -266,8 +268,11 @@ def apply(ctx):
         finally:
             seen["stack"].pop()
             # 版3: 控えは呼び出しを抜けるたびに捨てる（記録しない回や本体が投げた回も）。
+            # 版5: 捨てるのはいちばん外が抜けたときだけ。`execute` の中の `consume_item` が捨てると、
+            # 同じ文を持つはずの外側の行の texts が空になっていた。
             texts = seen["texts"][texts_from:]
-            del seen["texts"][texts_from:]
+            if not seen["stack"]:
+                del seen["texts"][texts_from:]
         try:
             if take_slot():
                 after_player = snapshot(player)

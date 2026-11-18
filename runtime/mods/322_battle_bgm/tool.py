@@ -199,7 +199,13 @@ class Model(object):
         return {"_help": list(PLAYLIST_HELP), "tracks": dict(sorted(merged.items()))}
 
     def save(self):
-        """playlist.json と mod_settings.json の両方。どちらかが書けなければ False。"""
+        """playlist.json と mod_settings.json の両方。どちらかが書けなければ False。
+
+        playlist.json が在るのに読めなければ書かない（開いたときに空として読んだ一覧で、
+        ファイルに在った重みを 0 に上書きしないため。`modtool.json_unreadable`）。
+        """
+        if modtool.json_unreadable(self.playlist_path):
+            return False
         data = self.to_json()
         if not modtool.write_json(self.root, self.playlist_path, data):
             return False
@@ -564,7 +570,9 @@ def build_window(model):
                 time.strftime("%H:%M:%S"), model.playlist_path))
         else:
             messagebox.showerror("保存に失敗しました",
-                                 "{} に書けませんでした。".format(model.playlist_path), parent=root)
+                                 "{} に書けませんでした。\n"
+                                 "ファイルが読めない間は上書きしません。".format(model.playlist_path),
+                                 parent=root)
 
     def close():
         modtool.close_window(root, model.root, MOD_DIR, model.dirty, model.save)

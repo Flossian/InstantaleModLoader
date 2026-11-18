@@ -136,6 +136,7 @@ def apply(ctx):
             "segments": [],         # 本文ごとの (本文, 追加時刻, セッション番号)
             "session": 0,           # 本文が何回追加されたか
             "stream_cache": None,   # 逐次表示で使い回す、打っている本文より前の色
+            "stream_now": None,     # 逐次表示の本文が始まった時刻（古さを数える時刻）
         }
 
     def state_for(app):
@@ -149,6 +150,7 @@ def apply(ctx):
         # 古い版が置いた控えには新しい鍵が無い。
         state.setdefault("session", 0)
         state.setdefault("stream_cache", None)
+        state.setdefault("stream_now", None)
         return state
 
     def note_segment(state, context):
@@ -158,11 +160,14 @@ def apply(ctx):
         if len(state["segments"]) > MAX_SEGMENTS:
             del state["segments"][:-MAX_SEGMENTS]
 
-    def is_old(state, added_at, session):
-        """この本文をもう灰色にしてよいか。数え方は `FRESH_MODE` が決める。"""
+    def is_old(state, added_at, session, now=None):
+        """この本文をもう灰色にしてよいか。数え方は `FRESH_MODE` が決める。
+
+        `now` を渡すとその時刻で数える（逐次表示は本文が始まった時刻で数え、打ち出しの途中で色を変えない）。
+        """
         if FRESH_MODE == "sessions":
             return state["session"] - session >= FRESH_SESSIONS
-        return monotonic_time() - added_at >= FRESH_SECONDS
+        return (monotonic_time() if now is None else now) - added_at >= FRESH_SECONDS
 
     # -- 覆いと寸法 ----------------------------------------------------------
     def hide_overlay(state):
@@ -352,8 +357,8 @@ def apply(ctx):
             positions.append(index)
         return "".join(chars), positions
 
-    def build_markup(state, shown):
-        """`shown` を色付きの markup に組み直す。
+    def build_markup(state, shown, now=None):
+        """`shown` を色付きの markup に組み直す。`now` は古さを数える時刻（`is_old`）。
 
         戻り値は次の4つ。
         `tail` は「控えのどれにも当たらない末尾」＝いま打っている最中の本文で、
@@ -406,7 +411,7 @@ def apply(ctx):
                 if gap.strip():
                     has_old = True
             escaped = escape_markup(shown[start:end])
-            if is_old(state, added_at, session):
+            if is_old(state, added_at, session, now):
                 parts.append("[color={}]{}[/color]".format(
                     OLD_TEXT_COLOR, escaped))
                 has_old = True
@@ -464,20 +469,27 @@ def apply(ctx):
         from kivy.utils import escape_markup
         cache = state.get("stream_cache")
         if not (isinstance(cache, dict) and cache["label"] is label
-                and shown.startswith(cache["prefix"])):
-            built = build_markup(state, shown)
-            if built is None or not built["has_old"]:
-                # 灰色にするものが無い＝生の本文をそのまま出してよい。
-                # markup を落としておかないと、本文中の `[` を書式として食われる。
-                drop_markup(state, label)
-                state["stream_cache"] = None
-                return
+                and shown.startswith(cache["prefix"])
+                and not (cache["pending"] and cache["pending"]
+                         in "".join(shown[len(cache["prefix"]):].split()))):
+            # 古さは本文が始まった時刻で数える（`stream_now`）。組み直しても打ち出しの途中で前の本文の色は変わらない。
+            built = build_markup(state, shown, state.get("stream_now"))
+            tail = 0 if built is None else built["tail"]
+            newest = segment_parts(state["segments"][-1])[0] if state["segments"] else ""
+            # 灰色にするものが無かった回も控える（`head` が None）。控えないと1文字ごとに組み直す。
+            # 打っている本文（`pending`）が打ち終わって控えと照らせるようになったら、1度だけ組み直す。
             cache = {
                 "label": label,
-                "prefix": shown[:built["tail"]],
-                "head": built["head"],
+                "prefix": shown[:tail],
+                "head": built["head"] if built is not None and built["has_old"] else None,
+                "pending": "".join(newest.split()) if tail < len(shown) else "",
             }
             state["stream_cache"] = cache
+        if cache["head"] is None:
+            # 灰色にするものが無い＝生の本文をそのまま出してよい。
+            # markup を落としておかないと、本文中の `[` を書式として食われる。
+            drop_markup(state, label)
+            return
         label.markup = True
         tagged = cache["head"] + escape_markup(shown[len(cache["prefix"]):])
         label.text = tagged
@@ -655,7 +667,13 @@ def apply(ctx):
         captured = snapshot(app, state)
         if isinstance(captured, dict):
             drop_markup(state, captured["label"])
-        immediate(context)
+        try:
+            immediate(context)
+        except Exception:
+            # 覆い（snapshot が掛けた黒い板）を外してから投げ直す。外さないと、ゲームの素の
+            # 呼び直しが通っても本文の欄が次の本文まで真っ黒のまま残る
+            hide_overlay(state)
+            raise
         note_segment(state, context)
 
         # 後始末はゲームにやらせる。
@@ -667,7 +685,11 @@ def apply(ctx):
         # 実機で踏んだ。
         _owner, before = canonical_text(app, None)
         started = store.get("starts", 0)
-        result = orig(app, dt, context, len(context))
+        try:
+            result = orig(app, dt, context, len(context))
+        except Exception:
+            hide_overlay(state)
+            raise
         if store.get("starts", 0) != started:
             # 終端がその場で次の本文を始めた。見せるのは次の本文の reveal に任せる
             # （ここで見ると次の本文を「末尾が重複した」と読み、reveal も2本走る）
@@ -686,7 +708,7 @@ def apply(ctx):
         return result
 
     # -- 逐次表示とクリックでの打ち切り --------------------------------------
-    def begin_stream(orig, app, dt, context, index, state):
+    def begin_stream(orig, app, dt, context, index, state, guard=False):
         """ゲーム本来の打ち出しに任せる。色付けだけこちらで面倒を見る。"""
         state["generation"] += 1        # 走っている一括表示の続きを止める
         hide_overlay(state)
@@ -699,12 +721,17 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("batch message render: could not prepare the label")
         note_segment(state, context)
+        state["stream_now"] = monotonic_time()     # この本文の打ち出しの間、古さはこの時刻で数える
         store["stream"] = {
             "app": app,
             "state": state,
             "context": context,
             "skip": False,
             "owner": None,      # 塗り直しの相手（塗り直し自身が教える）
+            # 同じ文の前の本文を打ち切った直後に始まった本文（`guard`）は、鎖が次に受けるはずの位置
+            # （`next`）と違う呼び出しを前の本文の残りとして捨てる（`continue_stream`）
+            "guard": guard,
+            "next": 0,
         }
         try:
             return orig(app, dt, context, index)
@@ -947,6 +974,12 @@ def apply(ctx):
             # 注入し直した時にだけ飛んでくる（こちらが始めていない鎖）。
             # ゲームに返して終わらせる。
             return orig(app, dt, context, index)
+        if type(index) is int:
+            if stream.get("guard") and index != stream.get("next"):
+                # 同じ文の前の本文を打ち切ったとき自分で回した鎖の残り（印は新しい本文が始まった時点で外した）。
+                # ゲームへ渡すと、新しい本文の鎖として文字を二重に書き、終端を二度踏む
+                return None
+            stream["next"] = index + 1
         if type(index) is int and index >= len(context):
             store["stream"] = None      # 打ち終わり
             return orig(app, dt, context, index)
@@ -1020,11 +1053,14 @@ def apply(ctx):
         # 落とすのはこの本文の印だけ。
         # 打ち切った本文の残りは、次の本文が始まった後に飛んでくる（終端がその場で次を始めるため）ので、
         # ここで全部落とすとその残りがゲームへ渡ってしまう。
+        # 同じ文の前の本文を打ち切った印が残っていれば、印を外す代わりに新しい鎖に見張りを立てる
+        # （残りの呼び出しは本文の文字列が同じなので、印のままだと新しい本文の鎖まで捨ててしまう）。
+        guard = is_dropped(self, context)
         forget_dropped(self, context)
         if BATCH_MODE == "always" and callable(
                 frames.attr(self, "add_text_immediately")):
             return show_at_once(orig, self, dt, context, state)
-        return begin_stream(orig, self, dt, context, index, state)
+        return begin_stream(orig, self, dt, context, index, state, guard=guard)
 
     @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_display_text",
               required=False, safe=True)

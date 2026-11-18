@@ -27,6 +27,7 @@ import threading
 import weakref
 
 from . import durations
+from . import frames as _frames
 from . import items as _items
 from . import loads
 from . import log_exc
@@ -1221,7 +1222,9 @@ def install(ctx, write=None):
 
     for target, why in TRADE_TARGETS:
         def traded(orig, self, *args, _why=why, **kwargs):
-            item = args[0] if args else next(iter(kwargs.values()), None)
+            # 品は名前で引く（署名は `buy_item(self, item_instance)`。out/recon/targets.txt）。
+            # キーワードの並びで品でない引数を拾わない
+            item = _frames.arg(args, kwargs, "item_instance", 0)
             result = orig(self, *args, **kwargs)
             _apply_one(item, _why, from_game=True)
             return result

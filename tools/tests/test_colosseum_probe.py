@@ -464,6 +464,27 @@ ctx.hooks["__main__:BattlePhaseManager.check_team_annihilation"](
     lambda self: False, Manager(app))
 check("閉じた後の戦闘の手は録らない", len(records()) == before, records()[before:])
 
+print("見張りの間でも闘技場の外の報酬と戦闘は録らない（版6）")
+app.player.location = arena
+app.in_colosseum_battle = 0
+app.player.gold = 500
+ctx.hooks["__main__:ColosseumMatchStart.execute"](
+    match_start_execute, Manager(app), "申し込む")
+ctx.hooks["__main__:BattleEndInColosseum.end_phase"](lambda self: "ended", Manager(app))
+before = len(records())
+app.add_text("受付: おめでとう！報酬として300Gを貰った。")
+check("閉じた直後の闘技場の報酬の文は録る",
+      [r["phase"] for r in records()[before:]] == ["reward_text"], records()[before:])
+app.player.location = Facility("ギルド", "guild", {})
+before = len(records())
+app.add_text("依頼の報酬として800Gを貰った。")
+app.player.gold += 800
+app.add_text("次の依頼を探そう。")
+ctx.hooks["scripts.functions:get_enemy_exp_lvl"](lambda tier, difficulty: 12, "normal", 30)
+check("闘技場を出た後の依頼の報酬の文・所持金・敵の数値は書かない",
+      len(records()) == before, records()[before:])
+app.player.location = arena
+
 print("窓の外・値が読めないとき")
 app.player.location = None
 ctx.hooks["__main__:MovePhaseManager.move_phase"](lambda self: "moved", Manager(app))

@@ -451,6 +451,7 @@ def main():
     check("例外は出ていない（一覧の窓）", ctx.errors == [], ctx.errors)
 
     # 版4: 窓が入れ子になっても、外側の読みの数を内側が壊さない。
+    # 版7: 外側の数は内側の窓の間の読みも含む（内側が写しをさらに差し替えると外側に届かなかった）。
     def nested_choice(self, *a, **kw):
         len(app.player.location.characters)
         len(app.player.location.characters)
@@ -461,10 +462,12 @@ def main():
     talk_choice(nested_choice, types.SimpleNamespace(app=app))
     outer = at(records(), "talk_choice")[-1:]
     inner = at(records(), "talk_reads")[-1:]
-    check("入れ子: 外側の読みは外側の数だけ",
-          outer and outer[0]["roster_reads"] == 2, outer)
+    check("入れ子: 外側の読みは内側の窓の読みも含む（2 + 1）",
+          outer and outer[0]["roster_reads"] == 3, outer)
     check("入れ子: 内側の読みは内側の数だけ",
           inner and inner[0]["facility_reads"] == 1, inner)
+    check("入れ子: 窓を抜けると施設の名簿は元のオブジェクトに戻る",
+          app.facility.characters is facility and type(facility) is list)
 
     # 版4: 保存ごとの行は注入1回あたり SAVE_LINES 回ぶんまで。
     save_hooks = ctx.hooks[modnpc.SAVE_TARGET]

@@ -23,7 +23,7 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
 """
 import sys
 
-from . import alive
+from . import window_call, window_entries, window_put
 
 STORE_ATTR = "_instantale_quest_clients"
 
@@ -40,7 +40,7 @@ def _store():
 
 def declare(owner, ctx, fn):
     """`owner` が依頼人を知っている依頼の行を返す関数を登録する。同じ持ち主の登録は差し替える。"""
-    _store()["clients"][str(owner)] = (ctx, fn)
+    window_put(_store()["clients"], owner, (ctx, fn))
 
 
 def withdraw(owner):
@@ -52,14 +52,9 @@ def clients(app):
     """依頼人の分かっている依頼の行。"""
     store = _store()
     out = []
-    for owner, (ctx, fn) in list(store["clients"].items()):
-        if not alive(ctx):
-            continue
-        try:
-            got = fn(app)
-        except Exception as exc:
-            store["errors"].append("{}: {}: {}".format(owner, type(exc).__name__, exc))
-            del store["errors"][:-20]
+    for owner, (_ctx, fn) in window_entries(store["clients"]):
+        ok, got = window_call(store, owner, fn, app)
+        if not ok:
             continue
         for row in got or ():
             if not isinstance(row, dict) or row.get("quest") in (None, ""):
@@ -86,7 +81,7 @@ def client_of(app, quest_id):
 
 def owners():
     """いま数えている登録の持ち主。ログ用。"""
-    return [owner for owner, (ctx, _fn) in _store()["clients"].items() if alive(ctx)]
+    return [owner for owner, _entry in window_entries(_store()["clients"])]
 
 
 def reset():

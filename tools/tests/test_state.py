@@ -421,6 +421,15 @@ def test_adopt_world_file():
               "鍵が世界名だけなら空")
         check(st.other_playthroughs(os.path.join(sandbox, "state"), "岩" + sep + "ミツバ") == [],
               "世界名の頭が同じだけの別の世界は数えない")
+        # 末尾に空白のある世界名・長い世界名でも、ファイル名と同じ作りの頭で引く
+        for odd_world in ("末尾空白の里 ", "長" * 115):
+            odd_key = odd_world + sep + "イチ"
+            with open(os.path.join(other_mod, st.world_filename(odd_key)), "w", encoding="utf-8") as f:
+                f.write("{}")
+            check(st.other_playthroughs(os.path.join(sandbox, "state"), odd_world + sep + "ニノ")
+                  == [st.world_filename(odd_key, "")],
+                  "別の主人公の周回を見つける: {!r}".format(odd_world[:8]))
+            os.remove(os.path.join(other_mod, st.world_filename(odd_key)))
         side = os.path.join(sandbox, "state", "side_files")
         os.makedirs(side, exist_ok=True)
         for suffix in (".cast.json", ".reroll.json"):

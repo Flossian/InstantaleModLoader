@@ -610,7 +610,7 @@ def apply(ctx):
             text = transcribe(app, npc_id) if npc_id else ""
             if text:
                 npc = npc_of(app, npc_id)
-                return text, npc_id, frames.short(getattr(npc, "name", ""), 40)
+                return text, npc_id, frames.short(getattr(npc, "name", ""), None)
             return "", None, ""
         last = state["last_talk"]
         if last is not None and last.get("moves", 0) > 0 \
@@ -643,7 +643,7 @@ def apply(ctx):
         state["last_talk"] = {
             "text": text,
             "npc_id": npc_id,
-            "npc_name": frames.short(getattr(npc, "name", ""), 40),
+            "npc_name": frames.short(getattr(npc, "name", ""), None),
             "moves": KEEP_TRANSCRIPT_MOVES,
             "world": world_key(app),
         }
@@ -1580,12 +1580,12 @@ def apply(ctx):
             note_inject("{}: no running app".format(label))
             return None
         npc_id = talking_npc_id(app, npc)
-        # 名前の切り詰めは 40 字に揃える。
-        # `remember_client` が控える名前も `current_talk` 経由で 40 字なので、
-        # ここを変えると長い名前で `quest_belongs_to` の名前照合が外れる。
-        npc_name = ui.character_name(app, npc_id, fallback="") if npc_id else ""
+        # 名前は切らない（`current_talk` と `remember_client` も切らない）。
+        # 依頼人の名前としてセーブの client_name に書き、`quest_belongs_to` の名前照合にも使うので、
+        # どこかで切ると長い名前で「…」付きの名前が残り、照合も外れる。
+        npc_name = ui.character_name(app, npc_id, limit=None, fallback="") if npc_id else ""
         if not npc_name:
-            npc_name = frames.short(getattr(npc, "name", ""), 40)
+            npc_name = frames.short(getattr(npc, "name", ""), None)
         if not npc_id and not npc_name:
             note_inject("{}: cannot name the character ({})".format(
                 label, type(npc).__name__))

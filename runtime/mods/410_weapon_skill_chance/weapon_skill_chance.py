@@ -446,9 +446,10 @@ def refill_worn(app):
 
 
 class ShownEffect(object):
-    """説明欄を描く間だけ、スキル名の下に効果と使用回数を足す。並びごと控えて戻す。
+    """説明欄を描く間だけ、スキル名の下に効果と使用回数を足す。抜けるときは足した2行だけを外す。
 
-    `134_` の `healing.Hidden` と同じ形（`attributes` は同じ辞書の中で組み直して戻す）。
+    `attributes` は同じ辞書の中で組み直す。抜けるときに入口の並びへ丸ごと戻すと、内側の
+    値段の関所（ローダの `prices` の説明欄の地点）が描く前に書いた買価・売価まで戻してしまう。
     """
 
     def __init__(self, item):
@@ -477,7 +478,7 @@ class ShownEffect(object):
                       len(rows))
         self.attributes = attributes
         self.effect_key = effect_key
-        self.saved = rows
+        self.added_keys = [key for key, _ in added]
         self.shown = rows[:at] + added + rows[at:]
 
     def __enter__(self):
@@ -488,8 +489,8 @@ class ShownEffect(object):
 
     def __exit__(self, *exc):
         if self.attributes is not None:
-            self.attributes.clear()
-            self.attributes.update(self.saved)
+            for key in self.added_keys:     # ほかの行は並びも値も内側が書いたまま
+                self.attributes.pop(key, None)
         return False
 
     def tighten(self, label):

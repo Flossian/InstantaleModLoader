@@ -150,7 +150,10 @@ def install(ctx):
     def enemy_instance(orig, self, enemy_dict=None, *args, **kwargs):
         """敵の実体。難易度からレベルと能力値が決まる。"""
         difficulty = _state()["inside"]
-        if difficulty is not None:
+        if difficulty is not None and "difficulty" in kwargs:
+            # 名前で渡された回（署名は `..., image_negative_prompt, difficulty, *args`。out/recon/targets.txt）
+            kwargs = dict(kwargs, difficulty=difficulty)
+        elif difficulty is not None:
             index = difficulty_index(args)
             if index is None:
                 _write("WARN guards: cannot find the difficulty among {} argument(s); "

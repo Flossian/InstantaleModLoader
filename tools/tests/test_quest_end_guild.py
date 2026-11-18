@@ -197,6 +197,8 @@ class InstantaleApp:
             character_instance.current_location = target_facility
 
     def remove_party_member(self, member_id):
+        if getattr(self, "remove_raises", False):
+            raise RuntimeError("the game could not remove the member")
         self.removed.append(str(member_id))
         self.party[:] = [v for v in self.party if v != str(member_id)]
 
@@ -580,6 +582,21 @@ QuestEndManager(app).method_1("71")
 clock.run_onces()
 check("ゲームが置いた後は時間切れが何もしない", len(app.moved) == 1, app.moved)
 check("そのときは保存もしない", app.saves == 0, app.saves)
+
+# ゲームの remove_party_member が落ちたら仲間はパーティに残る。控えを残すと時間切れで
+# パーティの仲間をギルドへ置いて保存してしまう。
+app, ctx, clock, mod, areas = setup()
+app.remove_raises = True
+raised = None
+try:
+    QuestEndManager(app).method_1("71")
+except RuntimeError as exc:
+    raised = exc
+check("ゲームの例外はそのまま上がる", raised is not None, raised)
+check("仲間はパーティに残っている", app.party == ["player", "71"], app.party)
+clock.run_onces()
+check("外せなかった相手は時間切れでも置かない", app.moved == [], names_of(app.moved))
+check("外せなかったときは保存しない", app.saves == 0, app.saves)
 
 print("=== 画面 ===")
 app, ctx, clock, mod, areas = setup()

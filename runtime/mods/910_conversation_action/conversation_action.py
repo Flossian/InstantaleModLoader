@@ -227,6 +227,11 @@ def apply(ctx):
         まず本体の応答の項目をそのまま書き換える（型が本体のまま残る）。
         書けない型（frozen）なら `404_` と同じく同じ項目の型を作って返す。
         """
+        # 辞書の応答は辞書のまま返す（`_get` が辞書も読むのと揃える）。
+        # setattr は辞書で必ず落ち、型を作り直すと受け取る側が想定しない形に変わる。
+        if isinstance(action_obj, dict):
+            action_obj["call_free_action"] = True
+            return result
         try:
             setattr(action_obj, "call_free_action", True)
             if _get(action_obj, "call_free_action") is True:

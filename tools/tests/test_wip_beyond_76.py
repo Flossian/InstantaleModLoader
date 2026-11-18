@@ -194,7 +194,14 @@ def test_extend():
     check("逆引き: 76 までは素のまま", fn.get_equipment_level_from_price(top_price) == 76
           and fn.get_equipment_level_from_price(1000) == raw.get_equipment_level_from_price(1000))
     above = fn.get_equipment_level_from_price(fn.get_equipment_price(86))
-    check("逆引き: 延ばした値段は延ばした段へ戻る", above in (85, 86), above)
+    check("逆引き: 延ばした値段は延ばした段へ戻る", above == 86, above)
+    missed = [(price_name, v) for price_name, level_name in (
+        ("get_equipment_price", "get_equipment_level_from_price"),
+        ("get_heal_item_price", "get_heal_item_level_from_price"),
+        ("get_other_item_price", "get_other_item_level_from_price"))
+        for v in range(77, 101)
+        if getattr(fn, level_name)(getattr(fn, price_name)(v)) != v]
+    check("逆引き: 77〜100 の値段がすべて同じ段へ戻る", not missed, missed[:6])
     check("逆引き: 100 で止まる", fn.get_equipment_level_from_price(10 ** 7) == 100)
     check("窓口: 品を延ばしている間は 100", value_limits.value_max() == 100 and value_limits.raised_by() == "923_beyond_76")
     check("記録: ログに延ばした行", os.path.exists(os.path.join(OUT_DIR, "out", "beyond_76.log")))

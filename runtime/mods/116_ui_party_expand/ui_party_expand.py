@@ -863,6 +863,17 @@ def apply(ctx):
             party_panel.sync_geometry(top, cell, PORTRAIT_FIT == FIT_FILL,
                                       ctx.log_exc)
 
+    def layout_key(box, design, extras):
+        """`align` と `cover_gap` が読む寸法をまとめた値（見本と足した枠の中身・帯・板）。"""
+        top = design["cells"][design["order"][0]]["widget"]
+        blocker = frames.attr(box, BLOCKER_ATTR, None)
+        parent = frames.attr(blocker, "parent", None) if blocker is not None else None
+        return (party_panel.geometry_key(top),
+                tuple(party_panel.geometry_key(cell) for cell in extras),
+                party_panel.rect_of(box), tuple(design["size"] or ()),
+                id(blocker), id(parent),
+                party_panel.rect_of(blocker) if blocker is not None else None)
+
     def expand(hud, box, cells, design):
         base = design["rows"]
         rows, total = plan_for(hud, design)
@@ -891,8 +902,16 @@ def apply(ctx):
             # 人数が同じままでも顔ぶれは入れ替わる（1人抜けて1人入る）し、
             # ゲームが枠を塗り替えると絵の大きさが変わる。
             fill_extras(hud, cells, extras)
-            align(design, extras)
-            cover_gap(hud, box, design)   # 板の寸法も毎回合わせ直す
+            # 見え方と板の寸法は、見本・足した枠・帯・板のどれかが動いたときだけ合わせ直す
+            # （塗り直しは本文の1文字ごとに来る。動いていなければ合わせ直しても同じ形になる）。
+            if layout_key(box, design, extras) != state.get("geometry"):
+                align(design, extras)
+                cover_gap(hud, box, design)
+                state["geometry"] = layout_key(box, design, extras)
+            if state.get("rehide"):
+                # `heal` が隠していたものを戻した（広げたまま注入し直した）。帯に重なるものを隠し直す
+                state["rehide"] = False
+                hide_covered(hud, box, design, cells, extras)
             return False
         for shot in design["family"]:
             party_panel.grow(shot, delta)
@@ -1033,6 +1052,8 @@ def apply(ctx):
             ctx.log_exc("party expand: could not sweep for stranded widgets")
         if restored:
             note("restored {} widget(s) that were left hidden".format(restored))
+            # 広げたまま注入し直した帯は、次の `expand` が近道に入って隠し直さない。印を立てて隠し直させる
+            state["rehide"] = True
 
     def adopt(box):
         """注入し直したときに、画面の今の姿を意思として引き継ぐ。
@@ -1196,6 +1217,20 @@ def apply(ctx):
         name = frames.text_of(frames.attr(hud, "text_display", None), "font_name")
         return name or None
 
+    def mark_bound(callback, hud):
+        """押下先に「この注入がこの HUD 用に結んだ」印を付けて返す（`bound_here` が見る）。"""
+        callback.expand_state = state
+        callback.expand_hud = hud
+        return callback
+
+    def bound_here(previous, hud):
+        """前に結んだ押下先が、この注入（`state`）がこの HUD 用に結んだものか。
+
+        `114_` の `still_held` と同じ考え方。前の注入の手や別の HUD の手なら偽（結び直す）。
+        """
+        return (getattr(previous, "expand_state", None) is state
+                and getattr(previous, "expand_hud", None) is hud)
+
     def ensure_button(hud):
         """ボタンを1枚だけ足す。既にあれば押下先だけ今の注入へ付け替える。"""
         widget = frames.attr(hud, BUTTON_ATTR)
@@ -1228,22 +1263,24 @@ def apply(ctx):
 
         # 押下先の付け替え。
         # 注入し直したとき、古い注入の切り替えを呼び続けないため。
+        # 塗り直しは本文の1文字ごとに来るので、この注入がこの HUD 用に結んだ手なら結び直さない（`bound_here`）。
         previous = frames.attr(widget, CALLBACK_ATTR)
-        if previous not in (None, frames.MISSING):
+        if not bound_here(previous, hud):
+            if previous not in (None, frames.MISSING):
+                try:
+                    widget.unbind(on_release=previous)
+                except Exception:
+                    pass
+
+            def callback(_instance=None, _hud=hud):
+                return guarded(lambda: toggle(_hud))
+
             try:
-                widget.unbind(on_release=previous)
+                widget.bind(on_release=mark_bound(callback, hud))
+                setattr(widget, CALLBACK_ATTR, callback)
             except Exception:
-                pass
-
-        def callback(_instance=None, _hud=hud):
-            return guarded(lambda: toggle(_hud))
-
-        try:
-            widget.bind(on_release=callback)
-            setattr(widget, CALLBACK_ATTR, callback)
-        except Exception:
-            ctx.log_exc("party expand: could not bind the toggle button")
-            return
+                ctx.log_exc("party expand: could not bind the toggle button")
+                return
         try:
             widget.text = button_text()
         except Exception:
@@ -1317,6 +1354,8 @@ def apply(ctx):
         for widget in pagers:
             # 押下先の付け替え（注入し直したとき、古い注入の送りを呼び続けないため）。
             previous = frames.attr(widget, CALLBACK_ATTR)
+            if bound_here(previous, hud):
+                continue
             if previous not in (None, frames.MISSING):
                 try:
                     widget.unbind(on_release=previous)
@@ -1327,7 +1366,7 @@ def apply(ctx):
                 return guarded(lambda: turn_page(_hud, _step))
 
             try:
-                widget.bind(on_release=callback)
+                widget.bind(on_release=mark_bound(callback, hud))
                 setattr(widget, CALLBACK_ATTR, callback)
             except Exception:
                 ctx.log_exc("party expand: could not bind a page button")

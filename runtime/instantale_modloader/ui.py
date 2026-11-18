@@ -669,7 +669,8 @@ def parse_coin(text):
         units = [re.escape(COIN_SHORT)]
         if short != COIN_SHORT:
             units.insert(0, re.escape(short))
-        pattern = re.compile(r"(\d[\d,]*)\s*(?:" + "|".join(units) + ")")
+        # 単位の後ろに英数字が続くもの（`8GB` / `3Gold`）は額ではない（`_COIN_SHORT_RE` と同じ守り）
+        pattern = re.compile(r"(\d[\d,]*)\s*(?:" + "|".join(units) + ")(?![A-Za-z0-9])")
         _coin_price_res[short] = pattern
     match = pattern.search(text or "")
     if match is None:
@@ -1687,9 +1688,16 @@ def current_facility(app):
     `current_area` と同じく、持ち方は決めつけずにどちらでも引き当てる。
     """
     where = getattr(getattr(app, "player", None), "location", None)
-    if isinstance(where, bool) or not isinstance(where, (str, int)):
+    if where is None or isinstance(where, bool):
+        return None                     # 真偽値は施設でも id でもない
+    if not isinstance(where, (str, int)):
         return where
-    facility, _node = find_facility(current_area(app), str(where))
+    try:
+        facility, _node = find_facility(current_area(app), str(where))
+    except Exception:
+        from . import log_exc           # ui はローダ本体より先に読まれるので、使うときに取り込む
+        log_exc("ui: cannot look up the facility {!r}".format(where))
+        return None
     return facility
 
 
@@ -2126,6 +2134,14 @@ def reload_image(widget):
     if callable(reload):
         reload()
         return
+    # 付け直すだけでは CoreImage がキャッシュ（kv.image）から古い絵を返すので、先にキャッシュから外す
+    # （Kivy 2.3 の `Image.reload` と同じ順）
+    remove = getattr(getattr(widget, "_coreimage", None), "remove_from_cache", None)
+    if callable(remove):
+        try:
+            remove()
+        except Exception:
+            pass
     source = widget.source
     widget.source = ""
     widget.source = source

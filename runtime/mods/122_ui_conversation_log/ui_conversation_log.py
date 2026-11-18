@@ -302,6 +302,9 @@ def apply(ctx):
             "anchor": None,
         }
         setattr(sys, STATE_STORE_ATTR, store)
+    # この注入が結んだ手の印。`store` は注入をまたいで残るので印にならない。
+    # 塗り直し（本文の1文字ごと）のたびに結び直さず、前の注入の手だけを付け替えるのに使う。
+    injection = object()
     note = ctx.logger(LOG_BASENAME)
     warn_once = ctx.warner("conversation log")
 
@@ -568,6 +571,9 @@ def apply(ctx):
         注入し直したときは前の手を外してから結ぶ。
         """
         previous = frames.attr(other, FOLLOW_ATTR, None)
+        if (getattr(previous, "log_injection", None) is injection
+                and getattr(previous, "log_button", None) is button):
+            return            # この注入がこのボタンのために結んだ手が付いたまま
         if previous is not None:
             try:
                 other.unbind(pos=previous, size=previous)
@@ -578,6 +584,8 @@ def apply(ctx):
             guarded(lambda: (match_size(button, other),
                              place_beside(button, other),
                              paint_icon(button)))
+        moved.log_injection = injection
+        moved.log_button = button
 
         try:
             other.bind(pos=moved, size=moved)
@@ -662,22 +670,27 @@ def apply(ctx):
 
         # 押下先の付け替え。
         # 注入し直したとき、古い注入の窓を開き続けないため。
+        # 塗り直しは本文の1文字ごとに来るので、この注入がこの HUD 用に結んだ手が付いたままなら結び直さない。
         previous = frames.attr(button, CALLBACK_ATTR)
-        if previous is not frames.MISSING and previous is not None:
+        if not (getattr(previous, "log_injection", None) is injection
+                and getattr(previous, "log_hud", None) is hud):
+            if previous is not frames.MISSING and previous is not None:
+                try:
+                    button.unbind(on_release=previous)
+                except Exception:
+                    pass
+
+            def callback(_instance=None, _hud=hud):
+                return guarded(lambda: toggle_view(_hud))
+            callback.log_injection = injection
+            callback.log_hud = hud
+
             try:
-                button.unbind(on_release=previous)
+                button.bind(on_release=callback)
+                setattr(button, CALLBACK_ATTR, callback)
             except Exception:
-                pass
-
-        def callback(_instance=None, _hud=hud):
-            return guarded(lambda: toggle_view(_hud))
-
-        try:
-            button.bind(on_release=callback)
-            setattr(button, CALLBACK_ATTR, callback)
-        except Exception:
-            ctx.log_exc("conversation log: could not bind the button")
-            return
+                ctx.log_exc("conversation log: could not bind the button")
+                return
         place_button(hud, button)
 
     # -- 読む窓 --------------------------------------------------------------

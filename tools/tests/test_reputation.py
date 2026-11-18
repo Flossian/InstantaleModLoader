@@ -1063,6 +1063,26 @@ def run():
     # -- 評判の画面 --
     check("評判の画面の行を MOD 用のボタンの一覧に足す", module.ICON_KEY in hudicons_module.keys(),
           hudicons_module.keys())
+    # 土地の呼び名の再生成。ワーカーが積んだ側より先に終えても「再生成中」の印が残らない
+    captured = {}
+    window_mod = sys.modules["reputation_mod.window"]
+    saved_open = window_mod.open_window
+    window_mod.open_window = lambda app, model, **kw: captured.update(kw) or object()
+    worker = store_of(module)["worker"]
+    saved_enqueue = worker.enqueue
+    # 積んだ直後に片付くまで待つ（ワーカーが先に終える回を毎回起こす）
+    worker.enqueue = lambda job: saved_enqueue(job) and (worker.drain(10) or True)
+    try:
+        hudicons_module._store()["icons"][module.ICON_KEY]["on_press"](app_f)
+        store_of(module)["view"] = None       # 開き直し（Kivy の Clock）を起こさない
+        module.llm.replies = []
+        queued = captured["on_land_reroll"]("3")
+    finally:
+        window_mod.open_window = saved_open
+        del worker.enqueue
+    check("土地の呼び名の再生成が先に終わっても、再生成中の印は残らない",
+          queued is True and "3" not in store_of(module)["state"].get("rerolling_lands", set()),
+          (queued, store_of(module)["state"].get("rerolling_lands")))
     check("行の絵の3枚が揃っている",
           all(os.path.isfile(os.path.join(MOD_DIR, name)) for name in module.ICON_FILES))
     bucket = {"areas": {"3": {"name": "灰の街", "reputation": "盗賊団を退けた者として知られている。",
@@ -1219,6 +1239,18 @@ def run():
                         player_profile="旅人の素性")
     check("player_profile がキーワードで来ても足す",
           "灰の街の盾" in seen["kwargs"]["player_profile"])
+    calls = []
+
+    def narrator_fails(*args, **kwargs):
+        calls.append(args)
+        raise TimeoutError("llm timed out")
+
+    try:
+        ctx.hooks[NARRATOR](narrator_fails, "log", "action", "旅人の素性", "area", "loc")
+        raised = False
+    except TimeoutError:
+        raised = True
+    check("情景描写そのものが失敗したら、呼び直さずに例外を返す", raised and len(calls) == 1, calls)
 
     print("控え")
     clear_cache(module)

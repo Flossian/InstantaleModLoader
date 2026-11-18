@@ -202,6 +202,9 @@ argv = passed_argv(launch(ctx, GAME_ARGV + ["--parallel", "2"]))
 check("既にある --parallel は書き換える", flag_value(argv, "--parallel") == "3",
       flag_value(argv, "--parallel"))
 check("--parallel も1つだけ", argv.count("--parallel") == 1)
+argv = passed_argv(launch(ctx, GAME_ARGV + ["--parallel=2"]))
+check("等号の形（--parallel=2）も書き換え、二重に足さない",
+      "--parallel=3" in argv and "--parallel" not in argv and not any(a == "--parallel=2" for a in argv), argv)
 argv = passed_argv(launch(ctx, [r"C:\bin\llama-server.exe", "-m", "x.gguf"]))
 check("旗が無ければ末尾に足す",
       flag_value(argv, "--ctx-size") == "24576"
@@ -228,6 +231,8 @@ check("--parallel は渡さない", "--parallel" not in argv, argv)
 argv = passed_argv(launch(ctx, GAME_ARGV + ["--parallel", "1"]))
 check("既にある --parallel は外す", "--parallel" not in argv, argv)
 check("外した値は道連れにしない", "1" not in argv[len(GAME_ARGV):], argv)
+argv = passed_argv(launch(ctx, GAME_ARGV + ["--parallel=2"]))
+check("等号の形（--parallel=2）も外す", not any(str(a).startswith("--parallel") for a in argv), argv)
 check("他の引数は落ちない",
       all(item in argv for item in ("--cache-reuse", "256", "--top-k", "64")))
 
@@ -484,9 +489,20 @@ with open(path, "wb") as fh:
                          ("gemma4.embedding_length", 4, 2816),
                          ("tokenizer.ggml.tokens", 9, ["t{}".format(i) for i in range(100)])]))
 meta = module.gguf_meta(path)
-check("構造の名前・数・長い語彙の並び（数だけ）を読む",
-      meta == {"general.architecture": "gemma4", "gemma4.embedding_length": 2816,
-               "tokenizer.ggml.tokens": ("array", 100), module.NEXTN_TENSORS_KEY: 0}, meta)
+tokens = meta.get("tokenizer.ggml.tokens") if isinstance(meta, dict) else None
+check("構造の名前・数・長い語彙の並び（件数と中身の印）を読む",
+      {k: v for k, v in meta.items() if k != "tokenizer.ggml.tokens"}
+      == {"general.architecture": "gemma4", "gemma4.embedding_length": 2816, module.NEXTN_TENSORS_KEY: 0}
+      and isinstance(tokens, tuple) and tokens[:2] == ("array", 100) and len(tokens) == 3, meta)
+other_path = os.path.join(OUT_DIR, "meta_probe_other.gguf")
+with open(other_path, "wb") as fh:
+    fh.write(gguf_bytes([("general.architecture", 8, "gemma4"),
+                         ("gemma4.embedding_length", 4, 2816),
+                         ("tokenizer.ggml.tokens", 9, ["u{}".format(i) for i in range(100)])]))
+other_tokens = (module.gguf_meta(other_path) or {}).get("tokenizer.ggml.tokens")
+check("  件数が同じでも中身の違う語彙は別の値になる（下書き役を取り違えない）",
+      other_tokens is not None and other_tokens != tokens, (tokens, other_tokens))
+os.remove(other_path)
 check("  本体に MTP の層が無ければ builtin_mtp は無しと答える", module.builtin_mtp(["llama-server", "-m", path])[0] is False)
 with open(path, "wb") as fh:
     fh.write(gguf_bytes([("general.architecture", 8, "qwen35"), ("qwen35.nextn_predict_layers", 4, 1)],

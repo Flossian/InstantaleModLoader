@@ -65,7 +65,7 @@
 順序を逆にすると、モジュールが無い回に早期 return して保留の監視すら始まらない。
 
 定数のダンプと世界の調査は印を分けてある。
-前者はモジュールさえ在ればよく、後者は `app` が要る。
+前者は実行側と生成側の2つのモジュールが要り（版5）、後者は `app` が要る。
 1つの印にまとめると、`app` がまだ無い回にダンプが走っただけで「調査済み」になり、
 世界の調査が永久に行われない。
 
@@ -92,6 +92,9 @@
 - 世界の調査の再試行（`on_button_press` の包み）は、ローダの `loads.on` には寄せなかった。
   `loads` はロードと新規開始の直後に1回来るだけで、起動直後の注入のやり直しとロードが重なると来ないことがある
   （`317_` が実機で踏んだ。VERIFICATION.md §3.36）。いまの包みは、そうなっても次に押した時に拾える
+
+版5: 定数のダンプは生成側（`GEN_MODULE`）も読み込まれるまで印を立てない。
+版4は実行側だけを見て印を立てていたので、生成側が後から来た回は `_DSL_SPEC` がそのプロセスで書かれなかった。
 """
 
 import datetime
@@ -100,7 +103,7 @@ import json
 import os
 import sys
 
-from instantale_modloader import frames, ui
+from instantale_modloader import frames, patch, ui
 
 LOG_BASENAME = "free_facility.log"
 
@@ -414,6 +417,12 @@ def apply(ctx):
             ctx.log("{} not imported yet; the dump waits for it".format(MODULE))
             return
         if getattr(sys, DUMP_MARK, False):
+            return
+        # 本命の `_DSL_SPEC` は生成側に在るので、生成側が揃うまで印を立てない。
+        # 先に立てると、生成側が来た後の当て直しでもこのプロセスでは二度と書かれない。
+        # 生成側は `generate_program` の包みが保留に積むので、来ればローダが apply() をやり直す。
+        if GEN_MODULE not in sys.modules or patch.still_loading(GEN_MODULE):
+            ctx.log("{} not imported yet; the dump waits for it".format(GEN_MODULE))
             return
         setattr(sys, DUMP_MARK, True)
 

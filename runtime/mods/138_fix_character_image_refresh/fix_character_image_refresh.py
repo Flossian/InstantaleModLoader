@@ -8,7 +8,7 @@
 
 import re
 
-from instantale_modloader import frames, imagegen, ui
+from instantale_modloader import expressions, frames, imagegen, ui
 
 
 LOG_BASENAME = "character_image_refresh.log"
@@ -43,8 +43,28 @@ def shows_character(source, name):
     return len(parts) >= 3 and parts[-2] == name and parts[-3] == "characters"
 
 
+def shows_variant(source, name):
+    """その画像の source が、この人物の表情の差分（`characters/<名前>/expressions/<表情>.png`）か。"""
+    if not isinstance(source, str) or not isinstance(name, str) or not name:
+        return False
+    parts = re.split(r"[\\/]", source)
+    return (len(parts) >= 4 and parts[-2] == expressions.FOLDER and parts[-3] == name
+            and parts[-4] == "characters")
+
+
+def portrait_of(app, name):
+    """その名前の人物のふだんの立ち絵のパス。引けなければ None。"""
+    characters = frames.attr(frames.attr(app, "world", None), "characters", None)
+    if not isinstance(characters, dict):
+        return None
+    for character in characters.values():
+        if getattr(character, "name", None) == name:
+            return expressions.portrait_path(character)
+    return None
+
+
 def character_images(hud, name):
-    """HUD の上で、この人物の画像フォルダを source に持つ画像（立ち絵・顔）。"""
+    """HUD の上で、この人物の画像フォルダを source に持つ画像（立ち絵・顔・表情の差分）。"""
     found, seen = [], set()
     stack = [(hud, 0)] + [(frames.attr(hud, attr, None), 0) for attr in PORTRAIT_WIDGETS]
     while stack:
@@ -52,7 +72,8 @@ def character_images(hud, name):
         if widget is None or id(widget) in seen:
             continue
         seen.add(id(widget))
-        if shows_character(frames.attr(widget, "source", None), name):
+        source = frames.attr(widget, "source", None)
+        if shows_character(source, name) or shows_variant(source, name):
             found.append(widget)
         if depth < MAX_WALK_DEPTH:
             stack.extend((child, depth + 1) for child in ui.children_of(widget))
@@ -67,6 +88,12 @@ def refresh(app, name, write):
     refreshed = 0
     for widget in character_images(hud, name):
         try:
+            if shows_variant(frames.attr(widget, "source", None), name):
+                # 表情の差分は描き直す前の立ち絵から描いたもの。ふだんの立ち絵に戻す
+                # （差分は画像を描く MOD が新しい立ち絵から描き直し、次に表情を選ぶときに見せる側が替える）
+                base = portrait_of(app, name)
+                if base:
+                    widget.source = base
             ui.reload_image(widget)
         except Exception:
             write("could not reload {} for {}".format(type(widget).__name__, name))

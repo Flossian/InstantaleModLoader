@@ -60,6 +60,9 @@ r"""MOD が持つ NPC と、正規 NPC への被せがどこまで通るかを�
     来訪者を置いていて名簿に居るときだけにした。前は置いていない間も一覧を組むたびに差し替えていた
   - 一覧に出た相手の読み（`offered_ids`）を1か所にまとめ、`talk_step` では1回だけ組む
   - `SAVE_LINES` は `ctx.logger(..., cap=N)` に寄せなかった（理由は定数の注記）
+- 版7: 施設の名簿が既に外側の窓の写しなら、内側の窓は差し替えずにその写しで数える（`spy_facility`）。
+  `talk_choice` の窓の中で `update_button_display` の窓が開くと、内側が写しをさらに写しへ差し替え、
+  内側の間の読みが外側の `roster_reads` に入らなかった。外側の数は内側の窓の読みも含む
 """
 
 import sys
@@ -422,21 +425,26 @@ def apply(ctx):
 
     def swap_in(owner, name, make):
         """`owner` の `name`（属性、`owner` が dict なら鍵）を読みを数える写しに置き換える。
-        戻り値は `put_back` に渡す `(元, 写し, 写した時点の鍵)`。"""
+        戻り値は `put_back` に渡す `(元, 写し, 写した時点の元の中身)`。"""
         original = dict.get(owner, name) if isinstance(owner, dict) else getattr(owner, name)
         spied = make(original)
         if isinstance(owner, dict):
             owner[name] = spied
         else:
             setattr(owner, name, spied)
-        return original, spied, set(dict.keys(original)) if isinstance(original, dict) else None
+        # 写した時点の中身も読みの印を通さずに取る（入れ子の窓で、外側の写しの読みに数えない）
+        base = (dict(dict.items(original)) if isinstance(original, dict)
+                else list.__getitem__(original, slice(None)))
+        return original, spied, base
 
-    def put_back(owner, name, original, spied, taken):
+    def put_back(owner, name, original, spied, base):
         """写しを外し、窓の間に写しへ入った書き込みを元のオブジェクトへ移す。
 
         写しに置き換えている間も本体や保存スレッドが名簿へ書くので、元へ戻すだけでは
         その分が消える。窓の間に本体が別のオブジェクトを置いていたらそちらを残す。
-        写した後に元へ直接入った書き込み（元を握っていた側の分）は残し、写しから消えた鍵だけ元からも消す。
+        移すのは写した時点（`base`）から**写しの側で変わった分だけ**（3方向のマージ）。
+        写しで変わっていない鍵は、元へ直接入った書き込みや削除（元を握っていた側の分）を残す。
+        写しから消えた鍵は、元の側でも写した時点のままのときだけ消す。配列は写しが変わったときだけ移す。
         読みの印は通さない（`dict.items` / `list.__getitem__` を直に呼ぶ）。
         """
         if isinstance(owner, dict):
@@ -446,13 +454,32 @@ def apply(ctx):
         elif getattr(owner, name, None) is spied:
             setattr(owner, name, original)
         if isinstance(original, dict):
-            items = list(dict.items(spied))
-            kept = set(key for key, _ in items)
-            for key in taken - kept:
-                original.pop(key, None)
-            original.update(items)
+            seen = set()
+            for key, value in list(dict.items(spied)):
+                seen.add(key)
+                if key in base and value is base[key]:
+                    continue
+                original[key] = value
+            for key, value in base.items():
+                if key not in seen and key in original and original[key] is value:
+                    original.pop(key, None)
         else:
-            original[:] = list.__getitem__(spied, slice(None))
+            now = list.__getitem__(spied, slice(None))
+            if len(now) != len(base) or any(a is not b for a, b in zip(now, base)):
+                original[:] = now
+
+    def spy_facility(facility):
+        """施設の名簿を読みを数える写しにする。`(put_back に渡す控え, 写し, 始めの数)`。
+
+        既に外側の窓の写しなら差し替えずにそれを数える（控えは None、外側が戻す）。
+        内側が写しをさらに写しへ差し替えると、内側の窓の間の読みが外側の写しに届かず、
+        外側の `roster_reads` が少なく出ていた（版7）。
+        """
+        current = getattr(facility, "characters", None)
+        if isinstance(current, ReadCountingList):
+            return None, current, current.reads
+        swapped = swap_in(facility, "characters", ReadCountingList)
+        return swapped, swapped[1], 0
 
     @ctx.wrap(TALK_TARGET, required=False, safe=True)
     def talk_choice(orig, self, *args, **kwargs):
@@ -470,16 +497,16 @@ def apply(ctx):
         facility = getattr(getattr(app, "player", None), "location", None)
         roster = getattr(facility, "characters", None)
         listed = [str(k) for k in (roster or [])]
-        swapped = None
+        spy = None
         if spying(app) and isinstance(roster, list):
-            swapped = swap_in(facility, "characters", ReadCountingList)
+            spy = spy_facility(facility)
         try:
             return orig(self, *args, **kwargs)
         finally:
             try:
-                if swapped:
-                    put_back(facility, "characters", *swapped)
-                reads_seen = swapped[1].reads if swapped else None
+                if spy and spy[0]:
+                    put_back(facility, "characters", *spy[0])
+                reads_seen = spy[1].reads - spy[2] if spy else None
                 offered = offered_ids(app)
                 note("talk_choice", offered=offered,
                      facility_characters=listed,
@@ -620,7 +647,7 @@ def apply(ctx):
                 swapped["npcs"] = swap_in(save, "npcs", NpcsSpy)
             roster = getattr(facility, "characters", None)
             if isinstance(roster, list):
-                swapped["facility"] = swap_in(facility, "characters", ReadCountingList)
+                swapped["facility"] = spy_facility(facility)
             if visitor is not None:
                 swapped["visitor_cls"] = spy_visitor(visitor)
         except Exception:
@@ -633,12 +660,12 @@ def apply(ctx):
                     put_back(world, "characters", *swapped["roster"])
                 if "npcs" in swapped:
                     put_back(save, "npcs", *swapped["npcs"])
-                if "facility" in swapped:
-                    put_back(facility, "characters", *swapped["facility"])
+                if "facility" in swapped and swapped["facility"][0]:
+                    put_back(facility, "characters", *swapped["facility"][0])
                 if swapped.get("visitor_cls") is not None:
                     visitor.__class__ = swapped["visitor_cls"]
                 offered = offered_ids(app)
-                facility_reads = (swapped["facility"][1].reads
+                facility_reads = (swapped["facility"][1].reads - swapped["facility"][2]
                                   if "facility" in swapped else None)
                 folded = []
                 for entry in reads:           # 連続する同じ読みは畳む

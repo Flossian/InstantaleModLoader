@@ -630,10 +630,9 @@ def _register_watch(ctx, label, rearm):
 
 
 def _superseded(ctx):
-    try:
-        return bool(ctx.superseded())
-    except Exception:
-        return True
+    # 生死の判定はローダ本体の alive に1つにまとめた（窓口と同じく、例外なら生きているとみなす）。
+    from . import alive
+    return not alive(ctx)
 
 
 def rearm_watches(ctx):

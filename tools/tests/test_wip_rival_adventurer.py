@@ -43,7 +43,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
-from instantale_modloader import modnpc, state, talk_affinity, ui  # noqa: E402
+from instantale_modloader import gates, modnpc, state, talk_affinity, ui  # noqa: E402
 from instantale_modloader import board as quest_board  # noqa: E402
 
 
@@ -280,6 +280,9 @@ def fresh_mod(roll=0.0, keep_state=False, **settings):
         setattr(module, name, value)
     module._store()["rng"] = FixedRng(roll)
     ctx = FakeCtx(OUT_DIR, STATE_DIR)
+    # 窓口（arrivals / durations / loads）の包みは1つの世代に1枚。偽の ctx を作り直すたびに忘れさせる
+    # （忘れさせないと2つ目の ctx には関所が包まれず、フックが無い）
+    gates.reset_all()
     module.apply(ctx)
     return module, ctx
 
@@ -963,16 +966,23 @@ def scene_store():
 
 
 def arrive(ctx, app, facility, area="0", other=None):
-    """施設に着く。ローダの包みの番号送りは手で行う（検査の ctx の包みは最後の1つしか呼ばない）。"""
+    """施設に着く。番号送りはローダの到着の関所が行う。
+
+    `other` はほかの MOD の申し出 `(持ち主, 優先度)`。着いた最中に出す（関所は着くたびに申し出を空にする）。
+    """
     from instantale_modloader import arrivals
     app.player.location = facility
     app.player.current_area = app.world.areas[area]
     app.buttons = []
     app.chosen = []
-    arrivals._store()["serial"] += 1
     if other is not None:
-        arrivals.offer(app, other[0], other[1])
-    ctx.hook("__main__:MovePhaseManager.move_phase")(lambda self: None, Phase(app))
+        arrivals.on(other[0], ctx, (arrivals.FACILITY,),
+                    before=lambda call: arrivals.offer(call.app, other[0], other[1]))
+    try:
+        ctx.hook("__main__:MovePhaseManager.move_phase")(lambda self: None, Phase(app))
+    finally:
+        if other is not None:
+            arrivals.off(other[0], (arrivals.FACILITY,))
     return app.chosen
 
 
@@ -1078,6 +1088,14 @@ def scene_tool():
     check("文と数の振り分けが重ならない", not set(tool.text_keys()) & set(tool.number_keys()))
     check("見本に仮の値が入る", tool.sample_of("{name}が{title}") == "リオが古城の亡霊")
     check("知らない変数は残す", tool.sample_of("{nope}") == "{nope}")
+    # 属性・添字つきの書き方（`{title.x}`）は AttributeError / TypeError になる。
+    # 設定の欄に何を書かれても、見本も本番の文も落とさない。
+    broken = ("{title.x}", "{nope.x}", "{title[x]}", "{days[0]}")
+    check("見本は書き崩した文型でも落ちない",
+          all(tool.sample_of(t) == "（{ } の対応が崩れています）" for t in broken),
+          [tool.sample_of(t) for t in broken])
+    check("本番の文型も書き崩した文型なら空にする",
+          all(tool.rivalry.format_text(t, title="古城の亡霊", days=3) == "" for t in broken))
     check("欄の改行を落とす", tool.one_line("一行目\n二行目\n") == "一行目二行目")
     check("ライバル前の様子", "まだ現れていない" in tool.describe({"rival": None}))
     module, ctx, app = ready(roll=0.99)

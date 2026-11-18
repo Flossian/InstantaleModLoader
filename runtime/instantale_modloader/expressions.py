@@ -163,13 +163,32 @@ def stamp(character_folder):
 
 
 def _record(character_folder):
-    """`source.json` の中身。無い・読めないなら None。"""
+    """`source.json` の中身。無い・読めないなら None。
+
+    同じ大きさと更新時刻のあいだは読み直さない（`image` は会話の返事のたびにメインスレッドで呼ばれる。
+    `seal` は隣に書いてから差し替えるので、書き直せばファイルの番号（`st_ino`）が変わる。
+    更新時刻の刻みが粗くても、同じ大きさの書き直しを取り違えない）。読めなかった回は覚えない。
+    """
+    path = os.path.join(folder_of(character_folder), SEAL)
     try:
-        with open(os.path.join(folder_of(character_folder), SEAL), encoding="utf-8") as fh:
+        st = os.stat(path)
+    except OSError:
+        return None
+    key = (os.path.normcase(os.path.abspath(path)), st.st_ino, st.st_size, st.st_mtime_ns)
+    records = _store().setdefault("records", {})
+    if key in records:
+        return dict(records[key])
+    try:
+        with open(path, encoding="utf-8") as fh:
             got = json.load(fh)
     except (OSError, ValueError):
         return None
-    return got if isinstance(got, dict) else None
+    if not isinstance(got, dict):
+        return None
+    if len(records) > 256:
+        records.clear()
+    records[key] = got
+    return dict(got)
 
 
 def sealed(character_folder):
@@ -283,11 +302,22 @@ def show(widget, character_folder, expression, base):
     except OSError:
         mtime = None
     key = _norm(want)
-    seen = _store().setdefault("shown", {})
-    stale = key in seen and seen[key] != mtime
-    if len(seen) > 512:
-        seen.clear()
+    # 更新時刻はパスごと（Kivy のキャッシュが持っている版）と部品ごと（その部品が読み込んだ版）の両方で覚える。
+    # パスごとだけだと、同じ絵を出す2つ目の部品は1つ目が読み直した後に描き直しに気付けない。
+    # 部品ごとだけだと、初めてその絵を出す部品がキャッシュに残った古い版を受け取る
+    store = _store()
+    seen = store.setdefault("shown", {})
+    marks = store.setdefault("widget_marks", {})
+    mark = marks.get(id(widget))
+    if mark is not None and mark[0] is not widget:
+        mark = None                     # id が別の部品に使い回された
+    stale = ((key in seen and seen[key] != mtime)
+             or (mark is not None and mark[1] == key and mark[2] != mtime))
+    for table in (seen, marks):
+        if len(table) > 512:
+            table.clear()
     seen[key] = mtime
+    marks[id(widget)] = (widget, key, mtime)
     same = _norm(source) == key
     if same and not stale:
         return None
@@ -300,4 +330,4 @@ def show(widget, character_folder, expression, base):
 
 def reset():
     """全部忘れる（検査用）。"""
-    setattr(sys, STORE_ATTR, {"wants": {}, "stamps": {}, "shown": {}})
+    setattr(sys, STORE_ATTR, {"wants": {}, "stamps": {}, "shown": {}, "widget_marks": {}, "records": {}})

@@ -128,6 +128,9 @@ def apply(ctx):
     hidden = {}
     # 効果の続いている強化・弱体。{id(持ち主): {スキル名: 残りの手番数}}。戦闘の開始で空にする
     resting = {}
+    # その手番の `referee_npc` が外した強化・弱体の名前。{id(持ち主): {スキル名}}。
+    # 同じ手番の `referee_npc_rewrite` にも同じ一覧を見せる（手番の数は減らさない）
+    last_rest = {}
 
     def tick(actor):
         """この者の手番が1つ来た。外している強化・弱体の残りを1つ減らし、今外すものを返す。"""
@@ -147,7 +150,9 @@ def apply(ctx):
         original = frames.attr(actor, "skills", None)
         kept = None
         try:
-            kept = usable_skills(original, tick(actor))
+            now = tick(actor)
+            last_rest[id(actor)] = now
+            kept = usable_skills(original, now)
             if kept is not None:
                 gone = [name for name in original if name not in kept]
                 spent = [name for name in gone if not usable(name, original[name])]
@@ -177,9 +182,46 @@ def apply(ctx):
             ctx.log_exc("npc skill uses: cannot read the chosen skill")
         return response
 
+    @ctx.wrap("scripts.llm.llm_manager_battle:referee_npc_rewrite", required=False, safe=True)
+    def referee_npc_rewrite(orig, player=None, combat_log=None, actor_name=None, actor=None,
+                            *args, **kwargs):
+        """NPC の手の書き直し（`referee_npc` と同じく NPC の手を扱う。GAME.md §2.10）。
+
+        こちらにも使い切ったスキルと効果の続いている強化・弱体を見せない。見せると、書き直しの経路で
+        外したはずのスキルがまた選ばれうる。手番の数は `referee_npc` が減らしたので、ここでは減らさない。
+        """
+        original = frames.attr(actor, "skills", None)
+        kept = None
+        try:
+            kept = usable_skills(original, last_rest.get(id(actor), set()))
+            if kept is not None:
+                actor.skills = kept
+                hidden[id(actor)] = (actor, original, kept)
+        except Exception:
+            kept = None
+            ctx.log_exc("npc skill uses: cannot narrow the skills for the rewrite")
+        try:
+            response = orig(player, combat_log, actor_name, actor, *args, **kwargs)
+        finally:
+            if kept is not None:
+                hidden.pop(id(actor), None)
+                try:
+                    actor.skills = original
+                except Exception:
+                    ctx.log_exc("npc skill uses: cannot put the skills back")
+        try:
+            name = chosen_skill(response)
+            turns = lingering_turns(original.get(name)) if isinstance(original, dict) and name else 0
+            if turns:
+                resting.setdefault(id(actor), {})[name] = turns
+        except Exception:
+            ctx.log_exc("npc skill uses: cannot read the chosen skill of the rewrite")
+        return response
+
     @ctx.wrap("__main__:BattleStartManager.start_battle", required=False, safe=True)
     def start_battle(orig, self, *args, **kwargs):
         resting.clear()
+        last_rest.clear()
         return orig(self, *args, **kwargs)
 
     @ctx.wrap("__main__:InstantaleApp.save_game", required=False)

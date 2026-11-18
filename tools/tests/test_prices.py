@@ -755,7 +755,7 @@ def haggle_main():
 # ---------------------------------------------------------------------------
 
 
-def trade(ctx, target, item, to, key, game_price, by_keyword=False):
+def trade(ctx, target, item, to, key, game_price, by_keyword=False, before=None):
     """売買を1回通す。ゲームは中で品を移し、新しい持ち主の鍵へ自分の額を付ける。"""
     paid = {}
 
@@ -767,7 +767,9 @@ def trade(ctx, target, item, to, key, game_price, by_keyword=False):
         item.attributes[key] = game_price
 
     if by_keyword:
-        ctx.hooks[target](move, None, item_instance=item)
+        named = dict(before or {})        # 品より前に別のキーワードが並ぶ呼び方
+        named["item_instance"] = item
+        ctx.hooks[target](move, None, **named)
     else:
         ctx.hooks[target](move, None, item)
     return paid.get("price")
@@ -791,9 +793,10 @@ def trade_main():
     ok &= check("売った額は関所の額", paid == 480, paid)
     ok &= check("店の買価はゲームの額でなく式 × 段", sword.attributes.get(prices.BUY) == 1200,
                 sword.attributes)
-    paid = trade(ctx, bought_at, sword, player, prices.SELL, 30, by_keyword=True)
+    paid = trade(ctx, bought_at, sword, player, prices.SELL, 30, by_keyword=True,
+                 before={"obtainer": player})
     ok &= check("買い戻す額も関所の額", paid == 1200, paid)
-    ok &= check("手持ちの売価も式 × 段（名前で渡されても）",
+    ok &= check("手持ちの売価も式 × 段（名前で渡され、品の前に別の引数が並んでも）",
                 sword.attributes.get(prices.SELL) == 480, sword.attributes)
 
     print("[式が無い品はゲームの新しい額に段が乗る]")

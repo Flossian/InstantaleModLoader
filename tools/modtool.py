@@ -304,7 +304,13 @@ def coerce_all(mod_dir, raw, root=""):
         return None, "設定の読み方が引けません"
     values = {}
     for key, decl in decls(mod_dir, root).items():
-        ok, value, why = config.coerce(decl, raw.get(key))
+        value = raw.get(key)
+        if decl.get("allow_null") and decl["type"] != "str" \
+                and isinstance(value, str) and not value.strip():
+            # 空欄は未指定（`None`）。入力欄は未指定を空欄で表す（`Form.set`）。
+            # str は空文字そのものが値なので除く（`gui.SettingsDialog._ok` と同じ分け方）。
+            value = None
+        ok, value, why = config.coerce(decl, value)
         if not ok:
             return None, "{}: {}".format(config.full_label(decl), why)
         values[key] = value
@@ -325,6 +331,23 @@ def read_json(path):
     except (OSError, ValueError):
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def json_unreadable(path):
+    """そのファイルが在るのに辞書として読めないか（一時的なロック・破損）。無ければ False。
+
+    `read_json` は読めないファイルを空の辞書として返す。開いて見せるにはそれでよいが、
+    読んだ中身を土台にして書き戻すと、ファイルに在った分を空で上書きしてしまう。
+    書く前にこれで確かめ、真なら書かない。
+    """
+    if not os.path.exists(path):
+        return False
+    try:
+        with io.open(path, encoding="utf-8-sig") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return True
+    return not isinstance(data, dict)
 
 
 def write_json(root, path, data, indent=1):
@@ -742,7 +765,30 @@ def load_world_settings(found, path, base):
             # `bool` が `int` として通るため（`True` が 1 の項目に入る）。
             if value is not None and type(value) is type(decl["default"]):
                 values[key] = value
+            elif decl.get("allow_null") and _null_world_value(decl, record, key):
+                values[key] = value
     return values
+
+
+def _null_world_value(decl, record, key):
+    """`allow_null` の項目で、型の一致だけでは拾えない控えの値を受けるか。
+
+    既定が `None` だと上の型の比べ方では何も通らず、`0.5` を書いても捨てていた。
+    そのときは宣言の型で見る（`bool` は `int` として通さない）。
+    控えに明示した `null`（この世界だけ未指定）も受ける。
+    """
+    if key not in record:
+        return False
+    value = record[key]
+    if value is None:
+        return True
+    if decl["default"] is not None:
+        return False
+    kind = decl["type"]
+    if kind == "choice":
+        return value in (decl.get("values") or ())
+    want = {"int": int, "float": float, "str": str, "bool": bool}.get(kind)
+    return want is not None and type(value) is want
 
 
 def world_record(found, base, values):
@@ -756,8 +802,16 @@ def world_record(found, base, values):
 
 
 def shown_values(values):
-    """型のある値を、入力欄が返す形（`bool` 以外は文字列）に揃える。入力欄の値と比べる前に通す。"""
-    return dict((k, v if isinstance(v, bool) else str(v)) for k, v in values.items())
+    """型のある値を、入力欄が返す形（`bool` 以外は文字列）に揃える。入力欄の値と比べる前に通す。
+
+    未指定（`allow_null` の `None`）は空欄（`Form.set` と同じ）。
+    """
+    return dict((k, v if isinstance(v, bool) else _field_text(v)) for k, v in values.items())
+
+
+def _field_text(value):
+    """入力欄に入れる文字。`None` は空欄（`str(None)` の "None" を欄に出さない）。"""
+    return "" if value is None else str(value)
 
 
 def carry_shared(was, form_world, new_shared, new_world):
@@ -970,15 +1024,18 @@ class Form(object):
 
         `str()` を通すのは、`int` を `StringVar` に入れると
         Tk 側で文字列化されて `get()` の戻りと食い違うため。
+        未指定（`allow_null` の `None`）は空欄にする（`coerce_all` が空欄を `None` に戻す）。
         """
         import tkinter as tk
         for key, var in self.vars.items():
             if isinstance(var, tk.BooleanVar):
                 var.set(values[key])
+            elif values[key] is None:
+                var.set("")
             elif self.decls[key]["type"] == "choice":
                 var.set(choice_text(self.decls[key], values[key]))
             else:
-                var.set(str(values[key]))
+                var.set(_field_text(values[key]))
 
 
 # ----------------------------------------------------------------- 設定画面の土台
@@ -987,8 +1044,12 @@ RESTART_NOTE = "ゲームを起動し直すと効きます"
 
 
 def as_shown(values):
-    """比べるための形。`bool` 以外は文字列にする（入力欄は文字列を返すので、読んだ値と揃える）。"""
-    return dict((key, value if isinstance(value, bool) else str(value)) for key, value in values.items())
+    """比べるための形。`bool` 以外は文字列にする（入力欄は文字列を返すので、読んだ値と揃える）。
+
+    未指定（`None`）は空欄の "" に揃える（`Form.set` が空欄で出すので、"None" と比べると開いただけで未保存になる）。
+    """
+    return dict((key, value if isinstance(value, bool) else _field_text(value))
+                for key, value in values.items())
 
 
 def text_style(theme, padx=8, pady=6):

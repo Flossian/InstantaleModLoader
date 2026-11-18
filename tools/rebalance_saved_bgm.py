@@ -8,26 +8,29 @@ mod（runtime/mods/104_balance_area_bgm/）が書き換えるのは、
 選び方のルールは mod ファイルをそのまま import して使っているので、
 両者の挙動がずれることはない。
 
+書き換えるのは遊んでいるセーブ（saves/<フォルダ>/savedata.json の areas[*].bgm）だけ。
+worlds/<世界名>/world_data.json は世界の骨格で、MOD なしの状態へ戻す手段なので書かない
+（TECH.md の「world_data.json へ MOD は書かない」）。--plain で渡されても world_data.json には書かない。
+
 セーブの形式
 ------------
-worlds/<ワールド名>/world_data.json は、
-JSON を固定の鍵で XOR しただけのファイルになっている。
+savedata.json は、JSON を固定の鍵で XOR しただけのファイルになっている（GAME.md §2.16）。
 
     平文 = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
                .encode("utf-8")
     暗号文[i] = 平文[i] ^ KEY[i % len(KEY)]
 
-手元の3ワールドで確認したところ、
-読み込んだデータを再度エンコードすると元のファイルとバイト単位で完全に一致した。
---apply を付けたときはこの検査をファイルごとに毎回やり直し、
-一度でも一致しなければ書き込みを中止する。
+--apply を付けたときは、読み込んだデータを再度エンコードして元のファイルとバイト単位で一致するかを
+ファイルごとに毎回確かめ、一度でも一致しなければ書き込みを中止する。
 JSON の書き出し方が少しでも違っていればそこで止まるので、セーブが壊れることはない。
+
+ゲームは行動のたびにセーブを上書きするので、ゲームを閉じてから走らせる。
 
 使い方
 ------
-    python tools/rebalance_saved_bgm.py                 # 全ワールドを確認だけする
-    python tools/rebalance_saved_bgm.py --world <世界名>
-    python tools/rebalance_saved_bgm.py --plain path/to/world_data_plain_x.json
+    python tools/rebalance_saved_bgm.py                 # 全セーブを確認だけする
+    python tools/rebalance_saved_bgm.py --world <saves の下のフォルダ名>
+    python tools/rebalance_saved_bgm.py --plain path/to/savedata_plain_x.json
     python tools/rebalance_saved_bgm.py --apply         # 実際に書き込む（バックアップあり）
 
 --apply を付けない限り、ファイルには一切書き込まない。
@@ -80,7 +83,10 @@ def find_mod(suffix: str, mods_dir: str = MODS_DIR) -> str:
     return os.path.join(folder, entry)
 
 
-DEFAULT_WORLDS = saves.worlds_dir()
+DEFAULT_SAVES = saves.saves_dir()
+
+#: 世界の骨格。読むことはあっても書かない（モジュールの冒頭）。
+SKELETON_NAME = "world_data.json"
 DEFAULT_GAME = r"C:\Program Files\Epic Games\Instantaleq6Ve7"
 
 
@@ -226,6 +232,11 @@ def process(path, policy, pool, apply_changes):
         print("    DRY RUN -- nothing written. Re-run with --apply to write.")
         return False
 
+    if os.path.basename(path).lower() == SKELETON_NAME:
+        print()
+        print("    REFUSED: %s is the world skeleton; write savedata.json instead" % SKELETON_NAME)
+        return False
+
     # 書き込む前に必ずバックアップを取る。
     # 名前に日時が入るので、実行を繰り返しても以前のバックアップは消えない。
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -244,10 +255,13 @@ def process(path, policy, pool, apply_changes):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--worlds", default=DEFAULT_WORLDS,
-                        help="worlds directory (default: %(default)s)")
+    parser.add_argument("--saves", default=DEFAULT_SAVES,
+                        help="saves directory holding <folder>/savedata.json (default: %(default)s)")
+    # 前の版の引数（骨格の worlds フォルダを指していた）。同じ親の saves フォルダとして読み、警告を出す。
+    # 配布物の道具の引数なので、外すのは v2.0.0（docs/TECH.md §3.9「次の API（v2.0.0）で外すもの」）
+    parser.add_argument("--worlds", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--world", action="append", default=[],
-                        help="only this world name; repeatable")
+                        help="only this folder under the saves directory; repeatable")
     parser.add_argument("--plain", action="append", default=[],
                         help="a plain JSON export to process instead; repeatable")
     parser.add_argument("--game", default=DEFAULT_GAME,
@@ -258,10 +272,16 @@ def main(argv=None):
 
     # ワールド名や曲名に日本語が入るので、
     # cp932 のコンソールでも文字化けやエラーで止まらないようにしておく。
+    # 何かを print するより前に差し替える。差し替える前の書き出しはバッファに残ったまま失われる。
     try:
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     except Exception:
         pass
+
+    if args.worlds:
+        args.saves = os.path.join(os.path.dirname(os.path.normpath(args.worlds)), "saves")
+        print("WARN: --worlds is deprecated and will be removed in v2.0.0; "
+              "reading the saves next to it ({}). Use --saves.".format(args.saves))
 
     policy = load_policy()
 
@@ -274,15 +294,16 @@ def main(argv=None):
     print("pool: %s\n" % ", ".join(
         "%s=%d tracks" % (s, len(pool[s])) for s in sorted(pool)))
 
-    # --plain が指定されていればそれを使い、無ければ worlds フォルダを探索する。
+    # --plain が指定されていればそれを使い、無ければ saves フォルダを探索する。
+    # 探すのはセーブ（savedata.json）で、骨格（worlds/<世界名>/world_data.json）は見ない。
     targets = list(args.plain)
     if not targets:
-        if not os.path.isdir(args.worlds):
-            raise SystemExit("worlds directory not found: {}".format(args.worlds))
-        for name in sorted(os.listdir(args.worlds)):
+        if not os.path.isdir(args.saves):
+            raise SystemExit("saves directory not found: {}".format(args.saves))
+        for name in sorted(os.listdir(args.saves)):
             if args.world and name not in args.world:
                 continue
-            candidate = os.path.join(args.worlds, name, "world_data.json")
+            candidate = os.path.join(args.saves, name, "savedata.json")
             if os.path.isfile(candidate):
                 targets.append(candidate)
 

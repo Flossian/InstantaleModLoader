@@ -49,6 +49,9 @@ recon（`out\recon\targets.txt`）から読めるのは「そこに関数が在�
     （spec が見つからない・loader が無い・loader を包めなかった）。
     来るときの `import_seen` は `import_done` とほぼ同数の対で、足す情報が無かった。
     本体が import の途中で投げた回は、`import_done` の代わりに `import_raised` を書く
+
+版11: import の直後の当て直し（`attach`）は、読み込まれたのが sdcpp の `_logger` か manager のときだけ走らせる
+（`could_carry_targets`）。前は diffusers の部分モジュールの import 1件ごとに `sys.modules` を2回なめていた。
 """
 import datetime
 import inspect
@@ -735,6 +738,12 @@ def apply(ctx):
             write("attach ({}): {} new target(s)".format(reason, added))
         return added
 
+    def could_carry_targets(name, module):
+        """`attach` が当てる先をこのモジュールが持ちうるか（`attach` の2つの絞り込みと同じ目印）。"""
+        if name.endswith(LOGGER_SUFFIX):
+            return True
+        return any(frames.attr(module, mark, None) is not None for mark in MANAGER_MARKS)
+
     # ------------------------------------------------------- import の瞬間を見る
 
     def on_import_seen(name, spec, watched):
@@ -783,7 +792,11 @@ def apply(ctx):
                     "has_loader": frames.attr(module, PIPELINE_FUNC, None) is not None,
                     "thread": threading.current_thread().name,
                     "caller": chain})
-            if attach("import of {}".format(name)):
+            # 当てる先が増えうるのは、読み込まれたのが sdcpp の `_logger` か manager のときだけ（版11）。
+            # 出口のクラスは manager の本体が先頭で import するので manager の読み込みで拾え、
+            # 建った後は `load_sd_pipeline` の包みが当て直す。それ以外（diffusers の部分モジュールなど
+            # 1回の起動で数百件）のたびに `sys.modules` を2回なめていた。
+            if could_carry_targets(name, module) and attach("import of {}".format(name)):
                 ctx.refresh_status()
         except Exception:
             ctx.log_exc("image generation probe: import hook failed")

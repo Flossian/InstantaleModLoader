@@ -93,7 +93,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check("--apply で書く（素の JSON のまま）", wrote is True and areas["2"]["bgm"] != SAME, areas)
     check("控えを残す", any(n.startswith("plain.json.bak-") for n in os.listdir(tmp)))
 
-    xored = os.path.join(tmp, "world_data.json")
+    xored = os.path.join(tmp, "savedata.json")
     with open(xored, "wb") as fh:
         fh.write(R.encode(world()))
     data, obfuscated, round_trip = R.read_world(xored)
@@ -103,6 +103,58 @@ with tempfile.TemporaryDirectory() as tmp:
     data, obfuscated, _ = R.read_world(xored)
     check("難読化されていたものは難読化して書き戻す",
           obfuscated and data["areas"]["2"]["bgm"] != SAME, data)
+
+    # 骨格は MOD も道具も書かない（TECH.md）。渡されても拒む。
+    skeleton = os.path.join(tmp, "world_data.json")
+    with open(skeleton, "wb") as fh:
+        fh.write(R.encode(world()))
+    before = open(skeleton, "rb").read()
+    with contextlib.redirect_stdout(io.StringIO()):
+        wrote = R.process(skeleton, policy, POOL, True)
+    check("**world_data.json（骨格）には --apply でも書かない**",
+          wrote is False and open(skeleton, "rb").read() == before)
+
+print("[探す先]")
+with tempfile.TemporaryDirectory() as tmp:
+    # 本物の置き場と同じ形: saves/<フォルダ>/savedata.json と worlds/<世界名>/world_data.json
+    for mood, name in (("calm", "a.mp3"), ("calm", "b.mp3"), ("lively", "c.mp3")):
+        folder = os.path.join(tmp, "game", "Assets", "sounds", "musics", "town", mood)
+        os.makedirs(folder, exist_ok=True)
+        open(os.path.join(folder, name), "wb").close()
+    save = os.path.join(tmp, "saves", "w1", "savedata.json")
+    skeleton = os.path.join(tmp, "worlds", "w1", "world_data.json")
+    for path in (save, skeleton):
+        os.makedirs(os.path.dirname(path))
+        with open(path, "wb") as fh:
+            fh.write(R.encode(world()))
+    skeleton_before = open(skeleton, "rb").read()
+    with contextlib.redirect_stdout(io.StringIO()):
+        R.main(["--saves", os.path.join(tmp, "saves"), "--game", os.path.join(tmp, "game"),
+                "--apply"])
+    data, obfuscated, round_trip = R.read_world(save)
+    check("**セーブ（savedata.json）の areas[*].bgm を均す**",
+          obfuscated and round_trip and data["areas"]["2"]["bgm"] != SAME, data)
+    check("骨格には触らない", open(skeleton, "rb").read() == skeleton_before)
+    # 前の版の引数（--worlds）でも止まらず、同じ親の saves を読んで警告を出す（外すのは v2.0.0）
+    out = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out):
+            R.main(["--worlds", os.path.join(tmp, "worlds"), "--game", os.path.join(tmp, "game")])
+        stopped = None
+    except SystemExit as exc:
+        stopped = exc
+    check("前の引数 --worlds でも止まらず、隣の saves を読んで警告を出す",
+          stopped is None and "--worlds is deprecated" in out.getvalue()
+          and os.path.join(tmp, "saves") in out.getvalue(), (stopped, out.getvalue()[-300:]))
+    # 本物の標準出力でも警告が残る（StringIO では stdout の差し替えが飛ぶので、別プロセスで見る）
+    import subprocess
+    got = subprocess.run(
+        [sys.executable, os.path.join(TOOLS_DIR, "rebalance_saved_bgm.py"),
+         "--worlds", os.path.join(tmp, "worlds"), "--game", os.path.join(tmp, "game")],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    text = got.stdout.decode("utf-8", "replace")
+    check("別プロセスの標準出力にも --worlds の警告が出る",
+          got.returncode == 0 and "--worlds is deprecated" in text, (got.returncode, text[-300:]))
 
 print()
 if failures:

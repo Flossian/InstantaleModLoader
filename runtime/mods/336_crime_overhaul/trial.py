@@ -164,6 +164,9 @@ def adjust(kind, years, requested, effects, cuts, death_years, penalty_years):
         new_kind, new_years = "imprisonment", ceiling
     elif kind == "imprisonment" and spared and years is not None and years > ceiling:
         new_years = ceiling
+    if (new_kind, new_years) == (kind, years):
+        # 判事が既に上限より軽くしていて、減らす介入は効いていない。知らせる文に「改められた」と書かない
+        reasons = []
     if effects.get("bribe") == "caught" and new_kind == "imprisonment" and penalty_years > 0:
         new_years = (new_years or 0) + int(penalty_years)
         reasons.append(REASON_CAUGHT)

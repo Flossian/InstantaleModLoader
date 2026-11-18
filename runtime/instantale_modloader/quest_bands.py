@@ -23,7 +23,7 @@ id 9 以降の街には範囲が無く、1〜76 の全域から引く。
 """
 import sys
 
-from . import alive
+from . import window_call, window_entries, window_put
 
 STORE_ATTR = "_instantale_quest_bands"
 
@@ -38,9 +38,7 @@ def _store():
 
 def provide(owner, ctx, fn):
     """`owner` の範囲を決める関数を登録する。同じ持ち主の登録は差し替える（新しい登録として後ろへ）。"""
-    providers = _store()["providers"]
-    providers.pop(str(owner), None)
-    providers[str(owner)] = (ctx, fn)
+    window_put(_store()["providers"], owner, (ctx, fn))
 
 
 def withdraw(owner):
@@ -61,15 +59,11 @@ def _band(value):
 def band_of(app, area_id):
     """`((下限, 上限), 決めた持ち主)`。誰も口を出さなければ `(None, None)`。"""
     store = _store()
-    for owner, (ctx, fn) in reversed(list(store["providers"].items())):
-        if not callable(fn) or not alive(ctx):
+    for owner, (_ctx, fn) in window_entries(store["providers"], newest_first=True):
+        if not callable(fn):
             continue
-        try:
-            got = _band(fn(app, None if area_id is None else str(area_id)))
-        except Exception as exc:
-            store["errors"].append("{}: {}: {}".format(owner, type(exc).__name__, exc))
-            del store["errors"][:-20]
-            continue
+        ok, got = window_call(store, owner, fn, app, None if area_id is None else str(area_id))
+        got = _band(got) if ok else None
         if got is not None:
             return got, owner
     return None, None
@@ -77,7 +71,7 @@ def band_of(app, area_id):
 
 def owners():
     """いま聞いている登録の持ち主。ログ用。"""
-    return [owner for owner, entry in _store()["providers"].items() if alive(entry[0])]
+    return [owner for owner, _entry in window_entries(_store()["providers"])]
 
 
 def reset():

@@ -17,8 +17,9 @@ STOP = ["会話する", "クエスト掲示板"]
 
 def main(say):
     prefer = list(ARGS.get("prefer") or []) + PREFER
-    avoid = list(ARGS.get("avoid") or AVOID)
-    stop = list(ARGS.get("stop") or STOP)
+    # 渡されなかったときだけ既定にする。`or` だと空の並びを渡しても既定に戻り、外せない
+    avoid = list(AVOID if ARGS.get("avoid") is None else ARGS["avoid"])
+    stop = list(STOP if ARGS.get("stop") is None else ARGS["stop"])
     state = {"n": 0, "last": None, "since": time.time()}
     limit = int(ARGS.get("steps", 30))
     deadline = time.time() + float(ARGS.get("timeout", 1500))

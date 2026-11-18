@@ -18,7 +18,7 @@ MOD どうしは import しない（TECH.md §3.2.3）。
 """
 import sys
 
-from . import alive
+from . import window_call, window_entries, window_put
 
 STORE_ATTR = "_instantale_value_limits"
 
@@ -36,9 +36,7 @@ def _store():
 
 def provide(owner, ctx, fn):
     """`owner` の上限を出す関数を登録する。同じ持ち主の登録は差し替える。"""
-    providers = _store()["providers"]
-    providers.pop(str(owner), None)
-    providers[str(owner)] = (ctx, fn)
+    window_put(_store()["providers"], owner, (ctx, fn))
 
 
 def withdraw(owner):
@@ -55,14 +53,11 @@ def game_max():
 def _offers():
     store = _store()
     out = []
-    for owner, (ctx, fn) in list(store["providers"].items()):
-        if not callable(fn) or not alive(ctx):
+    for owner, (_ctx, fn) in window_entries(store["providers"]):
+        if not callable(fn):
             continue
-        try:
-            got = fn()
-        except Exception as exc:
-            store["errors"].append("{}: {}: {}".format(owner, type(exc).__name__, exc))
-            del store["errors"][:-20]
+        ok, got = window_call(store, owner, fn)
+        if not ok:
             continue
         if isinstance(got, int) and not isinstance(got, bool):
             out.append((got, owner))

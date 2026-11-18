@@ -27,7 +27,7 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
 """
 import sys
 
-from . import alive
+from . import window_call, window_entries, window_put
 
 STORE_ATTR = "_instantale_quest_claims"
 
@@ -48,12 +48,12 @@ def _store():
 
 def declare(owner, ctx, fn):
     """`owner` が狙っている・片付けた依頼の行を返す関数を登録する。同じ持ち主の登録は差し替える。"""
-    _store()["claims"][str(owner)] = (ctx, fn)
+    window_put(_store()["claims"], owner, (ctx, fn))
 
 
 def declare_urgent(owner, ctx, fn):
     """`owner` が急ぎとする依頼の行を返す関数を登録する。同じ持ち主の登録は差し替える。"""
-    _store()["urgent"][str(owner)] = (ctx, fn)
+    window_put(_store()["urgent"], owner, (ctx, fn))
 
 
 def withdraw(owner):
@@ -66,14 +66,9 @@ def withdraw(owner):
 def _rows(kind, app):
     store = _store()
     out = []
-    for owner, (ctx, fn) in list(store[kind].items()):
-        if not alive(ctx):
-            continue
-        try:
-            got = fn(app)
-        except Exception as exc:
-            store["errors"].append("{} {}: {}: {}".format(kind, owner, type(exc).__name__, exc))
-            del store["errors"][:-20]
+    for owner, (_ctx, fn) in window_entries(store[kind]):
+        ok, got = window_call(store, "{} {}".format(kind, owner), fn, app)
+        if not ok:
             continue
         for row in got or ():
             if not isinstance(row, dict) or row.get("quest") in (None, ""):
@@ -110,8 +105,8 @@ def urgent(app):
 def owners():
     """いま数えている登録の持ち主（片付ける側・急ぎを置く側）。ログ用。"""
     store = _store()
-    return ([owner for owner, (ctx, _fn) in store["claims"].items() if alive(ctx)],
-            [owner for owner, (ctx, _fn) in store["urgent"].items() if alive(ctx)])
+    return ([owner for owner, _entry in window_entries(store["claims"])],
+            [owner for owner, _entry in window_entries(store["urgent"])])
 
 
 def reset():

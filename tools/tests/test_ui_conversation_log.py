@@ -662,6 +662,23 @@ def run():
           [type(c).__name__ for c in hud.children])
 
     other = hud.expand_button
+    held_press = list(button._binds.get("on_release", []))
+    held_follow = list(other._binds.get("pos", []))
+    binds = []
+    real_button_bind, real_other_bind = button.bind, other.bind
+    object.__setattr__(button, "bind", lambda **kw: (binds.append(("log", kw)), real_button_bind(**kw)))
+    object.__setattr__(other, "bind", lambda **kw: (binds.append(("113", kw)), real_other_bind(**kw)))
+    try:
+        for _ in range(5):
+            hud.show()
+            hud.repaint()
+    finally:
+        object.__delattr__(button, "bind")
+        object.__delattr__(other, "bind")
+    check("repainting keeps the press handler and the follow handler instead of binding them again",
+          not binds and button._binds.get("on_release") == held_press and len(held_press) == 1
+          and other._binds.get("pos") == held_follow and len(held_follow) == 1,
+          (binds, button._binds.get("on_release"), other._binds.get("pos")))
     check("the button sits just left of 113's, bottoms aligned",
           close(button.x, other.x - button.width - mod.BUTTON_GAP)
           and close(button.y, other.y),

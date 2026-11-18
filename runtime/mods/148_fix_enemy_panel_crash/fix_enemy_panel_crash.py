@@ -75,6 +75,9 @@ def apply(ctx):
     def update_enemy_display(orig, self, *args, **kwargs):
         panel = folded_panel(self)
         if panel is None:
+            # 欄が戻った後にゲームが新しい状態で描いた。畳まれていた間の古い呼び出しは描き直さない
+            # （見張りが後から走らせると、敵の欄が1つ前の状態で上書きされる）
+            state["pending"] = None
             return orig(self, *args, **kwargs)
         height = panel.height
         panel.height = FOLDED_HEIGHT

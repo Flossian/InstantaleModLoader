@@ -473,6 +473,23 @@ check("refused: no effect", player.physical_integrity == 0, player.physical_inte
 check("refused: logged", "refused" in io.open(
     os.path.join(OUT_DIR, "item_effects.log"), encoding="utf-8").read())
 
+# 本体が消費の中で保存し、品を外さずに終わった。保存には 0 ではなく元の `回復` を入れる
+saved_heal = []
+heal_before = medicine.attributes.get("回復")
+
+
+def save_inside(self, item_instance, usable_flag):
+    ctx.hooks["__main__:InstantaleApp.save_game"](
+        lambda app_self: saved_heal.append(item_instance.attributes.get("回復")), app)
+    saved_heal.append(("after save", item_instance.attributes.get("回復")))
+    return None
+
+
+ctx.hooks["__main__:ItemConsumeManager.consume_item"](save_inside, manager, medicine, True)
+check("refused + saved inside: the save gets the real heal, not 0",
+      saved_heal[:1] == [heal_before] and saved_heal[1] == ("after save", 0)
+      and medicine.attributes.get("回復") == heal_before, (saved_heal, medicine.attributes))
+
 # 本体が文を出さなかったとき
 print("[文が無いとき]")
 

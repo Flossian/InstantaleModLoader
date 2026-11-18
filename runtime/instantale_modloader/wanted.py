@@ -27,9 +27,10 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
 
 置き場は `sys` の属性（`_instantale_wanted`）。注入し直しをまたいで残る。
 """
+import math
 import sys
 
-from . import alive, ui
+from . import alive, ui, window_call, window_entries, window_put
 
 STORE_ATTR = "_instantale_wanted"
 
@@ -56,6 +57,8 @@ def weight_of(lawfulness):
     """
     if isinstance(lawfulness, bool) or not isinstance(lawfulness, (int, float)):
         return 0
+    if isinstance(lawfulness, float) and not math.isfinite(lawfulness):
+        return 0                    # NaN / inf は読めない値と同じ扱い（int() で落ちる）
     return max(0, WANTED_BELOW - int(lawfulness))
 
 
@@ -76,7 +79,7 @@ def total_weight(character):
 # --------------------------------------------------------------------------
 def declare_hunted(owner, ctx, fn):
     """`owner` の全域手配の線を返す関数を登録する。同じ持ち主の登録は差し替える。"""
-    _store()["hunted"][str(owner)] = (ctx, fn)
+    window_put(_store()["hunted"], owner, (ctx, fn))
 
 
 def withdraw(owner):
@@ -88,17 +91,14 @@ def hunted_line(app):
     """`(線, 決めた持ち主)`。誰も線を置いていなければ `(None, None)`。"""
     store = _store()
     line, by = None, None
-    for owner, (ctx, fn) in list(store["hunted"].items()):
-        if not alive(ctx):
-            continue
-        try:
-            got = fn(app)
-        except Exception as exc:
-            store["errors"].append("{}: {}: {}".format(owner, type(exc).__name__, exc))
-            del store["errors"][:-20]
+    for owner, (_ctx, fn) in window_entries(store["hunted"]):
+        ok, got = window_call(store, owner, fn, app)
+        if not ok:
             continue
         if isinstance(got, bool) or not isinstance(got, (int, float)):
             continue
+        if isinstance(got, float) and not math.isfinite(got):
+            continue        # NaN / inf は線を置かなかったものとみなす（int() で落ちる）
         got = int(got)      # 弾く判定も比べるのも、返す値（切り捨てた整数）で行う
         if got <= 0:
             continue
@@ -109,7 +109,7 @@ def hunted_line(app):
 
 def owners():
     """いま数えている登録の持ち主。ログ用。"""
-    return [owner for owner, (ctx, _fn) in _store()["hunted"].items() if alive(ctx)]
+    return [owner for owner, _entry in window_entries(_store()["hunted"])]
 
 
 # --------------------------------------------------------------------------
@@ -127,7 +127,7 @@ def owners():
 # `outcome` はゲームの `BattleEndManager(app, end_type)` の `end_type` をそのまま渡す。
 def on_hunt_end(owner, ctx, fn):
     """追手の戦闘の終わりを受ける関数を登録する。同じ持ち主の登録は差し替える。"""
-    _store().setdefault("hunt_end", {})[str(owner)] = (ctx, fn)
+    window_put(_store().setdefault("hunt_end", {}), owner, (ctx, fn))
 
 
 def hunt_ended(app, hunt):
@@ -137,15 +137,10 @@ def hunt_ended(app, hunt):
     """
     store = _store()
     reached = []
-    for owner, (ctx, fn) in list(store.setdefault("hunt_end", {}).items()):
-        if not alive(ctx):
-            continue
-        try:
-            fn(app, dict(hunt or {}))
+    for owner, (_ctx, fn) in window_entries(store.setdefault("hunt_end", {})):
+        ok, _got = window_call(store, owner, fn, app, dict(hunt or {}))
+        if ok:
             reached.append(owner)
-        except Exception as exc:
-            store["errors"].append("{}: {}: {}".format(owner, type(exc).__name__, exc))
-            del store["errors"][:-20]
     return reached
 
 
@@ -162,7 +157,7 @@ def hunt_ended(app, hunt):
 #     率を置く側が確かめる           wanted.shop_pressure_taker()                  # 引き受けた持ち主 / None
 def declare_shop_pressure(owner, ctx, fn):
     """`owner` の店の値の圧（いま居る土地での率）を返す関数を登録する。同じ持ち主の登録は差し替える。"""
-    _store().setdefault("pressure", {})[str(owner)] = (ctx, fn)
+    window_put(_store().setdefault("pressure", {}), owner, (ctx, fn))
 
 
 def shop_pressure(app):
@@ -172,14 +167,9 @@ def shop_pressure(app):
     """
     store = _store()
     rate, by = 0.0, None
-    for owner, (ctx, fn) in list(store.setdefault("pressure", {}).items()):
-        if not alive(ctx):
-            continue
-        try:
-            got = fn(app)
-        except Exception as exc:
-            store["errors"].append("{}: {}: {}".format(owner, type(exc).__name__, exc))
-            del store["errors"][:-20]
+    for owner, (_ctx, fn) in window_entries(store.setdefault("pressure", {})):
+        ok, got = window_call(store, owner, fn, app)
+        if not ok:
             continue
         if isinstance(got, bool) or not isinstance(got, (int, float)):
             continue

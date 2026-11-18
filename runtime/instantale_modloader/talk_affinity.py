@@ -26,7 +26,7 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
 """
 import sys
 
-from . import alive
+from . import window_call, window_entries, window_put
 
 STORE_ATTR = "_instantale_talk_affinity"
 
@@ -41,7 +41,7 @@ def _store():
 
 def limit(owner, ctx, fn):
     """`owner` の相手の上限を決める関数を登録する。同じ持ち主の登録は差し替える。"""
-    _store()["limits"][str(owner)] = (ctx, fn)
+    window_put(_store()["limits"], owner, (ctx, fn))
 
 
 def withdraw(owner):
@@ -53,14 +53,9 @@ def ceiling(app, npc_id, default):
     """`(上限, 決めた持ち主)`。誰も狭めなければ `(default, None)`。"""
     store = _store()
     value, by = default, None
-    for owner, (ctx, fn) in list(store["limits"].items()):
-        if not alive(ctx):
-            continue
-        try:
-            got = fn(app, str(npc_id))
-        except Exception as exc:
-            store["errors"].append("{}: {}: {}".format(owner, type(exc).__name__, exc))
-            del store["errors"][:-20]
+    for owner, (_ctx, fn) in window_entries(store["limits"]):
+        ok, got = window_call(store, owner, fn, app, str(npc_id))
+        if not ok:
             continue
         if isinstance(got, bool) or not isinstance(got, (int, float)):
             continue
@@ -71,7 +66,7 @@ def ceiling(app, npc_id, default):
 
 def owners():
     """いま数えている登録の持ち主。ログ用。"""
-    return [owner for owner, (ctx, _fn) in _store()["limits"].items() if alive(ctx)]
+    return [owner for owner, _entry in window_entries(_store()["limits"])]
 
 
 def reset():

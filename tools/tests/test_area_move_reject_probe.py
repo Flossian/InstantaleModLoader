@@ -126,8 +126,10 @@ def run(passes):
         app.original_party.append("2")
         member.relationship["player"]["affinity"] = 5
         member.relationship["2"] = {"affinity": 1}
-        # 写す前から元を握っていた側（保存スレッドなど）の書き込み
+        # 写す前から元を握っていた側（保存スレッドなど）の書き込み（足す・書き換える・消す）
         before["characters"]["14"] = "held"
+        before["characters"]["1"] = "replaced directly"
+        before["party"].pop("player", None)
         if passes and "同行中" in tags:
             ctx.hooks["__main__:InstantaleApp.elapse_days"](orig_elapse, app, 14)
         else:
@@ -168,9 +170,12 @@ for passes, marker in ((False, ">> area_move_rejector called"), (True, ">> elaps
           sorted(app.world.characters))
     check("写す前から握っていた側の書き込みも残る", app.world.characters.get("14") == "held",
           sorted(app.world.characters))
+    check("  → 元を直に書き換えた鍵を写した時点の値に戻さない",
+          app.world.characters.get("1") == "replaced directly", app.world.characters.get("1"))
+    check("  → 元から直に消した鍵を生き返らせない", "player" not in app.party, sorted(app.party))
     check("分岐の後の書き込みが残る", app.world.characters.get("15") == "later",
           sorted(app.world.characters))
-    check("仲間の出入りが残る", sorted(app.party) == ["2", "player"], app.party)
+    check("仲間の出入りが残る", sorted(app.party) == ["2"], app.party)
     check("list の追記が残る", app.original_party == ["player", "1", "2"], app.original_party)
     check("関係の書き換えが残る",
           member.relationship["player"]["affinity"] == 5

@@ -200,7 +200,12 @@ def apply(ctx):
                     slopes[price_name] = slope
             if slope <= 0:
                 return result
-            level = like(result, min(LIMIT, top + int((price - top_price) // slope)))
+            # 順方向は like で丸めるので、切り捨てだけだと順方向で出した値段が1段下に戻る。
+            # 順方向の値段が price を超えない最大の段を取る（切り捨てとの差は高々1〜2段）。
+            steps = int((price - top_price) // slope)
+            while top + steps < LIMIT and like(top_price, top_price + slope * (steps + 1)) <= price:
+                steps += 1
+            level = like(result, min(LIMIT, top + steps))
             note(name, price, top_price, level)
             return level
         return wrapper

@@ -1278,6 +1278,23 @@ _shown = [(section, row["text"]) for section in ("add", "remove", "replace")
 check("取り込んだ any の行は固定行に出る（保存で消えない）",
       sorted(_shown) == [("add", "bad hands"), ("remove", "nsfw"),
                          ("replace", "{prompt}, x")], _shown)
+# 手で書いた規則には画面に欄の無い行がある。保存の組み直しで消さないよう書き戻す
+_hand = {"replace": [{"enabled": True, "kind": "portrait", "target": "prompt", "when": "1boy",
+                      "text": "{prompt}, male"},
+                     {"enabled": True, "kind": "portrait", "target": "prompt", "text": "{prompt}, a"},
+                     {"enabled": True, "kind": "portrait", "target": "prompt", "text": "{prompt}, b"}],
+         "remove": [{"enabled": True, "kind": "any", "target": "prompt", "text": "x"},
+                    {"enabled": True, "kind": "any", "target": "prompt", "text": "y"}],
+         "add": [{"enabled": True, "kind": "any", "target": "prompt", "when": "girl", "text": "z"},
+                 {"enabled": True, "kind": "any", "target": "prompt", "text": "q", "model": "sdxl"}],
+         "skip_upscale": []}
+_keys = [(section, kind, target) for section in ("add", "remove", "replace")
+         for kind in _rule_kinds for target in RB.TARGETS]
+_keys += [("skip_upscale", kind, None) for kind, _label in TOOL.SKIP_LABELS]
+_unshown = TOOL.unshown_rows(_hand, _keys)
+check("画面に出ない行（モデルの無い条件つきの置換・同じ種類の2行目以降）を書き戻す",
+      {section: [row["text"] for row in rows] for section, rows in _unshown.items()}
+      == {"replace": ["{prompt}, male", "{prompt}, b"], "remove": ["y"]}, _unshown)
 
 print("モデルで絞る（版26）")
 NOVA = ("sdxl", os.path.join("state", "models", "sdxl", "checkpoints", "novaAnimeXL_ilV190.safetensors"))

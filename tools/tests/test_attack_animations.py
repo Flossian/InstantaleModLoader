@@ -346,6 +346,20 @@ if pydantic is not None:
     carried, action = resolve(MOD.VFX["arcane"][0])
     check("古い控えは使わない（時間切れ）", carried == MOD.VFX["arcane"][0]
           and not any("arcane" in n and "carries it" in n for n in ctx.notes[-1:]), ctx.notes[-2:])
+    # 控えた手が演出まで届かなかったとき、後の別の手の本物の運び手の値を元の値と取り違えない
+    ask("referee_player_any_input_new_new", {"vfx": "blow"})
+    carried, action = resolve("slash", side=MOD.ENEMY_SIDE)
+    check("敵の手の本物の slash は控えに当てない", carried == "slash", carried)
+    carried, action = resolve("slash")
+    check("敵の手が来たら控えは捨てる", carried == "slash", carried)
+    ask("referee_player_any_input_new_new", {"vfx": "blow"})
+    resolve("fire")
+    carried, action = resolve("slash")
+    check("値の違う手が来たら控えは捨てる", carried == "slash", carried)
+    ask("referee_player_any_input_new_new", {"vfx": "blow"})
+    CLOCK.now += MOD.NARROWED_SECONDS + 0.5
+    carried, action = resolve("slash")
+    check("控えは送り口の直後の手だけに使う（次の審判を待つ手には使わない）", carried == "slash", carried)
 
 
 def effect(src, target=APP_EFFECT, **kwargs):

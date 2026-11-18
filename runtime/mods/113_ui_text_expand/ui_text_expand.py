@@ -1118,21 +1118,28 @@ def apply(ctx):
 
         # 押下先の付け替え。
         # 注入し直したとき、古い注入の切り替えを呼び続けないため。
+        # 塗り直しは本文の1文字ごとに来るので、この注入がこの HUD 用に結んだ手が付いたままなら
+        # 結び直さない（`114_` の `still_held` と同じ考え方）。
         previous = frames.attr(button, CALLBACK_ATTR)
-        if previous is not frames.MISSING and previous is not None:
-            try:
-                button.unbind(on_release=previous)
-            except Exception:
-                pass
-        def callback(_instance=None, _hud=hud):
-            return guarded(lambda: toggle(_hud))
+        if not (getattr(previous, "expand_state", None) is state
+                and getattr(previous, "expand_hud", None) is hud):
+            if previous is not frames.MISSING and previous is not None:
+                try:
+                    button.unbind(on_release=previous)
+                except Exception:
+                    pass
 
-        try:
-            button.bind(on_release=callback)
-            setattr(button, CALLBACK_ATTR, callback)
-        except Exception:
-            ctx.log_exc("text expand: could not bind the toggle button")
-            return
+            def callback(_instance=None, _hud=hud):
+                return guarded(lambda: toggle(_hud))
+            callback.expand_state = state
+            callback.expand_hud = hud
+
+            try:
+                button.bind(on_release=callback)
+                setattr(button, CALLBACK_ATTR, callback)
+            except Exception:
+                ctx.log_exc("text expand: could not bind the toggle button")
+                return
         try:
             button.text = button_text()
         except Exception:

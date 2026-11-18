@@ -55,6 +55,7 @@ check("the elapsed and day-of-year names",
       rules.format_date("{elapsed}/{day_of_year}", 32, NAMED, 1) == "32/3")
 check("a typo stays visible", rules.format_date("{typo}{year}", 0, PLAIN, 1) == "{typo}1")
 check("a broken format falls back", rules.format_date("{", 0, PLAIN, 1) == "Date:1年1月1日")
+check("an index on a number falls back", rules.format_date("{year[0]}", 0, PLAIN, 1) == "Date:1年1月1日")
 check("full-width separators are read", rules.parse_months("霜月：10，5") == [("霜月", 10), ("", 5)])
 for broken in ("", "a,b", "0", "31,-1", "31,,31", None, ",".join(["1"] * (rules.MAX_MONTHS + 1))):
     check("broken months are refused: {!r}".format(broken and broken[:12]), rules.parse_months(broken) is None)

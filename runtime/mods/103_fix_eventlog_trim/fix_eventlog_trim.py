@@ -89,8 +89,9 @@ def apply(ctx):
                 # 呼び出し側がキーワード引数で渡すか位置引数で渡すかは、
                 # コンパイル済みなので読めない。
                 # 両方を見て、どちらでも無ければ何もせずに素通しする。
+                # 名前で渡されたかは鍵の有無で見る（`quest_event_log=None` を位置引数の取り違えにしない）
+                from_kwargs = EVENT_LOG_KEYWORD in kwargs
                 original = kwargs.get(EVENT_LOG_KEYWORD)
-                from_kwargs = original is not None
                 if not from_kwargs and len(args) > EVENT_LOG_INDEX:
                     original = args[EVENT_LOG_INDEX]
 

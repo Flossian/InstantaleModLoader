@@ -823,6 +823,37 @@ def run():
           RUNNING["app"].pressed == [("index", BASE_ROWS, ROSTER[3][0])],
           RUNNING["app"].pressed)
 
+    # -- 広げたままの塗り直し（本文の1文字ごと）は、動いていなければ合わせ直さない --
+    aligned, binds = [], []
+    real_sync = mod.party_panel.sync_geometry
+    real_place = mod.party_panel.place_blocker
+    mod.party_panel.sync_geometry = lambda *a: (aligned.append("sync"), real_sync(*a))
+    mod.party_panel.place_blocker = lambda *a: (aligned.append("blocker"), real_place(*a))
+    real_bind = button.bind
+    button.bind = lambda **kw: (binds.append(kw), real_bind(**kw))
+    held = list(button.bound)
+    try:
+        hud.show()                      # 広げた後の最初の塗り直しで寸法を控える
+        del aligned[:]
+        for _ in range(5):
+            hud.show()
+            hud.update_button_texts(hud, ["会話する", "出る"])
+        check("repainting an expanded panel that did not move does not re-align it",
+              aligned == [], aligned)
+        check("repainting keeps the toggle's press handler instead of binding it again",
+              binds == [] and button.bound == held and len(held) == 1, (binds, button.bound))
+        top_image.width += 10.0         # ゲームが見本の枠の絵を塗り替えた
+        hud.show()
+        check("a moved template is aligned again",
+              "sync" in aligned and extras[0].image().width == top_image.width,
+              (aligned, extras[0].image().width, top_image.width))
+        top_image.width -= 10.0
+        hud.show()
+    finally:
+        mod.party_panel.sync_geometry = real_sync
+        mod.party_panel.place_blocker = real_place
+        del button.bind
+
     # -- 帯に重なるボタンは隠れて押せない ------------------------------------
     check("a button the grown panel covers is hidden",
           hud.stray.opacity == 0 and hud.stray.disabled is True,
@@ -1354,6 +1385,20 @@ def run():
     check("a widget left hidden is restored on the next injection",
           stranded.opacity == 1.0 and stranded.disabled is False,
           (stranded.opacity, stranded.disabled))
+
+    # 広げたまま注入し直すと、戻したものを帯に重なっていれば隠し直す（近道でも）
+    install(mod, ctx)
+    hud = FakeHUD(members=4)
+    hud.show()
+    hud.toggle_button().press()
+    hidden_before = hud.stray.opacity == 0 and hud.stray.disabled is True
+    install(mod, ctx)                  # 広げたまま注入し直す
+    hud.show()
+    hud.tick_party()
+    CLOCK.tick()
+    check("re-injecting while expanded hides the covered button again",
+          hidden_before and hud.stray.opacity == 0 and hud.stray.disabled is True,
+          (hidden_before, hud.stray.opacity, hud.stray.disabled))
 
     # 置き去りの黒い板も同じ。
     # 残るとそこの触りを止め続ける。

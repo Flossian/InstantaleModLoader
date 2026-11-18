@@ -121,8 +121,8 @@ HUB_TYPES = ("entrance", "ward")
 #: 素データの `config` の既定。実セーブの `location` は `level_of_detail` だけを持つ。
 DEFAULT_CONFIG = {"level_of_detail": 0}
 
-#: 移動のボタンの spec のクラス名（GAME.md §2.2）。
-MOVE_CLS = "MovePhaseManager"
+#: 移動のボタンの spec のクラス名（GAME.md §2.2）。名前は `ui` の1か所で持つ（ゲームの更新で変わったら1か所直す）。
+MOVE_CLS = ui.MOVE_PHASE_CLS
 
 #: 会話のボタンの spec のクラス名。ゲームは施設の選択肢の**最後**に足す。
 TALK_CLS = "DisplayTalkChoice"
@@ -577,9 +577,11 @@ def hub_of(area, app=None, node_id=None):
     土地の先頭のノードから探すと、ノードが2つある街で
     プレイヤーの居ない側に建つ（実機）。
     """
-    node, facility = hub_in_node(node_here(app, area, node_id))
-    if facility is not None:
-        return node, facility
+    here = node_here(app, area, node_id)
+    if here is not None:
+        # ノードが分かっているなら、そこに入口が無くても他のノードへ探しに行かない
+        # （行けないノードに繋ぐと、どこからも入れない建物になる。`misplaced` が防ぐ事故）
+        return hub_in_node(here)
     for node in ui.nodes_of(area):
         entrance_id = getattr(node, "entrance_facility", None)
         if entrance_id is None:
@@ -731,6 +733,10 @@ def spawn(app, facility_id, area_id, *, node_id=None, hub_id=None, world=None,
                   "moving it to node {!r}".format(
                       facility_id, node_id_of(found_node),
                       node_id_of(node_here(app, area))))
+        if not record.get("placed"):
+            # 控えの置き場所が空（`forget` / `restore_world` の途中など）だと despawn は何も外さず、
+            # 古い建物を残したまま別のノードにもう1軒建てる。見つけた場所を控えてから壊す
+            record["placed"] = (str(area_id), node_id_of(found_node), "")
         despawn(app, facility_id, world=world, write=write)
         node_id = hub_id = None
     wanted = node_here(app, area)
@@ -1170,6 +1176,12 @@ def _persist(app, owner, facility_id, **changes):
     key, bucket = _bucket(app)
     if key is None:
         return False
+    _put_entry(bucket, owner, facility_id, changes)
+    return store().save(key, bucket)
+
+
+def _put_entry(bucket, owner, facility_id, changes):
+    """控え `bucket` の1軒ぶんを書き換える（書き出さない）。"""
     entry = bucket.setdefault(owner, {}).setdefault(
         str(facility_id), {"snapshot": None, "spawned": False, "place": None})
     if "snapshot" in changes:
@@ -1178,7 +1190,6 @@ def _persist(app, owner, facility_id, **changes):
         entry["spawned"] = bool(changes["spawned"])
     if "place" in changes:
         entry["place"] = list(changes["place"]) if changes["place"] else None
-    return store().save(key, bucket)
 
 
 def _drop_persisted(app, owner, facility_id):
@@ -1270,7 +1281,9 @@ def snapshot_all(app, write=None):
     正規の施設はゲームがセーブに書く。MOD の施設はそこに出さないので、
     同じ時点で同じ中身をこちらが控える（名前・説明・主・`config`）。
     """
-    done = []
+    # 写しを全軒ぶん控えに入れてから1回だけ書き出す（1軒ごとに書くと控えのファイル全体を軒数ぶん書き直す）。
+    key, bucket = _bucket(app)
+    taken = []
     for facility_id, record in list(registry().items()):
         if not is_mod_facility(facility_id) or record.get("facility") is None:
             continue
@@ -1282,8 +1295,12 @@ def snapshot_all(app, write=None):
             write("modfacility: snapshot of {}: {} value(s) not jsonable, dropped: {}".format(
                 facility_id, len(dropped), ", ".join(dropped[:6])))
         record["snapshot_dropped"] = dropped
-        if _persist(app, owner_of_id(facility_id), facility_id, snapshot=snap):
-            done.append(facility_id)
+        owner = owner_of_id(facility_id)
+        if key is None or not owner:
+            continue
+        _put_entry(bucket, owner, facility_id, {"snapshot": snap})
+        taken.append(facility_id)
+    done = taken if taken and store().save(key, bucket) else []
     # 控えは保存のたびに取るが、行は写した顔ぶれが変わったときだけ書く。
     # ゲームは行動のたびに保存するので、毎回書くと行動の数だけ同じ行が並んでいた。
     if write and done and _changed("snapshot", tuple(done)):
@@ -1426,6 +1443,12 @@ class Fac(object):
 
     def config_set(self, key, value):
         config = self._get("config")
+        facility = self.facility
+        if isinstance(config, dict) and facility is not None and getattr(facility, "config", None) is config:
+            # 建っている施設の config は書き足す（辞書を入れ替えない）。plain の施設は実体と素データの写しが
+            # 同じ辞書を持つ前提で、入れ替えるとゲームが写しへ書いた試合の進みが実体に届かなくなる（`install_plain`）
+            config[key] = value
+            return True
         config = dict(config) if isinstance(config, dict) else {}
         config[key] = value
         return self._set("config", config)

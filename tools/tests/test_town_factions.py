@@ -871,6 +871,14 @@ by_field, _ = rules.read_people({"people": [
 check("勢力の欄が別の勢力なら、役が何でも他の勢力寄り（役より勢力の欄を信じる）",
       [(by_field[i]["role"], by_field[i]["faction"], by_field[i].get("open")) for i in "1234"]
       == [("other", "f2", False), ("other", "f2", True), ("other", "f2", False), ("member", "f1", None)], by_field)
+negated, _ = rules.read_people({"people": [
+    {"id": "1", "role": "other", "faction": "灰の結社", "open": "知られていない"},
+    {"id": "2", "role": "other", "faction": "灰の結社", "open": "公然ではない"},
+    {"id": "3", "role": "other", "faction": "灰の結社", "open": "公然"},
+    {"id": "4", "role": "other", "faction": "灰の結社", "open": "周りに知られている"}]},
+    people_ledger, "7", ["1", "2", "3", "4"])
+check("open の否定の答えは公然と読まない",
+      [negated[i].get("open") for i in "1234"] == [False, False, True, True], negated)
 check("公然の他の勢力寄りは会話で見られ方を動かす立場", rules.OTHER_OPEN in rules.JUDGING_ROLES)
 check("公然の他の勢力寄りは中立でも、その勢力の者だと足す", rules.stance_text(
     dict(people_ledger, standing={"f2": {"score": 0}}), "f2", "主人公", rules.OTHER_OPEN)
@@ -1645,6 +1653,21 @@ check("勢力どうしの関係も戻し、噂も外す", book["relations"]["f1|
 check("情勢の起点と1日1回の印も戻す", book["trend"]["last_day"] == 200 and book["gained"] == {}
       and [h["day"] for h in book["history"]] == [150], book)
 check("台帳がその日より後に作られていれば作り直す", rules.rewind(dict(book, made_day=300), 200) == "rebuild")
+# 印は上がっても外れない。前から付いていた印は、後の日の下がる動きを戻しても残す
+locked_book = rules.empty_ledger()
+locked_book.update(status=rules.READY, made_day=0, factions=[{"id": "f1", "name": "甲"}],
+                   standing={"f1": {"score": -93, "locked": True}})
+locked_book["history"] = [{"day": 10, "faction": "f1", "before": 0, "after": -90, "kind": rules.TALK},
+                          {"day": 20, "faction": "f1", "before": -90, "after": -61, "kind": rules.INCIDENT},
+                          {"day": 30, "faction": "f1", "before": -61, "after": -77, "kind": rules.TALK},
+                          {"day": 40, "faction": "f1", "before": -77, "after": -93, "kind": rules.TALK}]
+rules.rewind(locked_book, 35)
+check("移動の前から付いていた敵対の印は巻き戻しで外さない",
+      locked_book["standing"]["f1"] == {"score": -77, "locked": True}, locked_book["standing"])
+hunter_book = rules.empty_ledger()
+hunter_book.update(status=rules.READY, made_day=0, hunter_day=180)
+check("後の日の刺客の日だけでも巻き戻す", rules.rewind(hunter_book, 120) is True
+      and hunter_book["hunter_day"] == 120, hunter_book.get("hunter_day"))
 
 print("[流れ] 勢力の無い世界に、後から組織を設ける設定を入れた")
 module, ctx, app = fresh()

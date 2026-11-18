@@ -764,12 +764,12 @@ def apply(ctx):
 
     @ctx.wrap("__main__:InstantaleApp.add_text", required=False)
     def add_text(orig, self, *args, **kwargs):
+        # orig は try の外で1回だけ呼ぶ（orig 自身の例外で本文を二度足さない）。
+        if state["window"] is None:
+            # 言い換えはエリア移動の窓の中だけ。窓の外の本文では設定も読み直さない
+            # （窓を開く `area_move_begin` が開く前に読み直している）。
+            return orig(self, *args, **kwargs)
         try:
-            window = state["window"]
-            if window is None:
-                # 言い換えはエリア移動の窓の中だけ。窓の外の本文では設定も読み直さない
-                # （窓を開く `area_move_begin` が開く前に読み直している）。
-                return orig(self, *args, **kwargs)
             refresh_world(self)
             window = state["window"]
             context = frames.arg(args, kwargs, "context", 0)

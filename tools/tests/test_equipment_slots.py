@@ -709,6 +709,13 @@ assert combat.attack(app, rookie_loaded) == 120 and combat.defense(app, rookie_l
 assert MOD.SCOPE_FOR(app, rookie_loaded, create=False) is None                 # 作っていない
 assert set(rookie_loaded.inventory.inventory) == {"r1", "r2"}                  # 持ち物は動かしていない
 assert combat.attack(app, stranger) is None                                    # 控えの無い人は従来どおり
+# ロードの後、窓を開かずに2つ目の手の品を渡す。控えで右手が埋まっているのに、装備欄の辞書が空なので
+# 右手を空きと読んで割り当て、組み直しで「同じ部位に2つ目」として落としていた
+r_knife_loaded = Item("r6", "weapon", "small_weapon", 60)
+rookie_loaded.give(r_knife_loaded)
+assert equipment.equip(app, rookie_loaded, r_knife_loaded) == "equipped"
+assert [r for r, _i in equipment.gear(app, rookie_loaded)] == ["right_hand", "left_hand", "body"], \
+    equipment.gear(app, rookie_loaded)
 
 # ---------------------------------------------------------------- 同じ世界のロード・別の主人公
 # 装備中の品は装備欄の辞書にだけ居る。ロードでそれを捨てないと、セーブの後に手に入れて装備した品が

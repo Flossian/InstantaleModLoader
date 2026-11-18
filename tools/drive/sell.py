@@ -10,9 +10,18 @@ def main(say):
     st = {}
     name = ARGS["item"]
 
+    def stop(why):
+        """残りの手順（売る・結果）を飛ばして終える。品も置き場も無いまま「売る」を押さない。"""
+        say("stop: {}".format(why))
+        run.steps[:] = []
+        return 0.2
+
     def drop():
+        st["gold"] = app().player.gold
         widget = item_widget(name, app().player)
         say("player has item: {}".format(widget is not None))
+        if widget is None:
+            return stop("no {!r} in the player's inventory".format(name))
         grid = [n for n in widget.parent.children
                 if getattr(n, "obtainer", None) is not app().player and hasattr(n, "place_new_item")][0]
         # 大きな品（2x2 など）は品の大きさで空きを探す。掴むのは品の真ん中で、落とす先も同じずれで
@@ -29,11 +38,10 @@ def main(say):
                 break
         say("free cell {} for {}x{}".format(cell, w, h))
         if cell is None:
-            return 0.2
+            return stop("no free cell on the shop side")
         dx, dy = widget.width / 2.0, widget.height / 2.0
         start = widget.parent.to_window(widget.x + dx, widget.y + dy)
         end = grid.parent.to_window(grid.x + cell[0] * 65 + dx, grid.y + cell[1] * 65 + dy)
-        st["gold"] = app().player.gold
         _touch([start, end])
         return 0.8
 
@@ -51,4 +59,5 @@ def main(say):
         say("after: player still has item {} gold {} -> {}".format(w is not None, st["gold"], app().player.gold))
         return 0.2
 
-    Steps(say, [drop, sell, report], timeout=60).start()
+    run = Steps(say, [drop, sell, report], timeout=60)
+    run.start()

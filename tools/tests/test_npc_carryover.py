@@ -30,6 +30,7 @@
 """
 import collections
 import importlib.util
+import codecs
 import io
 import json
 import os
@@ -316,6 +317,14 @@ try:
           set(carryover.list_worlds()) == {"世界H", "アルカディア", "素"},
           carryover.list_worlds())
 
+    print("-- 好感度の読み方")
+    check("float の好感度は切り捨てた int で読む（ローダの npcs.affinity_value と同じ）",
+          carryover.affinity_of({"relationship": {"player": {
+              "affinity": 42.7, "affinity_text": ["好意がある", "魅力"]}}}) == (42, "好意がある"),
+          carryover.affinity_of({"relationship": {"player": {"affinity": 42.7}}}))
+    check("真偽値は好感度として読まない",
+          carryover.affinity_of({"relationship": {"player": {"affinity": True}}}) == (None, ""))
+
     print("-- 名前をファイル名に")
     check("普通の名前はそのまま", carryover.safe_name("重装のハンス") == "重装のハンス")
     check("使えない字は潰す", carryover.safe_name('a/b:c') == "a_b_c",
@@ -349,6 +358,20 @@ try:
     bad = os.path.join(export_dir, "壊れもの.zip")
     io.open(bad, "wb").write(b"not a zip")
     check("壊れた zip は None（一覧を止めない）", carryover.read_package(bad) is None)
+    # 世界名とフォルダ名が食い違う世界。image_src の無い人物の立ち絵はフォルダ名の側で探す
+    unnamed = json.loads(json.dumps(source["0"]))
+    unnamed["name"] = "絵の在りかの検査"
+    unnamed["image_src"] = {"base_normal": None, "fullbody": None, "face": None}
+    picture_dir = carryover.characters_dir("食い違うフォルダ", "絵の在りかの検査")
+    os.makedirs(picture_dir, exist_ok=True)
+    io.open(os.path.join(picture_dir, "face_image.png"), "wb").write(b"png")
+    split_dest = carryover.free_path(os.path.join(state_dir, "split_export_check"), "絵の在りかの検査")   # 一覧の検査と分ける
+    carryover.export(unnamed, "食い違う世界名", "9", split_dest, image_world="食い違うフォルダ")
+    split = carryover.read_package(split_dest)
+    check("立ち絵はフォルダ名の側から入り、書き出し元は世界名のまま（image_world）",
+          split is not None and "face_image.png" in split.images
+          and split.source_world == "食い違う世界名",
+          (split and sorted(split.images), split and split.source_world))
     check("一覧は読めるものだけ（壊れた zip を飛ばす）",
           [p.name for p in carryover.list_packages(
               carryover.carryover_dir(state_dir))] == ["重装のハンス"],
@@ -398,7 +421,19 @@ try:
     print("-- 画面（tool.py）")
     sys.path.insert(0, MOD_DIR)
     tool = load("carryover_tool", os.path.join(MOD_DIR, "tool.py"))
+    # フォルダ名とセーブの中の世界名が食い違う世界（ゲームの中の本体は世界名で照らす）
+    renamed_folder = os.path.join(carryover.saves_dir(), "改名前")
+    os.makedirs(renamed_folder, exist_ok=True)
+    with io.open(os.path.join(renamed_folder, "savedata.json"), "wb") as fh:
+        fh.write(carryover.xor(json.dumps(
+            {"npcs": {"0": {"name": "改名の先住者"}}, "index": {"npc": 1},
+             "world_data": {"world_name": "改名後の世界"}}, ensure_ascii=False).encode("utf-8")))
     model = tool.Model()
+    check("世界の一覧はセーブの中の世界名で出す（フォルダ名ではない）",
+          "改名後の世界" in model.worlds and "改名前" not in model.worlds, model.worlds)
+    check("世界名で選んでもフォルダのセーブを読む",
+          model.collides("改名の先住者", "改名後の世界") is True
+          and model.open_world("改名後の世界") and model.folder == "改名前")
     check("世界を開ける", model.open_world("世界H"))
     rows = model.rows()
     check("一覧が出る", len(rows) == 2, rows)
@@ -443,6 +478,26 @@ try:
     check("予約が書かれる", os.path.isfile(carryover.pending_path(state_dir)))
     check("予約を読み返せる",
           carryover.load_pending(state_dir)[0]["target_world"] == "アルカディア")
+    pending_file = carryover.pending_path(state_dir)
+    with io.open(pending_file, "rb") as fh:
+        pending_bytes = fh.read()
+    with io.open(pending_file, "wb") as fh:
+        fh.write(codecs.BOM_UTF8 + pending_bytes)
+    check("BOM 付きでも読める",
+          carryover.load_pending(state_dir, strict=True)[0]["target_world"] == "アルカディア")
+    with io.open(pending_file, "wb") as fh:
+        fh.write(pending_bytes[:len(pending_bytes) // 2])          # 書きかけで壊れた控え
+    broken = io.open(pending_file, "rb").read()
+    try:
+        model.reserve(lilia, "アルカディア", {"memory": False})
+        refused = False
+    except carryover.PendingUnreadable:
+        refused = True
+    check("在るのに読めない控えには予約を書き足さない（空に倒して消さない）",
+          refused and io.open(pending_file, "rb").read() == broken)
+    check("  → strict でなければ空として読む（表示の側）", carryover.load_pending(state_dir) == [])
+    with io.open(pending_file, "wb") as fh:
+        fh.write(pending_bytes)
 
     print("-- 取り込み（ゲームの中）")
     hans = next(p for p in model.packages if p.name == "重装のハンス")

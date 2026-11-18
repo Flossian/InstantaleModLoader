@@ -159,6 +159,14 @@ def main():
     mod.SCORE_MARK_3 = False
     check("動いた品には常に表示が付く",
           all(mod.configured_score_mark(s) for s in (1, 2, 4, 5)))
+    specialty = {"classification": "major_product", "score": 5}
+    check("特産品の score は価格の印にしない",
+          mod._classification_price_score(specialty) == 3
+          and mod.configured_score_mark(mod._classification_price_score(specialty)) == "")
+    with open(mod.__file__, encoding="utf-8") as handle:
+        source = handle.read()
+    check("説明欄の印も値段と同じ score を使う",
+          "= _classification_display_score(" not in source)
     check("2 は -17%", mod._score_percent(2) == "（価格-17%）",
           mod._score_percent(2))
     check("1（供給過多）は -33%", mod._score_percent(1) == "（価格-33%）",

@@ -525,6 +525,7 @@ class InstantaleApp:
         self.windows.append((left, right, left_label_text, situation))
         # 実機ではここで Kivy の描画に触る。Clock の外から来たら落ちる。
         self.windows_from_clock.append(bool(CLOCK.inside))
+        self.hud.visible_twin_inventory_data["TorF"] = True
         return None
 
     def close_shopping_window_process(self):
@@ -654,9 +655,15 @@ def install_fake_hud():
             # 2枚並びの窓の右の見出し（ゲームでは「所持品」で固定）。
             self.right_header = types.SimpleNamespace(text="所持品", children=[])
             self.children = [self.right_header]
+            # 2枚並びの窓の表示の辞書（ゲームは開くと TorF を立て、外側を押すと下ろす）
+            self.visible_twin_inventory_data = {"TorF": False}
 
         def update_button_texts(self, instance, value):
             self.painted.append(list(value))
+
+        def turnoff_window_visibility(self, instance, data):
+            # 外側を押したときの閉じ方。`close_shopping_window_process` は通らない（GAME.md §2.13.1.3）
+            data["TorF"] = False
 
     module.InstanTaleHUD = InstanTaleHUD
     module.InventoryItem = InventoryItem
@@ -806,6 +813,8 @@ def install(hooks, targets):
 
 
 HUD_CLS = install_fake_hud()
+# 包む前の素の閉じ方。HUD の型は節をまたいで使い回すので、setup のたびにここへ戻してから包む
+HUD_TURNOFF = HUD_CLS.turnoff_window_visibility
 CLOCK = install_fake_kivy()
 install_fake_characters()
 
@@ -961,6 +970,7 @@ def setup(configure=None, keep_state=False, gold=100000):
     # 窓口の関所（日数・ロード・着いた後）も1つの世代に1枚なので、ctx を作り直すたびに忘れさせる
     # （残すと2回目の ctx に包みが渡らず、日数の後の精算が呼ばれない）。
     gates.reset_all()
+    HUD_CLS.turnoff_window_visibility = HUD_TURNOFF
 
     module = load_mod()
     if configure is not None:
@@ -988,6 +998,8 @@ def setup(configure=None, keep_state=False, gold=100000):
          classes["app"], "change_background_image_from_location_id"),
         ("scripts.hud.new_hud:InventoryItem.change_inventory", classes["item"],
          "change_inventory"),
+        ("scripts.hud.new_hud:InstanTaleHUD.turnoff_window_visibility", HUD_CLS,
+         "turnoff_window_visibility"),
     ))
     app, world, places = build_world(classes["app"], classes["world"])
     app.player.gold = gold
@@ -1320,6 +1332,76 @@ check("窓を閉じたら管理人は品を持たない",
 check("預けた品は 330 の控えにだけ残る",
       len((contract_of(module, app) or {}).get("storage") or {}) == 1,
       (contract_of(module, app) or {}).get("storage"))
+# 控えに書き出せない品（属性が JSON にならない）を預けて閉じても、世界から消さない。
+app.go(home)
+app.press(module.STORAGE_LABEL)
+CLOCK.settle()
+odd_holder = app.windows[-1][1]
+odd = app.generate_item_from_dict(sample_item(), "item_23", app.player)
+odd.skill = object()
+classes["item"](odd, InventoryGrid(app.player)).change_inventory(InventoryGrid(odd_holder))
+CLOCK.settle()
+app.close_shopping_window_process()
+CLOCK.settle()
+check("控えに書き出せない品は閉じるときに主人公へ戻る",
+      any(v is odd for v in app.player.inventory.inventory.values())
+      and getattr(odd, "obtainer", None) is app.player,
+      list(app.player.inventory.inventory))
+check("  → 控えには載せない（前からの1点のまま）",
+      len((contract_of(module, app) or {}).get("storage") or {}) == 1,
+      (contract_of(module, app) or {}).get("storage"))
+check("  → 管理人は品を持たない", not odd_holder.inventory.inventory,
+      list(odd_holder.inventory.inventory))
+# 外側を押して閉じる経路は `close_shopping_window_process` を通らない（GAME.md §2.13.1.3）。
+# そこでも閉じたときの後始末が走る（実機では一度も `storage: closed` が出ていなかった）。
+app.go(home)
+app.press(module.STORAGE_LABEL)
+CLOCK.settle()
+side_holder = app.windows[-1][1]
+loose = app.generate_item_from_dict(sample_item(), "item_29", app.player)
+loose.skill = object()
+classes["item"](loose, InventoryGrid(app.player)).change_inventory(InventoryGrid(side_holder))
+CLOCK.settle()
+app.hud.turnoff_window_visibility(app.hud, app.hud.visible_twin_inventory_data)
+CLOCK.settle()
+check("外側を押して閉じても、控えに書き出せない品は主人公へ戻る",
+      any(v is loose for v in app.player.inventory.inventory.values())
+      and getattr(loose, "obtainer", None) is app.player,
+      list(app.player.inventory.inventory))
+check("  → 管理人は品を持たない", not side_holder.inventory.inventory,
+      list(side_holder.inventory.inventory))
+check("  → 控えは前からの1点のまま",
+      len((contract_of(module, app) or {}).get("storage") or {}) == 1,
+      (contract_of(module, app) or {}).get("storage"))
+# 作り直せない控えが1件あっても窓は開き、その控えは閉じた後も残る。
+_live_store = getattr(sys, module.STATE_STORE_ATTR)["worlds"]
+_live = _live_store.load(module.playthrough_key(app))
+_live["contracts"][0]["storage"]["broken_1"] = dict(sample_item(), name="組めない品", broken=True)
+real_generate = app.generate_item_from_dict
+
+def generate_or_fail(item_dict, item_id, obtainer):
+    if item_dict.get("broken"):
+        raise ValueError("cannot rebuild")
+    return real_generate(item_dict, item_id, obtainer)
+
+app.generate_item_from_dict = generate_or_fail
+windows_before = len(app.windows)
+app.go(home)
+app.press(module.STORAGE_LABEL)
+CLOCK.settle()
+app.generate_item_from_dict = real_generate
+check("作り直せない控えが1件あっても窓は開く", len(app.windows) == windows_before + 1,
+      app.windows[windows_before:])
+check("  → 作り直せる品は窓に出る", len(app.windows[-1][1].inventory.inventory) == 1,
+      list(app.windows[-1][1].inventory.inventory))
+app.close_shopping_window_process()
+CLOCK.settle()
+kept = (contract_of(module, app) or {}).get("storage") or {}
+check("  → 作り直せない控えは閉じた後も控えに残る",
+      len(kept) == 2 and any((v or {}).get("name") == "組めない品" for v in kept.values()), kept)
+_live = _live_store.load(module.playthrough_key(app))
+_live["contracts"][0]["storage"].pop(next(
+    k for k, v in _live["contracts"][0]["storage"].items() if (v or {}).get("name") == "組めない品"))
 
 print("[家賃]")
 term = contract_of(module, app).get("term")
@@ -1410,6 +1492,21 @@ app.facility_screen()
 app.press(module.OFFICE_LABEL)
 CLOCK.settle()
 check("窓口に「預かり品を引き取る」が出る", app.has("預かり品を引き取る"), app.labels())
+# 料金を引けなかったら、品だけ戻さない（預かりはそのまま）。
+held_before = set(app.player.inventory.inventory)
+module.ui.add_gold = lambda *args, **kwargs: None
+try:
+    app.press(app.label_like("預かり品を引き取る"))
+    CLOCK.settle()
+finally:
+    module.ui.add_gold = real_add_gold
+check("料金を引けなければ品は戻さない", set(app.player.inventory.inventory) == held_before,
+      list(app.player.inventory.inventory))
+check("  → 預かりはそのまま", len((read_state() or {}).get("seized") or {}) == 1,
+      (read_state() or {}).get("seized"))
+app.facility_screen()
+app.press(module.OFFICE_LABEL)
+CLOCK.settle()
 app.press(app.label_like("預かり品を引き取る"))
 CLOCK.settle()
 check("引き取り料が引かれた", app.player.gold == 10000 - module.RECLAIM_FEE,

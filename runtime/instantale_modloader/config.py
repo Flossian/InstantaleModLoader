@@ -240,7 +240,11 @@ def coerce(decl: dict, value):
         elif kind == "str":
             out = str(value)
         elif kind == "choice":
-            out = value if value in decl["values"] else str(value)
+            # 選択肢の型へ戻す（数の選択肢 `[1, 2, 3]` に GUI の欄の "2" が来ても 2 にする）
+            if value in decl["values"]:
+                out = value
+            else:
+                out = next((v for v in decl["values"] if str(v) == str(value)), str(value))
             if out not in decl["values"]:
                 return False, None, "選択肢にありません: {!r}（{}）".format(
                     value, " / ".join(repr(v) for v in decl["values"]))

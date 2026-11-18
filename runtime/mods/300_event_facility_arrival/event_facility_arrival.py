@@ -216,6 +216,10 @@ IGNORE_LIMIT = 2
 # ログ（`out/`）ではなく `state/` なのは、消すと遊びの続きが巻き戻るため。
 STATE_DIRNAME = "arrival_event"
 
+#: 上の控え（`state.WorldStore`）を世代をまたいで1つだけ持つ置き場（`sys` の属性）。
+#: `apply()` の中で作ると注入し直すたびにキャッシュと錠が別物になる（WorldStore の説明）。
+STORE_ATTR = "_instantale_arrival_event_store"
+
 # 会話の終わりを見届けられなかったときに、見届けの控えを捨てるまでの時間（秒）。
 # 途中でゲームを閉じた場合などに、次の会話へ持ち越さないための保険。
 WATCH_TTL = 1800.0
@@ -310,7 +314,11 @@ def apply(ctx):
     #
     # 控えの出し入れ（場所・読み・キャッシュ・書き）は `state.WorldStore` に
     # 1つだけある。MOD ごとに写すとずれるため。
-    ignored_store = WorldStore(ctx, STATE_DIRNAME, write=write)
+    store = getattr(sys, STORE_ATTR, None)
+    if not isinstance(store, dict):
+        store = {"ignored": WorldStore(ctx, STATE_DIRNAME, write=write)}
+        setattr(sys, STORE_ATTR, store)
+    ignored_store = store["ignored"].rebind(ctx, write)
 
     def ignores(app):
         """この世界の控えを返す。世界が変わったら読み直す。
@@ -474,12 +482,28 @@ def apply(ctx):
                 return "the screen changed to {}".format(other)
             return None
 
+        # `when_idle` は取り消した回・待ちきれなかった回に `then`（start）を呼ばない。
+        # 後始末（間引きと申し出を戻す）を start に置くと通らないので、cancel_if の中で行う。
+        # 時間切れも同じ期限をこちらで見て取り消しにする。この期限は `when_idle` のものより先に来て、
+        # `when_idle` は期限より先に cancel_if を見るので、待ちきれなかった回は必ずここを通る。
+        deadline = time.monotonic() + IDLE_TIMEOUT
+        dropped = []
+
+        def cancelled():
+            reason = gone()
+            if reason is None and time.monotonic() > deadline and ui.busy_signals(app):
+                reason = "gave up waiting for idle ({:.0f}s)".format(IDLE_TIMEOUT)
+            if reason and not dropped:
+                dropped.append(reason)
+                write("launch: {}; cancelled".format(reason))
+                # 出さなかった回は間引きに数えない（譲った回と同じ）。
+                state["fired_at"].pop(str(getattr(facility, "id", "")), None)
+                arrivals.withdraw(app, ARRIVAL_OWNER)
+            return reason
+
         def start():
             # 待っている間に施設を出ていたら、もう始めない。
-            reason = gone()
-            if reason:
-                write("launch: {}; cancelled".format(reason))
-                arrivals.withdraw(app, ARRIVAL_OWNER)
+            if cancelled():
                 return
             top = arrivals.winner(app)
             if top not in (None, ARRIVAL_OWNER):
@@ -518,7 +542,7 @@ def apply(ctx):
         # 待ちきれなければ諦めるのがこちらの流儀（イベントは出さなくてよいもので、
         # 遅れて出すと場面が変わっている）。
         screen.when_idle(app, start, timeout=IDLE_TIMEOUT, settle=IDLE_SETTLE,
-                         poll=IDLE_POLL, cancel_if=gone, tag="launch")
+                         poll=IDLE_POLL, cancel_if=cancelled, tag="launch")
 
     # ================================================================
     # narration モード: 自前で1行だけ生成して情景描写に足す
@@ -720,6 +744,15 @@ def apply(ctx):
         if time.monotonic() - mark["at"] > REPHRASE_TTL:
             write("rephrase: stale marker, left untouched")
             return orig(*args, **kwargs)
+        # 印は相手を確かめてから使う。こちらが起こした会話が始まらないまま別の相手との会話が来たら、
+        # その第一声は書き替えず、見届けも捨てる（始まらなかった会話の終わりを待ち続けないため）。
+        partner = getattr(frames.arg(args, kwargs, "character_instance", 3), "name", None)
+        if isinstance(partner, str) and partner and partner != mark["npc"]:
+            write("rephrase: the talk is with {!r}, not {!r}; marker dropped".format(partner, mark["npc"]))
+            watch = state["watching"]
+            if watch is not None and watch.get("name") == mark["npc"]:
+                state["watching"] = None
+            return orig(*args, **kwargs)
         messages = frames.arg(args, kwargs, "messages", 0)
         if not isinstance(messages, list) or not messages:
             return orig(*args, **kwargs)
@@ -727,12 +760,18 @@ def apply(ctx):
         if not isinstance(last, dict) or "content" not in last:
             return orig(*args, **kwargs)
         replacement = dict(last)
-        replacement["content"] = (
+        opening = (
             "<状況: {facility}に入ってきた{player}に、あなたの方から声をかけた。"
             "呼び止める第一声を述べよ>"
         ).format(facility=mark["facility"] or "この場所",
                  player=frames.short(getattr(getattr(find_app(), "player", None),
                                          "name", "旅人"), 40))
+        # 置き換えるのはゲームの合図の1行目だけで、2行目以降は残す。
+        # `301_` などがローダの `modnpc` の prompt の口で同じ messages[-1] に改行で足した状況を消さないため
+        # （関所がこのフックより外側になる世代では、足された後の messages がここへ来る）。
+        content = last.get("content")
+        rest = content.partition("\n")[2] if isinstance(content, str) else ""
+        replacement["content"] = opening + ("\n" + rest if rest else "")
         write("rephrase: {!r} -> {!r}".format(
             frames.short(last.get("content"), 60), replacement["content"]))
         args, kwargs, _ = frames.replace_arg(args, kwargs, "messages", 0,

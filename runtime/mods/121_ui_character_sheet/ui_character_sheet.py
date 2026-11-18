@@ -293,7 +293,9 @@ def apply(ctx):
         """人物欄に出ている相手。プレイヤーと決めつけない。
 
         名前で引き当てる。
-        合う相手が居なければプレイヤーを返す（素の人物欄はプレイヤーのもの）。
+        名前が無ければプレイヤーを返す（素の人物欄はプレイヤーのもの）。
+        名前があって合う相手が居なければ None（ロード直後は名簿がほぼ空。GAME.md §2.8）。
+        プレイヤーを返すと、ほかの人物の欄にプレイヤーの手配度・二つ名・特性を描く。
         """
         player = frames.attr(app, "player")
         player = None if player is frames.MISSING else player
@@ -309,7 +311,7 @@ def apply(ctx):
             for character in characters.values():
                 if getattr(character, "name", None) == name:
                     return character
-        return player
+        return None
 
     def wanted_text(app, character):
         areas = ui.world_areas(app)

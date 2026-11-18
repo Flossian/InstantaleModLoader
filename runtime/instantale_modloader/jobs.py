@@ -112,6 +112,8 @@ class Worker(object):
         self.lock = threading.Lock()
         self._thread = None
         self._pending = set()
+        #: 積んだ仕事の鍵（`id(job)` → 鍵）。後始末は積んだときの鍵で外す（仕事の中身が変わっても外せる）
+        self._keys = {}
 
     # -- 状態 ---------------------------------------------------------------
 
@@ -202,10 +204,11 @@ class Worker(object):
                     break
                 self.jobs.task_done()
                 if self.key is not None:
-                    self._pending.discard(self.key(old))
+                    self._pending.discard(self._keys.pop(id(old), None))
                 dropped.append(old)
             if self.key is not None:
                 self._pending.add(drop_key)
+                self._keys[id(job)] = drop_key
             self.jobs.put(job)
             self._wake()
         for old in dropped:
@@ -248,9 +251,11 @@ class Worker(object):
             except Exception:
                 self.ctx.log_exc("{}: background job failed".format(self.label))
             finally:
-                with self.lock:
-                    if self.key is not None:
-                        self._pending.discard(self.key(job))
+                # 鍵は積んだときに控えたものを使う。ここで鍵の関数を呼び直すと、
+                # run が仕事の中身を書き換えたときに投げて finally から抜け、スレッドが死んで鍵が残る
+                if self.key is not None:
+                    with self.lock:
+                        self._pending.discard(self._keys.pop(id(job), None))
                 if self.on_done is not None:
                     try:
                         self.on_done(job)

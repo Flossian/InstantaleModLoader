@@ -25,7 +25,14 @@ if (sys.stdout.encoding or "").lower().replace("-", "") != "utf8":   # build_gun
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 MOD_DATA = os.path.join(os.path.dirname(SP), "data")
-EMB_DIR = r"C:\Program Files\Epic Games\Instantaleq6Ve7\Data\item_embeddings"
+EMB_SUBDIR = ("Data", "item_embeddings")
+
+
+def emb_dir():
+    """ゲームの埋め込みの置き場（ゲームの場所は `minibert.default_model_dir` と同じ探し方）。"""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(SP)))), "tools"))
+    from llm_ctx_probe import find_game_dir
+    return os.path.join(str(find_game_dir(None)), *EMB_SUBDIR)
 
 CAPTION_FILES = {
     "document": ["captions_document.json"],
@@ -55,7 +62,7 @@ for folder, files in CAPTION_FILES.items():
     write_lines(path, out)
 
     # 自己検索: 合成辞書（素+追加）の中で、自分のキャプションが自分を引くか
-    base = json.load(open(os.path.join(EMB_DIR, folder + ".json"), encoding="utf-8"))
+    base = json.load(open(os.path.join(emb_dir(), folder + ".json"), encoding="utf-8"))
     merged = dict(base)
     merged.update(out)
     keys = list(merged)

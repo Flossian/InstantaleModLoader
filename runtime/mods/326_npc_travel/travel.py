@@ -33,10 +33,11 @@ def new_bucket():
 
     `trips` は旅の途中の人、`hired` は旅先で雇われて解散待ちの人、
     `rest` は帰ってきて休んでいる人（次に出られる日）、
-    `seen` は街ごとに「街中の移動を最後に引いた日」。
+    `seen` は街ごとに「街中の移動を最後に引いた日」、
+    `returned` は帰した旅の写し（帰したことがセーブに届く前に落ちたら、次のロードで旅を戻す）。
     """
     return {"version": LEDGER_VERSION, "trips": {}, "hired": {}, "rest": {},
-            "seen": {}}
+            "seen": {}, "returned": {}}
 
 
 def table_of(bucket, name) -> dict:
@@ -66,6 +67,10 @@ def seen_of(bucket) -> dict:
     return table_of(bucket, "seen")
 
 
+def returned_of(bucket) -> dict:
+    return table_of(bucket, "returned")
+
+
 def _ordered(table, fields):
     ordered = {}
     for npc_id in sorted(table, key=lambda key: (len(str(key)), str(key))):
@@ -86,7 +91,8 @@ def order_bucket(bucket):
             "trips": _ordered(trips_of(bucket), TRIP_FIELDS),
             "hired": _ordered(hired_of(bucket), HIRED_FIELDS),
             "rest": _ordered(rest_of(bucket), REST_FIELDS),
-            "seen": _ordered(seen_of(bucket), ())}
+            "seen": _ordered(seen_of(bucket), ()),
+            "returned": _ordered(returned_of(bucket), RETURNED_FIELDS)}
 
 
 #: 旅の1行。並びは書くときの並び。
@@ -101,6 +107,10 @@ HIRED_FIELDS = ("name", "origin_area", "dest_area", "hired_day")
 
 #: 休んでいる人の1行。`until_day` 未満の日は出発の候補にしない。
 REST_FIELDS = ("name", "home_day", "until_day")
+
+
+#: 帰した旅の写しの1行。`trip` は帰す前の旅の1行そのもの。
+RETURNED_FIELDS = ("name", "home_day", "trip")
 
 
 def make_rest(name, day, rest_days):

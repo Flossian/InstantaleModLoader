@@ -529,6 +529,18 @@ def run():
     check("repainting does not add a second button",
           sum(1 for c in hud.root.children if isinstance(c, FakeButton)) == 1,
           [type(c).__name__ for c in hud.root.children])
+    held = list(button.bound)
+    binds = []
+    real_bind = button.bind
+    button.bind = lambda **kw: (binds.append(kw), real_bind(**kw))
+    try:
+        for _ in range(5):
+            hud.show()
+            hud.repaint()
+    finally:
+        del button.bind
+    check("repainting keeps the press handler instead of binding it again per letter",
+          not binds and button.bound == held and len(held) == 1, (binds, button.bound))
     # 素の HUD の子は FloatLayout 1枚だけ。
     # そこへ足すと「画面の最初の子」を取る側から見える相手が変わり、
     # アイテムの移動・装備が壊れる（VERIFICATION_LOG.md §2.33）。

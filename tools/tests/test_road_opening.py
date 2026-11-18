@@ -369,7 +369,8 @@ class InstantaleApp:
     def on_button_press(self, button_index):
         """ゲーム本来の押下。地図の枠が `'next'` ならページ送り（`206_` の記録。GAME.md §2.2）。"""
         mapping = getattr(self, "display_button_map", None)
-        if isinstance(mapping, list) and 0 <= button_index < len(mapping)                 and not isinstance(mapping[button_index], int):
+        if (isinstance(mapping, list) and 0 <= button_index < len(mapping)
+                and not isinstance(mapping[button_index], int)):
             self.pages += 1
             return None
         entry = self.buttons[button_index]

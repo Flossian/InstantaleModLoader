@@ -255,6 +255,8 @@ def test_prompt_rewrite():
     check(kind == "facilitator" and reason == "rewritten", "old facilitator rewrite")
     check(M.ARREST_ANCHOR_OLD not in old[0] and M.MARK_OTHER in old[0],
           "old anchor must be replaced")
+    # 旧い文面の効果（懲役刑を受ける）も置き換えた後に残す。
+    check("懲役刑を受けることになる" in old[0], "old arrest effect must survive")
 
     # 新旧が1つずつ並ぶのは知らない形。
     _result, kind, reason = M.rewrite_texts([M.ARREST_ANCHOR, M.ARREST_ANCHOR_OLD])

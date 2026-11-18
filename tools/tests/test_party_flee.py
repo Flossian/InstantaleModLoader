@@ -190,6 +190,18 @@ check("次の終わり方では何もしない（控えは使い切り）", list
 check("例外を残さない（戻す）", ctx.errors == [], ctx.errors)
 shutil.rmtree(work, ignore_errors=True)
 
+print("ロードで戦闘を抜けた")
+from instantale_modloader import gates  # noqa: E402
+gates.reset_all()                       # 偽の ctx を作り直すので、読み込みの関所を立て直させる
+mod, ctx, app, work = setup({"95": Character("リュウ")})
+one_action(mod, ctx, app, game_flee)
+ctx.hooks["__main__:InstantaleApp.load_game_new"](lambda self, *a: None, app)   # end_phase を通らずに抜ける
+loaded = InstantaleApp({"104": Character("ジーン")})                           # 読み直した後の一覧
+end_battle(mod, ctx, loaded, "BattleEndInColosseum.end_phase", give_back=False)
+check("ロードの後の戦闘の終わりで、前の戦闘で移した仲間を戻さない",
+      "95" not in loaded.party, list(loaded.party))
+shutil.rmtree(work, ignore_errors=True)
+
 print("名前のつなぎ")
 check("1人", mod.join_names(["リュウ"]) == "リュウ")
 check("2人", mod.join_names(["リュウ", "ジーン"]) == "リュウとジーン")

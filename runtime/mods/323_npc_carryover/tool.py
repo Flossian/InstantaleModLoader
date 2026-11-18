@@ -108,9 +108,17 @@ class Model(object):
         import carryover
         self.C = carryover
         self.settings = modtool.load_settings(self.root, MOD_DIR)
-        self.worlds = carryover.list_worlds()
+        # 世界はセーブの中の世界名で扱う（`saves.world_names`）。ゲームの中の本体が予約と照らすのも、
+        # 311_・403_ の控えの鍵も `world_key`（world_data の世界名）なので、フォルダ名で予約すると
+        # 名前の食い違う世界には置かれない。セーブと立ち絵を読むときだけフォルダへ引き直す
+        from instantale_modloader import saves as loader_saves
+        self._folders = {}          # 世界名 -> フォルダ名（同名が2つあれば先の方）
+        for name, folder in loader_saves.world_names():
+            self._folders.setdefault(name, folder)
+        self.worlds = list(self._folders)
         self.save = None            # 読んでいる世界のセーブ
         self.world = ""             # その世界名
+        self.folder = ""            # そのフォルダ名（`saves\` と `worlds\` の下）
         self.packages = []          # 書き出してある zip
         self.pending = carryover.load_pending(self.state_dir)
         #: 置き先の世界の名前（重複の検査に使う）。世界名 -> {名前}
@@ -118,10 +126,16 @@ class Model(object):
 
     # -- エクスポート側 ---------------------------------------------------
 
+    def folder_of(self, world):
+        """世界名からフォルダ名。一覧に無ければ世界名のまま。"""
+        return self._folders.get(world, world)
+
     def open_world(self, world):
         """1世界ぶんのセーブを読む。読めたか。"""
-        self.save = self.C.read_save(world) if world else None
+        folder = self.folder_of(world) if world else ""
+        self.save = self.C.read_save(folder) if folder else None
         self.world = world if self.save else ""
+        self.folder = folder if self.save else ""
         return self.save is not None
 
     def rows(self):
@@ -185,8 +199,9 @@ class Model(object):
                 continue
             try:
                 dest = self.C.free_path(folder, npc.get("name") or npc_id)
+                # 書き出し元の名前は世界名、立ち絵を探す場所はフォルダ名（食い違う世界がある）
                 self.C.export(npc, self.world, npc_id, dest,
-                              extra=self.bundle_of(npc_id))
+                              extra=self.bundle_of(npc_id), image_world=self.folder)
                 done += 1
             except OSError as exc:
                 failed.append("{}: {}".format(npc.get("name") or npc_id, exc))
@@ -247,7 +262,7 @@ class Model(object):
         """置き先の世界に居る名前。読めなければ `None`（＝検査できない）。"""
         if world in self._names:
             return self._names[world]
-        save = self.C.read_save(world)
+        save = self.C.read_save(self.folder_of(world))
         found = None
         if save is not None:
             found = {npc.get("name") for npc in self.C.npcs_of(save).values()
@@ -282,8 +297,9 @@ class Model(object):
         画面を開いたままゲームを遊べるので、開いたときの控えで丸ごと書き戻すと
         その印が消え、次のロードで同じ予約をもう一度果たそうとする。
         書く前には必ずここを通し、画面の操作はその上に当てる。
+        在るのに読めなければ `PendingUnreadable` を投げる（空に倒した一覧で書き戻さない）。
         """
-        self.pending = self.C.load_pending(self.state_dir)
+        self.pending = self.C.load_pending(self.state_dir, strict=True)
         return self.pending
 
     def reserve(self, package, world, inherit):
@@ -707,7 +723,7 @@ def build_window(model):
         """その NPC の `face_image.png` を出す。無ければ枠だけ残して空にする。"""
         photo = None
         if isinstance(npc, dict):
-            folder = model.C.image_dir_of(npc, model.world)
+            folder = model.C.image_dir_of(npc, model.folder)
             path = os.path.join(folder, model.C.FACE_IMAGE) if folder else ""
             if path and os.path.isfile(path):
                 photo = load_face(path)
@@ -740,7 +756,7 @@ def build_window(model):
                                         affinity_label(affinity, text) or "（記録なし）"))
         preview_text.insert("1.0", npc.get("profile") or "")
         preview_text.configure(state="disabled")
-        images = model.C.image_files(model.world, npc)
+        images = model.C.image_files(model.folder, npc)
         memories = model.memories_of(npc_id)
         preview_bundle.configure(
             text="エクスポートに含まれるもの\n画像 {}枚\n記憶: {}".format(
@@ -1074,7 +1090,11 @@ def build_window(model):
             check_collision()
             return
         inherit = {key: bool(var.get()) for key, var in inherit_vars.items()}
-        model.reserve(package, world, inherit)
+        try:
+            model.reserve(package, world, inherit)
+        except model.C.PendingUnreadable as exc:
+            unreadable(exc)
+            return
         refresh_plan()
         say("「{}」を {} へ予約しました".format(package.name, world))
 
@@ -1110,7 +1130,11 @@ def build_window(model):
         if row is None:
             return
         placed = row.get("status") not in (model.C.PENDING, model.C.ENDED)
-        model.drop([row])
+        try:
+            model.drop([row])
+        except model.C.PendingUnreadable as exc:
+            unreadable(exc)
+            return
         refresh_plan()
         on_plan_select()
         if row.get("status") == model.C.ENDED:
@@ -1122,8 +1146,18 @@ def build_window(model):
             say("「{}」の予約を取り消しました（zip は消しません）".format(
                 row.get("name") or ""))
 
+    def unreadable(exc):
+        messagebox.showwarning(
+            "予約の記録が読めません",
+            "予約の記録（pending.json）を読めなかったので、書き換えませんでした。\n"
+            "ゲームや別のツールが開いていないかを確かめて、もう一度試してください。\n\n{}".format(exc))
+
     def do_recheck():
-        model.recheck()
+        try:
+            model.recheck()
+        except model.C.PendingUnreadable as exc:
+            unreadable(exc)
+            return
         refresh_plan()
         check_collision()
         say("予約を検査し直しました（{}件）".format(len(model.pending)))

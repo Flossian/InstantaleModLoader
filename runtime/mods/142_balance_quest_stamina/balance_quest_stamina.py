@@ -124,8 +124,12 @@ def spend_of(max_pi, gap, loss_share):
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     lock = threading.Lock()
-    #: 依頼の間の被弾。`{"quest": id, "people": {人: {"last", "loss", "max_hp"}}}`。
-    track = {"quest": None, "people": {}}
+    # 置き直したスタミナは、ゲームが依頼の終わりの中で保存を済ませていればメモリの中だけに残る。
+    # 少し後にゲーム自身の保存を1回呼んでセーブへ載せる（何もせず閉じても緩和が残る）
+    save_soon = ui.saver(ctx, write, "quest stamina")
+    #: 依頼の間の被弾。`{"quest": id, "people": {人: {"last", "loss", "max_hp"}}, "clean": bool}`。
+    #: `clean` は依頼を受けた時点から数えているか（取りこぼしが無いか）。
+    track = {"quest": None, "people": {}, "clean": False}
 
     if is_game_rule():
         write("settings match the game (all {}%, damage 0); not touching the quest clear".format(
@@ -152,6 +156,7 @@ def apply(ctx):
             if track["quest"] != quest_id:
                 track["quest"] = quest_id
                 track["people"] = {}
+                track["clean"] = False          # 途中（ロードの後の保存など）から数え始めた
             for person, character in participants(app):
                 hp = _number(frames.attr(character, "current_hp", None))
                 if hp is None:
@@ -176,6 +181,8 @@ def apply(ctx):
                 with lock:
                     track["quest"] = None       # 同じ依頼を受け直したときも数え直す
                 sample(app, quest_id)
+                with lock:
+                    track["clean"] = True       # 受けた時点から数えている
         except Exception:
             ctx.log_exc("quest stamina: cannot start counting the damage")
         return result
@@ -201,6 +208,7 @@ def apply(ctx):
                 sample(app, quest_id)
                 with lock:
                     hits = {k: dict(v) for k, v in track["people"].items()}
+                    clean = bool(track.get("clean"))
                 quest = {"id": quest_id,
                          "difficulty": _number(ui.quest_value(data, "difficulty"))}
                 for person, character in participants(app):
@@ -213,8 +221,10 @@ def apply(ctx):
                     row = hits.get(person) or {}
                     base_hp = row.get("max_hp") or max_hp
                     loss = row.get("loss") or 0
-                    if hp is not None and max_hp:
-                        loss = max(loss, max_hp - hp)      # ロードをまたいだ被弾の取りこぼしを補う
+                    if hp is not None and max_hp and not clean:
+                        # ロードをまたいで途中から数え始めた回だけ、取りこぼしを補う。
+                        # 受けた時点から数えた回で補うと、依頼の前から減っていた体力まで被弾に数える
+                        loss = max(loss, max_hp - hp)
                     before.append({
                         "who": person, "character": character, "pi": pi, "max_pi": max_pi,
                         "level": _number(frames.attr(character, "experience_level", None)),
@@ -225,21 +235,26 @@ def apply(ctx):
         result = orig(self, *args, **kwargs)
         if before:
             try:
-                settle(quest, before)
+                if settle(quest, before) and app is not None:
+                    save_soon(app, "quest stamina")
             except Exception:
                 ctx.log_exc("quest stamina: cannot settle the stamina after the quest clear")
         with lock:
             track["quest"] = None
             track["people"] = {}
+            track["clean"] = False
         return result
 
     def settle(quest, before):
+        """依頼のクリアで引かれたスタミナを決め直す。決め直した人数を返す。"""
         difficulty = quest.get("difficulty")
+        changed = 0
         for row in before:
             character = row["character"]
             now = _number(frames.attr(character, "physical_integrity", None))
             if now is None or now == row["pi"]:
                 continue        # ゲームが引かなかった人には触らない
+            changed += 1
             level = row["level"]
             gap = (difficulty - level) if difficulty is not None and level is not None else 0
             spend, percent = spend_of(row["max_pi"], gap, row["share"])
@@ -257,10 +272,14 @@ def apply(ctx):
                       quest.get("id"), difficulty, row["who"], level, gap, base_percent(gap),
                       row["loss"], row["share"], damage_scale(row["share"]), spend, percent,
                       row["max_pi"], row["pi"], value, now))
+        return changed
 
-    if getattr(sys, INSTALLED_MARK, False):
+    # 設定の行は、前に書いた中身と違うときだけ書く（遅れて当て直す boot で同じ行を並べない。
+    # 設定を変えて注入し直したときは書く）。印は `sys` に置いて注入をまたぐ
+    line = ("installed: easy {}% / fair {}% / hard {}% over {} level(s), damage +{}% at {}% hp lost, "
+            "party {}".format(EASY_PERCENT, FAIR_PERCENT, HARD_PERCENT, LEVEL_GAP, DAMAGE_PERCENT,
+                              DAMAGE_FULL_AT, PARTY_TOO))
+    if getattr(sys, INSTALLED_MARK, None) == line:
         return
-    setattr(sys, INSTALLED_MARK, True)
-    write("installed: easy {}% / fair {}% / hard {}% over {} level(s), damage +{}% at {}% hp lost, "
-          "party {}".format(EASY_PERCENT, FAIR_PERCENT, HARD_PERCENT, LEVEL_GAP, DAMAGE_PERCENT,
-                            DAMAGE_FULL_AT, PARTY_TOO))
+    setattr(sys, INSTALLED_MARK, line)
+    write(line)

@@ -41,6 +41,12 @@ r"""計測: 施設での訓練。ゲームは変えない。
     版3では訓練と無関係な日数送り（宿泊・移動）がこの行になり、30日の遊びで log の半分近くを占めていた
   * `buttons_brief` は `218_` / `233_` / `238_` と同じ写しのまま残した。
     共有の置き場はローダしか無く、この版ではローダを触らないため
+
+版5（見直し）: `238_` の版2と同じ直し。
+  * 開いている窓の並びと `__init__` の引数の控えを `sys` に置いた（`STORE_ATTR`）。
+    版4までは apply ごとの控えで、注入し直しの瞬間に開いていた窓は古い世代の `execute` の包みだけが握り、
+    新しい世代の `elapse_days`・`add_text`・段の中の道の包みからは見えなかった
+  * 窓を閉じるときは同じ物（`is`）を外す。`list.remove` は中身の等しい別の窓を先に外しえた
 """
 import datetime
 import sys
@@ -106,14 +112,39 @@ def outside_counts():
     return found
 
 
+#: 開いている窓の並びと `__init__` の引数の控え（版5）。注入し直しで消えないよう `sys` に置く。
+STORE_ATTR = "_instantale_probe_training_store"
+
+
+def process_store():
+    """`{"windows": [...], "inits": WeakKeyDictionary, "inits_by_id": {...}}`。プロセスに1つ。"""
+    store = getattr(sys, STORE_ATTR, None)
+    if not (isinstance(store, dict) and isinstance(store.get("windows"), list)
+            and isinstance(store.get("inits"), weakref.WeakKeyDictionary)
+            and isinstance(store.get("inits_by_id"), dict)):
+        store = {"windows": [], "inits": weakref.WeakKeyDictionary(), "inits_by_id": {}}
+        setattr(sys, STORE_ATTR, store)
+    return store
+
+
+def close_window(windows, window):
+    """`window` そのもの（`is`）を並びから外す。中身の等しい別の窓は外さない。"""
+    for index in range(len(windows) - 1, -1, -1):
+        if windows[index] is window:
+            del windows[index]
+            return True
+    return False
+
+
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     record = ctx.jsonl(RECORD_BASENAME)
-    state = {"windows": []}
+    state = process_store()
     #: Manager ごとの `__init__` の引数（版3）。版2まではゲームの Manager に
     #: `_probe_training` という属性を足して控えていた（読み取りだけの約束の外）。
-    inits = weakref.WeakKeyDictionary()
-    inits_by_id = {}
+    #: 版5で窓の並びと一緒に `sys` へ移した（注入し直しの瞬間の窓でも引ける）。
+    inits = state["inits"]
+    inits_by_id = state["inits_by_id"]
 
     def remember_init(manager, init_args):
         try:
@@ -243,10 +274,7 @@ def apply(ctx):
                     init_args_of(self), gold_before, day_before))
                 return orig(self, *args, **kwargs)
             finally:
-                try:
-                    state["windows"].remove(window)
-                except ValueError:
-                    pass
+                close_window(state["windows"], window)
                 try:
                     gold_after = ui.gold_of(app)
                     day_after = ui.game_day(app)

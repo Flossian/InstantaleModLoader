@@ -14,6 +14,10 @@ import importlib.util
 import os
 import sys
 import time
+import traceback
+
+#: 窓を組んでから閉じるまでの上限（ミリ秒）。撮る前に固まったときの後始末。
+SHOOT_TIMEOUT_MS = 60000
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -59,25 +63,45 @@ def main():
     out = opts.out or os.path.join(ROOT, "out", "drive", "tool_{}_{}.png".format(opts.mod, opts.tab))
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
 
-    def shoot():
-        found = notebooks(root)
-        if not found:
-            print("ERROR: the tool has no tabs")
+    shot = []
+
+    def close():
+        try:
             root.destroy()
-            return
-        nb = found[0]
-        labels = [nb.tab(t, "text") for t in nb.tabs()]
-        index = int(opts.tab) if opts.tab.lstrip("-").isdigit() else labels.index(opts.tab)
-        nb.select(nb.tabs()[index])
-        root.update()
-        time.sleep(0.8)
-        root.update()
-        cts.capture(int(root.wm_frame(), 16), out)
-        print("tabs {} -> {} {}".format(labels, labels[index], out))
-        root.destroy()
+        except Exception:
+            pass                    # 既に閉じている
+
+    def shoot():
+        # Tk の後回しの中で投げると、窓を残したまま mainloop が回り続ける。必ず閉じる
+        try:
+            found = notebooks(root)
+            if not found:
+                print("ERROR: the tool has no tabs")
+                return
+            nb = found[0]
+            labels = [nb.tab(t, "text") for t in nb.tabs()]
+            index = int(opts.tab) if opts.tab.lstrip("-").isdigit() else labels.index(opts.tab)
+            nb.select(nb.tabs()[index])
+            root.update()
+            time.sleep(0.8)
+            root.update()
+            cts.capture(int(root.wm_frame(), 16), out)
+            print("tabs {} -> {} {}".format(labels, labels[index], out))
+            shot.append(out)
+        except Exception:
+            traceback.print_exc()
+        finally:
+            close()
 
     root.after(1500, shoot)
-    root.mainloop()
+    # 撮る前に固まっても窓を残さない
+    root.after(SHOOT_TIMEOUT_MS, close)
+    try:
+        root.mainloop()
+    finally:
+        close()
+    if not shot:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

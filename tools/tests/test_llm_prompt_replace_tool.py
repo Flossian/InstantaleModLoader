@@ -141,6 +141,10 @@ try:
     check("検査: 置換前が空", "置換前が空" in why(tool.Rule(True, False, 100, "", "後")))
     check("検査: 確率の範囲", "0〜100" in why(tool.Rule(True, False, 120, "前", "後")))
     check("検査: => の混入", "=>" in why(tool.Rule(True, False, 100, "前=>x", "後")))
+    check("検査: 読み直して同じに戻る置換後の => は通す（ゲームで効いている行を保存で断らない）",
+          why(tool.Rule(True, False, 100, "古い", "新しい=>説明")) == "")
+    check("検査: 末尾が確率に読まれる置換後の => は断る",
+          "確率" in why(tool.Rule(True, False, 100, "古い", "新しい=>50")))
     check("検査: 不正な正規表現", "正規表現" in why(tool.Rule(True, True, 100, "(未閉じ", "後")))
     check("検査: 置換前が regex: 始まり",
           "regex:" in why(tool.Rule(True, False, 100, "regex:前", "後")))

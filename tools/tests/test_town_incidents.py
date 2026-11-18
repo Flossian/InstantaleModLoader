@@ -149,6 +149,9 @@ check("良い出来事は兆し・盛況・収束", rules.KIND_BY_KEY["harvest"]
       and rules.stage_tones(rules.KIND_BY_KEY["harvest"]) == ("good1", "good2", "calm"))
 check("同じ品の買値と売値は別の効き目", ((rules.ALL, "buy", (5, 15, -10, -5)) in boom["effects"]
                                      and (rules.ALL, "sell", (10, 30, -25, -10)) in boom["effects"]), boom["effects"])
+long_bad = {"stages": ("一", "二", "三", "四"), "tones": ("bad",) * 4}
+check("bad が4段以上でも窓の色の表にある調子だけを返す",
+      rules.stage_tones(long_bad) == ("bad1", "bad1", "bad2", "bad3"), rules.stage_tones(long_bad))
 bad, why = rules.parse_kind({"key": "x y", "name": "a"})
 check("key が英数字でなければ読まない", bad is None and "key" in why[0], why)
 bad, why = rules.parse_kind({"key": "oops", "name": "a", "what": "b",
@@ -415,6 +418,22 @@ check("古いセーブなら後で起きたことを外す", rules.rewind(bucket
       and old["end_by"] is None, rules.events_of(bucket))
 check("進行中へ戻した出来事は、終わったときの名前と知らせの印も外す",
       "end_by_name" not in old and not old["told"].get("settled"), old)
+# 後の日の休みと抽選の日を外す。街 2 は 100 日に終わった分の休み（100+180）へ組み直す。
+bucket = rules.new_bucket()
+early = rules.start(bucket, 50, "2", "村", rules.KIND_BY_KEY["outlaws"], FixedRng(0.0))
+rules.end(bucket, early, 100, rules.END_NATURAL, 180)
+later = rules.start(bucket, 300, "2", "村", rules.KIND_BY_KEY["influx"], FixedRng(0.0))
+rules.end(bucket, later, 320, rules.END_NATURAL, 180)
+back = rules.start(bucket, 200, "3", "港", rules.KIND_BY_KEY["outlaws"], FixedRng(0.0))
+rules.end(bucket, back, 330, rules.END_NATURAL, 180)
+bucket["next_roll_day"] = 350
+rules.rewind(bucket, 250, rest_days=180, roll_gap=45)
+check("巻き戻しで後の日の休みを組み直し、進行中へ戻した街の休みは外す",
+      bucket["cooldown"] == {"2": 280}, bucket["cooldown"])
+check("巻き戻しで後の日に引いた抽選の日を外す", bucket["next_roll_day"] is None, bucket["next_roll_day"])
+bucket["next_roll_day"] = 290
+rules.rewind(bucket, 250, rest_days=180, roll_gap=45)
+check("ふつうの先の抽選の日は残す", bucket["next_roll_day"] == 290, bucket["next_roll_day"])
 ordered = rules.order_bucket(bucket)
 check("控えの鍵の並び", list(ordered) == list(rules.BUCKET_KEYS), list(ordered))
 check("出来事の鍵の並び", list(ordered["events"][0]) == list(rules.EVENT_KEYS),
@@ -675,6 +694,20 @@ if note_fn is not None:
 seen = {}
 ctx.hook("scripts.llm.llm_manager:narrator")(lambda *a, **k: seen.update(args=a), "w", "s", "主人公")
 check("情景描写の素材に情勢を足す", "【この土地の情勢】" in seen["args"][2], seen)
+narrated = []
+
+
+def narrator_fails(*a, **k):
+    narrated.append(a)
+    raise TimeoutError("llm timed out")
+
+
+try:
+    ctx.hook("scripts.llm.llm_manager:narrator")(narrator_fails, "w", "s", "主人公")
+    narrator_raised = False
+except TimeoutError:
+    narrator_raised = True
+check("情景描写そのものが失敗したら、呼び直さずに例外を返す", narrator_raised and len(narrated) == 1, narrated)
 
 print("[流れ] 掲示板を開くと依頼を作らせ、片付けると終わる")
 board = ctx.hook("__main__:DisplayQuestChoice.execute")

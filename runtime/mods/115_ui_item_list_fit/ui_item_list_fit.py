@@ -286,8 +286,11 @@ def apply(ctx):
                 return []
             levels.add(round(y, 1))
             widths.append(width)
-        if len(levels) < len(rows):
-            return []             # 同じ高さに並んでいる ＝ 横並び（一覧ではない）
+        if len(levels) < len(rows) and not isinstance(frames.attr(widget, BOX_ATTR, None), dict):
+            # 同じ高さに並んでいる ＝ 横並び（一覧ではない）。
+            # ただしこちらが列にした一覧（BOX_ATTR の控えがある）は、折り返して同じ高さに並ぶのが正しい姿
+            # （弾くと `verify` が折り返しの成功を見られず、後の `fit_one` も何もできない）
+            return []
         widest = max(widths)
         if widest <= 0:
             return []

@@ -753,7 +753,17 @@ OTHER_TEXT = "あなたはこの街に暮らしているが、心は{faction}の
 OTHER_OPEN_TEXT = "あなたは{faction}の者としてこの街にいて、周りもそれを知っている。"
 #: 答えの `open` で「公然」と読む語。
 OPEN_WORDS = ("true", "yes", "はい", "公然", "知られて")
+#: 答えの `open` で「隠している」と読む語。OPEN_WORDS より先に見る（「知られていない」「公然ではない」を公然と読まない）。
+HIDDEN_WORDS = ("false", "いいえ", "ない", "隠", "秘")
 PERSON_REASON_CHARS = 80
+
+
+def read_open(said_open):
+    """答えの `open`（小文字にして前後の空白を落とした文字列）が「公然」か。"""
+    if said_open in ("no", "none", "null") or said_open.startswith("not") \
+            or any(word in said_open for word in HIDDEN_WORDS):
+        return False
+    return any(word in said_open for word in OPEN_WORDS)
 
 
 def person_of(ledger, npc_id):
@@ -806,7 +816,7 @@ def read_people(answer, ledger, town_id, npc_ids):
             problems.append("{}: unreadable role {!r}".format(npc_id, item.get("role")))
             role = FOLLOWER
         said_open = str(item.get("open") or "").strip().lower()
-        is_open = any(word in said_open for word in OPEN_WORDS)
+        is_open = read_open(said_open)
         if faction and faction != town_faction and role != OTHER:
             # 別の勢力との結び付きを答えた（役の選び方より勢力の欄を信じる。役が割れた。2026-10-14、Haiku 5.5）。
             # 一員と答えた者は、隠していると答えなければ公然
@@ -933,7 +943,25 @@ def needs_rewind(ledger, day):
     days = [_day(ledger.get("made_day")), _day((ledger.get("trend") or {}).get("last_day"))]
     days += [_day(row.get("day")) for row in ledger.get("events") or [] if isinstance(row, dict)]
     days += [_day(row.get("day")) for row in ledger.get("history") or [] if isinstance(row, dict)]
+    days.append(_day(ledger.get("hunter_day")))
     return any(d is not None and d > day for d in days)
+
+
+def _locked_before(history, index, faction_id):
+    """来歴の `index` 件目の動きの前に、その勢力に敵対の印が付いていたか。
+
+    印は `ENEMY_LOCK_AT` 以下に下がると付き、外すのは和解（`RECONCILE`）だけで、点数が戻っても残る。
+    古い来歴は捨てているので、手がかりが無ければ付いていなかったものとする。
+    """
+    for row in reversed(history[:index]):
+        if row.get("faction") != faction_id:
+            continue
+        if row.get("kind") == RECONCILE:
+            return False
+        after = row.get("after")
+        if isinstance(after, (int, float)) and after <= ENEMY_LOCK_AT:
+            return True
+    return False
 
 
 def rewind(ledger, day):
@@ -950,7 +978,8 @@ def rewind(ledger, day):
     standing = ledger.get("standing") or {}
     history = [row for row in ledger.get("history") or [] if isinstance(row, dict)]
     keep = []
-    for row in reversed(history):
+    for index in range(len(history) - 1, -1, -1):
+        row = history[index]
         when = _day(row.get("day"))
         if when is None or when <= day:
             keep.append(row)
@@ -962,8 +991,10 @@ def rewind(ledger, day):
             state["locked"] = True          # 外した印を戻す
         before = row.get("before")
         if isinstance(before, (int, float)):
-            if state.get("score", 0) <= ENEMY_LOCK_AT < before:
-                state.pop("locked", None)   # この動きで付いた印
+            # この動きで付いた印だけ外す（動きの前から付いていた印は、点数が上がっても残っている）
+            if state.get("score", 0) <= ENEMY_LOCK_AT < before \
+                    and not _locked_before(history, index, row.get("faction")):
+                state.pop("locked", None)
             state["score"] = clamp_score(before)
     ledger["history"] = list(reversed(keep))
     relations = ledger.get("relations") or {}
@@ -981,6 +1012,10 @@ def rewind(ledger, day):
     trend = ledger.setdefault("trend", {"last_day": None, "incidents": {}})
     if _day(trend.get("last_day")) is not None and trend["last_day"] > day:
         trend["last_day"] = day
+    # 後の日に現れた刺客の日から数えると次が遅れる。その前の日は残っていないので今日に揃える
+    # （情勢の日と同じ扱い。待つのは長くても1回分の間隔）
+    if _day(ledger.get("hunter_day")) is not None and ledger["hunter_day"] > day:
+        ledger["hunter_day"] = day
     gained = ledger.get("gained") or {}
     for faction_id in [f for f, when in gained.items() if _day(when) is not None and when > day]:
         gained.pop(faction_id, None)

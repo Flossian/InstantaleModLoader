@@ -450,9 +450,20 @@ def validate(doc):
                 return tab, rule, "置換前が空です。"
             if not 0 <= rule.prob <= 100:
                 return tab, rule, "置換確率は 0〜100 の整数で入力してください。"
-            if SEPARATOR in rule.from_text or SEPARATOR in rule.to_text:
-                return tab, rule, "「{}」は置換前にも置換後にも使えません（区切りに読まれます）。".format(
-                    SEPARATOR)
+            if SEPARATOR in rule.from_text:
+                return tab, rule, "「{}」は置換前に使えません（区切りに読まれます）。".format(SEPARATOR)
+            if SEPARATOR in rule.to_text:
+                # 置換後の「=>」は、書いた行を読み直して同じ規則に戻るなら使える
+                # （本体も画面も、末尾が 0〜100 の整数でなければ置換後の一部として読む）。
+                # 戻らない形（末尾が確率に読まれる）だけ断る。断ると、ゲームで効いている行を
+                # 含むファイルが、その行に触れていなくても保存できなくなる
+                body = ((REGEX_PREFIX if rule.is_regex else "") + rule.from_text + SEPARATOR
+                        + rule.to_text + ("" if rule.prob == 100 else SEPARATOR + str(rule.prob)))
+                back = parse_rule_body(body, rule.enabled)
+                if back is None or (back.from_text, back.to_text, back.prob) != (
+                        rule.from_text, rule.to_text, rule.prob):
+                    return tab, rule, ("置換後の末尾が「{}数」の形だと確率に読まれます"
+                                       "（数の後ろに文字を足すなどして形を変えてください）。".format(SEPARATOR))
             if any(mark in text for text in (rule.from_text, rule.to_text) for mark in "\r\n"):
                 # ルールは1行1件。改行が残ると行が割れ、後ろ半分が別のルールとして読まれる。
                 return tab, rule, "置換前と置換後に改行は書けません（ファイルの上で行が割れます）。"

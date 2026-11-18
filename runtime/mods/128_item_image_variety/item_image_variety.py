@@ -682,6 +682,9 @@ def apply(ctx):
     # 2本が同時に通ると **片方が書きかけの tmp をもう片方が置き換える**。
     # 控えが壊れ、次の `read_json` で丸ごと失われる。
     lock = threading.Lock()
+    # 辞書を組む錠（`load_pool`）。組むのは重い（JSON と行列）ので上の錠とは分ける。
+    # 分けないまま錠の外で組むと、同じ分類の初回に2本のワーカーが重なって同じ辞書を2回組む
+    pool_lock = threading.RLock()
     state = {
         "world": None,   # images を読んだ世界（world_key）。替わったら読み直す
         "file": None,    # その世界の控え（state/item_image/<世界>.json）
@@ -728,11 +731,15 @@ def apply(ctx):
                 log("settings {!r}: {}".format(world, ", ".join(
                     "{}={}".format(n, values[n]) for n in SETTING_NAMES if values[n] != base_settings[n])))
 
-    def ensure_world():
-        """世界が替わっていたら、その世界の対応表を読み直す。個別設定は毎回見る（変わっていれば読み直す）。"""
+    def ensure_world(settings=True):
+        """世界が替わっていたら、その世界の対応表を読み直す。個別設定は毎回見る（変わっていれば読み直す）。
+
+        `settings=False` は同じ呼び出しの2回目以降（設定は1回目で読んだ。世界の入れ替わりだけ見る）。
+        """
         app = getattr(sys.modules.get("__main__"), "instantale_app", None)
         world = world_key(app) if app is not None else UNKNOWN_WORLD
-        refresh_settings(world)
+        if settings or world != state["world"]:
+            refresh_settings(world)
         if world == state["world"]:
             return
         if world == UNKNOWN_WORLD:
@@ -815,6 +822,11 @@ def apply(ctx):
         return bonus
 
     def load_pool(sub_type):
+        """同じ分類の辞書を2本のワーカーが同時に組まないよう、錠の中で組む（`_load_pool`）。"""
+        with pool_lock:
+            return _load_pool(sub_type)
+
+    def _load_pool(sub_type):
         """素の辞書と同梱の追加辞書を合成して (keys, tensor, キー集合, 側, 分類, 署名, 語の組) を返す。
         側は鍵ごとに、別扱い（separate）の分類ならその分類の名前、それ以外（素の絵と mix の分類）は空。
         分類は鍵ごとの分類の名前（素の絵と同梱の追加辞書は空。ジャンルの重みを引く）。
@@ -1004,7 +1016,7 @@ def apply(ctx):
         with lock:
             # 表の差し替えも錠の中で。外で2本が同時に読み直すと、
             # 片方が足した対応を、もう片方が読み直した表で上書きして失う。
-            ensure_world()
+            ensure_world(settings=False)
             stale = kept_image(item_sub_type, query_text, key_set)
             checked = (state["world"], pool[5], TOP_K, SIM_FLOOR, SIM_GAP, TAG_PENALTY, query_text, stale)
             if stale is not None and checked in state["checked"]:
@@ -1035,7 +1047,7 @@ def apply(ctx):
         # 同じ最少の絵を取り、同じ外見文なら後の1本が先の対応を別の絵で上書きする。
         # 埋め込みの計算中に他のスレッドが同じ外見文を入れていれば、それを返す。
         with lock:
-            ensure_world()
+            ensure_world(settings=False)
             kept = kept_image(item_sub_type, query_text, key_set)
             if kept is not None and kept != stale:
                 log("{}: kept {} for {!r}".format(item_sub_type, kept, query_text[:80]))

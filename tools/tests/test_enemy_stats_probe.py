@@ -335,6 +335,94 @@ check("止めた後は試し打ちしない", not [r for r in ctx.rows[before:] 
 hero.current_hp = 1832
 mod.DRY_RUN = False
 
+print("同名の敵（版6）")
+guards = [Character("衛兵", 300, 10) for _ in range(3)]
+app.current_enemy_dict = {"衛兵{}".format(i): g for i, g in enumerate(guards)}
+
+
+def calculate_hits_first_guard(self, battle_action):
+    guards[0].current_hp -= 50
+    return None
+
+
+before = len(ctx.rows)
+ctx.hooks["__main__:BattlePhaseManager.calculate_battle_effect"](
+    calculate_hits_first_guard, types.SimpleNamespace(app=app), dict(action))
+act = [r for r in ctx.rows[before:] if r["kind"] == "act"][0]
+check("同名の3人のうち1人目の HP の変化が state_changed に出る",
+      [v[1].get("current_hp") for v in act["state_changed"].values()] == [250],
+      act["state_changed"])
+guards[0].current_hp = 300
+
+
+class HitsFirstGuard(FakePhase):
+    def calculate_battle_effect(self, battle_action):
+        guards[0].current_hp -= 1
+        return FakePhase.calculate_battle_effect(self, battle_action)
+
+
+ctx2 = Ctx()
+mod.apply(ctx2)
+mod.ui.cls_of = lambda name: HitsFirstGuard
+mod.DRY_RUN = True
+getattr(sys, mod.DRY_SEEN_MARK, set()).clear()
+ctx2.hooks["__main__:BattleStartManager.start_battle"](lambda self: "go", manager)
+check("試し打ちが同名の1人目の HP を動かしたら dry_abort で止める",
+      [r["kind"] for r in ctx2.rows][-1] == "dry_abort", [r["kind"] for r in ctx2.rows])
+guards[0].current_hp = 300
+mod.DRY_RUN = False
+app.current_enemy_dict = {"ゴーレム": golem}
+
+print("手を開いた直後の例外（版6）")
+saved_ids = mod.ui.party_member_ids
+
+
+def broken_ids(a):
+    raise RuntimeError("boom")
+
+
+mod.ui.party_member_ids = broken_ids
+check("写しで例外が出ても戻りはそのまま（calculate）",
+      ctx.hooks["__main__:BattlePhaseManager.calculate_battle_effect"](
+          lambda self, a: "ok", types.SimpleNamespace(app=app), dict(action)) == "ok")
+mod.ui.party_member_ids = saved_ids
+before = len(ctx.rows)
+ctx.hooks["__main__:BattlePhaseManager.calculate_battle_effect"](
+    calculate_like, object(), action)
+check("次の手から act の行がまた書かれる",
+      len([r for r in ctx.rows[before:] if r["kind"] == "act"]) == 1,
+      [r["kind"] for r in ctx.rows[before:]])
+
+print("印の交差（版6）")
+steps = {name: threading.Event() for name in ("a_marked", "b_marked", "a_done")}
+
+
+def thread_a():
+    token = mod.mark_dry_thread()
+    steps["a_marked"].set()
+    steps["b_marked"].wait(5)
+    mod.unmark_dry_thread(token)
+    steps["a_done"].set()
+
+
+def thread_b():
+    steps["a_marked"].wait(5)
+    token = mod.mark_dry_thread()
+    steps["b_marked"].set()
+    steps["a_done"].wait(5)
+    mod.unmark_dry_thread(token)
+
+
+workers = [threading.Thread(target=thread_a), threading.Thread(target=thread_b)]
+for w in workers:
+    w.start()
+for w in workers:
+    w.join(10)
+check("先に始めたスレッドが先に終わっても、id が sys に居残らない",
+      not hasattr(sys, mod.DRY_THREAD_MARK), getattr(sys, mod.DRY_THREAD_MARK, None))
+if hasattr(sys, mod.DRY_THREAD_MARK):
+    delattr(sys, mod.DRY_THREAD_MARK)
+
 print()
 if failures:
     print("FAILED: " + ", ".join(failures))

@@ -2812,11 +2812,11 @@ class App(ttk.Frame):
         """
         want = bool(self.debug_var.get())
         # 一覧を作り直すと未保存の並びが消える。
-        # `launch()` と同じ聞き方で先に促す。
-        if self.dirty and messagebox.askyesno(
-                "未保存の変更",
-                "未保存の変更があります。保存してから切り替えますか？"):
-            self.save()
+        # 再読み込みと同じ聞き方（キャンセルあり）で先に促し、
+        # キャンセルと保存の失敗では切り替えない（捨ててよいと言われていない編集を消さない）。
+        if not self._settle_unsaved("切り替えます"):
+            self.debug_var.set(self.debug_mode)
+            return
         try:
             flags = C.load_flags(RUNTIME_DIR)
             flags["debug"] = want
@@ -3418,8 +3418,20 @@ class App(ttk.Frame):
 
     def _close(self) -> None:
         master = self.winfo_toplevel()
-        update_config(window=self.geom,
-                      window_maximized=(master.state() == "zoomed"),
+        maximized = master.state() == "zoomed"
+        geom = self.geom
+        if maximized:
+            # 最大化のまま開いて閉じると、`_on_configure` は一度も普通の大きさを拾わず、
+            # `self.geom` は描く前に取った `1x1` のまま残る。
+            # `modtool.save_window` と同じく、普通の大きさに戻してから測る。
+            try:
+                master.state("normal")
+                master.update_idletasks()
+                geom = master.geometry()
+            except tk.TclError:
+                pass
+        update_config(window=geom,
+                      window_maximized=maximized,
                       info_width=self._info_width())
         if self._tick is not None:
             self.after_cancel(self._tick)

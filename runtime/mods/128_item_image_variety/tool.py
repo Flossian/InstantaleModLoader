@@ -314,9 +314,9 @@ def body_module():
     return mod
 
 
-def genre_paths():
-    """`(既定の表, 変えた値のファイル)`。"""
-    body = body_module()
+def genre_paths(body=None):
+    """`(既定の表, 変えた値のファイル)`。読み込み済みの本体を渡せば読み直さない（本体は1000行超を実行する）。"""
+    body = body if body is not None else body_module()
     _root, state_dir, _game_dir = modtool.locate(MOD_DIR)
     return os.path.join(MOD_DIR, "genres.json"), os.path.join(state_dir, body.GENRE_WEIGHTS_DIRNAME, body.GENRE_WEIGHTS_FILE)
 
@@ -354,7 +354,7 @@ def genre_tab(tabs, root_dir):
 
     body = body_module()
     genres, base_stock, base_weights = genre_defaults()
-    _base_path, user_path = genre_paths()
+    _base_path, user_path = genre_paths(body)
     stock, weights = body.read_genre_weights(MOD_DIR, user_path)
     labels = dict(load_categories())
 

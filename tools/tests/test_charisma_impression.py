@@ -768,6 +768,27 @@ for npc in npcs[:-1]:
 check("据え置き: 包んだ入口を抜けた後は戻さない",
       log_text(ctx).count("据え置く") == kept_lines, log_text(ctx)[-300:])
 
+
+class TrainedQuestEnd(QuestEnd):
+    """呼び出しの中で主人公の魅力が上がる（訓練の `TrainingPhaseManager` と同じ形）。"""
+
+    def method_1(self):
+        LAST["player"].ability_scores["charisma"] += 6
+        return QuestEnd.method_1(self)
+
+
+mod, ctx, call, npcs = setup(npc_names=NAMES)
+mod.FRAME_DEPTH_MAX = 1
+manager_cls = install_manager_hooks(ctx)
+trained_cls = install_manager_hooks(ctx, TrainedQuestEnd, QUEST_END_TARGETS, "QuestEndManager")
+LAST["player"].ability_scores = {"charisma": 10}
+for npc in npcs[:-1]:
+    npc.relationship["player"]["affinity_text"] = call_via_manager(npc, 0, TOP_CHARM, manager_cls)
+trained_cls(npcs, TOP_CHARM).execute()
+check("据え置き: 呼び出しの中で魅力が変わったら前の段へ戻さない",
+      "据え置く" not in log_text(ctx) and "魅力が 10 → 16 に変わった" in log_text(ctx),
+      log_text(ctx)[-400:])
+
 # 診断。拾えないときは、その場に何が居たかを記録に残す。
 mod, ctx, call, npcs = setup()
 Bare().run(0, TOP_CHARM)

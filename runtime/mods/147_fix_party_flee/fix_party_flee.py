@@ -29,7 +29,7 @@
 
 import threading
 
-from instantale_modloader import ui
+from instantale_modloader import loads, ui
 
 LOG_BASENAME = "party_flee.log"
 
@@ -115,6 +115,17 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("party flee: cannot move the party after the player")
         return result
+
+    def forget_on_load(_call):
+        # ロード・新規開始は戦闘を抜ける（end_phase を通らない）。移した仲間の控えを残すと、
+        # 次の戦闘の終わりで古い Character を一覧へ戻し、外した仲間や別の世界の人物が混ざる
+        with lock:
+            dropped, state["moved"] = state["moved"], []
+            state["line"] = None
+        if dropped:
+            write("load: forgot {} member(s) moved in the last battle".format(len(dropped)))
+
+    loads.on("147_fix_party_flee", ctx, (loads.LOAD, loads.NEW_GAME), before=forget_on_load, write=write)
 
     @ctx.wrap(HANDLE_TARGET, required=False, safe=True)
     def handle_battle_situation(orig, self, *args, **kwargs):

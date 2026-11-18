@@ -420,7 +420,8 @@ def format_text(template, **fields):
 
     try:
         return template.format_map(_Missing(fields)).strip()
-    except (ValueError, IndexError):
+    except (ValueError, IndexError, KeyError, AttributeError, TypeError):
+        # 属性・添字つきの書き方（`{title.x}`・`{title[x]}`）は AttributeError / TypeError になる
         return ""
 
 

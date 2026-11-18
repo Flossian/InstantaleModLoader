@@ -82,7 +82,7 @@ import os
 import random
 import time
 
-from instantale_modloader import frames, sounds
+from instantale_modloader import arrivals, frames, sounds
 
 # GUI から変えられる値。mod.json の "settings" と同じ名前・同じ既定値。
 DEFAULT_WEIGHT = 100     # 設定画面で「使う」に入れたときの重み（本体は読まない。宣言と既定値を揃えるためにある）
@@ -340,6 +340,9 @@ def apply(ctx):
                 ctx.log_exc("battle bgm: {} could not be played; "
                             "falling back to the game's track".format(chosen))
                 write("FAILED {} -> {}".format(short(chosen), short(music_src)))
+                # この戦闘の種類は決めた後なので印は使い終わり。残すと次の戦闘を同じ種類と読む
+                state["pending"] = None
+                state["enemy_type"] = None
             else:
                 state["last"] = name
                 state["pending"] = None
@@ -376,6 +379,22 @@ def apply(ctx):
     def battle_start_init(orig, self, *args, **kwargs):
         state["enemy_type"] = frames.arg(args, kwargs, "enemy_type", 1)   # (app, enemy_type, enemy_content)
         return orig(self, *args, **kwargs)
+
+    def drop_marks(call):
+        """施設に着いた・街を移った。印の付いた戦闘は始まらなかったので印を捨てる。
+
+        闘技場の申し込みもボスに挑むも、移動を挟まずにその場で戦闘へ入る（実機の流れ）。
+        印は戦闘曲が鳴ったときにしか消えないので、試合の相手を作れなかった回などで残り、
+        寿命（`PENDING_TTL`）の内の別の戦闘を闘技場・ボス戦と読んでしまう。
+        """
+        if state["pending"] is not None or state["enemy_type"] is not None:
+            write("marks dropped on {} arrival: pending={} enemy_type={!r}".format(
+                call.kind, state["pending"], state["enemy_type"]))
+        state["pending"] = None
+        state["enemy_type"] = None
+
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "322_battle_bgm"
+    arrivals.on(owner, ctx, (arrivals.FACILITY, arrivals.AREA), after=drop_marks, write=write)
 
     # ------------------------------------------------------- 起動時の同期
     # playlist.json を戦闘より前に作っておく（書き換える場所を先に見せる）。

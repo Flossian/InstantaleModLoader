@@ -23,6 +23,9 @@ sys.path.insert(0, os.path.join(ROOT, "tools"))
 import injector  # noqa: E402
 
 # ゲームの `__main__` に名前を残さない（TECH.md §1.1）。全部を1つの関数に入れ、呼んだら消す。
+# 手順が投げたら KEEP_OPEN でも <done> を送る。手順が自分で <done> を書く前に落ちると、
+# 待つ側は --wait いっぱいまで待ってから途中の結果を出すことになる。
+# 中身は ASCII に限る（`tools/injector.py` の都合）ので、ここに日本語のコメントを書かない。
 PAYLOAD = r'''
 def _iml_drive():
     import json
@@ -45,6 +48,7 @@ def _iml_drive():
             ns["main"](say)
         except Exception:
             say(traceback.format_exc())
+            say("<done>")
         finally:
             if not ns.get("KEEP_OPEN"):
                 say("<done>")

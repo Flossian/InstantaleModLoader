@@ -897,6 +897,21 @@ def restored(module_ctx_app, texts):
 module, ctx, app, confirm_cls, move_cls = setup()
 check("組み直しを窓口に預けている",
       ctx.hooks.get("__main__:InstantaleApp.refresh_choice_buttons") is not None, sorted(ctx.hooks))
+added = []
+
+
+def add_text_fails(this, *args, **kwargs):
+    added.append(args)
+    raise RuntimeError("add_text failed")
+
+
+try:
+    ctx.hooks["__main__:InstantaleApp.add_text"](add_text_fails, app, "窓の外の本文")
+    add_raised = False
+except RuntimeError:
+    add_raised = True
+check("窓の外で本文の追加そのものが失敗したら、二度足さずに例外を返す",
+      add_raised and len(added) == 1, added)
 check("前の設定で保存した文言は、素のままの設定に戻る",
       restored((module, ctx, app), ["徒歩(30日)", "馬車(50G・7日)"])[:2] == [WALK_TEXT, CARRIAGE_SHOWN],
       texts_of(app))

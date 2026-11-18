@@ -79,12 +79,40 @@ def owner_ids(app, max_areas=40):
     return owners
 
 
+def _owner_of(facility):
+    """施設の主の id。居なければ空文字。"""
+    owner = frames.attr(facility, "owner")
+    if owner in (None, frames.MISSING, ""):
+        return ""
+    return ui.element_id(owner) or ""
+
+
+def _spot(area, facility_type):
+    """その種類で手がかりを置く施設。主の居る最初のもの、居なければ最初のもの。
+
+    証言者（`owner_in`）と案内先（`place_name`）が同じ施設を指すよう、選び方をここ1か所に置く。
+    別々に「最初の1つ」を探すと、飛ばす条件の違いで別の施設を指しうる。
+    """
+    first = None
+    for node in ui.nodes_of(area):
+        for _fid, facility in ui.facilities_of(node).items():
+            if ui.facility_type_of(facility) != facility_type:
+                continue
+            if _owner_of(facility):
+                return facility
+            if first is None:
+                first = facility
+    return first
+
+
 def facility_types_in(app, target_area_id):
-    """その土地に実在する `facility_type` の集合。
+    """その土地にある、主の居る施設の `facility_type` の集合。
 
     手がかりの置き場所はここから選ぶ。
     町の構成は世界ごとに違い、闇市や診療所が無い町もある。
     無い施設に手がかりを置くと、その事件は永久に解けなくなる。
+    主の居ない種類も外す。
+    証言者は施設の主なので（`owner_in`）、主が居なければ誰からも拾えない。
     """
     area = ui.world_areas(app).get(str(target_area_id))
     if area is None:
@@ -93,7 +121,7 @@ def facility_types_in(app, target_area_id):
     for node in ui.nodes_of(area):
         for _fid, facility in ui.facilities_of(node).items():
             kind = ui.facility_type_of(facility)
-            if kind:
+            if kind and _owner_of(facility):
                 kinds.add(kind)
     return kinds
 
@@ -124,14 +152,8 @@ def owner_in(app, target_area_id, facility_type):
     area = ui.world_areas(app).get(str(target_area_id))
     if area is None:
         return ""
-    for node in ui.nodes_of(area):
-        for _fid, facility in ui.facilities_of(node).items():
-            if ui.facility_type_of(facility) != facility_type:
-                continue
-            owner = frames.attr(facility, "owner")
-            if owner not in (None, frames.MISSING, ""):
-                return ui.element_id(owner)
-    return ""
+    facility = _spot(area, facility_type)
+    return _owner_of(facility) if facility is not None else ""
 
 
 def _short(value, limit):
@@ -266,12 +288,14 @@ def place_name(app, target_area_id, facility_type, limit=40):
     area = ui.world_areas(app).get(str(target_area_id))
     if area is None:
         return None
-    for node in ui.nodes_of(area):
-        for _fid, facility in ui.facilities_of(node).items():
-            if ui.facility_type_of(facility) == facility_type:
-                name = ui.facility_name(app, facility, limit=limit)
-                if isinstance(name, str) and name.strip():
-                    return name
+    # 証言者の居る施設を指す（`_spot`）。
+    # 名前の無いときに別の施設の名前へ逃げると、案内先と証言者がずれる。
+    facility = _spot(area, facility_type)
+    if facility is None:
+        return None
+    name = ui.facility_name(app, facility, limit=limit)
+    if isinstance(name, str) and name.strip():
+        return name
     return None
 
 

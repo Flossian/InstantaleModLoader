@@ -267,6 +267,11 @@ def setup(mode="conversation", override=1.0, reply="「いらっしゃい」", *
     # 偽の ctx を作り直すたびに忘れさせないと、2回目の ctx に包みが渡らない
     from instantale_modloader import gates
     gates.reset_all()
+    # 応答の控えは `sys` に置いて世代をまたぐ。setup は「起動し直し」なので落としてから当てる
+    # （残すと前の筋書きのキャッシュが state/ を消した後まで効く）。
+    store_attr = getattr(mod, "STORE_ATTR", None)
+    if store_attr and hasattr(sys, store_attr):
+        delattr(sys, store_attr)
     mod.apply(ctx)
     hooks = {
         "move": ctx.hooks["__main__:MovePhaseManager.move_phase"],
@@ -705,6 +710,106 @@ check("キーワード引数で呼ばれても最後のメッセージが差し�
 check("  → 受け取った形のまま渡す（位置引数に直さない）",
       seen["args"] == () and sorted(seen["kwargs"]) == ["character_life_log", "messages", "player"],
       (seen.get("args"), sorted(seen.get("kwargs") or {})))
+
+print("10b. 読み替えはゲームの合図の1行目だけ。ほかの MOD が改行で足した状況は残す")
+# `301_` は modnpc の prompt の口で messages[-1] に「\n<状況: …>」を足す。関所がこのフックより外側の世代では、
+# 足された後の messages がここへ来る。
+clock = install_fake_kivy()
+mod, ctx, calls, hooks = setup()
+do_move(hooks)
+clock.tick()
+clock.run_onces()
+appended = [{"role": "user", "content": "<行動: 話しかける>\n<状況: 依頼を片付けて戻ってきた>"}]
+seen.clear()
+hooks["starter"](lambda messages, *a, **k: seen.setdefault("messages", messages),
+                 appended, "life_log", "player", app.world.characters["64"])
+content10b = seen["messages"][-1]["content"]
+check("声をかけた側への読み替えが入る", "あなたの方から声をかけた" in content10b, content10b)
+check("足された状況が残る", "<状況: 依頼を片付けて戻ってきた>" in content10b, content10b)
+check("ゲームの合図は消える", "<行動: 話しかける>" not in content10b, content10b)
+
+print("10c. 起こした会話と別の相手の第一声は書き替えない（印と見届けを捨てる）")
+shutil.rmtree(os.path.join(HERE, os.pardir, os.pardir, "out", "test", "state"),
+              ignore_errors=True)
+clock = install_fake_kivy()
+mod, ctx, calls, hooks = setup(IGNORE_LIMIT=2, COOLDOWN_VISITS=0)
+app.process_choice_calls = []
+app.player.location = inn
+do_move(hooks)
+clock.tick()
+clock.run_onces()
+check("会話を起こした", len(app.process_choice_calls) == 1, app.process_choice_calls)
+# 起こした会話が始まらないまま、プレイヤーが別の人に話しかけた。
+stranger = Character(name="テストNPC D", id="65")
+seen.clear()
+hooks["starter"](lambda messages, *a, **k: seen.setdefault("messages", messages),
+                 original, "life_log", "player", stranger)
+check("別の相手の第一声は書き替えない",
+      seen["messages"][-1]["content"] == "<行動: 話しかける>", seen["messages"])
+seen.clear()
+hooks["starter"](lambda messages, *a, **k: seen.setdefault("messages", messages),
+                 original, "life_log", "player", app.world.characters["64"])
+check("印は捨てられている（後の会話も素通し）",
+      seen["messages"][-1]["content"] == "<行動: 話しかける>", seen["messages"])
+# その後プレイヤーが自分から主に話しかけ、返事をせずに閉じても無視とは数えない。
+end_conversation(hooks, replied=False)
+saved10c = ctx.read_json(ctx.state_path(mod.STATE_DIRNAME, __import__(
+    "instantale_modloader.state", fromlist=["state"]).world_filename("テスト世界")), {})
+check("始まらなかった会話の見届けで無視を数えない", "64" not in saved10c, saved10c)
+shutil.rmtree(os.path.join(HERE, os.pardir, os.pardir, "out", "test", "state"),
+              ignore_errors=True)
+
+print("10d. 待ちを取り消した回・待ちきれなかった回は、間引きと申し出を戻す")
+arrivals.reset()
+clock = install_fake_kivy()
+mod, ctx, calls, hooks = setup(override=1.0, COOLDOWN_VISITS=2)
+app.process_choice_calls = []
+app.player.location = inn
+arrivals._store()["serial"] += 1
+app.is_adding_text = True
+mod.IDLE_TIMEOUT = -1                  # 期限は launch の時点で決まる
+do_move(hooks)
+clock.tick()
+check("待ちきれずに押さない", not app.process_choice_calls, app.process_choice_calls)
+check("待ちきれなかった回は申し出を下げる", arrivals.offers(app) == [], arrivals.offers(app))
+app.is_adding_text = False
+mod.IDLE_TIMEOUT = 30.0
+arrivals._store()["serial"] += 1
+do_move(hooks)
+clock.tick()
+clock.run_onces()
+check("待ちきれなかった回は間引きに数えない（次の到着で話しかける）",
+      len(app.process_choice_calls) == 1, app.process_choice_calls)
+
+# 手が空いてから押すまでの間に取り消した回（4b と同じ売買の窓）。
+clock = install_fake_kivy()
+mod, ctx, calls, hooks = setup(override=1.0, COOLDOWN_VISITS=2)
+app.process_choice_calls = []
+arrivals._store()["serial"] += 1
+do_move(hooks)
+app.is_popup_window_opened = True
+clock.run_onces()
+check("取り消した回は押さない", not app.process_choice_calls, app.process_choice_calls)
+check("取り消した回は申し出を下げる", arrivals.offers(app) == [], arrivals.offers(app))
+app.is_popup_window_opened = False
+arrivals._store()["serial"] += 1
+do_move(hooks)
+clock.tick()
+clock.run_onces()
+check("取り消した回は間引きに数えない（次の到着で話しかける）",
+      len(app.process_choice_calls) == 1, app.process_choice_calls)
+arrivals.reset()
+
+print("10e. 応答の控えは注入し直しても1つ（WorldStore は apply の外に持つ）")
+clock = install_fake_kivy()
+mod, ctx, calls, hooks = setup()
+held = getattr(sys, getattr(mod, "STORE_ATTR", "") or "_missing_", None)
+mod.apply(FakeCtx(os.path.join(HERE, os.pardir, os.pardir, "out", "test")))
+again = getattr(sys, getattr(mod, "STORE_ATTR", "") or "_missing_", None)
+check("控えを sys に1つ置く", isinstance(held, dict) and held.get("ignored") is not None, held)
+check("注入し直しても同じ控えを使う",
+      held is not None and again is held and again.get("ignored") is held.get("ignored"),
+      (held, again))
 
 # ============================================================== narration
 print()

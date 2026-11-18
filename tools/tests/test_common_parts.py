@@ -269,6 +269,19 @@ def test_worker(root):
     check("失敗した次の仕事もこなす", ran == ["bad", "good"], ran)
     check("失敗は記録に残る", any("hardy" in e for e in ctx.errors), ctx.errors)
 
+    # run が仕事の中身を書き換え、鍵の関数が読めなくなっても、スレッドは死なず鍵も残らない。
+    after_done = []
+
+    def strip(job):
+        job.pop("area")
+
+    reshaped = jobs.Worker(ctx, strip, name="test_reshaped", idle=1.0,
+                           key=lambda job: job["area"], on_done=after_done.append)
+    reshaped.enqueue({"area": "x"})
+    check("中身が変わった仕事も捌け終わる", reshaped.drain(5.0))
+    check("  → on_done も呼ぶ", len(after_done) == 1, after_done)
+    check("  → 同じ鍵の仕事をまた積める", reshaped.enqueue({"area": "x"}) and reshaped.drain(5.0))
+
     # 仕事が無ければ畳み、次の仕事で起き直す。
     quick = jobs.Worker(ctx, lambda job: None, name="test_idle", idle=0.05)
     quick.enqueue(1)
@@ -379,6 +392,32 @@ def test_game_day():
           ui.game_day(types.SimpleNamespace(world=types.SimpleNamespace(
               days_elapsed=True))) is None)
     check("読めなければ None", ui.game_day(object()) is None)
+
+
+def test_current_facility():
+    print("ui.current_facility")
+    shop = types.SimpleNamespace(id="12")
+    node = types.SimpleNamespace(facilities={"12": shop})
+    area = types.SimpleNamespace(nodes={"0": node})
+    real_current_area = ui.current_area
+    ui.current_area = lambda app: area
+    try:
+        def app_at(where):
+            return types.SimpleNamespace(player=types.SimpleNamespace(location=where))
+        check("施設そのものならそのまま", ui.current_facility(app_at(shop)) is shop)
+        check("id の文字列なら引き当てる", ui.current_facility(app_at("12")) is shop)
+        check("真偽値は施設ではない", ui.current_facility(app_at(True)) is None)
+        check("無ければ None", ui.current_facility(app_at(None)) is None)
+
+        class Broken(object):
+            @property
+            def id(self):
+                raise RuntimeError("broken id")
+
+        area.nodes = {"0": types.SimpleNamespace(facilities={"x": Broken()})}
+        check("引き当ての途中の例外は握って None", ui.current_facility(app_at("12")) is None)
+    finally:
+        ui.current_area = real_current_area
 
 
 def test_pressed_entry():
@@ -969,6 +1008,38 @@ def test_watch_aliases_superseded():
         llm.ALIAS_POLL_SECONDS = old_poll
 
 
+def test_window_parts():
+    print("窓口の共通の手（window_put / window_entries / window_call）と llm の生死の判定")
+    live = types.SimpleNamespace(superseded=lambda: False)
+    dead = types.SimpleNamespace(superseded=lambda: True)
+
+    def broken():
+        raise RuntimeError("boom")
+    flaky = types.SimpleNamespace(superseded=broken)
+    table = {}
+    ml.window_put(table, "a", (live, 1))
+    ml.window_put(table, "b", (dead, 2))
+    ml.window_put(table, "c", (flaky, 3))
+    ml.window_put(table, "a", (live, 4))
+    check("差し替えた登録は後ろへ回る", list(table) == ["b", "c", "a"] and table["a"][1] == 4, list(table))
+    check("用済みの ctx は除き、superseded が投げた ctx は生きているとみなす",
+          [owner for owner, _entry in ml.window_entries(table)] == ["c", "a"],
+          ml.window_entries(table))
+    check("新しい順にも回せる",
+          [owner for owner, _entry in ml.window_entries(table, newest_first=True)] == ["a", "c"])
+    store = {"errors": []}
+    check("呼べたら (True, 戻り値)", ml.window_call(store, "x", lambda v: v * 2, 21) == (True, 42))
+    for index in range(25):
+        got = ml.window_call(store, "x{}".format(index), broken)
+    check("投げたら (False, None)", got == (False, None), got)
+    check("errors は末尾 20 件", len(store["errors"]) == ml.WINDOW_ERRORS_KEEP
+          and store["errors"][-1] == "x24: RuntimeError: boom" and store["errors"][0].startswith("x5:"),
+          store["errors"][:2])
+    check("llm の見張りも alive と同じ判定（superseded が投げたら生きている）",
+          llm._superseded(flaky) is False and llm._superseded(dead) is True
+          and llm._superseded(live) is False)
+
+
 def test_rebuild_hook():
     print("llm.install_rebuild_hook（ゲームが送り口を作り直したら包み直す。作り直しの途中は当てさせない）")
     import instantale_modloader as ml
@@ -1104,6 +1175,7 @@ def main():
         test_worker(root)
         test_llm_reading()
         test_game_day()
+        test_current_facility()
         test_pressed_entry()
         test_records(root)
         test_enroll()
@@ -1115,6 +1187,7 @@ def main():
         test_clock_guard(root)
         test_when_idle_rechecks(root)
         test_watch_aliases_superseded()
+        test_window_parts()
         test_rebuild_hook()
     finally:
         shutil.rmtree(root, ignore_errors=True)

@@ -59,6 +59,8 @@ STORE_ATTR = "_instantale_hud_icons"
 HUD_ATTR = ui.MOD_WIDGET_PREFIX + "hud_icons"
 #: ゲームのボタンの元の `pos_hint`。
 HOME_ATTR = ui.MOD_WIDGET_PREFIX + "hud_icon_home"
+#: 最後に並べたときの列の様子（`_layout_signature`）。同じなら HUD の塗り直しで並べ直さない。
+SIGNATURE_ATTR = ui.MOD_WIDGET_PREFIX + "hud_icon_signature"
 #: 列の大きさの変化に結んだ手。
 BIND_ATTR = ui.MOD_WIDGET_PREFIX + "hud_icon_bound"
 CALLBACK_ATTR = ui.MOD_WIDGET_PREFIX + "hud_icon_press"
@@ -243,7 +245,16 @@ def marked(key, app=None):
 
 def has_attention(app=None):
     """一覧に並ぶ登録のどれかに、いまの周回で見せる知らせの印が付いているか。"""
-    return any(marked(entry["key"], app) for entry in menu_entries(app))
+    return _any_marked(menu_entries(app), app)
+
+
+def _any_marked(entries, app):
+    """`menu_entries` で引いた並びで `has_attention` を答える（`visible` を聞き直さない）。
+
+    印の無い行は周回の鍵を引かずに飛ばす（並べ直しの判定で毎回通るため）。
+    """
+    attention = _store()["attention"]
+    return any(attention.get(entry["key"]) and marked(entry["key"], app) for entry in entries)
 
 
 def _number(value, default=None):
@@ -428,6 +439,55 @@ def _root_entry():
 
 def arrange(hud):
     """MOD 用のボタンを置き、ゲームの4つと一緒に並べ直す。何度呼んでも同じ形になる。"""
+    app = ui.find_app()
+    _arrange(hud, menu_entries(app), app)
+
+
+def _layout_signature(hud, shown, app):
+    """並べ方を決める材料を1つの値にまとめる。前に並べたときと同じなら並べ直しても形は変わらない。
+
+    材料は、出す行・列とゲームのボタンの顔ぶれ・列の幅・アイコンの大きさ・今の `pos_hint`
+    （ゲームや他の MOD が動かしたら並べ直す）・MOD 用のボタンが列に居るか・知らせの点を出すか。
+    """
+    layout = frames.attr(hud, LAYOUT_NAME, None)
+    game = frames.attr(hud, BUTTONS_NAME, None)
+    game = list(game) if isinstance(game, (list, tuple)) else []
+    widgets = list(game)
+    placed = frames.attr(hud, HUD_ATTR, None)
+    root = placed.get(ROOT_KEY) if isinstance(placed, dict) else None
+    if root is not None:
+        widgets.append(root)
+    hints = []
+    for widget in widgets:
+        hint = frames.attr(widget, "pos_hint", None)
+        hints.append(tuple(sorted(hint.items())) if isinstance(hint, dict) else None)
+    return (tuple(entry["key"] for entry in shown), id(layout), frames.attr(layout, "width", None),
+            tuple(id(widget) for widget in widgets), tuple(hints),
+            tuple(frames.attr(game[0], "size", ()) or ()) if game else None,
+            frames.attr(root, "parent", None) is layout if root is not None else None,
+            sorted(placed) if isinstance(placed, dict) else None,
+            _any_marked(shown, app))
+
+
+def _arrange_if_changed(hud):
+    """HUD の塗り直し（約0.3秒ごとと状態の欄の更新のたび）から呼ぶ。材料が変わったときだけ並べ直す。
+
+    `visible(app)` は出し入れを決めるので毎回1度は聞く。並べ直しと点の描き直しは、
+    `_layout_signature` が前と同じなら省く（同じ形をなぞるだけになるため）。
+    """
+    app = ui.find_app()
+    shown = menu_entries(app)
+    if frames.attr(hud, SIGNATURE_ATTR, None) == _layout_signature(hud, shown, app):
+        return
+    _arrange(hud, shown, app)
+    try:
+        setattr(hud, SIGNATURE_ATTR, _layout_signature(hud, shown, app))
+    except Exception:
+        pass
+
+
+def _arrange(hud, shown, app):
+    """`arrange` の中身。`shown` は呼ぶ側が引いた `menu_entries(app)`（`visible` を聞き直さないため）。"""
     layout = frames.attr(hud, LAYOUT_NAME, None)
     game = frames.attr(hud, BUTTONS_NAME, None)
     if layout in (None, frames.MISSING) or not isinstance(game, (list, tuple)) or not game:
@@ -446,7 +506,7 @@ def arrange(hud):
         setattr(hud, HUD_ATTR, placed)
     # 置くのは MOD 用のボタン1つだけ（登録が1つでもあれば）。v1.15.1 の形で MOD ごとに置いたボタンが
     # 前の世代から残っていれば、ここで外れる。
-    entries = [_root_entry()] if menu_entries(ui.find_app()) else []
+    entries = [_root_entry()] if shown else []
     wanted = {ROOT_KEY} if entries else set()
     for key in list(placed):
         if key not in wanted:
@@ -508,7 +568,7 @@ def arrange(hud):
     if len(xs) > 1 and (xs[1] - xs[0]) * width - icon_width < TIGHT_GAP:
         _once(("tight", int(width)), "WARN hud icons: the row is {:.0f}px wide; the icons "
                                      "are almost touching".format(width))
-    _paint_dot(button)
+    _paint_dot(button, _any_marked(shown, app))
     _follow(button)
 
 
@@ -940,7 +1000,7 @@ def install(ctx):
             result = orig(self, *args, **kwargs)
             try:
                 if store["icons"]:
-                    arrange(self)
+                    _arrange_if_changed(self)
             except Exception:
                 log_exc("hud icons: cannot arrange the icons")
             return result

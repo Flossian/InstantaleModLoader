@@ -529,7 +529,7 @@ def apply(ctx):
         name = game.world_name(app)
         if case_mod.is_active(found) and name and not case_mod.belongs_to(found, name):
             # ファイルの鍵が世界名を含むので、ここへ来るのは世界の名前が変わったときだけ。
-            found = drop(app, found, "it belongs to another world ({!r})".format(
+            found = drop_and_retire(app, found, "it belongs to another world ({!r})".format(
                 found.get("world")))
         elif case_mod.is_active(found) and backfill(app, found):
             pass
@@ -539,7 +539,7 @@ def apply(ctx):
             # 古い版が組んだ控えや、
             # `CLUE_POOL` を書き換えた後の控えがこれになる（実際に踏んだ）。
             # 黙って捨てて、次の依頼から組み直す。
-            found = drop(app, found, "its clues point at facilities this town "
+            found = drop_and_retire(app, found, "its clues point at facilities this town "
                                      "does not have")
         return found
 
@@ -574,6 +574,15 @@ def apply(ctx):
         available = game.facility_types_in(app, found.get("area"))
         return all(clue.get("at_type") in available
                    for clue in found.get("clues", []) if not clue.get("found"))
+
+    def drop_and_retire(app, found, why):
+        """控えを捨て、その事件の人物も片付ける。
+
+        捨てるだけだと人物は台帳に残り、掃除（`sweep`）は読み込み直後の1回だけなので、
+        次に世界を読み込むまで町に立ち続ける。
+        """
+        retire(app, case_mod.suspect_ids(found), "the case was dropped")
+        return drop(app, found, why)
 
     def drop(app, found, why):
         write("[{}] dropping the case: {}".format(stamp(), why))
@@ -1187,7 +1196,11 @@ def apply(ctx):
                 # 名前は同じ応答で作らせている最中で、まだ無い。
                 orders.append({"skip": True})
                 continue
-            avoid = set()
+            # 性別も避ける。
+            # 容疑者の一覧には性別が並ぶ（`tell_of`）のに軸ではないので、
+            # 他の軸の語だけ避けると「男を見た」が通り、その1文で半分が消える。
+            sexes = set(SEX_WORDS.values())
+            avoid = set(sexes)
             for (other, _v), words in (state.get("hints") or {}).items():
                 if other != axis:
                     avoid.update(words)
@@ -1198,7 +1211,10 @@ def apply(ctx):
                 #   「大柄な」を頼んで『大きな影が…』、
                 #   「黒髪」を頼んで『黒い髪が揺れて…』
                 # どちらも中身は正しいのに、語の完全一致で捨てていた。
-                "accept": sorted((state.get("hints") or {}).get((axis, value), ())),
+                # 性別を含む言い換え（「大男」）は検算で必ず落ちるので頼まない。
+                "accept": sorted(
+                    word for word in (state.get("hints") or {}).get((axis, value), ())
+                    if not any(sex in word for sex in sexes)),
                 "avoid": sorted(avoid)})
         return orders
 
@@ -1397,11 +1413,15 @@ def apply(ctx):
         # 組んだ時点で解けることを確かめる。
         # 全部集めても2人以上残るなら、
         # そのお題は詰んでいる（当てずっぽうにしかならない）。
+        # 思い違いが混じる事件は、全部信じると誰も残らないのが正しい形。
+        # その1本を外して1人に絞れるかで見る。
         for clue in found["clues"]:
             clue["found"] = True
-        if not case_mod.solvable(found):
-            write("    WARN even with every clue, {} suspect(s) remain"
-                  .format(len(case_mod.remaining(found))))
+        wrong = [clue["id"] for clue in found["clues"] if clue.get("wrong")]
+        left = case_mod.remaining(found, skip=wrong[0] if wrong else None)
+        if len(left) != 1:
+            write("    WARN even with every clue{}, {} suspect(s) remain"
+                  .format(" but the mistaken one" if wrong else "", len(left)))
         for clue in found["clues"]:
             clue["found"] = False
 

@@ -54,6 +54,11 @@ HP・防御が別々に散っていることまでは読めた（Lv77 で素点 
       代わりに、この段の引数の型と主な属性を1プロセス1回だけ `kind: resolve_args` で録る（控えは `sys` の `RESOLVE_ARGS_MARK`）
     - `DRY_THREAD_MARK` は、立てる前の値を控えて終わったら戻す（`mark_dry_thread` / `unmark_dry_thread`）。
       前は終わりに消していたので、印の中で印を立てると外側の印まで消えていた
+  * 版6:
+    - 前後の HP と状態の比べ（`combatants_state`）は、同名の敵を `名前#2` のように分けて持つ。
+      前は名前を鍵にしていたので、衛兵×3 のうち先の2人の変化が見えず、`dry_abort` と `state_changed` が働かなかった
+    - 手の記録を開いた直後に例外が出たら、開いた手を戻す。前は戻さず、以後 `act` の行が書かれなくなっていた
+    - `DRY_THREAD_MARK` は、2スレッドが交差しても終わったスレッドの id を居残らせない（`DRY_ACTIVE_MARK`）
 
 この probe は読み込み順で `319_` / `333_` より外側に入る。
 `get_instant_damage` の引数（素点と防御）は誰も書き換えないので素の値が録れるが、戻りは 319 が置き換えた後の値。
@@ -152,25 +157,64 @@ def rng_restore(saved):
             pass
 
 
+#: 印を置いている最中のスレッドと入れ子の深さ（`{スレッドの id: 深さ}`。版6）。
+#: 印は1つの値しか持てないので、2スレッドが交差したときに戻し先が終わったスレッドかを見分けるのに使う。
+DRY_ACTIVE_MARK = "_instantale_probe_236_dry_active"
+_DRY_LOCK = threading.Lock()
+
+
+def _dry_active():
+    active = getattr(sys, DRY_ACTIVE_MARK, None)
+    if not isinstance(active, dict):
+        active = {}
+        setattr(sys, DRY_ACTIVE_MARK, active)
+    return active
+
+
 def mark_dry_thread():
-    """`DRY_THREAD_MARK` に自分のスレッドの id を置く。戻り値は置く前の値（`unmark_dry_thread` に渡す）。
+    """`DRY_THREAD_MARK` に自分のスレッドの id を置く。戻り値は `unmark_dry_thread` に渡す控え。
 
-    版5: 入れ子にしても外側の印を消さないよう、前の値を返す。
+    版5: 入れ子にしても外側の印を消さないよう、前の値を控える。
+    版6: 前の値がこの probe の試し打ちのスレッドだったかも控える（交差したときの戻し先の判断に使う）。
     """
-    previous = getattr(sys, DRY_THREAD_MARK, None)
-    setattr(sys, DRY_THREAD_MARK, threading.get_ident())
-    return previous
+    me = threading.get_ident()
+    with _DRY_LOCK:
+        active = _dry_active()
+        previous = getattr(sys, DRY_THREAD_MARK, None)
+        ours = previous in active
+        active[me] = active.get(me, 0) + 1
+        setattr(sys, DRY_THREAD_MARK, me)
+    return previous, ours
 
 
-def unmark_dry_thread(previous):
-    """`mark_dry_thread` の前の値へ戻す。前に何も無ければ印を消す。"""
-    if previous is None:
-        try:
-            delattr(sys, DRY_THREAD_MARK)
-        except AttributeError:
-            pass
-    else:
-        setattr(sys, DRY_THREAD_MARK, previous)
+def unmark_dry_thread(token):
+    """`mark_dry_thread` の前の値へ戻す。前に何も無ければ印を消す。
+
+    版6: 2スレッドが交差したときに id を居残らせない。
+    - 印がもう別のスレッドに移っていれば触らない（そのスレッドが戻す）
+    - 戻し先がこの probe の試し打ちのスレッドで、既に終わっていれば戻さず、
+      まだ中に居るスレッドへ移すか消す
+    """
+    previous, ours = token if isinstance(token, tuple) else (token, False)
+    me = threading.get_ident()
+    with _DRY_LOCK:
+        active = _dry_active()
+        depth = active.get(me, 0) - 1
+        if depth > 0:
+            active[me] = depth
+        else:
+            active.pop(me, None)
+        if getattr(sys, DRY_THREAD_MARK, None) != me:
+            return
+        if ours and previous not in active:
+            previous = next(iter(active), None)
+        if previous is None:
+            try:
+                delattr(sys, DRY_THREAD_MARK)
+            except AttributeError:
+                pass
+        else:
+            setattr(sys, DRY_THREAD_MARK, previous)
 
 
 def arg_shape(value):
@@ -471,7 +515,14 @@ def apply(ctx):
         for person in people:
             if person is None:
                 continue
-            state[str(getattr(person, "name", "?"))] = plain({
+            # 同名の敵（衛兵×3 など）を1つに潰さないよう、2人目からは `名前#2` のように番号を付ける（版6）。
+            # 並びは前後で同じなので、同じ人に同じ鍵が付く。
+            name = str(getattr(person, "name", "?"))
+            key, number = name, 1
+            while key in state:
+                number += 1
+                key = "{}#{}".format(name, number)
+            state[key] = plain({
                 "current_hp": getattr(person, "current_hp", None),
                 "max_hp": getattr(person, "max_hp", None),
                 "status": getattr(person, "status", None)})
@@ -491,6 +542,7 @@ def apply(ctx):
                     note_resolve_args(args, kwargs)
             except Exception:
                 ctx.log_exc("enemy stats probe: recording the resolve arguments failed")
+            act, mine = None, False
             try:
                 act, mine = open_act(stage, battle_action)
                 if mine and stage == "calculate":
@@ -499,6 +551,9 @@ def apply(ctx):
                     act["action"] = plain(battle_action)
                     before = combatants_state(getattr(self, "app", None) or ui.find_app())
             except Exception:
+                # 開いた手を戻さないと、以後の手が全部「束ねる側」になり act の行が書かれない（版6）。
+                if mine:
+                    local.act = None
                 act, mine = None, False
             result = None
             try:

@@ -1348,6 +1348,47 @@ def test_changed_false_keeps_the_record():
     return run
 
 
+def test_unchanged_profile_is_not_rewritten_without_player_memory():
+    """プレイヤーの記録を切っていて人物像が同じなら、以前の認識が残る控えを書き直さない"""
+    saved = MOD.RECORD_PLAYER_MEMORY
+    MOD.RECORD_PLAYER_MEMORY = False
+    try:
+        run = Run(seed_record={"name": "傭兵ガロ", "profile": "古い剣を好む。",
+                               "about_player": "まだ値踏みしている。",
+                               "updated": "2026-07-30T00:00:00"},
+                  structured={MOD.KEY_CHANGED: "true",
+                              MOD.KEY_PROFILE: "古い剣を好む。",
+                              MOD.KEY_ABOUT_PLAYER: "全く別の態度",
+                              MOD.KEY_NEW_FACTS: []})
+        run.turn()
+    finally:
+        MOD.RECORD_PLAYER_MEMORY = saved
+    check(run.record().get("updated") == "2026-07-30T00:00:00",
+          "変わっていないのに書き直した: {}".format(run.record()))
+    check("updated:" not in run.log(),
+          "変わっていないのに更新を記録した: {!r}".format(run.log()[-300:]))
+    check(run.about_player() == "まだ値踏みしている。",
+          "以前の認識が変わった: {!r}".format(run.about_player()))
+    return run
+
+
+def test_empty_about_does_not_rewrite_the_record():
+    """抽出が認識を空で返し人物像が同じなら、控えを書き直さない"""
+    run = Run(seed_record={"name": "傭兵ガロ", "profile": "古い剣を好む。",
+                           "about_player": "まだ値踏みしている。",
+                           "updated": "2026-07-30T00:00:00"},
+              structured={MOD.KEY_CHANGED: "true",
+                          MOD.KEY_PROFILE: "古い剣を好む。",
+                          MOD.KEY_ABOUT_PLAYER: "",
+                          MOD.KEY_NEW_FACTS: []})
+    run.turn()
+    check(run.record().get("updated") == "2026-07-30T00:00:00",
+          "変わっていないのに書き直した: {}".format(run.record()))
+    check(run.about_player() == "まだ値踏みしている。",
+          "以前の認識が変わった: {!r}".format(run.about_player()))
+    return run
+
+
 def test_json_in_plain_text_is_read():
     """構造化が無い版でも、本文のJSONを読む"""
     run = Run(answers="```json\n" + json.dumps(
@@ -1647,6 +1688,8 @@ def main():
                  test_structured_call_follows_the_house_rules,
                  test_structured_failure_falls_back_to_text,
                  test_changed_false_keeps_the_record,
+                 test_unchanged_profile_is_not_rewritten_without_player_memory,
+                 test_empty_about_does_not_rewrite_the_record,
                  test_json_in_plain_text_is_read,
                  test_broken_json_changes_nothing,
                  test_about_player_is_injected_under_its_own_heading,

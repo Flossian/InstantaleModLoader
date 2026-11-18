@@ -208,6 +208,56 @@ try:
 except TypeError:
     check("visible は関数だけ", True)
 
+print("[塗り直し] 材料が変わったときだけ並べ直す")
+reset()
+asked = {"on": True, "count": 0}
+
+
+def counted_visible(app):
+    asked["count"] += 1
+    return asked["on"]
+
+
+hudicons.add(ctx, "339_town_factions", lambda app: None, visible=counted_visible)
+hud = FakeHud()
+HUD[0] = hud
+asked["count"] = 0
+hudicons.arrange(hud)
+check("並べ直し1回で visible を聞くのは1回（点の判定で聞き直さない）", asked["count"] == 1, asked)
+real_arrange = hudicons._arrange
+ran = []
+hudicons._arrange = lambda *args: (ran.append(1), real_arrange(*args))
+try:
+    asked["count"] = 0
+    hudicons._arrange_if_changed(hud)
+    check("前の様子が無ければ並べる", len(ran) == 1, ran)
+    hudicons._arrange_if_changed(hud)
+    hudicons._arrange_if_changed(hud)
+    check("変わらなければ並べ直さない", len(ran) == 1, ran)
+    check("visible は塗り直しごとに1回だけ聞く", asked["count"] == 3, asked)
+    hud.icon_button_layout.width = 500.0
+    hudicons._arrange_if_changed(hud)
+    check("列の幅が変われば並べ直す", len(ran) == 2, ran)
+    hud.icon_buttons[0].pos_hint = {"x": 0.5, "y": 0.03}
+    hudicons._arrange_if_changed(hud)
+    check("ボタンが外から動かされたら並べ直す", len(ran) == 3 and hud.icon_buttons[0].pos_hint["x"] != 0.5,
+          (ran, hud.icon_buttons[0].pos_hint))
+    hudicons.notify("339_town_factions")
+    hudicons._arrange_if_changed(hud)
+    check("知らせの印が変われば並べ直す（点を描き直す）", len(ran) == 4, ran)
+    asked["on"] = False
+    hudicons._arrange_if_changed(hud)
+    check("出さなくなれば並べ直してボタンを外す", len(ran) == 5
+          and len(hud.icon_button_layout.children) == 4, (ran, len(hud.icon_button_layout.children)))
+    hudicons._arrange_if_changed(hud)
+    check("外した後も変わらなければ並べ直さない", len(ran) == 5, ran)
+    asked["on"] = True
+    hudicons._arrange_if_changed(hud)
+    check("また出すようになれば並べ直す", len(ran) == 6 and len(hud.icon_button_layout.children) == 5,
+          (ran, len(hud.icon_button_layout.children)))
+finally:
+    hudicons._arrange = real_arrange
+
 print("[知らせ] 周回ごとの印")
 reset()
 PLAYTHROUGH = ["世界A×主人公"]

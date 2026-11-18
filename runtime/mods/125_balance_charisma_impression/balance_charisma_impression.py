@@ -167,7 +167,7 @@ import hashlib
 import sys
 import threading
 
-from instantale_modloader import frames, ui
+from instantale_modloader import abilities, frames, ui
 
 LOG_BASENAME = "charisma_impression.log"
 
@@ -738,6 +738,12 @@ def apply(ctx):
                 out[key] = (npc, entry, tuple(texts))
         return out
 
+    def player_charisma():
+        """主人公の素の魅力（補正を足す前）。読めなければ None。"""
+        scores = abilities.raw(player_of(), "ability_scores")
+        value = scores.get("charisma") if isinstance(scores, dict) else None
+        return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
     def keep_charm(before, site):
         """包んだ呼び出しの間に作り直された文の、魅力の段だけを前の値へ戻す。"""
         ladders = state["ladders"]
@@ -763,10 +769,11 @@ def apply(ctx):
     def keep_phase(orig, self, *args, **kwargs):
         # `conversation_phase` と同じ理由で `safe=True` は付けず、後始末まで
         # 含めて自分で握り潰す。
-        thread, before, mark, saved = None, None, None, None
+        thread, before, mark, saved, charm_before = None, None, None, None, None
         try:
             thread = threading.get_ident()
             before = stored_texts()
+            charm_before = player_charisma()
             saved = state["keeping"].get(thread)
             mark = {"blind": False}
             state["keeping"][thread] = mark
@@ -782,7 +789,13 @@ def apply(ctx):
                     else:
                         state["keeping"][thread] = saved
                     # 相手が決まった呼び出しだけなら、作り直された段が正しい。
-                    if mark["blind"]:
+                    # 主人公の魅力が変わった（訓練で上がった）ときも戻さない。前の段へ戻すと、
+                    # 上がった魅力が次にその相手と話すまで印象の文に出ない（好みは会話の側が入れ直す）
+                    charm_after = player_charisma()
+                    if mark["blind"] and charm_after != charm_before:
+                        write("{}: 魅力が {} → {} に変わったので、作り直された段をそのまま残す".format(
+                            type(self).__name__, charm_before, charm_after))
+                    elif mark["blind"]:
                         keep_charm(before, type(self).__name__)
             except Exception:
                 pass

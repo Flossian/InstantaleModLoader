@@ -598,10 +598,14 @@ def apply(ctx):
 
     def run(app, world, label):
         """この世界に予約されているものを全部果たす。"""
-        rows = carryover.load_pending(state_dir)
+        try:
+            rows = carryover.load_pending(state_dir, strict=True)
+        except carryover.PendingUnreadable as exc:
+            write("WARN {}: the reservations cannot be read ({}); nothing brought in".format(label, exc))
+            return
         returned = unsaved(app, rows, world)
-        if returned:
-            carryover.save_pending(state_dir, rows)
+        if returned and not carryover.save_pending(state_dir, rows):
+            write("WARN {}: could not write the reservations back".format(label))
         mine = [row for row in rows
                 if row.get("status") == carryover.PENDING
                 and row.get("target_world") == world]
@@ -617,7 +621,8 @@ def apply(ctx):
                 continue
             if said:
                 words.append(said)
-        carryover.save_pending(state_dir, rows)
+        if not carryover.save_pending(state_dir, rows):
+            write("WARN {}: could not record the placed reservations".format(label))
         if ANNOUNCE and words:
             pending_words.extend(words)
 
@@ -645,7 +650,11 @@ def apply(ctx):
         world = getattr(call, "world", None)
         if not world:
             return
-        rows = carryover.load_pending(state_dir)
+        try:
+            rows = carryover.load_pending(state_dir, strict=True)
+        except carryover.PendingUnreadable as exc:
+            write("WARN {}: the reservations cannot be read ({}); none ended".format(world, exc))
+            return
         ended = carryover.end_reservations(
             rows, world, datetime.datetime.now().isoformat(timespec="seconds"))
         if not ended:
@@ -670,7 +679,11 @@ def apply(ctx):
             app = (self if getattr(self, "save_data_dict", None) is not None
                    else ui.find_app())
             world = loader_state.world_key(app) if app is not None else ""
-            rows = carryover.load_pending(state_dir)
+            try:
+                rows = carryover.load_pending(state_dir, strict=True)
+            except carryover.PendingUnreadable as exc:
+                write("WARN save: the reservations cannot be read ({}); not stamped".format(exc))
+                return result
             stamped = []
             for row in rows:
                 if (row.get("status") == carryover.PLACED
@@ -680,9 +693,12 @@ def apply(ctx):
                         timespec="seconds")
                     stamped.append(row.get("name"))
             if stamped:
-                carryover.save_pending(state_dir, rows)
-                write("saved: {} now live in {}".format(
-                    "、".join(str(name) for name in stamped), world))
+                if carryover.save_pending(state_dir, rows):
+                    write("saved: {} now live in {}".format(
+                        "、".join(str(name) for name in stamped), world))
+                else:
+                    write("WARN save: could not stamp {} as saved".format(
+                        "、".join(str(name) for name in stamped)))
         except Exception:
             ctx.log_exc("npc carryover: cannot record the save")
         return result

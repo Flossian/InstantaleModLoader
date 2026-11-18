@@ -30,6 +30,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
+from instantale_modloader import arrivals, gates       # noqa: E402
 
 
 def find_mod(suffix):
@@ -223,6 +224,7 @@ try:
     try:
         ctx = FakeCtx()
         mod.AVOID_REPEAT = False
+        gates.reset_all()                # 窓口 arrivals の包みをこの偽の ctx に渡す
         mod.apply(ctx)
     finally:
         os.chdir(old_cwd)
@@ -286,6 +288,25 @@ try:
     check("hook: pending boss mark works without the flag", played[-1].endswith("/決戦.mp3"))
     hook(orig, None, app, src)
     check("hook: mark is consumed by one battle", played[-1].endswith("/1. Echoes of Valhalla.mp3"))
+
+    # 印を付けた戦闘が始まらないまま移動した。次の戦闘は通常戦闘のまま
+    for target in (arrivals.MOVE_TARGET, arrivals.AREA_TARGET):
+        ctx.hooks["__main__:QuestEncounterFinalBoss.execute"](lambda self, *a: None, None, "text")
+        moved = ctx.hooks.get(target)
+        if moved is not None:
+            moved(lambda self, *a: None, type("Manager", (), {"app": app})())
+        hook(orig, None, app, src)
+        check("hook: a move drops the mark of a battle that never started ({})".format(target),
+              moved is not None and played[-1].endswith("/1. Echoes of Valhalla.mp3"), played[-1:])
+
+    # 闘技場の曲を鳴らせず素の曲に落ちた回も、印はその戦闘で使い終わる
+    # （通常戦闘は state 側の同名の曲を絶対パスで鳴らすので、素の曲 `src` と見分けられる）
+    ctx.hooks["__main__:ColosseumMatchStart.execute"](lambda self, *a: None, None)
+    hook(orig, None, app, src)
+    hook(orig, None, app, src)
+    check("hook: a failed play still consumes the mark",
+          played[-2] == src
+          and played[-1].endswith("/state/musics/battle/1. Echoes of Valhalla.mp3"), played[-2:])
 
     # 闘技場: 鳴らせなければ素の曲に落ちる
     app.in_colosseum_battle = 1

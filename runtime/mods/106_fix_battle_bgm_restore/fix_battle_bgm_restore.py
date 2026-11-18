@@ -49,7 +49,7 @@ pygame に直接聞く。
 
 import time
 
-from instantale_modloader import choices, sounds, ui
+from instantale_modloader import choices, loads, sounds, ui
 
 LOG_BASENAME = "battle_bgm.log"      # 207_ の計測と同じログに時系列で並べる
 
@@ -444,6 +444,16 @@ def apply(ctx):
     on_end("__main__:BattleEndManager.end_phase", "BattleEndManager.end_phase")
     on_end("__main__:BattleEndInFreeAction.end_phase", "BattleEndInFreeAction.end_phase")
     on_end("__main__:BattleEndInColosseum.end_phase", "BattleEndInColosseum.end_phase")
+
+    # ロードは戦闘を抜ける（end_phase を通らない）。戦闘の最中のセーブを読んで戦闘の続きに戻ったときは、
+    # 鳴った戦闘曲を `sweep`（keep_live）が並んだボタンで見分けて印を立て直す。下ろさないと、
+    # 印が立ったままになり「戦闘外の戦闘曲」の見張りがそのプロセスでは二度と働かない
+    def leave_battle_on_load(_call):
+        if state["battle_active"]:
+            state["battle_active"] = False
+            write("load: the battle mark is down (a load leaves the battle)")
+
+    loads.on("106_fix_battle_bgm_restore", ctx, (loads.LOAD,), before=leave_battle_on_load, write=write)
 
     # ------------------------------------------------- 2. 世界に戻ったところ
     # 上のどれも通らない経路が万一あっても、選択肢が普通の状態に戻れば必ず通る。

@@ -465,6 +465,17 @@ def apply(ctx):
         """
         return world_key_of_dict(container, "id:{}".format(id(container)))
 
+    def seen_slot(container, world):
+        """控え（`_seen`）の鍵。世界の名前に、世界側かセーブ側かを足す。
+
+        保存は `world_data.json`（世界側）と `savedata.json`（セーブ側）の両方を同じ関数で書き、
+        セーブ側にだけ依頼のダンジョンが在る（GAME.md §2.28）。1つの控えを共有すると、
+        先に世界側を見た回はセーブ側にだけ在る既存のダンジョンを新しいエリアと取り違えて選び直す。
+        見分けはセーブ側にだけ在る `player_data` で付ける。
+        """
+        side = "save" if isinstance(container.get("player_data"), dict) else "world"
+        return (world, side)
+
     def areas_of(container):
         """渡されたデータから areas を取り出す。想定した形でなければ None。"""
         if not isinstance(container, dict):
@@ -488,23 +499,23 @@ def apply(ctx):
     def area_name(area):
         return area.get("name") if isinstance(area, dict) else None
 
-    def known_of(world, areas, hook):
+    def known_of(world, areas, hook, slot):
         """そのワールドで前に見たエリア（id → 名前）。初めて見るなら None。
 
         控えはワールドの名前を鍵にプロセスの間持つので、同じ名前の別のワールド（消して同じ名前で
         作り直した・名前の重なる別のフォルダ）を読むと、前のワールドの控えで新旧を決めていた。
         控えた id の名前が今のエリアと食い違えば別のワールドとみなし、初めて見たことにする。
         """
-        known = _seen.get(world)
+        known = _seen.get(slot)
         if known is None:
             return None
         if not isinstance(known, dict):            # 名前を控える前の版の控え（id の集合）
-            known = _seen[world] = {k: None for k in known}
+            known = _seen[slot] = {k: None for k in known}
         for k, name in known.items():
             if name is not None and k in areas and area_name(areas[k]) != name:
                 write("[BALANCE] {} {!r} is a different world with the same name; "
                       "starting over".format(hook, world))
-                _seen.pop(world, None)
+                _seen.pop(slot, None)
                 return None
         return known
 
@@ -522,7 +533,8 @@ def apply(ctx):
         if key not in areas:
             return
         world = world_key(world_dict)
-        known = known_of(world, areas, hook)
+        slot = seen_slot(world_dict, world)
+        known = known_of(world, areas, hook, slot)
         if known is None:
             # **このワールドを見るのが初めて。**
             # 今あるエリアは対象外として記録するが、**いま生まれたこのエリアだけは
@@ -535,9 +547,9 @@ def apply(ctx):
             # まとめて変わり、`area["bgm"]` はその場で書き換わるのでセーブに残る）。
             known = {}
             remember(known, areas, set(areas) - {key})
-            _seen[world] = known
-            write("[BALANCE] {} first sight of {!r}: {} existing area(s) "
-                  "grandfathered".format(hook, world, len(known)))
+            _seen[slot] = known
+            write("[BALANCE] {} first sight of {!r} ({} side): {} existing area(s) "
+                  "grandfathered".format(hook, world, slot[1], len(known)))
             # このエリアは下へ落として選び直す。
         if key in known:
             return                      # 注入より前からあるエリア。触らない
@@ -554,15 +566,16 @@ def apply(ctx):
         if areas is None:
             return
         key = world_key(container)
-        known = known_of(key, areas, hook)
+        slot = seen_slot(container, key)
+        known = known_of(key, areas, hook, slot)
         if known is None:
             # このワールドを見るのが初めて。
             # 今あるエリアは全て対象外として記録し、
             # 次回以降に増えた分だけを新しいエリアとして扱う。
-            _seen[key] = {}
-            remember(_seen[key], areas, areas)
-            write("[BALANCE] {} first sight of {!r}: {} existing area(s) "
-                  "grandfathered".format(hook, key, len(areas)))
+            _seen[slot] = {}
+            remember(_seen[slot], areas, areas)
+            write("[BALANCE] {} first sight of {!r} ({} side): {} existing area(s) "
+                  "grandfathered".format(hook, key, slot[1], len(areas)))
             return
         fresh = set(areas) - set(known)
         remember(known, areas, fresh)
@@ -714,12 +727,14 @@ def _self_test(ctx, pool):
                                size_folder({"size": value}, pool) == want))
 
     # bgm が空でも、size が分かっていれば曲が入ること。
-    silent = {"0": {"size": "city", "bgm": ""}, "1": {"size": "town"}}
-    balance_world(silent, pool)
-    checks.append(("empty bgm filled from size",
-                   (parse_bgm(silent["0"].get("bgm")) or [None, None])[1] == "city"))
-    checks.append(("absent bgm filled from size",
-                   (parse_bgm(silent["1"].get("bgm")) or [None, None])[1] == "town"))
+    # 曲の一覧にそのフォルダ（曲が入ったもの）が無い版では埋めようが無いので確かめない（上の検査と同じ守り）。
+    if pool.get("city") and pool.get("town"):
+        silent = {"0": {"size": "city", "bgm": ""}, "1": {"size": "town"}}
+        balance_world(silent, pool)
+        checks.append(("empty bgm filled from size",
+                       (parse_bgm(silent["0"].get("bgm")) or [None, None])[1] == "city"))
+        checks.append(("absent bgm filled from size",
+                       (parse_bgm(silent["1"].get("bgm")) or [None, None])[1] == "town"))
 
     # size もパスも無い場合は判断材料が無いので、何もしないこと。
     nothing = {"0": {"bgm": ""}, "1": {}}

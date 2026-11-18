@@ -253,7 +253,8 @@ def apply(ctx):
             # 依頼が1件も無い＝まだ作られていない街。範囲を決める MOD に聞き、無ければ枠から見積もる。
             area_id = ui.area_id_of(area)
             band, _by = quest_bands.band_of(app, area_id)
-            values = estimate_from_band(band, LEVEL_OFFSET) if band is not None                 else estimate_values(area_id, LEVEL_OFFSET)
+            values = (estimate_from_band(band, LEVEL_OFFSET) if band is not None
+                      else estimate_values(area_id, LEVEL_OFFSET))
         band = band_text(values)
         merged = {"name": name, "band": band or ""}
         if values is not None:

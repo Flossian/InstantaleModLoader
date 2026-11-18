@@ -17,7 +17,8 @@
              好感度と一緒に記録も戻る（上限を使い切らない）。保存が投げたら書かない
   周回     … 記録は世界×主人公ごと。世界名だけの記録は見つけた時点の主人公へ移し、
              同じ世界で作り直した主人公には渡さない
-  1行      … 宿の主と話しているときだけ本文の先頭に入り、二度は入らない
+  1行      … 宿の主との会話の頼み文（ローダの modnpc の関所）の相手の素性にだけ入る。
+             本人には書かない。話している間の会話でない頼みには入らない
   社交     … 部屋を問わず 同行者 → 好感度の高い相手 → ランダム。設定 OFF なら触らない。
              ゲームは施設の主を選ぶ（実測）ので、LLM へ渡る `npc_list` と
              `VacationSocializeResolveManager` の `npc_id_list` を同じ1人に差し替える
@@ -66,6 +67,34 @@ def check(name, cond, detail=""):
 # ---------------------------------------------------------------- 偽ゲーム
 GAME_PRICES = {"kennel": 0, "bunk": 10, "private_room": 100, "luxury_suite": 1000}
 CHAT_TARGET = "llama_cpp_runtime_completion:LlamaCppClient.chat"
+CONVERSATION_TARGET = "scripts.llm.llm_manager:conversation_facilitator"
+OPENING_TARGET = "scripts.llm.llm_manager:conversation_starter"
+
+
+def install_fake_llm_manager():
+    """会話の関数を持つ `scripts.llm.llm_manager` を差し込む。
+
+    ローダの `modnpc` の関所は、いま差し込まれている素の関数の署名で引数を名前に直す。
+    モジュールが無いと素通りするので、先頭4引数の並び（GAME.md §2.25）だけ揃えて置く。
+    """
+    name = "scripts.llm.llm_manager"
+    module = sys.modules.get(name) or types.ModuleType(name)
+
+    # 引数の並びは実際の署名（out/recon/targets.txt）と同じにする（modnpc は名前で開いて渡す）
+    def conversation_facilitator(messages, character_life_log, player, character_instance, worldview,
+                                 world_story, area_residency, area_achievements, response_list,
+                                 negotiate_response_list, response_prompt_instruction, retrieved_knowledge,
+                                 job_knowledge="", reply_only=False):
+        return "返答"
+
+    def conversation_starter(messages, character_life_log, player, character_instance, *args, **kwargs):
+        return "第一声"
+    module.conversation_facilitator = conversation_facilitator
+    module.conversation_starter = conversation_starter
+    sys.modules[name] = module
+
+
+install_fake_llm_manager()
 
 
 class PhaseSpec:
@@ -111,7 +140,7 @@ class Player:
 
 
 class World:
-    def __init__(self):
+    def __init__(self, save_data_dict=None, app=None):
         self.name = "テスト世界"
         self.days_elapsed = 100
         self.characters = {
@@ -230,6 +259,8 @@ class InstantaleApp:
         self.done = []
         self.in_conversation = None
         self.chat_hook = None
+        self.conversation_hook = None
+        self.opening_hook = None
         self.autosave = True
         self.fail_save = False
         self.saved = {}
@@ -267,6 +298,7 @@ class InstantaleApp:
         return [e["text"] for e in self.buttons]
 
     def send_prompt(self, prompt):
+        """会話でない頼み（抽出・依頼の生成など）を LLM の送信口へ1回流す。届いた本文を返す。"""
         messages = [{"role": "system", "content": "GM"},
                     {"role": "user", "content": prompt}]
         sent = []
@@ -274,8 +306,49 @@ class InstantaleApp:
         def orig(_self, _model, msgs, _format=None, *a, **k):
             sent.append(msgs)
 
-        self.chat_hook(orig, object(), "model", messages, None)
+        if self.chat_hook is None:       # 送信口を包む MOD が無い
+            orig(object(), "model", messages, None)
+        else:
+            self.chat_hook(orig, object(), "model", messages, None)
         return sent[-1]
+
+    def talk(self, npc_id):
+        """その人物との返事の頼みを、ローダの `modnpc` の関所越しに1回組む。
+
+        `response_prompt_instruction` に足された分を返す（足されなければ空）。
+        """
+        hook = self.conversation_hook
+        if hook is None:
+            return ""
+        seen = {}
+
+        def orig(messages, character_life_log, player, character_instance, worldview, world_story,
+                 area_residency, area_achievements, response_list, negotiate_response_list,
+                 response_prompt_instruction, retrieved_knowledge, job_knowledge="", reply_only=False):
+            seen["rule"] = response_prompt_instruction
+            seen["profile"] = getattr(character_instance, "profile", "")
+            return "返答"
+
+        base = "返事の決まり"
+        hook(orig, [{"role": "user", "content": "こんにちは"}], [], None, self.world.characters[npc_id],
+             "", "", "", "", [], [], base, "")
+        self.last_profile = seen.get("profile") or ""
+        rule = seen.get("rule") or ""
+        return rule[len(base):].lstrip() if rule.startswith(base) else rule
+
+    def opening(self, npc_id):
+        """その人物の第一声の頼みを1回組み、`messages` の最後の本文を返す。"""
+        hook = self.opening_hook
+        if hook is None:
+            return ""
+        seen = {}
+
+        def orig(messages, character_life_log, player, character_instance, *a, **k):
+            seen["last"] = messages[-1]["content"]
+            return "第一声"
+
+        hook(orig, [{"role": "user", "content": "<行動: 話しかける>"}], [], None, self.world.characters[npc_id])
+        return seen.get("last") or ""
 
 
 class FakeCtx:
@@ -316,8 +389,19 @@ class FakeCtx:
         return ml.write_json(path, data, indent=indent)
 
     def wrap(self, target, **kw):
+        """同じ先を2本目が包んだら重ねる（ゲームの中と同じく、後から包んだ方が外側）。
+
+        ローダの `modnpc` の関所も `save_game` と `World.__init__` を包むので、
+        上書きにすると 327 自身の包みが消える。
+        """
         def decorator(func):
-            self.hooks[target] = func
+            inner = self.hooks.get(target)
+            if inner is None:
+                self.hooks[target] = func
+            else:
+                def stacked(orig, *args, **kwargs):
+                    return func(lambda *a, **k: inner(orig, *a, **k), *args, **kwargs)
+                self.hooks[target] = stacked
             return func
         return decorator
 
@@ -383,6 +467,8 @@ def setup():
     ])
     app = app_cls()
     app.chat_hook = ctx.hooks.get(CHAT_TARGET)
+    app.conversation_hook = ctx.hooks.get(CONVERSATION_TARGET)
+    app.opening_hook = ctx.hooks.get(OPENING_TARGET)
     app.scene_hook = ctx.hooks["scripts.llm.llm_manager:vacation_scene_generator"]
     ml.ui.find_app = lambda: app
     return module, ctx, app
@@ -456,20 +542,21 @@ check("regular: owner without 'player' recorded only", rec["stays"] == 1 and rec
       and app.world.characters["8"].relationship == {}, rec)
 
 # ---------------------------------------------------------------- 会話の1行
-app.in_conversation = None
-sent = app.send_prompt("こんにちは")
-check("line: not in conversation", "泊まっている" not in sent[0]["content"], sent)
-app.in_conversation = "7"
 app.world.days_elapsed += 12
-sent = app.send_prompt("こんにちは")
 line = "【宿の客として】プレイヤーはエリンの宿にこれまで7回泊まっている（簡易寝台1回・高級個室6回）。最後の宿泊は42日前。"
-check("line: innkeeper conversation", sent[0]["content"].startswith(line), sent[0]["content"])
-check("line: user text untouched", sent[1]["content"] == "こんにちは")
-sent = app.send_prompt(line + "\nGM")
-check("line: not duplicated", sum(m["content"].count("【宿の客として】") for m in sent) == 1, sent)
-app.in_conversation = "9"
-sent = app.send_prompt("こんにちは")
-check("line: other npc", "泊まっている" not in sent[0]["content"])
+check("line: innkeeper reply (response_prompt_instruction)", app.talk("7") == line, app.talk("7"))
+check("line: not in the innkeeper's profile (facts there were ignored)", line not in app.last_profile,
+      app.last_profile)
+check("line: innkeeper opening (the last message)",
+      app.opening("7") == "<行動: 話しかける>\n" + line, app.opening("7"))
+check("line: the innkeeper himself is untouched", not hasattr(app.world.characters["7"], "profile"))
+check("line: other npc", "泊まっている" not in app.talk("9"), app.talk("9"))
+# 宿の主と話している間に出る、会話でない頼み（311_ の抽出・301_ の依頼の生成など）には入らない
+app.in_conversation = "7"
+sent = app.send_prompt("この会話から依頼を作る")
+check("line: not in other requests during the conversation",
+      all("泊まっている" not in m["content"] for m in sent), sent)
+app.in_conversation = None
 
 # ---------------------------------------------------------------- 社交の相手
 app.player.location = app.world.characters["7"].location
@@ -599,13 +686,12 @@ check("playthrough: (premise) records sit in the world-only file", os.path.exist
 
 app.player.name = "旅人"
 app.player.location = app.world.characters["7"].location
-app.in_conversation = "12"
-sent = app.send_prompt("こんにちは")
+profile = app.talk("12")                 # 返事の頼みに足された1行
 check("playthrough: the world-only records move to the hero found playing",
       os.path.exists(HERO_FILE) and not os.path.exists(OLD_FILE) and record_of(ctx) == before,
       sorted(os.listdir(REGULAR_DIR)))
 check("playthrough: the moved record still feeds the conversation",
-      "ダンの宿にこれまで" in sent[0]["content"], sent[0]["content"])
+      "ダンの宿にこれまで" in profile, profile)
 
 app.player.name = "別の旅人"
 sys.modules["__main__"].World()          # 同じ世界で作り直した主人公を読み込む

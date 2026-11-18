@@ -496,6 +496,23 @@ def sync_geometry(template, copy, fill, log_exc):
     walk(template, copy, 0)
 
 
+def geometry_key(widget):
+    """`widget` から下の各ノードの矩形と `keep_ratio`（`sync_geometry` が読み書きするもの）を並べた値。
+
+    合わせ直す前と後で比べ、何も動いていなければ合わせ直しを省くのに使う（読むだけで何も書かない）。
+    """
+    out = []
+
+    def walk(node, depth):
+        out.append((id(node), rect_of(node), frames.attr(node, "keep_ratio", None)))
+        if depth < MAX_DEPTH:
+            for child in children_of(node):
+                walk(child, depth + 1)
+
+    walk(widget, 0)
+    return tuple(out)
+
+
 def path_of(root, widget):
     """`root` から `widget` までの添字の道。複製の同じ場所を指すのに使う。"""
     path = []

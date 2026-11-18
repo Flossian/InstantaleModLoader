@@ -66,6 +66,9 @@ id6≈62 / id7≈43 / id8≈70）なので、決め方はゲームのコード�
   呼び出し元は1回だけ組む（版9は行と読む用のログで2回組んでいた）
 - `AreaMoveManager.execute` と `DisplayQuestChoice.generate_random_quest` の包みに `safe=True`
 - 包む乱数の名前を絞るときに `hasattr` を使わない（`getattr` の既定値で見る）
+
+版11: 経路の `generate_quest_area` と `write_area_data_to_world_dict` は、街の id を署名の位置で読む（`AREA_ID_AT`）。
+版10までは前から順に拾う推測で、`generate_quest_area` では `quest_value`（数）を街の id として写していた。
 """
 
 import datetime
@@ -130,6 +133,14 @@ BUILD_TARGETS = (
     "save_area_json:generate_quest_area",
     "save_area_json:write_area_data_to_world_dict",
 )
+
+# 経路のうち、街の id の位置が署名で決まっているもの（関数名 -> (引数名, self 込みの位置)。recon の signatures.json）。
+# 前から順に拾う推測では、`generate_quest_area(world_dict, quest_value, next_area_id)` の
+# `quest_value`（数）を街の id として拾っていた。`World.generate_quest_area(self, quest_value, next_area_id)` も同じ位置。
+AREA_ID_AT = {
+    "generate_quest_area": ("next_area_id", 2),
+    "write_area_data_to_world_dict": ("area_id", 1),
+}
 
 # 到着の移動の間だけ写す乱数。`random` のモジュール関数と `Random` のメソッドの両方
 # （モジュール関数は import 時に束縛済みの bound method なので、クラス側だけ包んでも届かない。
@@ -408,6 +419,7 @@ def apply(ctx):
 
     def watch_build(target):
         name = target.split(":")[-1]
+        known = AREA_ID_AT.get(name.rpartition(".")[2])     # `World.generate_quest_area` も
 
         @ctx.wrap(target, required=False, safe=True)
         def build(orig, *args, **kwargs):
@@ -420,7 +432,11 @@ def apply(ctx):
             try:
                 rest = list(args[1:]) if args and not isinstance(args[0], (str, int, dict)) \
                     else list(args)
-                area_id = area_id_from(rest, kwargs)
+                if known is not None:
+                    value = frames.arg(args, kwargs, *known)
+                    area_id = None if value is None else str(value)
+                else:
+                    area_id = area_id_from(rest, kwargs)
                 if area_id is None and args and not isinstance(args[0], (str, int, dict)):
                     area_id = frames.attr(args[0], "id", None)
                 before = area_brief(app, area_id) if area_id is not None else None

@@ -377,6 +377,10 @@ def load_mod(name="city_case_mod"):
 mod = load_mod()
 from instantale_modloader import state as loader_state
 
+#: ログは追記なので、この回に書かれた分だけを見るための起点。
+_log_file = os.path.join(OUT_DIR, mod.LOG_BASENAME)
+LOG_START = os.path.getsize(_log_file) if os.path.exists(_log_file) else 0
+
 case_mod = sys.modules["city_case_mod.case"]
 ledger_mod = sys.modules["city_case_mod.ledger"]
 world_mod = sys.modules["city_case_mod.world"]
@@ -1929,6 +1933,35 @@ check("拾えない手がかりを抱えた控えは捨てられる",
 check("捨てた後は新しい事件を受けられる",
       mod.START_LABEL in app5.labels(), app5.labels())
 
+print("\n[控え] **捨てた事件の人物は片付ける**")
+# 読み込み直後の掃除（`sweep`）は1回だけなので、その後に捨てた事件の人物は
+# 捨てる側で片付けないと次に世界を読み込むまで町に残る。
+ctx7 = FakeCtx()
+clean_record(ctx7)
+mod.apply(ctx7)
+app7, _places7 = fresh_world()
+refresh7 = install(ctx7, app7)
+case7 = open_case_at(ctx7, app7)
+cast7 = [str(i) for i in case_mod.suspect_ids(case7)]
+check("事件が始まり人物が町に立つ",
+      case7["stage"] == case_mod.INVESTIGATING
+      and cast7 and all(i in app7.world_dict["npcs"] for i in cast7), cast7)
+# 掃除が済んだ後で、手がかりの施設が町から無くなったことにする。
+live7 = getattr(sys, mod.STORE_ATTR)["cases"].load(playthrough_of("テスト世界"))
+for clue in live7["clues"]:
+    clue["at_type"] = MARKET
+app7.world.areas["0"].nodes["0"].facilities.pop("3")
+app7.facility_screen()
+refresh7()
+check("拾えない事件は捨てられる", case_of(ctx7)["stage"] == case_mod.NONE,
+      case_of(ctx7)["stage"])
+check("**捨てた事件の人物も町から消える**",
+      not [i for i in cast7 if i in app7.world_dict["npcs"]],
+      [i for i in cast7 if i in app7.world_dict["npcs"]])
+check("台帳からも外れる",
+      not [i for i in cast7 if i in [str(x) for x in ledger_mod.ids(cast_of(ctx7))]],
+      cast_of(ctx7))
+
 print("\n[材料] **事件のパターンを JSON から引いて組み合わせる**")
 # 材料がコードに焼き付いていると、何度遊んでも同じ形の事件になる。
 # `patterns/*.json` に出して、**1件ごとに抽選して組み合わせる**。
@@ -2437,6 +2470,12 @@ check("見た目の指定は渡している",
       all(p["words"] in prompt for p in PEOPLE), prompt[:200])
 check("**触れてほしくない語を渡している**",
       all(w in prompt for w in ORDERS[0]["avoid"]), prompt)
+# 裏取り（skip）は並べないので数えない。
+# 数えると「2件」と言って1件しか並ばず、件数に合わせた返事で位置合わせがずれる。
+counted = writer.build_prompt("w", "a", PEOPLE, ORDERS + [{"skip": True}], 2)
+check("**目撃情報の件数は並べた分だけ**（裏取りを数えない）",
+      "目撃情報 1件" in counted and counted.count("件目:") == 1,
+      [line for line in counted.splitlines() if "目撃情報" in line or "件目" in line])
 # **その町の実データを渡す。**
 # 架空の宿屋を書かれるより、いま歩いている町の宿屋の名前を出したい。
 # そのほうが「その町の事件」になる。
@@ -2737,6 +2776,20 @@ try:
           isinstance(seen_request["structure"], dict)
           and "people" in seen_request["structure"]["fields"],
           seen_request["structure"])
+    # 容疑者の一覧には性別が並ぶので、目撃の文に性別が入るとその1文で半分が消える。
+    asked = seen_request["message"]
+    if isinstance(asked, (list, tuple)):
+        asked = "\n".join(str(m.get("content", "")) for m in asked
+                          if isinstance(m, dict))
+    asked_lines = str(asked).splitlines()
+    avoid_lines = [line for line in asked_lines if "触れないこと" in line]
+    check("**性別の語も避けさせる**（一覧に性別が並ぶため）",
+          avoid_lines and all("男" in line and "女" in line for line in avoid_lines),
+          avoid_lines)
+    accept_lines = [line for line in asked_lines if "必ず入れること" in line]
+    check("性別を含む言い換えは頼まない（検算で必ず落ちる）",
+          not [line for line in accept_lines if "男" in line or "女" in line],
+          accept_lines)
 
     names = [appw.world_dict["npcs"][i]["name"]
              for i in case_mod.suspect_ids(casew)]
@@ -3658,10 +3711,37 @@ check("どちらからも引けなければ空文字（＝紐付けない）",
       world_mod.world_name(types.SimpleNamespace(world=None, world_dict={})) == "",
       world_mod.world_name(types.SimpleNamespace(world=None, world_dict={})))
 
+print("\n[案内] **証言者と案内先は同じ施設を指す**")
+# 同じ種類の施設が複数あると、主の居ない1軒目を飛ばす・名前の無い1軒目を飛ばすの
+# 違いで、証言者と案内先が別の施設になっていた。
+guild_s = Facility("1", "ギルド", GUILD, owner="10", characters=["10"])
+inn_free = Facility("2", "主の居ない宿", INN, owner=None)
+inn_kept = Facility("4", "主の居る宿", INN, owner="11", characters=["11"])
+market_free = Facility("5", "主の居ない闇市", MARKET, owner=None)
+area_s = Area("0", "町", [guild_s, inn_free, inn_kept, market_free])
+app_s = InstantaleApp(World({"0": area_s}, {cid: Character(cid, "NPC" + cid)
+                                            for cid in ("10", "11")}),
+                      Player(area_s, guild_s))
+check("証言者は主の居る宿の主", world_mod.owner_in(app_s, "0", INN) == "11",
+      world_mod.owner_in(app_s, "0", INN))
+check("**案内先も同じ宿**", world_mod.place_name(app_s, "0", INN) == "主の居る宿",
+      world_mod.place_name(app_s, "0", INN))
+check("**主の居ない種類には手がかりを置かない**（誰からも拾えない）",
+      MARKET not in world_mod.facility_types_in(app_s, "0")
+      and INN in world_mod.facility_types_in(app_s, "0"),
+      world_mod.facility_types_in(app_s, "0"))
+
 print("\n[ログ] 何が起きたか残る")
 log_path = ctx.out_path(mod.LOG_BASENAME)
 check("ログが書かれている", os.path.exists(log_path)
       and os.path.getsize(log_path) > 0, log_path)
+with io.open(log_path, "rb") as fh:
+    fh.seek(LOG_START)
+    log_now = fh.read().decode("utf-8", "replace")
+# 思い違いの事件は全部信じると誰も残らないのが正しい形なので、警告しない。
+check("**組んだ事件に「全部集めても解けない」が出ない**（思い違いの事件を含む）",
+      "WARN even with every clue" not in log_now,
+      [line for line in log_now.splitlines() if "WARN even" in line][:3])
 check("フックの中で例外が出ていない", not ctx.errors, ctx.errors)
 
 print("\n失敗 {} 件".format(len(failures)))

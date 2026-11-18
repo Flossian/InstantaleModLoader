@@ -109,6 +109,21 @@ def main():
         expressions.seal(folder, now, names=["smile"], complete=False)
         check("描き揃わなかった印は complete が偽で、載せた表情は返す",
               not expressions.complete(folder) and expressions.image(folder, "smile") is not None)
+        loads = []
+        real_load = expressions.json.load
+        expressions.json.load = lambda fh: loads.append(1) or real_load(fh)
+        try:
+            for _ in range(5):
+                expressions.image(folder, "smile")
+            check("印が変わらない間は source.json を読み直さない", len(loads) <= 1, loads)
+            write(expressions.variant_path(folder, "angry"), b"angry")
+            expressions.seal(folder, now, names=["angry"], complete=False)     # 同じ大きさの書き直し
+            check("印を書き直したら読み直す（同じ大きさでも）",
+                  expressions.image(folder, "smile") is None
+                  and expressions.image(folder, "angry") is not None, loads)
+        finally:
+            expressions.json.load = real_load
+        os.remove(expressions.variant_path(folder, "angry"))
         expressions.seal(folder, now, names=[])
         check("印を書いた後に一時ファイルを残さない",
               sorted(os.listdir(expressions.folder_of(folder))) == sorted([expressions.SEAL, "smile.png"]),
@@ -165,6 +180,16 @@ def main():
         expressions.show(widget, folder, "smile", portrait)
         check("前に見せた後に描き直された差分は、キャッシュを捨てて読み直す",
               widget.source == expressions.variant_path(folder, "smile") and widget.reloads == 1, widget.reloads)
+        # 同じ差分を出す部品が2つ。描き直しの後、1つ目が読み直しても2つ目も読み直す
+        left, right = Widget(portrait), Widget(portrait)
+        expressions.show(left, folder, "angry", portrait)
+        expressions.show(right, folder, "angry", portrait)
+        write(expressions.variant_path(folder, "angry"), b"angry redrawn")
+        os.utime(expressions.variant_path(folder, "angry"), ns=(time.time_ns(), time.time_ns() + 2 * 10 ** 9))
+        expressions.show(left, folder, "angry", portrait)
+        expressions.show(right, folder, "angry", portrait)
+        check("同じ差分を出す2つ目の部品も、描き直しの後に読み直す",
+              left.reloads == 1 and right.reloads == 1, (left.reloads, right.reloads))
         other_widget = Widget(os.path.join(base, "w", "characters", "someone", "reduced_color_image.png"))
         check("部品がほかの人物の絵を出しているときは触らない",
               expressions.show(other_widget, folder, "smile", portrait) is None

@@ -163,6 +163,10 @@ VFX_GUIDE = (
 
 #: 控えた差し替えを捨てるまでの秒数。ゲームは絵と音を Clock で少し後に出す。
 PENDING_SECONDS = 6.0
+#: 運び手に置き換えた答え（`NARROWED_MANAGERS`）の控えを捨てるまでの秒数。
+#: 控えた手は送り口が答えを返した直後に `resolve_battle_effect` へ来る（ログで数 ms）。
+#: ほかの手は自分の審判の応答を待つので秒の単位で後になり、本物の運び手の値を元の値と取り違えない。
+NARROWED_SECONDS = 2.0
 #: 演出の関数ごとに、最初のこの回数だけ引数をログに残す（どこを通るかの確かめ）。
 EFFECT_SAMPLES = 5
 #: 敵の手の `character_side`。ゲームは敵が味方を打つ手には絵を出さない（揺れと音だけ）ので、
@@ -395,7 +399,7 @@ def apply(ctx):
             if manager_name in NARROWED_MANAGERS:
                 for carrier, value in narrow_answer(answer):
                     narrowed.append({"carrier": carrier, "vfx": value,
-                                     "until": time.monotonic() + PENDING_SECONDS})
+                                     "until": time.monotonic() + NARROWED_SECONDS})
                     write("{}: {} goes back to the game's choices as {} (the answer is rebuilt "
                           "with the original type)".format(manager_name, value, carrier))
             return answer
@@ -421,11 +425,17 @@ def apply(ctx):
         action = battle_action_of(args, kwargs)
         vfx = action.get("vfx") if isinstance(action, dict) else None
         now = time.monotonic()
+        side = kwargs.get("character_side", args[1] if len(args) >= 2 else None)
         narrowed[:] = [row for row in narrowed if row["until"] > now]
-        back = next((row for row in narrowed if row["carrier"] == vfx), None) if isinstance(vfx, str) else None
+        back = None
+        if narrowed and side != ENEMY_SIDE and isinstance(vfx, str) and narrowed[0]["carrier"] == vfx:
+            back = narrowed.pop(0)
+        else:
+            # 控えは主人公の自由入力の手で、その手より前にほかの手は来ない。
+            # 敵の手や値の違う手が来たら、控えた手は演出まで届かなかったので捨てる
+            del narrowed[:]
         if back is not None:
             # 作り直しの前に運び手に置き換えた答え（`NARROWED_MANAGERS`）。元の値に戻して扱う
-            narrowed.remove(back)
             vfx = back["vfx"]
             if vfx in GAME_HANDLED:
                 action["vfx"] = vfx
@@ -433,7 +443,6 @@ def apply(ctx):
         if spec is not None:
             carrier, _art, sound = spec
             action["vfx"] = carrier
-            side = kwargs.get("character_side", args[1] if len(args) >= 2 else None)
             pending.update(vfx=vfx, carrier=carrier, source=sources.get(vfx), sound=sound,
                            until=time.monotonic() + PENDING_SECONDS, art=False, heard=False,
                            side=side)

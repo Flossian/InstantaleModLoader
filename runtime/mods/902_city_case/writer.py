@@ -208,7 +208,10 @@ def build_prompt(world, area, people, facts, count, incident=None,
         "  look … 立ち絵生成用の英語のタグ列（{}文字以内）。"
         "上で指定した見た目を必ず含めること".format(LIMITS["look"]),
         "",
-        "■ 目撃情報 {}件（facts）".format(len(facts)),
+        # 件数は並べる分だけ。
+        # 裏取り（skip）まで数えると件数と並びが食い違い、
+        # 件数に合わせて作られた返事で `read_facts` の位置合わせがずれる。
+        "■ 目撃情報 {}件（facts）".format(len(wanted_facts(facts))),
         "町の人が語った目撃情報として、次の内容を1文ずつ（各{}文字以内）"
         "書いてください。".format(LIMITS["fact"]),
     ]

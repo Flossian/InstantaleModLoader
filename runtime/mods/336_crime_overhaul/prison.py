@@ -242,6 +242,7 @@ def install(env):
         if not screen.start_phase(app, phase, common.GUARD_CHOICE_TEXT):
             jail["battle"] = None
             take_back_improvised(app)
+            env.prison_event("abort", app)      # 加勢に入れた囚人を牢の中へ戻す（`cellmate`）
             return False
         set_breaking(app, {"area": jail["battle"]["area"], "prep": prep})
         write("jailbreak: break out with prep {} (difficulty {} -> {}); sentence {}".format(
@@ -291,9 +292,11 @@ def install(env):
         if saved is None:
             return
         if not ui.battle_on_screen(app):
-            # 戦闘の続きに戻らなかった（ゲームが場所の画面を出した）。決行は無かったことになる
+            # 戦闘の続きに戻らなかった（ゲームが場所の画面を出した）。決行は無かったことになる。
+            # 主人公は牢の中のままなので、牢に居る印（`custody`）は下ろさない。加勢に入った囚人だけ牢へ戻す
             set_breaking(app, None)
             write("jailbreak: the load did not return to the break-out battle; dropped the mark")
+            env.prison_event("abort", app)
             return
         jail["battle"] = {"phase": None, "args": [], "prep": saved.get("prep", 0), "started": True,
                           "area": saved.get("area")}

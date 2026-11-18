@@ -510,6 +510,51 @@ def alive(ctx) -> bool:
         return True
 
 
+# 小さな窓口（quest_bands / quest_claims / quest_clients / shop_lineup / talk_affinity /
+# value_limits / wanted）は「sys の属性に {持ち主: (ctx, fn, ...)} → alive で絞る → fn →
+# 例外は errors の末尾 20 件」を同じ形で持つ。写すと刈り方や差し替えの並びがずれていったので、
+# その3つの手だけをここに置く。何を返すか・どう束ねるかは各窓口が決める。
+
+#: 窓口の `errors` に残す件数（古いものから捨てる）。
+WINDOW_ERRORS_KEEP = 20
+
+
+def window_put(table: dict, owner, entry) -> None:
+    """窓口の登録簿 `table` に `owner` の登録を置く。同じ持ち主の登録は差し替えて後ろへ回す。
+
+    後ろへ回すのは、注入し直した後の並びを今の世代の登録の順にするため
+    （前の世代の位置に居座ると、並びで決まる窓口の答えが世代をまたいで変わらない）。
+    """
+    owner = str(owner)
+    table.pop(owner, None)
+    table[owner] = entry
+
+
+def window_entries(table: dict, *, newest_first: bool = False) -> list:
+    """登録簿 `table` のうち ctx（登録の先頭）がまだ生きているものを `(持ち主, 登録)` の並びで返す。
+
+    写しを返すので、呼んだ関数が登録し直しても回している途中で壊れない。
+    """
+    items = list(table.items())
+    if newest_first:
+        items.reverse()
+    return [(owner, entry) for owner, entry in items if alive(entry[0])]
+
+
+def window_call(store: dict, label, fn, *args):
+    """登録の関数を1つ呼ぶ。`(True, 戻り値)`。投げたら `store["errors"]` に残して `(False, None)`。
+
+    `label` は記録の頭（ふつうは持ち主）。登録した MOD の失敗で窓口を呼んだ側を止めない。
+    """
+    try:
+        return True, fn(*args)
+    except Exception as exc:
+        errors = store.setdefault("errors", [])
+        errors.append("{}: {}: {}".format(label, type(exc).__name__, exc))
+        del errors[:-WINDOW_ERRORS_KEEP]
+        return False, None
+
+
 # --------------------------------------------------------------------------
 # 各 mod に渡されるコンテキスト
 # --------------------------------------------------------------------------
@@ -669,6 +714,10 @@ class ModContext:
         store.add(name)
         pending[name] = generation
         _state["ready"].append((name, fn, delay))
+        if "ready_dispatched" in _state and _state["ready_dispatched"] == generation:
+            # この世代の分はもう流し終えた（apply の外・流した後の on_ready の中・フックから呼ばれた）。
+            # 積むだけだと、この世代では二度と流れないまま印だけが立つので、その場で流す
+            _dispatch_ready()
         return True
 
     # -- 自分より新しい注入が来たか ------------------------------------------
@@ -1858,6 +1907,7 @@ def _dispatch_ready() -> None:
     """
     entries = _state["ready"]
     _state["ready"] = []
+    _state["ready_dispatched"] = _state.get("generation")
     if not entries:
         return
 
@@ -2124,6 +2174,25 @@ def boot(out_dir: str) -> dict:
         return _boot(out_dir)
 
 
+def _window_owners() -> set:
+    """期間・値段・戦闘・装備・能力値・戦闘効果の窓口に登録している持ち主の和。
+
+    `_forget_unapplied` と `_unload` が同じ集め方をするので1か所にまとめた（窓口を足したらここだけ直す）。
+    import は呼んだ時の世代のモジュールを読む（`on_forget` の片付けをこの世代の durations に繋ぐため）。
+    """
+    from . import durations as _durations
+    from . import prices as _prices
+    from . import combat as _combat
+    from . import equipment as _equipment
+    from . import abilities as _abilities
+    from . import battle_effects as _battle_effects
+    base, layers = _prices.item_price_sources()
+    _inn_answer, inn_layers = _prices.inn_price_sources()
+    return (set(_durations.owners()) | {base} | set(layers) | set(inn_layers)
+            | set(_combat.owners()) | set(_equipment.owners()) | set(_abilities.owners())
+            | set(_battle_effects.owners()))
+
+
 def _forget_unapplied(results: dict, manifests: dict) -> list[str]:
     """今回 "ok" にならなかった MOD が置いた期間・日数の望み・値段・装備の窓口を外す。外した持ち主を返す。
 
@@ -2134,20 +2203,11 @@ def _forget_unapplied(results: dict, manifests: dict) -> list[str]:
     登録簿に居るが今は無い名前（消した・改名した MOD）も外す。
     """
     from . import durations as _durations
-    # `on_forget` の片付けを、この世代の durations に登録させる。
+    # `on_forget` の片付けを、この世代の durations に登録させる（`_window_owners` が各窓口を import する）。
     # durations は注入のたびに読み直されるので、prices がまだ読まれていない世代では
     # 値段の片付けが繋がっていない。combat と equipment も同じ。
-    from . import prices as _prices
-    from . import combat as _combat
-    from . import equipment as _equipment
-    from . import abilities as _abilities
-    from . import battle_effects as _battle_effects
     ok = {name for name, verdict in results.items() if verdict == "ok"}
-    base, layers = _prices.item_price_sources()
-    _inn_answer, inn_layers = _prices.inn_price_sources()
-    owners = (set(manifests) | set(_durations.owners()) | {base} | set(layers) | set(inn_layers)
-              | set(_combat.owners()) | set(_equipment.owners()) | set(_abilities.owners())
-              | set(_battle_effects.owners()))
+    owners = set(manifests) | _window_owners()
     gone = []
     for owner in sorted(owners - ok - {""}):
         if _durations.forget(owner, write=log):
@@ -2269,6 +2329,7 @@ def _boot(out_dir: str) -> dict:
     results: dict[str, str] = {}
     settings: dict[str, dict] = {}
     _state["ready"] = []      # 前回の boot で流し残した分は持ち越さない
+    _state.pop("ready_dispatched", None)     # この boot の分はまだ流していない（`on_ready`）
     # `ctx.config` はここを読む。
     # apply() が始まる前に**この boot のもの**に差し替えておくこと（同じ辞書を持たせるので、以降は
     # settings に足すだけで見える）。
@@ -2767,17 +2828,8 @@ def _unload(out_dir: str | None) -> dict:
     # 期間・日数の望み・値段・装備の窓口の登録簿も空にする（関所が剥がれた後も sys に残るため）。
     try:
         from . import durations as _durations
-        from . import prices as _prices
-        from . import combat as _combat
-        from . import equipment as _equipment
         from . import abilities as _abilities
-        from . import battle_effects as _battle_effects
-        base, layers = _prices.item_price_sources()
-        _inn_answer, inn_layers = _prices.inn_price_sources()
-        owners = (set(_durations.owners()) | {base} | set(layers) | set(inn_layers)
-                  | set(_combat.owners()) | set(_equipment.owners()) | set(_abilities.owners())
-                  | set(_battle_effects.owners()))
-        for owner in sorted(owners - {""}):
+        for owner in sorted(_window_owners() - {""}):
             _durations.forget(owner, write=log)
         # 読み口はクラスに残る（剥がさない）。場面の包みが剥がれたので補正は足されないが、念のため素通しにする
         _abilities.detach()

@@ -83,6 +83,7 @@ import os
 import sys
 
 from instantale_modloader import frames
+from instantale_modloader.state import world_key_of_dict
 
 LOG_BASENAME = "world_overview.log"
 
@@ -188,6 +189,8 @@ def apply(ctx):
         plot = frames.arg(args, kwargs, PLOT_ARG, 1)
         # 前の世界の控えを持ち越さない。差し替えられた場合だけ入れ直す。
         state["forced"] = None
+        # 照合は同じ世界の書き出しとだけ（生成が途中で止まった後の、別の世界の書き出しと比べない）
+        state["world"] = frames.arg(args, kwargs, "world_name", 0)
         response = orig(*args, **kwargs)
 
         # ここから先は `orig` が済んでいる。
@@ -262,6 +265,12 @@ def _record_saved(ctx, write, state, path, data):
     forced = state["forced"]
     # 1つの世界につき1回。この後は遊んでいる間の保存なので照合しない。
     state["forced"] = None
+    world = state.get("world")
+    written = world_key_of_dict(data) if isinstance(data, dict) else None
+    if isinstance(world, str) and world and written and written != world:
+        # 差し替えた世界の生成は途中で止まり、別の世界が書き出された。照合しない（何も起きていない）
+        write("the world written is {!r}, not {!r} that was replaced; not comparing".format(written, world))
+        return
 
     saved = _saved_overview(path)
     if saved is not None:

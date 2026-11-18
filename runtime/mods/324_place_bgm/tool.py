@@ -488,6 +488,12 @@ class Model(object):
         世界の指定だけ直した回でも「playlist を保存した」と読める。
         """
         self.written = []
+        # 在るのに読めないファイルには書かない（空として読んだ中身で、ファイルに在った重みや
+        # 本体が覚えた曲を消さないため。`modtool.json_unreadable`）。書く前に全部確かめる
+        targets = [self.playlist_path] + [self.world_path(key) for key in
+                                          sorted(set(k for k, _g, _p in self.world_playlists))]
+        if any(modtool.json_unreadable(path) for path in targets):
+            return False
         data = self.to_json()
         changed = data != self.file or bool(self.cleared)
         if not modtool.write_json(self.root, self.playlist_path, data):
@@ -1040,7 +1046,9 @@ def build_window(model):
                 " / ".join(model.written) if model.written else "（変更はありません）"))
         else:
             messagebox.showerror("保存に失敗しました",
-                                 "{} か worlds\\ に書けませんでした。".format(model.playlist_path), parent=root)
+                                 "{} か worlds\\ に書けませんでした。\n"
+                                 "ファイルが読めない間は上書きしません。".format(model.playlist_path),
+                                 parent=root)
 
     def close():
         modtool.close_window(root, model.root, MOD_DIR, model.dirty, model.save)

@@ -35,7 +35,6 @@ MOD との突き合わせと、遊んでいる間の見張りだけを持つ。�
 from __future__ import annotations
 
 import datetime
-import json
 import os
 import sys
 import threading
@@ -113,27 +112,20 @@ def store_dir(out_dir: str) -> str:
     return os.path.join(recon.snapshot_dir(out_dir), recon.DRIFT_DIR_NAME)
 
 
+def _report(msg: str) -> None:
+    log_exc("drift: " + msg)
+
+
+# 読み書きはローダの read_json / write_json に任せる（一時ファイル名・fsync・BOM の扱いを1か所にするため）。
 def _read(path: str) -> dict:
-    try:
-        with open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-        return data if isinstance(data, dict) else {}
-    except FileNotFoundError:
-        return {}
-    except Exception:
-        log_exc("drift: cannot read {}".format(path))
-        return {}
+    from . import read_json
+    data = read_json(path, {}, report=_report)
+    return data if isinstance(data, dict) else {}
 
 
 def _write(path: str, data: dict) -> None:
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=1)
-        os.replace(tmp, path)
-    except Exception:
-        log_exc("drift: cannot write {}".format(path))
+    from . import write_json
+    write_json(path, data, report=_report)
 
 
 def _builds(data: dict) -> list:
@@ -308,12 +300,8 @@ def flush_rewrites(out_dir: str) -> list:
 # 包みの外れ
 # --------------------------------------------------------------------------
 def _screen_name() -> str | None:
-    try:
-        from kivy.app import App
-        root = App.get_running_app().root
-        return getattr(root, "current", None)
-    except Exception:
-        return None
+    from . import ui
+    return ui.screen_name()
 
 
 _NOT_SEEN = object()

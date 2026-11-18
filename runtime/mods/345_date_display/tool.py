@@ -72,8 +72,9 @@ class MonthsEditor(object):
         self.count_var.trace_add("write", lambda *_args: self.on_count())
         self.var.trace_add("write", lambda *_args: self.on_value())
         # 途中の値（打ちかけの「3」など）は表へ移さないので、欄を離れるときに表の値へ揃える。
+        # 揃えるための書き込みが on_year / on_count を起こして割り直さないよう、guarded の中で書く。
         for box in (year_box, count_box):
-            box.bind("<FocusOut>", lambda _event: self.show_totals())
+            box.bind("<FocusOut>", lambda _event: self.guarded(self.show_totals))
         self.on_value()
 
     def months(self):
@@ -168,6 +169,11 @@ class MonthsEditor(object):
             return
         if total < count or total > count * rules.MAX_DAYS_IN_MONTH:
             self.warning.configure(text="1年の日数は月数より少なくできません")
+            return
+        current = self.months()
+        if current and len(current) == count and sum(days for _name, days in current) == total:
+            # 合計も月数も変わっていない。手で決めた月ごとの日数をそのまま残す。
+            self.warning.configure(text="")
             return
         self.set_row_count(count)
         self.fill_days(rules.distribute(total, count))

@@ -136,9 +136,10 @@ class Kit:
         from kivy.uix.boxlayout import BoxLayout
         from kivy.uix.widget import Widget
         row = BoxLayout(orientation="horizontal", size_hint_y=None, height=self.px(30), spacing=self.px(6))
+        base_color = color
         for index, name in enumerate(names):
-            if colors is not None and index < len(colors):
-                color = colors[index]
+            # 段ごとの色が足りない段は基本の色（前の段の色を引き継がない）
+            color = colors[index] if colors is not None and index < len(colors) else base_color
             cell = BoxLayout(orientation="vertical", spacing=self.px(3))
             bar = Widget(size_hint_y=None, height=self.px(9))
             on = index == current

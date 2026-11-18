@@ -118,6 +118,19 @@ try:
     again = tool.Model()
     check("reload: round trip", again.to_tracks() == model.to_tracks())
 
+    # 在るのに読めない playlist.json には書かない（空として読んだ一覧で重みを 0 に上書きしない）
+    with io.open(playlist_path, "rb") as fh:
+        good_bytes = fh.read()
+    with io.open(playlist_path, "wb") as fh:
+        fh.write(good_bytes[:len(good_bytes) // 2])
+    blind = tool.Model()
+    blind.rows["喝采.ogg"]["normal"] = 7
+    check("save: refuses to overwrite an unreadable playlist", blind.save() is False)
+    with io.open(playlist_path, "rb") as fh:
+        check("save: the unreadable playlist is left as it was", fh.read() == good_bytes[:len(good_bytes) // 2])
+    with io.open(playlist_path, "wb") as fh:
+        fh.write(good_bytes)
+
     # ---------------------------------------------------------------- 本体
     found = core.scan_tracks(assets, state_dir)
     pool = core.candidates(on_disk, found, "colosseum")

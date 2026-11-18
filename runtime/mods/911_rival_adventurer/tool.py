@@ -109,7 +109,8 @@ def sample_of(template):
             return "{" + key + "}"
     try:
         return str(template).format_map(_Missing(SAMPLE))
-    except (ValueError, IndexError):
+    except (ValueError, IndexError, KeyError, AttributeError, TypeError):
+        # 属性・添字つきの書き方（`{title.x}`・`{title[x]}`）は AttributeError / TypeError になる
         return "（{ } の対応が崩れています）"
 
 

@@ -188,6 +188,12 @@ def main():
         _World.generate_character = lambda self, cid: cid
         check(P.owners_ready() == ["__main__:World.generate_character"],
               "生えたら解決できるようになる: {}".format(P.owners_ready()))
+        # 持ち主が `__main__` そのもので葉がまだ無い形（`await_module("__main__", X)`）は、
+        # 組み上がるまで ready にしない（`__main__` は `__spec__._initializing` を持たない）
+        P._pending_owners.add("__main__:module_level_not_yet")
+        check("__main__:module_level_not_yet" not in P.owners_ready(),
+              "__main__ の葉が無いうちは組み上がるまで ready にしない: {}".format(P.owners_ready()))
+        P._pending_owners.discard("__main__:module_level_not_yet")
 
         # 組み上がった後の持ち主の打ち間違いは保留にしない。
         # 1時間待って skipped に落ちると、ゲーム更新を疑う UNRESOLVED に出ない。
@@ -657,6 +663,10 @@ def main():
         check(False, "on_ready の例外が漏れた: {!r}".format(exc))
     check(ctx.on_ready(boom, key="boom") is False,
           "例外で終わった処理は積み直さない（毎回失敗し続けない）")
+
+    late = []
+    check(ctx.on_ready(lambda: late.append("late"), key="late") is True and late == ["late"],
+          "この世代の分を流し終えた後に積んだものは、その場で流す: {}".format(late))
 
     print("=== on_ready: 登録と実行済みの関係 ===")
     # 「積んだが、流す前に次の boot が来た」= 遅延当て直しの最中に起きうる並び。
@@ -1183,6 +1193,9 @@ def main():
           "文字列から拾う（GUI の入力欄も手書きの JSON も同じ経路）")
     check(C.coerce(decls["COUNT"], "99")[0] is False, "上限を外れた値は撥ねる")
     check(C.coerce(decls["MODE"], "z")[0] is False, "選択肢の外は撥ねる")
+    numbered = {"type": "choice", "values": [1, 2, 3], "default": 1}
+    check(C.coerce(numbered, "2") == (True, 2, ""),
+          "数の選択肢に文字列の数が来たら選択肢の型（int）に戻す")
     check(C.coerce(decls["ON"], "false") == (True, False, ""), "真偽値は文字列でも読む")
     check(C.coerce(decls["RATE"], None) == (True, None, ""),
           "allow_null なら null を通す（CHANCE_OVERRIDE の形）")

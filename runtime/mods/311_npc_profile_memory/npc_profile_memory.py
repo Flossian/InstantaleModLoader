@@ -649,7 +649,9 @@ def apply(ctx):
                 bucket[str(npc_id)] = record
             old_profile = _field(record, "profile")
             old_about = _field(record, "about_player")
-            if profile == old_profile and about == old_about \
+            # 空の欄は「書かない」なので、比べるのは書く欄だけ。
+            # 空の about を既存と比べると、RECORD_PLAYER_MEMORY が切・抽出が about を返さない回に毎回書き直す。
+            if (not profile or profile == old_profile) and (not about or about == old_about) \
                     and not update.get(KEY_NEW_FACTS):
                 return
             record["name"] = npc_name

@@ -427,9 +427,19 @@ def apply(ctx):
                             "from; leaving the box alone", level="WARN")
                 return result
 
+            def settle(_dt, box=self, labels=labels):
+                # 位置は update_content の後でゲームが入れる（モジュールの説明「画面外への対策」）。
+                # この時点の box.x / box.y は作り直した直後の値なので、位置が入った次のフレームに
+                # 本当の位置から幅の上限（窓の右端まで）と上端を測り直してから、窓の内側へ収める
+                try:
+                    resize(box, labels)
+                except Exception:
+                    ctx.log_exc("item detail autosize: refit failed")
+                clamp(box)
+
             try:
                 from kivy.clock import Clock
-                Clock.schedule_once(lambda dt: clamp(self), 0)
+                Clock.schedule_once(settle, 0)
             except Exception:
                 ctx.log_exc("item detail autosize: could not schedule the clamp")
 

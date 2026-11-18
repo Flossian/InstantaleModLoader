@@ -285,6 +285,28 @@ def find_row(rows, section, kind, target):
     return None
 
 
+def unshown_rows(rules_in, fixed_keys):
+    """画面のどの欄にも出ない行 `{節: [行]}`。保存は画面の中身から組み直すので、これを書き戻して消さない。
+
+    `fixed_keys` は固定行の `(節, 種類, 対象)` の並び。固定行は1種類に1行しか出せず、
+    条件つきの一覧は追加の行だけを持つので、同じ種類の2行目以降と、モデルの無い条件つきの置換は
+    手で書いたときだけ在り、画面に出ない。
+    """
+    shown = set()
+    for section, kind, target in fixed_keys:
+        row = find_row(rules_in.get(section) or [], section, kind, target)
+        if row is not None:
+            shown.add(id(row))
+    out = {}
+    for section in MODEL_TAB_SECTIONS:
+        rows = [row for row in rules_in.get(section) or []
+                if id(row) not in shown and not by_model(row)
+                and not (section == "add" and str(row.get("when") or "").strip())]
+        if rows:
+            out[section] = rows
+    return out
+
+
 class _FixedRows(object):
     """種類ごとに1行ずつの欄（元 GUI の GroupBox の中身と同じ形）。
 
@@ -1300,7 +1322,12 @@ def build_window(rules_in=None, settings_in=None, note=""):
             got[section].extend(rows)
         got["words"] = tables["words"].get()
         got["tags"] = tables["tags"].get()
+        for section, rows in unshown.items():
+            got[section].extend(dict(row) for row in rows)
         return got
+
+    unshown = unshown_rows(rules_now, [(rows.section, kind, rows.target)
+                                       for rows in fixed for kind in rows.vars])
 
     # 規則は設定とは別の保存物。開いた時点の中身を覚えて、未保存の変更があるかを見る。
     # 取り込んだ直後（`rules_in` / `settings_in` が在る）は、保存するまで未保存の変更として扱う。

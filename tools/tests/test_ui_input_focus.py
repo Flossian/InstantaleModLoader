@@ -455,6 +455,25 @@ def run():
           polite.text_input.focus is False and polite.other_input.focus is True)
     polite.other_input.focus = False
 
+    # 窓に直付けされた入力欄（Popup の中）に打っている最中も奪わない（is_popup_window_opened が立たない窓）
+    popup_input = FakeTextInput(width=300.0)
+    popup = FakeWidget()
+    popup.children = [popup_input]
+    window_mod = types.ModuleType("kivy.core.window")
+    window_mod.Window = types.SimpleNamespace(children=[polite, popup])
+    sys.modules["kivy.core"] = types.ModuleType("kivy.core")
+    sys.modules["kivy.core.window"] = window_mod
+    try:
+        popup_input.focus = True
+        polite.text_input.blur()
+        CLOCK.tick()
+        check("窓に直付けされた入力欄に打っている最中は焦点を奪わない",
+              polite.text_input.focus is False and popup_input.focus is True)
+    finally:
+        popup_input.focus = False
+        sys.modules.pop("kivy.core.window", None)
+        sys.modules.pop("kivy.core", None)
+
     APP.is_popup_window_opened = True
     polite.text_input.blur()
     CLOCK.tick()

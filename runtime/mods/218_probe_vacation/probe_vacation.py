@@ -60,9 +60,16 @@
 版4までは「本体の例外を窓の片付けの後にそのまま上げたい」として外していたが、
 `safe=True` は本体が投げた例外をそのまま通す（呼び直さない）ので、片付けの後に上がる形は同じ。
 あわせて使っていない `import json` を外した。
+
+版6: `238_` の版2・`231_` の版5と同じ直し。
+開いている窓の並びと `__init__` の引数の控えを `sys` に置いた（`STORE_ATTR`）。
+版5までは apply ごとの控えで、注入し直しの瞬間に開いていた窓は古い世代の `execute` の包みだけが握り、
+新しい世代の `elapse_days`・`add_text`・背景の包みからは見えなかった。
+窓を閉じるときは同じ物（`is`）を外す。`list.remove` は中身の等しい別の窓を先に外しえた。
 """
 
 import datetime
+import sys
 import time
 import weakref
 
@@ -91,6 +98,29 @@ MANAGERS = (
     "VacationEndManager",
 )
 
+#: 開いている窓の並びと `__init__` の引数の控え（版6）。注入し直しで消えないよう `sys` に置く。
+STORE_ATTR = "_instantale_probe_vacation_store"
+
+
+def process_store():
+    """`{"windows": [...], "inits": WeakKeyDictionary, "inits_by_id": {...}}`。プロセスに1つ。"""
+    store = getattr(sys, STORE_ATTR, None)
+    if not (isinstance(store, dict) and isinstance(store.get("windows"), list)
+            and isinstance(store.get("inits"), weakref.WeakKeyDictionary)
+            and isinstance(store.get("inits_by_id"), dict)):
+        store = {"windows": [], "inits": weakref.WeakKeyDictionary(), "inits_by_id": {}}
+        setattr(sys, STORE_ATTR, store)
+    return store
+
+
+def close_window(windows, window):
+    """`window` そのもの（`is`）を並びから外す。中身の等しい別の窓は外さない。"""
+    for index in range(len(windows) - 1, -1, -1):
+        if windows[index] is window:
+            del windows[index]
+            return True
+    return False
+
 
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
@@ -98,7 +128,7 @@ def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
 
     # 窓は入れ子になりうる（Socialize の中で Resolve が走る等）のでスタックで持つ。
-    state = {"windows": []}
+    state = process_store()
 
     #: 1件1行の JSON。後から数えるための表（ローダの語彙）。
     record = ctx.jsonl(RECORD_BASENAME)
@@ -170,8 +200,9 @@ def apply(ctx):
         return result
 
     # マネージャの引数の控え。ゲームの実体に属性を足さない（読み取りだけの約束。`231_` と同じ形）。
-    inits = weakref.WeakKeyDictionary()
-    inits_by_id = {}
+    # 版6で窓の並びと一緒に `sys` へ移した（注入し直しの瞬間の窓でも引ける）。
+    inits = state["inits"]
+    inits_by_id = state["inits_by_id"]
 
     def remember_init(manager, init_args):
         try:
@@ -230,10 +261,7 @@ def apply(ctx):
             try:
                 return orig(self, *args, **kwargs)
             finally:
-                try:
-                    state["windows"].remove(window)
-                except ValueError:
-                    pass
+                close_window(state["windows"], window)
                 try:
                     gold_after = ui.gold_of(app)
                     row = {

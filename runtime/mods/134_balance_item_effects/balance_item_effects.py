@@ -220,6 +220,22 @@ def apply(ctx):
     # 同じスレッドで走っている `consume_item` の控え。
     # `add_text` の差し替えは、この控えを持つスレッドの、品の名前を含む最初の1行だけ。
     active = {}
+    # `回復` を 0 にしている間の控え。{スレッド: Silenced}。間にゲームが保存したら元の値で保存させる（`save_game`）
+    silenced = {}
+
+    @ctx.wrap("__main__:InstantaleApp.save_game", required=False)
+    def save_game(orig, self, *args, **kwargs):
+        # 本体の consume_item の中で保存が走っても、セーブには元の `回復` を入れる。
+        # 0 のまま保存し、品を外さずに終わる（断られた）と、読み込んだ後その品は二度と回復しない
+        quiet = list(silenced.values())
+        for entry in quiet:
+            entry.restore()
+        try:
+            return orig(self, *args, **kwargs)
+        finally:
+            for entry in quiet:
+                if entry in silenced.values():
+                    entry.silence()
 
     # ---- 品を作り直す --------------------------------------------------
     def rework_one(item, why, rng=None):
@@ -327,8 +343,12 @@ def apply(ctx):
         ident = threading.get_ident()
         active[ident] = ticket
         try:
-            with healing.Silenced(attributes, labels_of()):
-                result = orig(self, item_instance, True, *args, **kwargs)
+            with healing.Silenced(attributes, labels_of()) as quiet:
+                silenced[ident] = quiet
+                try:
+                    result = orig(self, item_instance, True, *args, **kwargs)
+                finally:
+                    silenced.pop(ident, None)
         finally:
             active.pop(ident, None)
 

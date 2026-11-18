@@ -309,14 +309,23 @@ def set_affinity(app, npc_id, value, character=None):
     """好感度を書く。実行時の人物（`character` を渡せばそれも）と、素データの心当たり全部。
 
     `player` の欄が無い所には書かない（好感度だけの欄を作ると `affinity_text` などが欠ける）。
-    保存のときゲームは実行時の値を写すが、名簿に居ない相手は素データにしか居ないので両方に書く。
+    ただし実行時の人物に欄が無く素データに欄があるときは、素データの欄を丸ごと写してから書く。
+    保存のときゲームは実行時の値を写すので、素データにだけ書くと保存で消える。
+    名簿に居ない相手は素データにしか居ないので両方に書く。
     書いた所の数を返す。
     """
-    rows = [_player_row(character), _player_row(ui.character_of(app, npc_id))]
+    raw_rows = []
     for where, holder in npc_stores(app):
         if "characters" in where.rsplit(".", 1)[-1]:
             continue                    # 実行時の名簿。素データではない
-        rows.append(_player_row(holder.get(str(npc_id)) if isinstance(holder, dict) else None))
+        raw_rows.append(_player_row(holder.get(str(npc_id)) if isinstance(holder, dict) else None))
+    template = next((row for row in raw_rows if row is not None), None)
+    live = [character, ui.character_of(app, npc_id)]
+    for holder in live:
+        relationship = getattr(holder, "relationship", None) if holder is not None else None
+        if template is not None and isinstance(relationship, dict) and _player_row(holder) is None:
+            relationship["player"] = dict(template)
+    rows = [_player_row(holder) for holder in live] + raw_rows
     written = 0
     seen = set()
     for row in rows:

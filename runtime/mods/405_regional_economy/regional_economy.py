@@ -2319,7 +2319,9 @@ def apply(ctx):
                     classification = _classification_for_item(
                         state, scope, record, target)
                     if classification is not None:
-                        score = _classification_display_score(classification)
+                        # 価格の印は値段の側と同じ score で出す。特産品の score は関連の強さで、
+                        # 値段を動かさないので価格の印にしない（DOC.md の値段と表示の節）。
+                        score = _classification_price_score(classification) or 3
         except Exception:
             ctx.log_exc("regional economy: item detail overlay failed")
         result = orig(self, item, *args, **kwargs)

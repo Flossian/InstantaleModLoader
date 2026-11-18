@@ -321,6 +321,10 @@ def type_line(type_name, type_schema):
         return None
     properties = type_schema.get("properties")
     if not isinstance(properties, dict):
+        # 項目を持たない型（pydantic の Enum クラスが出す `{"enum": [...], "type": "string"}` など）は、
+        # 欄の型と同じ書き方で1行にする。落とすと、それを参照する欄に型の名前だけが残り、選べる値が消える
+        if any(key in type_schema for key in ("enum", "const", "anyOf", "items", "type", "$ref")):
+            return "{} = {}".format(type_name, describe_field(type_schema))
         return None
 
     required = type_schema.get("required")

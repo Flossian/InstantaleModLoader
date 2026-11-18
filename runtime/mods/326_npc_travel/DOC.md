@@ -73,3 +73,4 @@ MOD なしのゲームの NPC は生成された施設から一歩も動かな�
 | 旅先で雇って解散したのに、どの街の一覧にも出ない | 同ログの `hired: ... left the party; enrolled in area N`。無ければ解散した施設がどの街のものか読めていない（`stands nowhere known`） |
 | 友好度が高いのに一度も出ない人が居る | 同ログの `skip: ... stands in area`。一覧の街と実体の街が食い違っている（`303_` が置いた人）。帰ったばかりの人は記録の `rest` に居る間は出ない |
 | ロードしたら旅が消えた | 同ログの `reconcile: ... forgotten`。出発より古いセーブを読んだ |
+| ロードしたら帰ったはずの人がまた旅に出ている | 同ログの `reconcile: the return of ... did not reach the save`。帰した後、次の保存より前にゲームが落ちた。期限が来ていれば読んだ後にもう一度帰す |

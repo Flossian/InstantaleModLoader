@@ -130,6 +130,9 @@ def test_vocabulary():
               ui.parse_coin("馬車(1,000円)") == 1000
               and ui.parse_coin("馬車(1000G)") == 1000
               and ui.parse_coin("徒歩(3ヵ月)") is None)
+        check("単位の後ろに英数字が続くものは額と読まない",
+              ui.parse_coin("容量 8GB") is None and ui.parse_coin("3Gold") is None
+              and ui.parse_coin("宿(80G)") == 80)
 
         # 伸びる表記は受け取らない（素へ据え置き、戻り値で分かる）。
         check("伸びる長い形を拒む",

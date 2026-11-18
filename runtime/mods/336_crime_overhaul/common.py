@@ -157,8 +157,9 @@ class Env(object):
         self.underworld_banned = lambda app: False
         #: 牢の出来事を受ける関数（`cellmate` が受ける）。`prison` / `rescue` が `prison_event` で知らせる。
         #: "break"（決行の戦闘を起こす直前）/
+        #: "abort"（決行が始まらなかった。戦闘を起こせなかった・ロードで戦闘の続きに戻らなかった）/
         #: "exit"（牢を出た。how は "release" / "escape" / "rescue"）。
-        self.prison_handlers = {"break": [], "exit": []}
+        self.prison_handlers = {"break": [], "abort": [], "exit": []}
 
     def carry(self, app, key, value):
         """裁判へ持ち越す介入を置く（`value` が None なら外す）。メモリと控えの両方。"""

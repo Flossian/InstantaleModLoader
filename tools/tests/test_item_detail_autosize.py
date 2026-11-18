@@ -448,6 +448,18 @@ def run():
           and 0 <= box.x and box.x + box.width <= WINDOW[0],
           "pos=({}, {}) size={}".format(box.x, box.y, box.size))
 
+    # 箱はホバーのたびに作り直され、位置は update_content の後でゲームが入れる。
+    # 作り直した直後の (0, 0) で上限を決めると、窓の右端に近いアイテムで広げすぎて、
+    # 収めるときに掴んだアイテムの上へ押し戻す。次のフレームに本当の位置で測り直す。
+    box = FakeBox(pos=(0, 0))
+    box.update_content(item(description=long_desc))
+    placed_x = WINDOW[0] - BOX_SIZE[0] * 1.2      # アイテムの右端（窓の右端の近く）
+    box.x, box.y = placed_x, 400
+    CLOCK.tick()
+    check("the width limit uses the position the game set (not the fresh box's 0)",
+          close(box.x, placed_x) and box.x + box.width <= WINDOW[0] + 0.5,
+          "pos=({}, {}) size={}".format(box.x, box.y, box.size))
+
     # -- 表示中のラベルを測定器にしない -------------------------------------
     # 幅の候補を試すループは1回のホバーでラベル3枚 x 最大6周ぶん測る。
     # そこで表示中のラベルを焼き直していると、ホバーのたびに18回焼くことになる

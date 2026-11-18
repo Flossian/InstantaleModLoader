@@ -454,6 +454,11 @@ arena.config["enemy_data"] = {"4": {"data": {"name": "闘士", "rank": 58}}}
 app.texts = []
 _result, gained = win(app, ctx)
 check("相手の格に連動", gained == int(round(359 * 1.58)), gained)
+# 読み込みの後に戦った相手は数の鍵で貯まる（GAME.md §2.11）。試合の直後はこちらを引く。
+arena.config["enemy_data"] = {4: {"data": {"name": "闘士", "rank": 58}}}
+app.texts = []
+_result, gained = win(app, ctx)
+check("相手の格に連動（数の鍵）", gained == int(round(359 * 1.58)), gained)
 module.REWARD_PER_RANK = 0.0
 arena.config["enemy_data"] = {}
 
@@ -602,6 +607,22 @@ battle = fall_in_arena(ForgetfulEnd)
 hook(lambda self: "checked", battle)
 check("ゲームが戻さなければ控えた値で戻す", app.party.get("player") is app.player, app.party)
 check("手で戻したことは WARN で残る", any("put back by hand" in line for line in DEFEAT_LOG))
+
+
+class BrokenEnd(FakeEnd):
+    """終わり方そのものが落ちる（ゲーム側の例外）。"""
+
+    def execute(self, choice_text):
+        raise RuntimeError("the ending failed")
+
+
+battle = fall_in_arena(BrokenEnd)
+hook(lambda self: "checked", battle)
+check("終わり方が落ちたら敵の一覧を戻す", list(app.current_enemy_dict) == ["黄金の蒐集家"],
+      app.current_enemy_dict)
+check("  → 主人公を預かりから引き上げて一覧へ戻す",
+      app.party.get("player") is app.player and "player" not in app.escaped_member_in_battle,
+      (app.party, app.escaped_member_in_battle))
 
 print("倒れた仲間も連れて戻る")
 

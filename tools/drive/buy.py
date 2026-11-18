@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """開いている売買の窓で、店の棚の品を1つ手持ちの側へ落として「買う」を押す。ARGS: {"item": 品名}
 
-確認の窓の「品名:額G」と、買った後に品が手持ちに入ったか・棚に残ったか・所持金の増減を返す。
+確認の窓の「品名:額G」と、買う前後の手持ち・棚の同名の品の数と所持金の増減を返す。
 """
 KEEP_OPEN = True
 
@@ -10,15 +10,23 @@ def main(say):
     st = {}
     name = ARGS["item"]
 
-    def shelf_widget():
+    def same_name(mine):
+        """同名の品の部品。`mine` が真なら手持ち、偽なら棚。"""
+        found = []
         for node in ui.walk_widgets(Window):
             item = getattr(node, "item_instance", None)
             if type(node).__name__ == "InventoryItem" and getattr(item, "name", None) == name \
-                    and getattr(item, "obtainer", None) is not app().player:
-                return node
-        return None
+                    and (getattr(item, "obtainer", None) is app().player) is mine:
+                found.append(node)
+        return found
+
+    def shelf_widget():
+        found = same_name(False)
+        return found[0] if found else None
 
     def drop():
+        # 数で比べる。同名の品を前から持っている・棚に2つある、では「在るか」で決まらない
+        st["mine"], st["shelf"] = len(same_name(True)), len(same_name(False))
         widget = shelf_widget()
         say("shop has item: {}".format(widget is not None))
         if widget is None:
@@ -57,9 +65,12 @@ def main(say):
         return 1.5
 
     def report():
-        mine = item_widget(name, app().player)
-        say("after: player has item {} / shop still has one {} / gold {} -> {}".format(
-            mine is not None, shelf_widget() is not None, st.get("gold"), app().player.gold))
+        mine, shelf = len(same_name(True)), len(same_name(False))
+        bought = st.get("mine") is not None and mine == st["mine"] + 1 \
+            and shelf == st["shelf"] - 1
+        say("after: bought {} / player has {} -> {} / shop has {} -> {} / gold {} -> {}".format(
+            bought, st.get("mine"), mine, st.get("shelf"), shelf, st.get("gold"),
+            app().player.gold))
         return 0.2
 
     Steps(say, [drop, buy, report], timeout=60).start()

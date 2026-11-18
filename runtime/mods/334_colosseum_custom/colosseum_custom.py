@@ -463,7 +463,13 @@ def apply(ctx):
         index = max(0, int(phase) // 2) if isinstance(phase, (int, float)) else 0
         enemies = config.get("enemy_data")
         if isinstance(enemies, dict):
-            entry = enemies.get(str(int(phase))) if isinstance(phase, (int, float)) else None
+            # 鍵はセーブから読んだ分が文字列、読み込みの後に戦った分が数（GAME.md §2.11）。
+            # 試合の直後の賞金は数の鍵の側を引くので、両方を見る。
+            entry = None
+            if isinstance(phase, (int, float)) and not isinstance(phase, bool):
+                entry = enemies.get(int(phase))
+                if entry is None:
+                    entry = enemies.get(str(int(phase)))
             data = entry.get("data") if isinstance(entry, dict) else None
             rank = data.get("rank") if isinstance(data, dict) else None
             if isinstance(rank, (int, float)) and not isinstance(rank, bool):

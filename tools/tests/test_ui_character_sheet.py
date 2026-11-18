@@ -536,6 +536,13 @@ def run():
                       if box.text.startswith("スキル"))
     check("その相手の手配度を出す", "始まりの泥濘：-3" in text3, text3)
     check("その相手のスキルを出す", "影抜き" in skills3, skills3)
+    hud.visible_character_sheet_data = {"name": "名簿に居ない人"}   # ロード直後は名簿がほぼ空
+    toggle()
+    toggle()
+    skills4 = "".join(box.text for box in layout.children if box.text.startswith("スキル"))
+    check("名前が引けない相手の欄にプレイヤーのスキルを描かない（地響きの断罪はプレイヤーのもの）",
+          "地響きの断罪" not in skills4, skills4)
+    hud.visible_character_sheet_data = {"name": "カイル"}
 
     print("\n[二つ名] 評判 MOD の控えがあればレベル行に続けて出す")
     from instantale_modloader.state import playthrough_key, world_filename, world_key

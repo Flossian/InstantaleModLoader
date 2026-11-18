@@ -408,6 +408,23 @@ def main():
     character.current_log = ["受付と話した"]
     character.physical_integrity = 42
     character.config["is_dead"] = True
+    porter = modnpc.register("229_probe", key="porter", fields={"name": "荷運び"})
+    modnpc.spawn(app, porter)
+    modnpc.place(app, porter, "1", "5")
+    saves = []
+    found = modnpc.store()
+    real_save = found.save
+    found.save = lambda key, bucket=None: saves.append(key) or real_save(key, bucket)
+    try:
+        both = modnpc.snapshot_all(app)
+    finally:
+        del found.save
+    ok &= check("控えの書き出しは何人いても1回",
+                sorted(both) == sorted([npc_id, porter]) and len(saves) == 1)
+    ok &= check("2人とも写る", ((modnpc._persisted_entry(app, "229_probe", porter) or {})
+                               .get("snapshot") or {}).get("name") == "荷運び")
+    modnpc.unplace(app, porter)
+    modnpc.unregister("229_probe", porter, app=app)
     done = modnpc.snapshot_all(app)
     entry = modnpc._persisted_entry(app, "229_probe", npc_id)
     ok &= check("写した", done == [npc_id] and entry is not None)
@@ -512,6 +529,22 @@ def main():
     patch.set_generation("gen2")
     modnpc.register("229_probe", key="clerk", fields={"name": "受付２"})
     ok &= check("注入し直した世代では実体が捨てられた",
+                modnpc.registry()[npc_id]["character"] is None)
+    seen_world = {}
+    real_place, real_unplace = modnpc.place, modnpc.unplace
+    modnpc.place = lambda *a, **k: seen_world.setdefault("place", k.get("world"))
+    modnpc.unplace = lambda *a, **k: seen_world.setdefault("unplace", k.get("world"))
+    try:
+        other_world = object()
+        handle = modnpc.get(app2, npc_id, world=other_world)
+        handle.place("1", "10")
+        handle.unplace()
+    finally:
+        modnpc.place, modnpc.unplace = real_place, real_unplace
+    ok &= check("取っ手の place / unplace は取っ手の世界を渡す（World.__init__ の中で前の世界に置かない）",
+                seen_world.get("place") is other_world and seen_world.get("unplace") is other_world)
+    modnpc.get(app2, npc_id).snapshot()               # spawn より前に取っ手から読む（保存の関所など）
+    ok &= check("組み直しを待つ間に読んでも、名簿の古い実体を記録に戻さない",
                 modnpc.registry()[npc_id]["character"] is None)
     fresh_one = modnpc.spawn(app2, npc_id)
     ok &= check("組み直された（写しが在るので名前は写しのまま）",

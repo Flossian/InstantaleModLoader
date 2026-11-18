@@ -1452,7 +1452,7 @@ def apply(ctx):
             return
         # 持ち物に戻った品だけを数え、戻らなかった品は預かりに残す
         # （`storage.fill` と同じ確かめ方）。控えから消した品は世界から消える。
-        moved, left = 0, {}
+        moved, left, landed = 0, {}, []
         for key, data in sorted(seized.items()):
             target = storage.free_key(inv, key)
             try:
@@ -1465,6 +1465,7 @@ def apply(ctx):
                 inv[str(target)] = item
             if str(target) in inv:
                 moved += 1
+                landed.append(str(target))
             else:
                 write("WARN reclaim: {} {} did not land in the inventory".format(
                     key, storage.describe(data)))
@@ -1475,7 +1476,14 @@ def apply(ctx):
             screen.say(app, "預かり品を受け取れなかった。")
             back(app, "nothing reclaimed")
             return
-        ui.add_gold(app, -fee, on_error=lambda msg: write("WARN reclaim: " + msg))
+        if ui.add_gold(app, -fee, on_error=lambda msg: write("WARN reclaim: " + msg)) is None:
+            # 料金を引けなかった。戻した品を引き上げ、預かりはそのまま残す（品だけ戻さない）。
+            for target in landed:
+                inv.pop(target, None)
+            write("WARN reclaim: the fee could not be charged; {} item(s) stay seized".format(moved))
+            screen.say(app, "預かり品を受け取れなかった。")
+            back(app, "fee not charged")
+            return
         bucket_of(current_key(app))["seized"] = left
         save(app)
         write("reclaimed: {} item(s) for {}{}".format(
@@ -1680,13 +1688,18 @@ def apply(ctx):
         # 管理人の持ち物は**窓を開いている間だけ**の姿。前の窓の残りが在れば先に払う
         # （控えが正で、実体はそこから毎回作り直す）。
         empty_holder(holder)
+        # 作り直せない控えは飛ばして窓を開き、閉じるときに控えへ戻す（`write_down`）。
+        # 1件で止めると、並びが毎回同じなので同じ1件で毎回止まり、他の品も取り出せなくなる。
+        unbuilt = {}
         try:
-            storage.fill(app, holder, items, write=write)
+            storage.fill(app, holder, items, write=write, skipped=unbuilt)
         except Exception:
             ctx.log_exc("real estate: cannot rebuild the stored items")
             return
+        # `opening` は窓が組み上がるまでの印。その間に別の窓の `turnoff_window_visibility` が来ても
+        # 「閉じた」と取り違えない（`close_if_hidden`）。
         state["storage"] = {"holder": holder, "area": str(record.get("area")),
-                            "name": name}
+                            "name": name, "unbuilt": unbuilt, "opening": True}
         player_name = frames.short(frames.text_of(player, "name"), 40) or "所持品"
 
         def show():
@@ -1703,6 +1716,8 @@ def apply(ctx):
                 ctx.log_exc("real estate: toggle_twin_inventory_window failed")
                 state["storage"] = None
                 return
+            if isinstance(state.get("storage"), dict):
+                state["storage"]["opening"] = False
             # 借りているのは店の売買の窓なので、右の見出しは「所持品」で固定されている。
             # 窓が組み上がる次のフレームで、この保管庫の名前に描き替える（`402_` と同じ）。
             screen.schedule(lambda: rename_right_header(app, name), 0)
@@ -1765,6 +1780,11 @@ def apply(ctx):
         if items is None:
             write("WARN {}: cannot read the holder's inventory".format(why))
             return 0
+        # 開くときに作り直せなかった控えは、窓に出ていなくても控えから消さない。
+        open_window = state.get("storage")
+        unbuilt = open_window.get("unbuilt") if isinstance(open_window, dict) else None
+        for key, data in sorted((unbuilt or {}).items()):
+            items[key if key not in items else storage.free_key(items, key)] = data
         set_storage(app, record, items)
         write("{}: the storage now holds {} item(s){}".format(
             why, len(items), " (lost {})".format(lost) if lost else ""))
@@ -1834,11 +1854,43 @@ def apply(ctx):
                 return True
         return False
 
+    def return_unwritable(app, holder):
+        """控えに書き出せない品を主人公の持ち物へ戻す。戻した点数を返す。
+
+        預けた品は控えが正で、閉じるときに管理人の手元を空にする。
+        控えに入らない品（属性が JSON にならないもの。`storage.item_to_dict`）を
+        そのまま空にすると世界から消えるので、手元を空にする前に持ち主へ返す。
+        """
+        player = getattr(app, "player", None)
+        src = storage.inventory_dict(holder) if holder is not None else None
+        dst = storage.inventory_dict(player) if player is not None else None
+        if not isinstance(src, dict) or not isinstance(dst, dict):
+            return 0
+        moved = 0
+        for key, item in list(src.items()):
+            if storage.item_to_dict(item) is not None:
+                continue
+            src.pop(key, None)
+            new_key = storage.free_key(dst, key)
+            dst[new_key] = item
+            for attr, value in (("id", str(new_key)), ("obtainer", player)):
+                try:
+                    setattr(item, attr, value)
+                except Exception:
+                    pass
+            moved += 1
+            write("WARN storage: {!r} cannot be kept in the storage; returned to the player "
+                  "(key {} -> {})".format(frames.short(getattr(item, "name", "?"), 40),
+                                          key, new_key))
+        return moved
+
     def close_storage(app, why):
         """窓が閉じたときの後始末。"""
         if state.get("storage") is None:
             return
         write_down(app, why)
+        if return_unwritable(app, storage_holder()):
+            save_soon(app, why)
         # 控えへ写したら持ち主の手元は空にする（管理人に品を住まわせない）。
         empty_holder(storage_holder())
         state["storage"] = None
@@ -2494,6 +2546,36 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("real estate: cannot close the storage")
         return orig(self, *args, **kwargs)
+
+    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.turnoff_window_visibility", required=False,
+              safe=True)
+    def turnoff_window_visibility(orig, self, *args, **kwargs):
+        """外側を押して窓を消したときも、閉じたときの後始末をする。
+
+        外側を押して閉じる経路は `close_shopping_window_process` を通らない
+        （`_on_backdrop_touch` → `turnoff_window_visibility` → `on_backdrop_callback`。GAME.md §2.13.1.3）。
+        上の包みだけでは、保管庫を閉じても `close_storage` が一度も走らなかった（実機）。
+        消した直後はまだ表示の辞書が書き換わっていないことがあるので、次のフレームで見る。
+        """
+        result = orig(self, *args, **kwargs)
+        if state.get("storage") is not None:
+            app = ui.find_app()
+            if app is not None:
+                screen.schedule(lambda: close_if_hidden(app), 0)
+        return result
+
+    def close_if_hidden(app):
+        """保管庫の窓が消えていれば閉じたときの後始末をする。開いている途中・まだ見えているなら何もしない。"""
+        open_window = state.get("storage")
+        if not isinstance(open_window, dict) or open_window.get("opening"):
+            return
+        data = getattr(ui.find_hud(app), "visible_twin_inventory_data", None)
+        if isinstance(data, dict) and data.get("TorF"):
+            return
+        try:
+            close_storage(app, "window turned off")
+        except Exception:
+            ctx.log_exc("real estate: cannot close the storage")
 
     # ------------------------------------------------------ 家と施設の窓
     def holdings_side(app):

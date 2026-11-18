@@ -154,6 +154,22 @@ def _ensure_player_back(app):
     _write("WARN defeat: the game did not bring the player back; put back by hand")
 
 
+def _undo_escape(app, enemies, saved_enemies, had_escaped_player):
+    """逃走の準備（`_prepare_escape`）を戻す。終わり方を起こせなかったときに呼ぶ。
+
+    戻さずにゲーム自身の判定へ任せると、敵の居ない一覧（勝ちとして扱われうる）と、
+    主人公の居ない一覧のまま判定が進む。
+    """
+    if isinstance(enemies, dict) and saved_enemies and getattr(app, "current_enemy_dict", None) is enemies:
+        enemies.clear()
+        enemies.update(saved_enemies)
+    escaped = getattr(app, "escaped_member_in_battle", None)
+    if not had_escaped_player and isinstance(escaped, dict):
+        escaped.pop(PLAYER_KEY, None)
+    _ensure_player_back(app)
+    _write("defeat: the escape ending failed; put the enemies and the player back")
+
+
 def _surrender(app, owner, answer):
     """逃走と同じ終わり方を起こす。起こせたら True。"""
     cls = ui.cls_of(END_MANAGER_CLS)
@@ -169,6 +185,10 @@ def _surrender(app, owner, answer):
     # 落ちても何をしようとしていたかが残るよう、起こす前に書く。
     _write("defeat: ending the battle as an escape for {}".format(owner))
     state["surrendered_at"] = time.monotonic()
+    enemies = getattr(app, "current_enemy_dict", None)
+    saved_enemies = dict(enemies) if isinstance(enemies, dict) else None
+    escaped = getattr(app, "escaped_member_in_battle", None)
+    had_escaped_player = isinstance(escaped, dict) and PLAYER_KEY in escaped
     try:
         _prepare_escape(app)
     except Exception:
@@ -178,6 +198,10 @@ def _surrender(app, owner, answer):
         manager.execute("")
     except Exception:
         log_exc("defeat: the escape ending failed")
+        try:
+            _undo_escape(app, enemies, saved_enemies, had_escaped_player)
+        except Exception:
+            log_exc("defeat: cannot undo the escape")
         return False
     finally:
         state["surrendering"] = False

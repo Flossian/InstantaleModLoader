@@ -180,6 +180,15 @@ try:
           model.written)
     on_disk = read_json(model.playlist_path)
     check("save: area:town on disk", on_disk["playlists"]["area:town"] == {"town/calm/a.mp3": 60, "town/calm/b.mp3": 40})
+    with io.open(model.playlist_path, "rb") as fh:
+        good_bytes = fh.read()
+    with io.open(model.playlist_path, "wb") as fh:
+        fh.write(good_bytes[:len(good_bytes) // 2])
+    blind = tool.Model()
+    check("save: refuses to overwrite an unreadable playlist",
+          blind.save() is False and io.open(model.playlist_path, "rb").read() == good_bytes[:len(good_bytes) // 2])
+    with io.open(model.playlist_path, "wb") as fh:
+        fh.write(good_bytes)
     check("settings: default weight is the declared default", model.default_weight == core.DEFAULT_WEIGHT)
 
     # ------------------------------------------------------------ 本体が同じ内容を読める

@@ -50,6 +50,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 import zlib
 from ctypes import wintypes
@@ -234,20 +235,30 @@ def launch(mod_dir, entry, exe):
     env["IML_STATE_DIR"] = ml.state_dir(RUNTIME_DIR)
     env["IML_GAME_DIR"] = game_dir()
     env["IML_MOD_SETTINGS"] = os.path.join(ROOT, "settings", "mod_settings.json")
-    proc = subprocess.Popen([exe, os.path.join(mod_dir, entry)], cwd=mod_dir, env=env,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    for _ in range(OPEN_TIMEOUT * 2):
-        time.sleep(0.5)
-        if proc.poll() is not None:
-            out, err = proc.communicate()
-            raise RuntimeError("終了コード {}: {}".format(
-                proc.returncode, (err or out or b"").decode("utf-8", "replace").strip()[:400]))
-        found = visible_windows(proc.pid)
-        if found:
-            time.sleep(SETTLE)
-            return (proc,) + found[0]
-    proc.kill()
-    raise RuntimeError("窓が {} 秒で出なかった".format(OPEN_TIMEOUT))
+    # 出力は一時ファイルで受ける。
+    # PIPE のまま読まないと、道具が書き続けたときにパイプが詰まり、窓を出す前に止まる。
+    out_fh, err_fh = tempfile.TemporaryFile(), tempfile.TemporaryFile()
+    try:
+        proc = subprocess.Popen([exe, os.path.join(mod_dir, entry)], cwd=mod_dir, env=env,
+                                stdout=out_fh, stderr=err_fh)
+        for _ in range(OPEN_TIMEOUT * 2):
+            time.sleep(0.5)
+            if proc.poll() is not None:
+                out_fh.seek(0)
+                err_fh.seek(0)
+                out, err = out_fh.read(), err_fh.read()
+                raise RuntimeError("終了コード {}: {}".format(
+                    proc.returncode, (err or out or b"").decode("utf-8", "replace").strip()[:400]))
+            found = visible_windows(proc.pid)
+            if found:
+                time.sleep(SETTLE)
+                return (proc,) + found[0]
+        proc.kill()
+        raise RuntimeError("窓が {} 秒で出なかった".format(OPEN_TIMEOUT))
+    finally:
+        # 子は自分の複製を持つので、親の側はここで閉じてよい
+        out_fh.close()
+        err_fh.close()
 
 
 def shut(proc, hwnd):
@@ -329,13 +340,17 @@ def check_window_memory(rows):
             except Exception as exc:
                 check("開く", False, exc)
                 continue
-            plain = window_size(hwnd)
-            user32.ShowWindow(hwnd, SW_MAXIMIZE)
-            time.sleep(SETTLE)
-            zoomed = window_size(hwnd)
-            check("最大化で大きくなる", zoomed[0] > plain[0] and zoomed[1] > plain[1],
-                  "{}x{} → {}x{}".format(plain[0], plain[1], zoomed[0], zoomed[1]))
-            shut(proc, hwnd)
+            # 例外で抜けても窓は必ず閉じる。
+            # 残すと、後で閉じたときにその窓が戻した gui.json を上書きする。
+            try:
+                plain = window_size(hwnd)
+                user32.ShowWindow(hwnd, SW_MAXIMIZE)
+                time.sleep(SETTLE)
+                zoomed = window_size(hwnd)
+                check("最大化で大きくなる", zoomed[0] > plain[0] and zoomed[1] > plain[1],
+                      "{}x{} → {}x{}".format(plain[0], plain[1], zoomed[0], zoomed[1]))
+            finally:
+                shut(proc, hwnd)
 
             try:
                 with io.open(GUI_JSON, encoding="utf-8") as fh:
@@ -369,17 +384,22 @@ def check_window_memory(rows):
             except Exception as exc:
                 check("開き直す", False, exc)
                 continue
-            reopened = window_size(hwnd)
-            capture(hwnd, os.path.join(OUT_DIR, "{}_maximized.png".format(name)))
-            check("最大化で開く", reopened[0] >= zoomed[0] - 20 and reopened[1] >= zoomed[1] - 20,
-                  "{}x{}".format(*reopened))
-            user32.ShowWindow(hwnd, SW_RESTORE)
-            time.sleep(SETTLE)
-            restored = window_size(hwnd)
-            check("元に戻すと最大化前の寸法になる",
-                  abs(restored[0] - plain[0]) <= 20 and abs(restored[1] - plain[1]) <= 20,
-                  "{}x{}  （素は {}x{}）".format(restored[0], restored[1], plain[0], plain[1]))
-            shut(proc, hwnd)
+            try:
+                reopened = window_size(hwnd)
+                try:
+                    capture(hwnd, os.path.join(OUT_DIR, "{}_maximized.png".format(name)))
+                except Exception as exc:
+                    check("開き直して撮る", False, exc)
+                check("最大化で開く", reopened[0] >= zoomed[0] - 20 and reopened[1] >= zoomed[1] - 20,
+                      "{}x{}".format(*reopened))
+                user32.ShowWindow(hwnd, SW_RESTORE)
+                time.sleep(SETTLE)
+                restored = window_size(hwnd)
+                check("元に戻すと最大化前の寸法になる",
+                      abs(restored[0] - plain[0]) <= 20 and abs(restored[1] - plain[1]) <= 20,
+                      "{}x{}  （素は {}x{}）".format(restored[0], restored[1], plain[0], plain[1]))
+            finally:
+                shut(proc, hwnd)
     finally:
         shutil.copy(backup, GUI_JSON)
         os.remove(backup)

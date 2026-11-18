@@ -207,6 +207,21 @@ player.current_hp = 100
 reduce_status(lambda s, c: None, manager, player)
 check("再生も直す（最大 300 の 10% = 30 → 15）", player.current_hp == 115, player.current_hp)
 
+give()
+player.status = {}
+battle_effects._mark(player, "venom", 3)
+player.current_hp = 200
+import threading  # noqa: E402
+sys._instantale_probe_dry_run_thread = threading.get_ident()
+try:
+    reduce_status(lambda s, c: None, manager, player)
+finally:
+    sys._instantale_probe_dry_run_thread = None
+check("試し打ちの最中は毒刃で体力を削らない", player.current_hp == 200, player.current_hp)
+reduce_status(lambda s, c: None, manager, player)
+check("  → 試し打ちでなければ削る", player.current_hp < 200, player.current_hp)
+player.status = {}
+
 print("反動")
 check("戦闘の終わりを包む", battle_end is not None)
 give(backlash=10)

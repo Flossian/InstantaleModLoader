@@ -124,10 +124,31 @@ count = mod.refresh(app, "甲", logs.append)
 check("立ち絵と顔を読み直す", sorted(reloaded) == sorted([body, face]), reloaded)
 check("reload の無い画像は source を付け直す",
       old.history == ["", ROOT + "甲\\generated_image.png"], old.history)
+cached = OldPicture(face)
+dropped = []
+cached._coreimage = types.SimpleNamespace(remove_from_cache=lambda: dropped.append(True))
+mod.ui.reload_image(cached)
+check("  → 付け直す前に Kivy のキャッシュから外す", dropped == [True] and cached.history == ["", face],
+      (dropped, cached.history))
 check("読み直しの失敗は数えず次へ進む", count == 3, count)
 check("数をログに残す", any("reloaded 3 image(s) of 甲" in line for line in logs), logs)
 check("失敗もログに残す", any("could not reload Broken" in line for line in logs), logs)
 del reloaded[:]
+
+print("=== 表情の差分 ===")
+smile = ROOT + "甲\\expressions\\smile.png"
+check("差分の見分け", mod.shows_variant(smile, "甲") and not mod.shows_variant(face, "甲")
+      and not mod.shows_variant(ROOT + "乙\\expressions\\smile.png", "甲"))
+talking = Picture(smile)
+variant_hud = types.SimpleNamespace(children=[Box(talking)])
+mod.ui.find_hud = lambda app: variant_hud
+hero = types.SimpleNamespace(name="甲", image_src={"fullbody": body})
+app_with_world = types.SimpleNamespace(world=types.SimpleNamespace(characters={"7": hero}))
+mod.refresh(app_with_world, "甲", logs.append)
+check("立ち絵が描き直されたら、差分を出している部品はふだんの立ち絵に戻して読み直す",
+      talking.source == body and reloaded == [body], (talking.source, reloaded))
+del reloaded[:]
+
 mod.ui.find_hud = lambda app: None
 check("HUD が無ければ何もしない", mod.refresh(app, "甲", logs.append) == 0)
 

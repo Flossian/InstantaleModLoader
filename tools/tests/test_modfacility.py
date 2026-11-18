@@ -240,7 +240,21 @@ def main():
 
     print("控える: 素データの写しが控えに入る")
     facility.name = "灯火亭（改装）"
-    modfacility.snapshot_all(app)
+    second = modfacility.register("915_invest", key="shop2", fields={"name": "二軒目"})
+    modfacility.spawn(app, second, "1")
+    saves = []
+    found = modfacility.store()
+    real_save = found.save
+    found.save = lambda key, bucket=None: saves.append(key) or real_save(key, bucket)
+    try:
+        done = modfacility.snapshot_all(app)
+    finally:
+        del found.save
+    ok &= check("控えの書き出しは何軒あっても1回", sorted(done) == sorted([fid, second])
+                and len(saves) == 1)
+    ok &= check("2軒とも写る", (modfacility._persisted_entry(app, "915_invest", second) or {})
+                .get("snapshot", {}).get("name") == "二軒目")
+    modfacility.unregister("915_invest", second, app=app)
     entry = modfacility._persisted_entry(app, "915_invest", fid)
     ok &= check("写しが控えに在る", isinstance(entry, dict) and entry.get("spawned"))
     ok &= check("書き換えた名前が写る",
@@ -713,6 +727,9 @@ def main():
     plain = stores[0][pid]
     ok &= check("写しは8項目・同じ並び", list(plain) == list(modfacility.FACILITY_FIELDS))
     ok &= check("config は実体と同じ辞書", plain["config"] is arena.config)
+    modfacility.get(app2, pid).config_set("mod_mark", 1)
+    ok &= check("config_set でも辞書を入れ替えない（写しと実体が同じ辞書のまま）",
+                plain["config"] is arena.config and arena.config.get("mod_mark") == 1)
     plain["config"]["current_phase"] = 3                       # ゲームが試合の進みを書く
     plain["config"]["enemy_data"] = {0: {"type": "normal", "rank": 14},   # 実行時は int の鍵
                                      2: {"type": "normal", "rank": 21}}
@@ -1011,6 +1028,13 @@ def main():
     ok &= check("別のノードの入口には繋がない", two not in entrance1.connections)
     ok &= check("控えの置き場所もそのノード",
                 modfacility.get(town, two).placed[:2] == ("1", "20"))
+    lonely = types.SimpleNamespace(id="30", entrance_facility=None,
+                                   facilities={"60": types.SimpleNamespace(
+                                       id="60", name="宿だけ", facility_type="inn", connections=[])})
+    town_area.nodes["30"] = lonely
+    ok &= check("居るノードに繋ぎ先が無ければ、別のノードの入口を答えない",
+                modfacility.hub_of(town_area, node_id="30") == (None, None))
+    del town_area.nodes["30"]
 
     print("ノードが2つある街: 行けないノードに在る建物は移す")
     modfacility.despawn(town, two)
@@ -1022,6 +1046,16 @@ def main():
     ok &= check("プレイヤーの居るノードへ移る",
                 node_b.facilities.get(two) is moved and two not in node_a.facilities)
     ok &= check("前のノードの入口からは外れる", two not in entrance1.connections)
+    modfacility.despawn(town, two)
+    town.player.location = entrance1
+    modfacility.spawn(town, two, "1")
+    modfacility.registry()[two]["placed"] = None          # 控えの置き場所だけ空になった
+    town.player.location = entrance2
+    modfacility.spawn(town, two, "1")
+    ok &= check("控えの置き場所が空でも、行けないノードの古い建物を壊してから建てる",
+                two in node_b.facilities and two not in node_a.facilities
+                and two not in entrance1.connections)
+    moved = node_b.facilities.get(two)                    # 建て直した実体（以下の節が使う）
     ok &= check("控えの置き場所も書き換わる",
                 modfacility.get(town, two).placed[:2] == ("1", "20"))
     ok &= check("名前は写しから戻る",

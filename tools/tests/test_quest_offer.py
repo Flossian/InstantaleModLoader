@@ -949,6 +949,17 @@ check("依頼人の上書きはセーブ側（`save_data_dict['quests']`）に�
 check("雛形（`world_dict['quests']`）には書かない",
       app.world_dict["quests"] == {}, app.world_dict["quests"])
 
+# 40字を超える名前の相手。依頼人の名前を切って「…」付きでセーブに書かない。
+mod_long, ctx_long, app_long = setup(history=history)
+long_client = "古き森の誓いを継ぐ者にして七つの丘を渡り歩いた放浪の吟遊詩人たる長い名のテストNPC"
+app_long.world.characters["62"].name = long_client
+press_generate(ctx_long, app_long)
+saved_long = app_long.save_data_dict["quests"]
+newest_long = max(saved_long, key=int) if saved_long else None
+check("40字を超える名前でも依頼人の名前を切らずに書く",
+      newest_long is not None and saved_long[newest_long].get("client_name") == long_client,
+      saved_long.get(newest_long))
+
 # 生成の後の読み直しで投げた回。生成中の印と待機表示を残さない。
 print("=== 生成の途中で投げても後始末は通る ===")
 mod, ctx, app = setup(history=history)

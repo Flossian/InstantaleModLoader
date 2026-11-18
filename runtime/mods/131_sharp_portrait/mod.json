@@ -10,7 +10,7 @@
     "en": "Before saving a generated picture the game shrinks it, cuts the colours down and adds noise; the face is then cropped out of the shrunken portrait. Each of portraits, enemies and backgrounds can skip those steps through its own setting (all off by default, so the pictures stay as the game makes them). With portraits on, the background-removed drawing becomes the standing portrait as it is and the face is re-cropped from it at 256x256. Background removal can use the anime-oriented model in the game folder, and enemies can combine two models so that bodies do not vanish or turn see-through. Faces are looked for first with YuNet (OpenCV's neural face detector, bundled), which finds most of the faces the game misses or mistakes for clothing; when it misses, the game's own detection runs, then a retry on a preprocessed copy",
     "ja": "ゲームは生成した絵を保存する前に縮め、減色し、雑音を乗せている。顔画像も縮めた立ち絵から切り出している。立ち絵・敵・背景のそれぞれで、設定を入れるとこの工程を通さない（既定はすべて切で、ゲームのままの絵になる）。立ち絵を入れると、背景を抜いた絵をそのまま立ち絵にし、顔もそこから 256x256 で切り直す。背景抜きはゲームのフォルダのアニメ絵向けのモデルも選べ、敵は2つのモデルを合わせて本体が消えたり透けたりしにくくできる。顔はまず YuNet（OpenCV の深層学習の顔検出。同梱）で探す。ゲームが外す顔や服を顔として切る絵の大半で顔を当てる。外したらゲームの検出、それも外れたら前処理した絵で検出をやり直す"
   },
-  "version": "20",
+  "version": "21",
   "author": "R01/Flossian",
   "tool": {
     "entry": "tool.py",

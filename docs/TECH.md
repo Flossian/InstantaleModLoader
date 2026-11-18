@@ -1061,6 +1061,7 @@ MOD 同梱の設定画面（`tool.py`。§3.12）はゲームの中では走ら�
 | 宣言駆動のワールド別設定画面 | `modtool.world_settings_main`（§3.12.1） | 2本が501行バイト同一のコピーだった |
 | 所持金を型を保って書く | `ui.set_gold`（`add_gold` も同じ書き方に直した。§5.1.3） | 3本。ローダの `add_gold` だけが float の所持金を int に変えていた |
 | 位置でもキーワードでも来うる引数の読み書き | `frames.arg` / `replace_arg`（§5.2） | 5本 / 2本。届かなかったときの振る舞いが `327_` と `324_` で違った |
+| 呼び出しの起点が MOD かの判定 | `frames.mod_caller` / `passes_to_orig`（§5.2） | 2本（`214_` / `219_`）。一字一句同じ写しだった |
 | 曲の置き場所と戦闘曲の見分け方 | `sounds`（§5.10） | 4本。docstring が「`106_` と同じ判定」と互いを参照していた |
 | 画像生成の方式の読み取りとフックする先 | `imagegen`（§5.11） | 4本。方式の表と `config.json` の読み取りが1字違わずコピーされ、`131_` だけは cuda に決め打ちで vulkan / cpu では効かなかった |
 | ウィジェット木の辿り方 | `ui.walk_widgets` / `children_of`（§5.1.3） | 5本 / 3本。兄弟を出す順が2通りあり、どちらも実機で確かめた順なので引数で残した |
@@ -1072,7 +1073,8 @@ MOD 同梱の設定画面（`tool.py`。§3.12）はゲームの中では走ら�
 | 設定画面の JSON の読み方 | `modtool.read_json`（§3.12） | 2本（`322_` / `324_` の `tool.py`）と `modtool` の中の4か所 |
 | 施設の選択肢の画面かの判定・いま居る施設の引き当て | `ui.is_facility_screen` / `current_facility` | 6本 / 10本。施設 id を str だけ引き当てる版と int も引き当てる版、見つからないときに None を返す版と id を返す版に分かれていた |
 | 好感度の読み書き（実行時の人物とセーブの素データ） | `npcs.affinity_value` / `affinity_of` / `set_affinity`（GAME.md §2.25） | 9か所 / 2本。float を通す版・int だけの版・int に切り捨てる版、実行時の名簿だけを見る版と素データまで見る版に分かれていた |
-| 窓口が持つ登録の ctx が用済みでないかの確かめ | `instantale_modloader.alive`（`gates.alive` は同じ関数） | 17本（窓口の14モジュールと `gates`・`holdings`・`hudicons`）。新しい窓口を作るたびに写されていた |
+| 窓口が持つ登録の ctx が用済みでないかの確かめ | `instantale_modloader.alive`（`gates.alive` は同じ関数） | 17本（窓口の14モジュールと `gates`・`holdings`・`hudicons`）。新しい窓口を作るたびに写されていた。`llm` の見張りの登録だけは、`superseded` が例外を送出した ctx を用済みとみなしていた |
+| 小さな窓口の登録簿の出し入れ（同じ持ち主の差し替え・生きている登録の並び・`fn` の呼び出しと `errors` の末尾20件） | `instantale_modloader.window_put` / `window_entries` / `window_call` | 7本（`quest_bands` / `quest_claims` / `quest_clients` / `shop_lineup` / `talk_affinity` / `value_limits` / `wanted`）。差し替えた登録を後ろへ回す窓口と元の位置に残す窓口に分かれていたので、後ろへ回すほうに揃えた（注入し直した後の並びが今の世代の登録の順になる） |
 | 宣言の設定の画面の組み立てと、設定の出し入れ・下の欄・控えの頁 | `modtool.SettingsWindow` / `SettingsFooter` / `RecordsPage`（§3.12） | 6本（`331_` / `336_` / `338_` / `342_` / `343_` / `911_` の `tool.py`）。画面に置いていない項目の扱いと、未保存の判定の比べ先が3通りに分かれ、`343_` には閉じるときの未保存の確認が無かった |
 | 閉じるときの未保存の確認 | `modtool.close_window` / `confirm_unsaved`（§3.12） | 6本（`111_` / `322_` / `324_` / `922_` の `tool.py`、`modtool` のワールド別設定画面と `SettingsFooter`） |
 
@@ -1937,7 +1939,7 @@ MOD ごとにアイコンを1つずつ並べると、MOD が増えるほど列�
 | 余白 | 列の左の余白（ゲームの一番左のアイコンの x の比率）を、右にも同じだけ取る |
 | 並び | その間に、ゲームの4つ・MOD 用のボタンの順で、画像の見えている部分どうしの間が等しくなるよう置く。見えている部分は、普段の画像（`normal_image`）のファイルで、暗い背景に溶けない明るさのドットがある列（画像ごとに1回数えて覚える。ホバー時の画像では数えないので、マウスの位置で並びが揺れない）。読めなければボタンの箱どうしの等間隔。大きさはゲームのアイコンに揃える |
 | ウィンドウの大きさ | 大きさは px の固定で位置は比率なので、列の幅が変わるたびに比率を出し直す（列の `width` にバインドする）。バインドするのは1本だけで、前の世代のモジュールのハンドラが残っていれば外してバインドし直す（点の描き直しも同じ。残すと、注入し直した後も前の世代の処理で動く） |
-| 再描画 | HUD の `update_button_texts` / `update_status_texts` の後に並べ直す（1つの世代につきラッパーは1組） |
+| 再描画 | HUD の `update_button_texts` / `update_status_texts` の後に、並べ方の材料（出す行・列の幅・ボタンの顔ぶれと今の `pos_hint`・アイコンの大きさ・通知の点を出すか）が前と変わったときだけ並べ直す（1つの世代につきラッパーは1組）。`update_button_texts` は約0.3秒ごとに来るので、毎回並べ直すと同じ形をなぞるだけになる。`visible(app)` は出し入れを決めるので毎回1度だけ聞く |
 | ボタンの型と画像 | ゲームと同じ `HoverableButton(普段, ホバー時, 押した時)`。画像はローダの `assets\hud_mods*.png`（`tools\draw_hud_icons.py` が描き出す） |
 | ホバー時 | ゲームの HUD は自分の4つにしかホバーの出入りを通知しない（GAME.md §2.34）。ウィンドウのマウスの位置に1本だけバインドし、MOD 用のボタンの `on_hover` を、変わったときだけ呼ぶ。ゲームと同じく、場面（ウィンドウが開いている・処理の最中）では止めない |
 
@@ -2399,6 +2401,7 @@ expressions.name_of(answer.get("expression"))   # 返った値を表情の名前
 | 欠けた表情があれば、描けた分を載せて `complete=False` の印にする。描く側は `complete` が偽の人物を描き直す | 一度の描画の失敗で、その表情が立ち絵を描き直すまで欠けたままにならない。描けた分はそのあいだも見せる |
 | 顔が見つからない人物には差分の無い印を書く | 描く側が、同じ元の絵へ顔の検出と描画の用意を繰り返さない。立ち絵が描き直されれば印が外れて、また描く |
 | 印はローダの `write_json` で書く | 見せる側が返事のたびに `source.json` を開くので、差し替えが Windows で一時的に拒まれる。1回で諦めると、差分は在るのに印が無い |
+| `image` は `source.json` の中身を、ファイルの番号・大きさ・更新時刻が同じあいだ読み直さない（元の絵の SHA-1 も大きさと更新時刻で控える） | 返事のたびにメインスレッドの `show` から呼ばれる。印は隣に書いてから差し替えるので、書き直せばファイルの番号が変わり、更新時刻の刻みが粗くても取り違えない |
 | 宣言は持ち主ごとに1つ。用済みの ctx の宣言は数えない | `talk_affinity` と同じ。見せる MOD を外した後に描き続けない |
 | 見せる処理（`show`）と表情の説明（`GUIDE`）・値の直し方（`name_of`）も窓口に置く | 会話（`347_`）とパーティー会話（`404_`）で同じ判定と説明を使う。片方だけ直して食い違わない |
 | `show` は前に見せたときと更新時刻が違う絵を読み直す | 差分は同じファイル名へ描き直されるので、Kivy の画像のキャッシュが古い差分を出し続ける（`138_` が立ち絵で直しているのと同じ） |
@@ -2844,6 +2847,7 @@ v2.0.0 を作るときは、この表の行を外し、`MIN_API` を上げる。
 | `ui.Screen.prune_stale(buttons, labels)`（マークを失った自前のボタンを外す） | `choices.provide(labels=...)`（連携 API が組み直しの最初に外す） | 働きは前のまま | 2026-10-21 |
 | `modfacility.maintain_buttons(app)` / `modfacility.press(app, index)`（建物の選択肢を自分で組む・押す） | 連携 API が組み直しのたびに組む（§5.8） | 呼べばその場で組み直す・押す | 2026-10-21 |
 | `llm.text_limit(local_chars, path)` / `llm.runs_bundled_llm(path)`（同梱の llama.cpp のときだけ足す文を切る） | 切らずに渡す（同梱のコンテキスト長 16384 に収まる。§5.3「リクエストに足す文の上限」） | 働きは前のまま | 2026-10-31 |
+| `tools\rebalance_saved_bgm.py` の `--worlds`（骨格の `worlds` フォルダを指す引数） | `--saves`（書く先を骨格からセーブの `savedata.json` に替えた） | 同じ親の `saves` フォルダとして読み、WARN を出す。検査は `tools/tests/test_rebalance_saved_bgm.py` | 2026-11-19 |
 
 #### 次の API（v2.0.0）で変えるもの
 
@@ -3071,6 +3075,7 @@ MOD が自分の画面を持つほうが分かりやすい。
 | ウィンドウの記憶 | `modtool.restore_window(root, MOD_DIR, win)` / `save_window(root, MOD_DIR, win)` |
 | 壊れない書き込み | `modtool.write_json(root, path, data)` |
 | 読み込み | `modtool.read_json(path)`（無い・壊れた・辞書でないファイルは空の辞書） |
+| 書く前の確かめ | `modtool.json_unreadable(path)`（在るのに辞書として読めなければ真。`read_json` が空として返した中身を土台に書き戻さないため、真なら書かない） |
 | 配色と書体 | `modtool.setup_theme(win, root)`（戻り値は `gui` モジュール。他も借りられる） |
 | ディスクのセーブ | `modtool.saves_module(mod_dir=MOD_DIR)`（＝`instantale_modloader.saves`） |
 | 曲の試聴 | `modtool.preview_bar(parent, pick)`（▶ 試聴 / ■ 停止の一行。`pick()` が `(絶対パス, 名前)` を返す。鳴らすのは Windows の MCI で、mp3 と wav が鳴る。鳴る曲は1つなので1ウィンドウに1本） |
@@ -3595,6 +3600,8 @@ ui.character_of(app, id) / ui.character_name(app, id, fallback="その仲間")
 frames.text_of(obj, name)  # 文字列を期待する読み方。文字列でなければ None
 frames.short(value, limit) # 表示・ログ用の切り詰め。None は空文字。limit=None なら切らずに整えるだけ（v1.21.0）
 frames.caller()            # 呼び出し元の連鎖。段数では数えない（wrap のラッパーが挟まる）
+frames.mod_caller(start, own_file=None, scan_depth=80)    # 呼び出しの起点が MOD なら、その枠の説明。ゲーム側なら None（`214_` / `219_`）
+frames.passes_to_orig(frame, inner)                       # MOD の枠が受け取った orig を呼んでいる最中か（包みの層か）
 frames.owner_of(code)      # method_1 / execute の持ち主クラスを名指しする
 frames.attr(obj, name)     # hasattr を使わない存在確認
 frames.repr_value(value)   # dict はキーとキーの型を出す

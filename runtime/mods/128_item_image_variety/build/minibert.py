@@ -11,7 +11,19 @@ import unicodedata
 
 import numpy as np
 
-MODEL_DIR = r"C:\Program Files\Epic Games\Instantaleq6Ve7\runtime\models\embedding\models--sentence-transformers--all-MiniLM-L6-v2"
+MODEL_SUBDIR = ("runtime", "models", "embedding", "models--sentence-transformers--all-MiniLM-L6-v2")
+
+
+def default_model_dir():
+    """ゲームの同梱モデルの置き場。ゲームの場所は道具の `find_game_dir`（Epic の導入記録）で探す。"""
+    import os
+    import sys
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), *([os.pardir] * 4)))
+    tools = os.path.join(root, "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    from llm_ctx_probe import find_game_dir
+    return os.path.join(str(find_game_dir(None)), *MODEL_SUBDIR)
 
 
 def load_safetensors(path):
@@ -98,8 +110,9 @@ class Tokenizer:
 
 
 class MiniLM:
-    def __init__(self, model_dir=MODEL_DIR):
+    def __init__(self, model_dir=None):
         import os
+        model_dir = model_dir or default_model_dir()
         self.w = load_safetensors(os.path.join(model_dir, "model.safetensors"))
         self.tok = Tokenizer(os.path.join(model_dir, "vocab.txt"))
         cfg = json.load(open(os.path.join(model_dir, "config.json"), encoding="utf-8"))

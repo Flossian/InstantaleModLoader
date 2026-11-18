@@ -117,6 +117,16 @@ check("見張りは終わる", not clock.ticks, clock.ticks)
 clock.step()
 check("描き直しは重ならない", len(calls) == 3, calls)
 
+print("欄が戻った直後にゲームが新しい状態で描いたとき")
+panel.height = 0
+calls.clear()
+display(game_update, hud, hud, {"敵": 5})          # 畳まれている間の更新（見張りが付く）
+panel.height = 456.3
+display(game_update, hud, hud, {"敵": 6})          # 見張りの tick より前に、ゲームが新しい状態で描いた
+clock.step()
+check("畳まれていた間の古い呼び出しで上書きしない", calls[-1] == {"敵": 6} and len(calls) == 2, calls)
+clock.step()
+
 print("畳まれたまま戦闘が終わったとき")
 panel.height = 0
 calls.clear()

@@ -174,6 +174,7 @@ config.json の欄  --parallel 2 --ctx-size 32768 --cache-reuse 256
 """
 
 import glob
+import hashlib
 import importlib
 import os
 import re
@@ -388,6 +389,11 @@ def set_flag(argv, flag, value):
         out, removed = drop_flag(out, alias)      # 短い綴りは長い綴りへまとめる（1つだけ持つ）
         alias_value = alias_value if removed is None else removed
     for i, item in enumerate(out):
+        if str(item).startswith(flag + "="):
+            # `--parallel=2` の形（設定欄に等号で書かれた）は同じ形のまま値だけ書き換える
+            before = str(item).split("=", 1)[1]
+            out[i] = "{}={}".format(flag, text)
+            return out, before
         if str(item) != flag:
             continue
         if i + 1 < len(out):
@@ -405,7 +411,8 @@ def set_flag(argv, flag, value):
 def has_flag(argv, flag):
     """`flag` が既に argv にあるか。設定欄からの指定を上書きしないための確認。"""
     names = _flag_names(flag)
-    return any(str(item) in names for item in argv)
+    return any(str(item) in names or any(str(item).startswith(name + "=") for name in names)
+               for item in argv)
 
 
 def flag_value(argv, flag):
@@ -454,6 +461,9 @@ def drop_flag(argv, flag):
                 removed = str(argv[i + 1])
                 skip = True
             continue
+        if any(str(item).startswith(name + "=") for name in names):
+            removed = str(item).split("=", 1)[1]      # `--parallel=2` の形（`flag_value` と同じく読む）
+            continue
         out.append(item)
     return out, removed
 
@@ -481,10 +491,15 @@ def _gguf_value(fh, kind):
             fh.seek(count * struct.calcsize(_GGUF_SCALAR[inner]), 1)    # 長い数の並びは読まない
             return ("array", count)
         if inner == 8 and count > 64:
-            for _ in range(count):                                       # 語彙など。長さだけ見て飛ばす
-                (size,) = struct.unpack("<Q", fh.read(8))
-                fh.seek(size, 1)
-            return ("array", count)
+            # 語彙など。値は持たず、件数と中身の印（SHA-1）だけ返す。
+            # 件数だけでは、件数が同じで中身の違う語彙の下書き役を「同じ」と読む（`mtp_matches`）
+            digest = hashlib.sha1()
+            for _ in range(count):
+                raw_size = fh.read(8)
+                (size,) = struct.unpack("<Q", raw_size)
+                digest.update(raw_size)
+                digest.update(fh.read(size))
+            return ("array", count, digest.hexdigest())
         return [_gguf_value(fh, inner) for _ in range(count)]
     raise ValueError("unknown GGUF value type {}".format(kind))
 

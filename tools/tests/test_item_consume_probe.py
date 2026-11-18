@@ -415,6 +415,33 @@ check("a raising use leaves no stale text",
       rows and rows[-1].get("texts") == ["焼き魚を使った。"],
       rows[-1].get("texts") if rows else rows)
 
+# 版5: execute の中で consume_item が呼ばれても、外側の行の texts は空にならない
+module6, ctx6 = fresh_mod(app)
+inner6 = ctx6.hooks["__main__:ItemConsumeManager.consume_item"]
+outer6 = ctx6.hooks["__main__:ItemConsumeManager.execute"]
+
+
+def execute_calls_consume(self, item_instance, usable):
+    return inner6(fake_consume, self, item_instance, usable)
+
+
+outer6(execute_calls_consume, manager, Item("干し肉", player), True)
+rows = read_records()
+inner_rows = [r for r in rows if r.get("phase") == "consume_item"]
+outer_rows = [r for r in rows if r.get("phase") == "consume_execute"]
+check("nested: the inner row has the text",
+      inner_rows and inner_rows[-1].get("texts") == ["干し肉を使った。"],
+      inner_rows[-1].get("texts") if inner_rows else inner_rows)
+check("nested: the outer row keeps the same text",
+      outer_rows and outer_rows[-1].get("texts") == ["干し肉を使った。"],
+      outer_rows[-1].get("texts") if outer_rows else outer_rows)
+hook6 = inner6
+hook6(fake_consume, manager, Item("焼き魚", player), True)
+rows = [r for r in read_records() if r.get("phase") == "consume_item"]
+check("nested: nothing is left over for the next use",
+      rows and rows[-1].get("texts") == ["焼き魚を使った。"],
+      rows[-1].get("texts") if rows else rows)
+
 # ---------------------------------------------------------------- 結果
 print()
 if failures:

@@ -11,9 +11,31 @@ KEEP_OPEN = True
 from instantale_modloader import prices as _prices
 
 
-def sell_prices(say, shop=False):
-    reg = _prices._item_registry()
+def axis_price(say, reg, item, key):
+    """段を乗せる前の額と軸の名前。本体（`prices._axis_prices`）と同じ順で引くが、台帳は書かない。
+
+    式が組めなければ、台帳に控えたゲームの額、それも無ければ品に今ある額（まだ書き換えていない）。
+    """
     base = reg.get("base")
+    if base is not None:
+        try:
+            built = base[1](item)
+        except Exception as exc:
+            built = None
+            say("P base from {!r} failed: {!r}".format(base[0], exc))
+        if isinstance(built, dict):
+            return _prices._price_number(built.get(key)), "base"
+    known = reg["ledger"].get(item)
+    if isinstance(known, dict) and key in (known.get("game") or {}):
+        return _prices._price_number(known["game"][key]), "game"
+    _field, attributes = _prices.read_item(item)
+    return _prices._price_number(attributes.get(key)), "game"
+
+
+def sell_prices(say, shop=False):
+    # 段の回し方は本体（`prices._apply_one`）に揃える。
+    # 額が引けない品に段を呼ばない・段の例外は握って次へ・額は数として読む。
+    reg = _prices._item_registry()
     seen = set()
     for node in ui.walk_widgets(Window):
         item = getattr(node, "item_instance", None)
@@ -21,16 +43,22 @@ def sell_prices(say, shop=False):
                 or (getattr(item, "obtainer", None) is app().player) is shop or id(item) in seen:
             continue
         seen.add(id(item))
-        built = base[1](item) if base else None
         key = "買価" if shop else "売価"
-        price = (built or {}).get(key)
+        price, axis = axis_price(say, reg, item, key)
+        if price is None:
+            say("P {} no {} to start from".format(item.name, key))
+            continue
         start, steps = price, []
-        for owner, fn, _t, _w in reg["adjust"]:
-            got = fn(item, key, price)
-            if got is not None and got != price:
+        for owner, fn, _t, _w in _prices._layers(reg, True):
+            try:
+                got = _prices._price_number(fn(item, key, price))
+            except Exception as exc:
+                steps.append("{}:failed {!r}".format(owner, exc))
+                continue
+            if got is not None and abs(got - price) >= 0.0001:
                 steps.append("{}:{}->{}".format(owner, price, got))
                 price = got
-        say("P {} base {} now {} {}".format(item.name, start, price, steps))
+        say("P {} {} {} now {} {}".format(item.name, axis, start, int(round(price)), steps))
 
 
 def main(say):

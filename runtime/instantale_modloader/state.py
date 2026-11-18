@@ -242,6 +242,19 @@ def playthrough_key(app):
     return world + PLAYTHROUGH_SEP + name if name else world
 
 
+def _playthrough_prefix(world) -> str:
+    """その世界の周回の鍵（`<世界>×<主人公>`）から `world_filename` が作るファイル名の頭。
+
+    ファイル名は鍵全体を均す（`_clean`）ので、頭も同じ作りで求める。
+    世界名だけを `strip` すると、末尾に空白のある世界名（鍵の中では内側なので残る）や、
+    長くて切り詰められた鍵のファイルと食い違い、前の周回の控えを退避し損なう。
+    切り詰めは印（"-" ＋ 8桁）の分を空けた長さまでなので、頭も同じ長さで切る。
+    先頭の空白と使えない文字は均すので、`" W"` と `"W"` の周回は頭が同じになる（世界名としてはまず無い）。
+    """
+    prefix = _UNSAFE.sub("_", str(world).lstrip()) + PLAYTHROUGH_SEP
+    return prefix[:MAX_STEM - 9]
+
+
 def other_playthroughs(state_dir, key) -> list:
     """同じ世界の、別の主人公の周回の控え（`state/` のどの MOD のものでも）。ファイル名の語幹を返す。
 
@@ -256,7 +269,7 @@ def other_playthroughs(state_dir, key) -> list:
     if not sep or not state_dir:
         return []
     own = world_filename(key, "")
-    prefix = _UNSAFE.sub("_", world.strip()) + PLAYTHROUGH_SEP
+    prefix = _playthrough_prefix(world)
     found = set()
     # 新しい主人公を始めたときに退避した前の周回（`retire_world`）も別の周回と数える。
     # 数えないと、退避の後に残った世界名だけの控えが新しい主人公へ移る。
@@ -362,7 +375,7 @@ def _world_files(folder, world, with_world_only):
         names = os.listdir(folder)
     except OSError:
         return []
-    prefix = _UNSAFE.sub("_", world.strip()) + PLAYTHROUGH_SEP
+    prefix = _playthrough_prefix(world)
     stem = world_filename(world, "")
     plain = {stem + suffix for suffix in WORLD_SUFFIXES} if with_world_only else set()
     return sorted(name for name in names

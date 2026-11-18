@@ -472,6 +472,43 @@ def install(env):
         write("cellmate: {} joins the break out (affinity {})".format(npc_id, affinity))
         screen.say(app, ASSIST_TEXT.format(name=mate.get("name")))
 
+    def unenroll(app, npc_id, mate):
+        """冒険者の一覧（`adventurer_npcs`）から外す。`enroll` の逆（実行時の Area と素データの両方）。"""
+        area_id = str(mate.get("area"))
+        lists = [frames.attr(ui.world_areas(app).get(area_id), "adventurer_npcs", None)]
+        for root in (getattr(app, "world_dict", None), getattr(app, "save_data_dict", None)):
+            if not isinstance(root, dict):
+                continue
+            for holder in (root, root.get("world_data")):
+                areas = holder.get("areas") if isinstance(holder, dict) else None
+                entry = areas.get(area_id) if isinstance(areas, dict) else None
+                lists.append(entry.get("adventurer_npcs") if isinstance(entry, dict) else None)
+        for roster in lists:
+            while isinstance(roster, list) and str(npc_id) in roster:
+                roster.remove(str(npc_id))
+
+    def on_abort(app):
+        """決行が始まらなかった（戦闘を起こせなかった・ロードで戦闘の続きに戻らなかった）。
+
+        主人公は牢の中のまま。加勢に入った囚人を仲間から外し、一覧から外してギルドに置き、牢の中に戻す
+        （仲間に入れたまま "breaking" で残すと、年ごとに親しくならず、話す選択肢も出ず、次の決行にも加勢しない）。
+        """
+        found = jailed(app, ("breaking",))
+        if found is None:
+            return
+        npc_id, mate = found
+        if npc_id in [str(member) for member in ui.party_member_ids(app)]:
+            remove = getattr(app, "remove_party_member", None)
+            if callable(remove):
+                remove(npc_id)
+                screen.paint_party(app)
+            else:
+                write("WARN cellmate: the game's party removal is not available")
+        unenroll(app, npc_id, mate)
+        place_at_guild(app, npc_id, mate)
+        set_mate(app, npc_id, status="jailed")
+        write("cellmate: the break out did not start; {} is back in the cell".format(npc_id))
+
     def on_exit(app, how=""):
         """主人公が牢を出た。加勢した囚人は仲間のまま、牢に残った囚人はギルドの冒険者になる。"""
         found = jailed(app, ("jailed", "breaking"))
@@ -505,4 +542,5 @@ def install(env):
     env.on_offer(offer)
     env.on_labels(labels)
     env.on_prison("break", on_break)
+    env.on_prison("abort", on_abort)
     env.on_prison("exit", on_exit)

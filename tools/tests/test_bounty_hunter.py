@@ -410,6 +410,8 @@ def main():
     check("数でない値は重さ0",
           hunt.weight_of(True) == 0 and hunt.weight_of(None) == 0
           and hunt.weight_of("-5") == 0)
+    check("NaN と inf も重さ0（落ちない）",
+          hunt.weight_of(float("nan")) == 0 and hunt.weight_of(float("-inf")) == 0)
     check("今いる土地だけで条件を満たす",
           hunt.should_send(20, 20, 20, 40) and not hunt.should_send(19, 19, 20, 40))
     check("合計だけでも条件を満たす（逃げても追ってくる）",
@@ -640,6 +642,9 @@ def main():
         orig, calls = counting(None)
         instance(orig, app, {"type": "normal"}, "base.png", "pos")
         seen["none"] = calls
+        orig, calls = counting(None)
+        instance(orig, app, {"type": "normal"}, "base.png", "pixel.png", "pos", "neg", difficulty=20)
+        seen["named"] = calls
         return None
 
     ctx.hooks["__main__:BattleStartManager.start_battle"](
@@ -649,6 +654,8 @@ def main():
     check("数が無ければ素のまま作らせる",
           seen["none"][0][0] == (app, {"type": "normal"}, "base.png", "pos"),
           seen["none"])
+    check("難易度が名前で渡されても差し替える",
+          seen["named"][0][1].get("difficulty") == 50, seen["named"])
 
     print("ゲーム自身の衛兵とぶつからない")
     app = App({"0": -30})
@@ -877,6 +884,10 @@ def main():
     wanted.on_hunt_end("listener", None, listen)
     check("全域手配の線を窓口に置く", wanted.hunted_line(app) == (40, "316_bounty_hunter"),
           wanted.hunted_line(app))
+    wanted.declare_hunted("broken_line", None, lambda _app: float("nan"))
+    check("NaN を返す登録は線を置かなかったものとみなす（落ちない）",
+          wanted.hunted_line(app) == (40, "316_bounty_hunter"), wanted.hunted_line(app))
+    wanted.withdraw("broken_line")
     arrive(ctx, app)
     start_of(ctx, app, BattleStartManager.last)
     end(app, "won")

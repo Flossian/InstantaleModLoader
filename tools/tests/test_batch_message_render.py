@@ -660,6 +660,27 @@ def run():
           app.hud.text_display.text == text + "次", app.hud.text_display.text)
     CLOCK.drain()
 
+    # 同じ文の本文が2つ続き、1つ目を打ち切った。終端がその場で2つ目を始める。
+    # 1つ目の鎖の残りが2つ目の鎖に紛れ込むと、文字を二重に書き、終端を二度踏む（空の行列を pop して落ちる）。
+    app = InstantaleApp()
+    same = "何も起きなかった。"
+    app.add_text(same)
+    app.add_text(same)
+    app.process_text_queue(0)
+    CLOCK.tick()
+    CLOCK.tick()
+    WINDOW.click()
+    try:
+        CLOCK.drain()
+        crashed = None
+    except Exception as exc:
+        crashed = exc
+    check("two identical messages in a row survive a skip of the first",
+          crashed is None and app.to_add_text_list == [] and app.is_adding_text is False,
+          (crashed, app.to_add_text_list, app.is_adding_text))
+    check("  → each copy is shown once",
+          app.shown_text.count(same) == 2, app.shown_text)
+
     # 打ち出しの最中に改行を足すゲームでの色。
     # 控えた本文をそのまま探すと、見つかる本文と見つからない本文が混ざり、
     # 白・灰・白・灰と交互になる（実機で出た症状そのもの）。
@@ -766,6 +787,24 @@ def run():
           app.hud.text_display.text
           == "[color=#808080]&bl;一つ目&br;[/color]&bl;二つ目&br;",
           app.hud.text_display.text)
+
+    # 打ち出しの途中で古さの境目（FRESH_SECONDS）を過ぎても、前の本文の色は変えない
+    other = InstantaleApp()
+    other.add_text("先の本文")
+    other.process_text_queue(0)
+    CLOCK.drain()
+    CLOCK.advance(mod.FRESH_SECONDS - 1)       # まだ新しい
+    other.add_text("後から打つ本文")
+    other.process_text_queue(0)
+    CLOCK.tick()
+    CLOCK.tick()
+    CLOCK.advance(2)                            # 打っている途中で境目を過ぎる
+    CLOCK.drain()
+    check("crossing FRESH_SECONDS mid-message does not gray the text before it",
+          other.hud.text_display.markup is False
+          and other.hud.text_display.text == "先の本文後から打つ本文",
+          (other.hud.text_display.markup, other.hud.text_display.text))
+    CLOCK.pending = []
 
     CLOCK.advance(mod.FRESH_SECONDS)
     app.add_text("三つ目")
@@ -1078,6 +1117,21 @@ def run():
           app.hud.text_display.text
           == "[color=#808080]区切り前[/color][color=#808080]\n[/color]区切り後",
           app.hud.text_display.text)
+
+    app = InstantaleApp()
+
+    def broken_immediate(content):
+        raise RuntimeError("immediate failed")
+
+    app.add_text_immediately = broken_immediate
+    app.add_text("落ちる本文")
+    try:
+        app.process_text_queue(0)
+    except Exception:
+        pass
+    CLOCK.drain()
+    check("immediate display failing leaves no black cover on the text",
+          not RECTANGLES or RECTANGLES[-1].size == (0, 0), RECTANGLES[-1].size if RECTANGLES else None)
 
     app = InstantaleApp()
     app.add_text_immediately = None

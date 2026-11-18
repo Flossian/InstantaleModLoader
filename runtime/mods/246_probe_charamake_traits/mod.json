@@ -10,7 +10,7 @@
     "en": "Records where the character creation screen keeps the traits and what the trait window is made of: the trait fields of StoryApp.character_vm before and after generate_trait / delete_trait / on_trait_generate_press / apply_trait_popup_display / apply_character_sheet / load_character_preset / generate_random_character, what TraitPopup receives and its widget tree, the TraitButton index, TraitVM.to_dict and create_trait. Read-only",
     "ja": "キャラ作成画面が特質をどこに持ち、特質の窓が何でできているかを録る。generate_trait / delete_trait / on_trait_generate_press / apply_trait_popup_display / apply_character_sheet / load_character_preset / generate_random_character の前後の StoryApp.character_vm の特質の欄、TraitPopup が受け取るものと部品の木、TraitButton の番号、TraitVM.to_dict、create_trait。読み取りだけでゲームは変えない"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "debug": true,
   "settings": {

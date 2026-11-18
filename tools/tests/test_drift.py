@@ -270,6 +270,15 @@ def test_rewrites(tmp):
     now = [entry for entry in stored["builds"] if entry["build"] == "main_002|200"][0]
     check("控えへ足すのは前回からの差分だけ", now["counts"]["prompt replace|battle_referee"] == [24, 0],
           now["counts"])
+    rewrites = os.path.join(drift.store_dir(out_dir), drift.REWRITES_NAME)
+    with open(rewrites, "rb") as fh:
+        raw = fh.read()
+    with open(rewrites, "wb") as fh:
+        fh.write(b"\xef\xbb\xbf" + raw)              # エディタが BOM を付けて保存した控え
+    check("BOM 付きの控えも読める（ローダの read_json）",
+          drift._read(rewrites).get("builds") == stored["builds"])
+    check("一時ファイルを残さない",
+          [name for name in os.listdir(drift.store_dir(out_dir)) if name.endswith(".tmp")] == [])
 
     # 鍵に要素を足しただけの同じ版は比べない（main_002|200 → main_002|200|abc）。
     fresh("gen_c")

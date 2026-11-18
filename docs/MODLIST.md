@@ -144,7 +144,7 @@
 | [`340_shop_lineup`](MODS.md#340_shop_lineup-宿屋と鍛冶屋でも売買でき店の種類ごとに品揃えの傾向が付く) | 宿屋と鍛冶屋でも売買でき、店の種類ごとに品揃えの傾向が付く | 宿屋と鍛冶屋でも売買でき、店の種類ごとに品揃えの傾向が付く | 1 |  |
 | [`341_shopkeeper_attitude`](MODS.md#341_shopkeeper_attitude-店主の人柄と主人公との関係で売買の値段が変わる) | 店主の人柄と主人公との関係で売買の値段が変わる | 店主の人柄と主人公との関係で売買の値段が変わる | 6 |  |
 | [`342_attack_animations`](MODS.md#342_attack_animations-攻撃の演出が武器と属性に合ったものになる) | 攻撃の演出が武器と属性に合ったものになる | 攻撃の演出が武器と属性に合ったものになる | 1 |  |
-| [`343_stable_diffusion`](MODS.md#343_stable_diffusion-stable-diffusion-の解像度サンプラーモデルプロンプトを差し替える) | Stable Diffusionの各種差し替え | Stable Diffusion の解像度・サンプラー・モデル・プロンプトを差し替える | 62 |  |
+| [`343_stable_diffusion`](MODS.md#343_stable_diffusion-stable-diffusion-の解像度サンプラーモデルプロンプトを差し替える) | Stable Diffusionの各種差し替え | Stable Diffusion の解像度・サンプラー・モデル・プロンプトを差し替える | 63 |  |
 | [`344_quest_return_days`](MODS.md#344_quest_return_days-依頼から帰還すると日付が進む) | 依頼から帰還すると日付が進む | 依頼から帰還すると日付が進む | 2 |  |
 | [`345_date_display`](MODS.md#345_date_display-現在地の下に日付を表示する) | 現在地の下に日付を表示する | 現在地の下に日付を表示する | 3 |  |
 | [`346_player_trait_effects`](MODS.md#346_player_trait_effects-主人公の特質を能力値戦闘店の値段に効かせる) | 主人公の特質を能力値・戦闘・店の値段に効かせる | 主人公の特質を能力値・戦闘・店の値段に効かせる | 8 |  |

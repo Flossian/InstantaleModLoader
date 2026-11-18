@@ -211,6 +211,19 @@ check("止めたと記録する", "stopped the battle track held by the app" in 
 check("例外を残さない（残骸）", ctx.errors == [], ctx.errors)
 shutil.rmtree(work, ignore_errors=True)
 
+print("戦闘の途中のロード")
+from instantale_modloader import gates  # noqa: E402
+gates.reset_all()                       # 偽の ctx を作り直すので、読み込みの関所を立て直させる
+mod, ctx, app, work = setup(PLACE_BUTTONS)
+ctx.hooks["__main__:BattleStartManager.start_battle"](lambda self: None, object())
+ctx.hooks["__main__:InstantaleApp.load_game_new"](lambda self, *a: None, app)   # end_phase を通らずに抜ける
+CLOCK.pending[:] = []
+load_plays_battle_track(ctx, app)
+check("戦闘の途中でロードしても、戦闘外の戦闘曲を見張る（印が立ったまま残らない）",
+      app.music is not None and app.music.src == Area.bgm, getattr(app.music, "src", None))
+check("例外を残さない（ロード）", ctx.errors == [], ctx.errors)
+shutil.rmtree(work, ignore_errors=True)
+
 print()
 if failures:
     print("FAILED: {}".format(", ".join(failures)))

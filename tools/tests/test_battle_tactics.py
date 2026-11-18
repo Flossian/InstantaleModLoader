@@ -336,6 +336,11 @@ check("per-turn: a heal that hits the ceiling stays an int",
       _king.current_hp == 1560 and type(_king.current_hp) is int,
       repr(_king.current_hp))
 check("per-turn: nothing was swallowed", not _ctx.errors, _ctx.errors)
+# 倒れた者（体力0）は継続回復で起き上がらない
+_king.current_hp = 0
+_ctx.hooks["__main__:BattlePhaseManager.reduce_status_turns_and_log"](
+    lambda *a, **k: None, _phase, _king)
+check("per-turn: a heal does not raise the fallen", _king.current_hp == 0, repr(_king.current_hp))
 
 # 仲間の自己強化スキルが、状態異常と与ダメの倍率になる（期限はスキルの duration）。
 _ctx = _fresh()
@@ -440,6 +445,41 @@ check("turn: the hero's blow applies the referee's multiplier to the ratio",
 check("turn: both blows are logged", _log().count("hit: ") == 2, _log())
 check("turn: nothing was swallowed", not _ctx.errors, _ctx.errors)
 
+# 敵の1手が仲間と主人公に当たる。仲間の防御値（get_npc_defense）を読んだ後、
+# 主人公の防具の値が偶然同じでも、主人公の1発を仲間に当てない
+_ctx = _fresh()
+_mei2 = types.SimpleNamespace(name="メイ", experience_level=20, max_hp=1000, current_hp=1000,
+                              status={})
+_hero = types.SimpleNamespace(name="エリス", max_hp=300, current_hp=300, experience_level=20,
+                              status={})
+_app = types.SimpleNamespace(current_enemy_dict={"ゴブリン1": _goblin}, player=_hero,
+                             party_members={"メイ": _mei2}, add_text=lambda text: None)
+_phase = types.SimpleNamespace(app=_app)
+
+
+def _sweep_turn(*args, **kwargs):
+    action = {"instant_damage": [
+        {"target": "メイ", "power": "weak", "multiplier": 1, "category": "physical"},
+        {"target": "エリス", "power": "weak", "multiplier": 1, "category": "physical"}]}
+    _ctx.hooks["__main__:BattlePhaseManager.calculate_battle_effect"](
+        lambda self, a: [{"メイ": 150, "エリス": 137}] + [{}] * 7, _phase, action)
+    damage = _ctx.hooks["scripts.functions:get_instant_damage"]
+    defense = _ctx.hooks["scripts.characters:Character.get_npc_defense"](lambda self: 94, _mei2)
+    damage(lambda a, d: a - d, 150, defense)
+    damage(lambda a, d: a - d, 137, 94)          # 主人公は防具の値で来る
+
+
+_saved_find_app = _ui.find_app
+_ui.find_app = lambda: _app
+try:
+    _ctx.hooks["__main__:BattlePhaseManager.handle_battle_situation"](
+        _sweep_turn, _phase, "ゴブリン1", "敵側", None)
+finally:
+    _ui.find_app = _saved_find_app
+check("turn: a stale defense value does not steer the next blow to its old holder",
+      "-> メイ " in _log() and "-> エリス " in _log(), _log())
+check("turn: the sweep swallowed nothing", not _ctx.errors, _ctx.errors)
+
 # 同名の敵が並ぶ戦闘（`Character.name` に連番は付かない。GAME.md §2.10）。
 # 片方に付いた効果は、もう片方の手番で帳簿ごと消えず、もう片方の与ダメにも掛からない。
 _ctx = _fresh()
@@ -469,6 +509,13 @@ _tick(lambda *a, **k: None, _phase, _guard1)
 check("same-named enemies: the other one's turn does not drop the per-turn effect",
       _guard1.current_hp == 568 - mod.per_turn_amount(568, "weak", 3)
       and _guard2.current_hp == 568, (_guard1.current_hp, _guard2.current_hp))
+# 継続ダメージの「体力1で止める」が、倒れた者を1へ戻さない
+_hp_before = _guard1.current_hp
+_guard1.current_hp = 0
+_tick(lambda *a, **k: None, _phase, _guard1)
+check("per-turn: a damage tick does not raise the fallen to 1",
+      _guard1.current_hp == 0, repr(_guard1.current_hp))
+_guard1.current_hp = _hp_before
 _got = {}
 
 

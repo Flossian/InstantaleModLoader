@@ -139,7 +139,8 @@ def facilitator_replacement(effect):
 
 FACILITATOR_REPLACEMENT = facilitator_replacement("衛兵が現れ、プレイヤーを逮捕しにかかる。")
 
-FACILITATOR_REPLACEMENT_OLD = facilitator_replacement("プレイヤーを逮捕する。")
+# 旧い文面の効果は「逮捕する」と「懲役刑を受ける」の2文。後ろを落とすと逮捕を選ぶ重さが LLM に届かない。
+FACILITATOR_REPLACEMENT_OLD = facilitator_replacement("プレイヤーを逮捕する。懲役刑を受けることになる。")
 
 # 逮捕の目印と、それぞれの置き換え先。
 FACILITATOR_ANCHORS = (

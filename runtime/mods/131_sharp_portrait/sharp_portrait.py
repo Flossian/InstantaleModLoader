@@ -592,6 +592,11 @@ def apply(ctx):
             return orig(image, *args, **kwargs)
         rest = dict(zip(ARG_NAMES, args))
         rest.update(kwargs)
+        # 箱の一辺はゲームが渡した crop_size。切り直し（`extract_and_save_face`）もこの値で戻す
+        try:
+            _LOCAL.crop_size = int(rest.get("crop_size") or faces.FACE_CROP)
+        except (TypeError, ValueError):
+            _LOCAL.crop_size = faces.FACE_CROP
         given = str(rest.get("cascade_path") or faces.CASCADES[0])
         first = os.path.basename(given) == faces.CASCADES[0]
         if FACE_YUNET and first:
@@ -683,8 +688,9 @@ def apply(ctx):
         # 縮めた箱は整数に丸まっている（165 と 166 が混ざる）ので、
         # 四隅を戻すのではなく中心を戻して一辺 256 の正方形に組み直す。
         ratio = image.size[0] / float(getattr(_LOCAL, "detect_width", None) or image.size[0])
-        scale = (faces.FACE_CROP / side) * ratio          # 縮めた座標 → 立ち絵の座標
-        half = int(round(faces.FACE_CROP * ratio / 2.0))
+        crop = getattr(_LOCAL, "crop_size", None) or faces.FACE_CROP   # 検出に渡った一辺
+        scale = (crop / side) * ratio                     # 縮めた座標 → 立ち絵の座標
+        half = int(round(crop * ratio / 2.0))
         cx = int(round((left + right) / 2.0 * scale))
         cy = int(round((top + bottom) / 2.0 * scale))
         box = (cx - half, cy - half, cx + half, cy + half)

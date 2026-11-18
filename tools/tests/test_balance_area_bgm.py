@@ -234,6 +234,33 @@ def main():
               and any("first sight" in line for line in after), after)
         check("  → 別のワールドの既存のエリアを選び直さない",
               not any("write_obfuscated_json_file area 2:" in line for line in after), after)
+
+        # 保存は世界側（world_data.json）とセーブ側（savedata.json）を同じ関数で書き、
+        # セーブ側にだけ依頼のダンジョンが在る（GAME.md §2.28）。先に世界側を見ても、
+        # セーブ側にだけ在る既存のダンジョンを新しいエリアとして選び直さない。
+        def dungeon(name):
+            return {"name": name, "size": "dungeon",
+                    "bgm": "Assets/sounds/musics/dungeons/eerie/a.mp3"}
+
+        skeleton = {"world_data": {"world_name": "二つの辞書の世界"},
+                    "areas": {"1": town("港町")}}
+        progress = {"world_data": {"world_name": "二つの辞書の世界"},
+                    "player_data": {"name": "主人公"},
+                    "areas": {"1": town("港町"), "7": dungeon("古い洞窟")}}
+        before = len(read_log(out_dir))
+        save(lambda *a, **k: None, "world_data.json", skeleton)
+        save(lambda *a, **k: None, "savedata.json", progress)
+        after = read_log(out_dir)[before:]
+        check("世界側とセーブ側はそれぞれ初めて見たものとして扱う",
+              sum("first sight" in line for line in after) == 2, after)
+        check("  → セーブ側にだけ在る既存のダンジョンを選び直さない",
+              not any("write_obfuscated_json_file area 7:" in line for line in after), after)
+        progress["areas"]["8"] = dungeon("新しい洞窟")
+        before = len(read_log(out_dir))
+        save(lambda *a, **k: None, "savedata.json", progress)
+        after = read_log(out_dir)[before:]
+        check("  → セーブ側で後から増えたダンジョンは選び直す",
+              any("write_obfuscated_json_file area 8:" in line for line in after), after)
     finally:
         for attr in (POOL_LOG_ATTR, SEEN_ATTR):
             if hasattr(sys, attr):

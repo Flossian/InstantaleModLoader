@@ -235,11 +235,28 @@ def apply(ctx):
             if frames.attr(app, "is_popup_window_opened", False) is True:
                 reasons.append("popup open")
         # 他の欄に打っている最中なら奪わない。
-        for other in all_inputs(hud):
+        for other in all_inputs(hud) + window_inputs(hud):
             if other is not widget and frames.attr(other, "focus", False) is True:
                 reasons.append("another input has focus")
                 break
         return reasons
+
+    def window_inputs(hud):
+        """窓に直付けされた入力欄（Popup / ModalView の中。`115_` の `tree` と同じ範囲）。
+
+        自由入力の欄を選ぶ候補（`all_inputs`）には入れない。「他の欄へ打っている最中か」の判定にだけ使う。
+        見ないと、`is_popup_window_opened` が立たない窓の入力欄へ移ったフォーカスを奪い返す。
+        """
+        found = []
+        try:
+            from kivy.core.window import Window
+            for child in ui.children_of(Window):
+                if child is hud:
+                    continue
+                found.extend(widget for widget in ui.walk_widgets(child, MAX_DEPTH) if is_input(widget))
+        except Exception:
+            pass                # 窓を持たない環境（オフライン検証）
+        return found
 
     def standing_down(now):
         """取り合いの歯止め。手を引いている最中か。"""

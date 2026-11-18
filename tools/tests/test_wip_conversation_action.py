@@ -279,6 +279,13 @@ check("書けない型は作り直す", got is not frozen and got.action.call_fr
 check("作り直しても項目は写る", got.action.statement == "ふむ" and got.action.accepted is True
       and got.content_violation is False)
 
+as_dict = {"content_violation": False,
+           "action": {"type": "casual_response", "accepted": None, "statement": "おう",
+                      "call_free_action": False}}
+got = ctx.hooks[FAC](lambda *a, **k: as_dict, messages("<渡す>"))
+check("辞書の応答は辞書のまま書き換える", got is as_dict
+      and got["action"]["call_free_action"] is True, got)
+
 saved = llm.create_structure
 llm.create_structure = lambda ctx, name, fields, label="llm": None
 ctx2 = fresh()

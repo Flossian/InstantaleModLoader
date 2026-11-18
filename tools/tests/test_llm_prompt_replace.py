@@ -1129,6 +1129,15 @@ def test_tally_left_over(tmp):
     check("残り: 同じプロセスの控えは前の起動として書かない",
           read_log(out_dir).count("前の起動") == 1, read_log(out_dir))
 
+    # 落ちた前の起動と同じ pid が回ってきても（Windows は pid を使い回す）、前の起動の控えとして読む。
+    with open(pending, "w", encoding="utf-8") as fh:
+        json.dump({"pid": os.getpid(), "proc": "{}-前の起動".format(os.getpid()),
+                   "at": "2026-09-30T11:00:00",
+                   "rows": [["REPLACE", "前", "後", 3, 15]]}, fh, ensure_ascii=False)
+    arm("#tab:t\n前=>後\n", out_dir, roll=lambda d: 0)
+    check("残り: pid が同じでもプロセスの印が違えば前の起動の控えとして書く",
+          read_log(out_dir).count("前の起動") == 2 and "3回" in read_log(out_dir), read_log(out_dir)[-300:])
+
 
 def test_log_repeats(tmp):
     """同じ文面の行を繰り返さないこと（版8）。

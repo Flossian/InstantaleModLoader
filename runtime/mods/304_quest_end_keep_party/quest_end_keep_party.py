@@ -173,7 +173,8 @@ def apply(ctx):
         """引き留めた相手を控える。既に控えてあれば時刻だけ延ばす。"""
         entry = state["kept"].get(member_id)
         if entry is None:
-            entry = {"name": ui.character_name(app, member_id), "source": source}
+            # 照合（`keep_text_for`）に使うので切らない。切ると長い名前が離脱の文に入らず、照合が外れる
+            entry = {"name": ui.character_name(app, member_id, limit=None), "source": source}
             state["kept"][member_id] = entry
             write("{!r} ({}) stays in the party ― {} {}".format(
                 entry["name"], member_id, source, reason))

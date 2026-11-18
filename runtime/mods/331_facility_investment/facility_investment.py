@@ -72,7 +72,7 @@ import datetime
 import sys
 
 from instantale_modloader import (choices, durations, frames, holdings, llm, loads, modfacility,
-                                  modnpc, prices, ui)
+                                  modnpc, npcs, prices, ui)
 from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, playthrough_key,
                                         playthrough_key_of_dict)
 
@@ -694,11 +694,8 @@ def apply(ctx):
         if not isinstance(player, dict):
             relationship["player"] = dict(catalog.keeper_relationship()["player"])
             return True
-        try:
-            affinity = int(player.get("affinity") or 0)
-        except (TypeError, ValueError):
-            affinity = 0
-        if affinity >= catalog.KEEPER_AFFINITY:
+        affinity = npcs.affinity_value(handle)  # float の扱いをほかの MOD と揃える（読めなければ None）
+        if affinity is not None and affinity >= catalog.KEEPER_AFFINITY:
             return False
         player["affinity"] = catalog.KEEPER_AFFINITY
         tags = player.get("relationship")

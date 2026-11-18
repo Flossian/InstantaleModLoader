@@ -243,6 +243,21 @@ clear(app, ctx)
 check("数えていなくても最大 HP の不足を使う（49 -> 29）", app.player.physical_integrity == 29,
       app.player.physical_integrity)
 
+app, module, ctx = setup(party=False)
+app.player.current_hp = 500          # 依頼の前から体力が半分（前の戦闘の傷）
+start(app, ctx, 72)
+clear(app, ctx)                      # 依頼の間は1度も被弾していない
+check("受けた時点から数えた依頼では、依頼の前から減っていた体力を被弾に数えない（49 -> 33）",
+      app.player.physical_integrity == 33, app.player.physical_integrity)
+
+app, module, ctx = setup(party=False)
+saved_values = []
+app.save_game = lambda: saved_values.append(app.player.physical_integrity)
+start(app, ctx, 72)
+clear(app, ctx)
+check("決め直したスタミナをゲーム自身の保存でセーブへ載せる",
+      saved_values and saved_values[-1] == app.player.physical_integrity, saved_values)
+
 print("同行者を切る")
 app, module, ctx = setup(PARTY_TOO=False)
 start(app, ctx, 72)

@@ -275,6 +275,7 @@ def stage_tones(event_or_kind):
 
     困り事の3段は bad1・bad2・bad3（黄・橙・赤）、良い出来事は good1・good2 の後に calm。
     1つだけの bad は一番重い色（バブルの崩壊）。
+    `kinds\\` で bad を4段以上書いたときは、余った前の段を bad1 に揃える（窓の色の表は3色まで）。
     """
     kind = kind_of(event_or_kind)
     tones = kind["tones"] if kind else ("bad",) * STAGES[-1]
@@ -285,7 +286,7 @@ def stage_tones(event_or_kind):
             continue
         total = tones.count(tone)
         rank = sum(1 for prev in out if prev.startswith(tone)) + 1
-        out.append("{}{}".format(tone, 3 - total + rank if tone == "bad" else min(rank, 2)))
+        out.append("{}{}".format(tone, max(1, 3 - total + rank) if tone == "bad" else min(rank, 2)))
     return tuple(out)
 
 
@@ -566,22 +567,28 @@ def days_to_next(event, day, stage_days, settle_days):
     return max(0, int(limit) - since)
 
 
-def rewind(bucket, day):
+def rewind(bucket, day, rest_days=None, roll_gap=None):
     """古いセーブを読んだ（暦が控えより前）。その日より後に起きたことを控えから外す。直したら True。
 
     その日より後に始まった出来事は消す。その日より後に終わった出来事は進行中へ戻す（段はそのまま）。
+    それらの街の休み（`cooldown`）は、残った終わった出来事から `rest_days` で組み直す（無ければ消す）。
+    次の抽選の日は、ふつうは今日から `roll_gap`（間隔＋ずらしの幅）より先にならないので、
+    それより先なら後の日に引いた分として消す（次の日送りで今日から数え直す）。
     """
     if day is None:
         return False
     changed = False
     keep = []
+    touched = set()
     for event in events_of(bucket):
         started = _int(event.get("started"), 0)
         if started > day:
+            touched.add(str(event.get("area")))
             changed = True
             continue
         ended = _int(event.get("ended"))
         if ended is not None and ended > day:
+            touched.add(str(event.get("area")))
             event["status"], event["ended"], event["end_by"] = ACTIVE, None, None
             event.pop("end_by_name", None)
             # 終わったときの知らせの印も戻す（もう一度収まったら、着いたときにまた知らせる）
@@ -594,8 +601,22 @@ def rewind(bucket, day):
             changed = True
         keep.append(event)
     bucket["events"] = keep
+    cooldown = bucket.get("cooldown")
+    if touched and isinstance(cooldown, dict):
+        for area in touched:
+            if area not in cooldown:
+                continue
+            ends = [_int(event.get("ended")) for event in keep
+                    if event.get("status") == ENDED and str(event.get("area")) == area]
+            ends = [end for end in ends if end is not None]
+            if ends and rest_days is not None:
+                cooldown[area] = max(ends) + max(0, int(rest_days))
+            else:
+                cooldown.pop(area)
+            changed = True
     next_day = _int(bucket.get("next_roll_day"))
-    if next_day is not None and next_day > day + 3650:
+    gap = 3650 if roll_gap is None else max(1, int(roll_gap))
+    if next_day is not None and next_day > day + gap:
         bucket["next_roll_day"] = None
         changed = True
     return changed

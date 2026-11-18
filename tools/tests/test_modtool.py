@@ -53,6 +53,14 @@ DECLS = {
              "label": {"ja": "大きく", "en": "Loud"}, "note": {"ja": "", "en": ""}},
 }
 
+#: 未指定（`None`）を許す項目。既定が None のものと、既定に値があるもの。
+NULL_DECLS = {
+    "CHANCE": {"type": "float", "default": None, "allow_null": True, "min": 0.0, "max": 1.0,
+               "label": {"ja": "確率", "en": "Chance"}, "note": {"ja": "", "en": ""}},
+    "SCALE": {"type": "float", "default": 0.8, "allow_null": True,
+              "label": {"ja": "倍率", "en": "Scale"}, "note": {"ja": "", "en": ""}},
+}
+
 tmp = tempfile.mkdtemp(prefix="modtool_")
 try:
     # 偽の配布フォルダ。`runtime/instantale_modloader` は本物を指す（symlink は使わない）。
@@ -62,8 +70,10 @@ try:
     mods = os.path.join(root, "runtime", "mods")
     first = os.path.join(mods, "801_first_mod")
     second = os.path.join(mods, "802_second_mod")
+    third = os.path.join(mods, "803_null_mod")
     for path, decls, extra in ((first, DECLS, {}),
-                               (second, {"COUNT": DECLS["COUNT"]}, {})):
+                               (second, {"COUNT": DECLS["COUNT"]}, {}),
+                               (third, NULL_DECLS, {})):
         os.makedirs(path)
         manifest = {"name": {"ja": "偽の MOD", "en": "Fake"},
                     "description": {"ja": "検査用", "en": "for tests"},
@@ -154,6 +164,45 @@ try:
     check("文字列から型どおりに戻る", values == {"COUNT": 5, "LOUD": False} and not bad, (values, bad))
     values, bad = modtool.coerce_all(first, {"COUNT": "11", "LOUD": True}, root)
     check("上限の外は通さない", values is None and bad, bad)
+    values, bad = modtool.coerce_all(first, {"COUNT": "", "LOUD": True}, root)
+    check("未指定を許さない項目の空欄は今までどおり断る", values is None and bad, bad)
+
+    print("[未指定（allow_null）]")
+    # 入力欄は未指定を空欄で表す。空欄を None に戻し、None を "None" と出さない。
+    values, bad = modtool.coerce_all(third, {"CHANCE": "", "SCALE": " "}, root)
+    check("**空欄は未指定（None）として通る**",
+          values == {"CHANCE": None, "SCALE": None} and not bad, (values, bad))
+    values, bad = modtool.coerce_all(third, {"CHANCE": "0.5", "SCALE": "0.8"}, root)
+    check("値を入れれば型どおり", values == {"CHANCE": 0.5, "SCALE": 0.8} and not bad, (values, bad))
+    check("**比べる形でも None は空欄**（開いただけで未保存にならない）",
+          modtool.as_shown({"CHANCE": None, "SCALE": 0.8}) == {"CHANCE": "", "SCALE": "0.8"}
+          and modtool.shown_values({"CHANCE": None}) == {"CHANCE": ""},
+          (modtool.as_shown({"CHANCE": None}), modtool.shown_values({"CHANCE": None})))
+    null_decls = modtool.decls(third, root)
+    world_file = os.path.join(tmp, "world_null.json")
+    base = {"CHANCE": None, "SCALE": 0.8}
+    for record, want, label in (
+            ({"CHANCE": 0.5}, {"CHANCE": 0.5, "SCALE": 0.8}, "**既定が None の項目でも控えの値を読む**"),
+            ({"SCALE": None}, {"CHANCE": None, "SCALE": None}, "控えに明示した null（この世界だけ未指定）を読む"),
+            ({"CHANCE": "0.5", "SCALE": "x"}, base, "型の違う値は今までどおり捨てる"),
+            ({"CHANCE": True}, base, "真偽値は数として通さない")):
+        with io.open(world_file, "w", encoding="utf-8") as fh:
+            json.dump(record, fh)
+        got = modtool.load_world_settings(null_decls, world_file, base)
+        check(label, got == want, (record, got))
+    import tkinter as tk
+    form_root = tk.Tk()
+    form_root.withdraw()            # 欄に入る文字だけ見る。窓は出さない
+    try:
+        form = modtool.Form(tk.Frame(form_root), null_decls, lambda _key: "")
+        form.set({"CHANCE": None, "SCALE": 0.8})
+        check("**入力欄に \"None\" を出さない**（空欄にする）",
+              form.get() == {"CHANCE": "", "SCALE": "0.8"}, form.get())
+        values, bad = modtool.coerce_all(third, form.get(), root)
+        check("欄に入れた値をそのまま保存できる",
+              values == {"CHANCE": None, "SCALE": 0.8} and not bad, (values, bad))
+    finally:
+        form_root.destroy()
 
     print("[書き込み]")
     target = os.path.join(tmp, "deep", "written.json")

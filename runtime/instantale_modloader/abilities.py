@@ -126,9 +126,9 @@ SHEET_NAMES = {"筋力": "strength", "器用": "dexterity", "耐久": "constitut
                "知力": "intelligence", "判断": "wisdom", "魅力": "charisma"}
 SHEET_PREFIX = {"str": "strength", "dex": "dexterity", "con": "constitution",
                 "int": "intelligence", "wis": "wisdom", "cha": "charisma"}
-#: `名前: 数` の行。前に書き足した `(+4)` は剥がしてから書き直す（開き直しで重ならない）。
+#: `名前: 数` の行。前に書き足した `(+4)` / `(+2.5)` は剥がしてから書き直す（開き直しで重ならない）。
 SHEET_LINE = re.compile(r"^(?P<head>\s*(?P<name>[^:：]+?)\s*[:：]\s*)(?P<value>-?\d+(?:\.\d+)?)"
-                        r"(?:\([+-]\d+\))?(?P<tail>.*)$")
+                        r"(?:\([+-]\d+(?:\.\d+)?\))?(?P<tail>.*)$")
 
 STATE_DIRNAME = "abilities"
 STORE_ATTR = "_instantale_abilities_store"
@@ -426,15 +426,54 @@ def scores(app, holder):
     return _boosted(base, bonus(app, holder))
 
 
+class _Boosted(dict):
+    """補正を足した能力値の写し。**書き込みは素の辞書へ通す**。
+
+    場面の中で読ませるのは写しなので、ゲームがその場で書き換えると（負傷の `update_ability_scores` は
+    `original_ability_scores` から計算し直して書く。GAME.md §2.19.1）写しに入って消える。
+    書かれた値は素の値として素の辞書へ入れ、写しの側はそれに補正を足し直す。
+    """
+
+    def __init__(self, raw, amounts):
+        dict.__init__(self, raw)
+        self._raw = raw
+        self._amounts = dict(amounts)
+        for key in list(self):
+            dict.__setitem__(self, key, self._with_bonus(key, dict.__getitem__(self, key)))
+
+    def _with_bonus(self, key, value):
+        current = _number(value)
+        amount = self._amounts.get(key)
+        if current is None or not amount:
+            return value
+        return max(1, current + amount)
+
+    def __setitem__(self, key, value):
+        self._raw[key] = value
+        dict.__setitem__(self, key, self._with_bonus(key, value))
+
+    def __delitem__(self, key):
+        self._raw.pop(key, None)
+        dict.__delitem__(self, key)
+
+    def update(self, *args, **kwargs):
+        for key, value in dict(*args, **kwargs).items():
+            self[key] = value
+
+    def setdefault(self, key, default=None):
+        if key not in self:
+            self[key] = default
+        return dict.__getitem__(self, key)
+
+    def pop(self, key, *default):
+        self._raw.pop(key, None)
+        return dict.pop(self, key, *default)
+
+
 def _boosted(base, amounts):
     if not amounts:
         return dict(base)
-    found = dict(base)
-    for key, value in amounts.items():
-        current = _number(found.get(key))
-        if current is not None:
-            found[key] = max(1, current + value)
-    return found
+    return _Boosted(base, amounts)
 
 
 def level_rate(holder):
@@ -627,7 +666,7 @@ def sheet_text(text, amounts):
 
 
 def _sheet_holder(app, hud):
-    """人物欄に出ている相手（名前で引く。`121_` と同じ）。"""
+    """人物欄に出ている相手（名前で引く。`121_` と同じ）。名前があって引けなければ None（補正を足さない）。"""
     player = frames.attr(app, "player", None)
     data = frames.attr(hud, "visible_character_sheet_data", None)
     name = data.get("name") if isinstance(data, dict) else None
@@ -638,7 +677,7 @@ def _sheet_holder(app, hud):
         for character in characters.values():
             if getattr(character, "name", None) == name:
                 return character
-    return player
+    return None
 
 
 def _sheet(orig, self, *args, **kwargs):

@@ -419,6 +419,36 @@ def run():
           and "功績その6" not in body)
     check("done は総数まで進む", read_cache(module)["3"]["done"] == 8)
 
+    print("待ちの後に書き足された功績")
+    # 待ちを抜けた後、頼み文の功績を読むまでの間にゲームが1件書き足した回。
+    # 頼み文に入れた件数を控えるので、次の照合で同じ1件を二度織り込まない
+    clear_cache(module)
+    app = make_app()
+    module, ctx = fresh_mod(app, replies=(REPLY, REPLY))
+    saved_area_record = ui_module.area_record
+    calls = []
+
+    def late_area_record(player, area_id):
+        calls.append(area_id)
+        if len(calls) == 2:
+            player.area_history["3"]["achievements"].append("霧の底で古い祠を見つけた")
+        return saved_area_record(player, area_id)
+
+    ui_module.area_record = late_area_record
+    try:
+        ctx.hooks[QUEST_END](lambda self: None, clear_quest(app))
+        drain(module)
+    finally:
+        ui_module.area_record = saved_area_record
+    check("書き足された1件も頼み文に載り、done はその件数まで進む",
+          "古い祠" in prompt_of(module) and read_cache(module)["3"]["done"] == 2,
+          read_cache(module))
+    asked = len(module.llm.asked)
+    ctx.hooks[ELAPSE](lambda self, days: None, app, 1)
+    drain(module)
+    check("次の照合で同じ功績を織り込み直さない", len(module.llm.asked) == asked,
+          len(module.llm.asked))
+
     print("ロード時の当て直し")
     app2 = make_app()                      # 素の文面で作り直した世界
     module, ctx = fresh_mod(app2)          # 控えは前の検査のものが残っている

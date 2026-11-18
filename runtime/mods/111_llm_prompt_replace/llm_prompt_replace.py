@@ -138,6 +138,7 @@ import re
 import sys
 import threading
 import time
+import uuid
 
 from instantale_modloader import ui
 from instantale_modloader.llm import wrap_outgoing
@@ -664,6 +665,7 @@ def save_pending(store):
         rows = [[kind, source, target, count, store["total"].get((kind, source, target), count)]
                 for (kind, source, target), count in pending.items()]
         data = {"pid": os.getpid(),
+                "proc": process_token(),
                 "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
                 "rows": rows}
         tmp = path + ".tmp"
@@ -676,17 +678,38 @@ def save_pending(store):
             pass
 
 
+PROCESS_TOKEN_ATTR = "_instantale_prompt_replace_process"
+
+
+def process_token():
+    """このプロセスの印。`sys` に置くので注入し直しをまたいで同じ値、起動し直せば別の値。
+
+    PID は Windows が使い回すので、落ちた前の起動と同じ PID が回ってくると、前の起動の控えを
+    今のプロセスのものと取り違えて読まず、最初の保存で上書きして消していた。
+    """
+    token = getattr(sys, PROCESS_TOKEN_ATTR, None)
+    if not isinstance(token, str):
+        token = "{}-{}".format(os.getpid(), uuid.uuid4().hex)
+        setattr(sys, PROCESS_TOKEN_ATTR, token)
+    return token
+
+
 def take_leftover(path):
     """前の起動が書けずに残した回数を `[TALLY]` の1行にして返し、控えを消す。無ければ None。
 
     今のプロセスが残した控え（遅れて当て直す boot）は、手元の回数と同じなので読まない。
+    見分けはプロセスの印（`process_token`）。印の無い前の版の控えは PID で見る。
     """
     try:
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
     except (OSError, ValueError):
         return None
-    if not isinstance(data, dict) or data.get("pid") == os.getpid():
+    if not isinstance(data, dict):
+        return None
+    mine = (data.get("proc") == process_token() if "proc" in data
+            else data.get("pid") == os.getpid())
+    if mine:
         return None
     try:
         os.remove(path)

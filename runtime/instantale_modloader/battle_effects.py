@@ -1051,7 +1051,8 @@ def _reduce_status_turns_and_log(orig, self, *args, **kwargs):
     # ゲームの減算より先に動かす（`319_` の継続ダメージと同じ置き方。期限0で消える前の手も削る）
     try:
         character = frames.arg(args, kwargs, "character", 0)
-        if character is not None and _marked(character, "venom"):
+        # 試し打ち（計測 MOD が数だけ測る呼び出し）では体力を動かさない（再生と同じ）
+        if character is not None and not _dry_run() and _marked(character, "venom"):
             hp = _num(frames.attr(character, "current_hp", None))
             amount = venom_tick(_num(frames.attr(character, "max_hp", None)))
             if hp is not None and hp > 1 and amount:

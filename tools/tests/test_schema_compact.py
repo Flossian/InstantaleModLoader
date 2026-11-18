@@ -121,6 +121,14 @@ reply = {"properties": {
 check("reply line", mod.type_line("Reply", reply)
       == 'Reply = {"type": "casual_response"|"recruitment_response", "accepted": boolean|null, '
          '"statement": string, "call_free_action": boolean}', mod.type_line("Reply", reply))
+kind_enum = {"enum": ["shop", "inn"], "title": "Kind", "type": "string"}
+check("項目を持たない型（Enum）も選べる値ごと1行にする",
+      mod.type_line("Kind", kind_enum) == 'Kind = "shop"|"inn"', mod.type_line("Kind", kind_enum))
+text = mod.compact_schema_text({"$defs": {"Kind": kind_enum},
+                                "properties": {"kind": {"$ref": "#/$defs/Kind"}}, "required": ["kind"]})
+check("  → 参照する欄の型の名前と、その値の行が両方残る",
+      'Kind = "shop"|"inn"' in text and '"kind": Kind' in text, text)
+check("何の型でもない辞書は今までどおり落とす", mod.type_line("Empty", {"title": "Empty"}) is None)
 
 if failures:
     raise SystemExit("FAILED: {}".format(failures))

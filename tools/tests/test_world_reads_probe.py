@@ -215,6 +215,14 @@ try:
     check("窓の外では記録しない", len(store["paths"]["Facility.__init__"]) == n)
     check("窓の外の書き込みも元の辞書に通る",
           original["areas"]["8"]["nodes"]["32"]["facilities"]["228"]["config"].get("after") == 1)
+    replaced = {"areas": {}, "npcs": {}}
+
+    def load_new_world(self, owner):
+        app.world_dict = replaced                 # 窓の間にゲームが世界の辞書を差し替えた
+
+    thook(load_new_world, Facility(), "98")
+    check("窓の間に差し替わった世界の辞書は元へ戻さない", app.__dict__["world_dict"] is replaced)
+    app.world_dict = original
     module.TRACE_PATHS = False
     calls = []
     thook(lambda self, o: calls.append(type(app.world_dict).__name__), Facility(), "98")

@@ -466,6 +466,14 @@ finally:
     mod.REPLACE_LEAVE_TEXT = True
 
 app, ctx, clock, mod, areas = setup()
+long_name = "古き森の誓いを継ぐ者にして七つの丘を渡り歩いた放浪の吟遊詩人たる長い名のテスト仲間"
+app.world.characters["71"].name = long_name
+QuestEndManager(app).method_1("71")
+check("40字を超える名前でも離脱の文を差し替える",
+      not any("離脱" in text for text in app.texts)
+      and any(long_name in text and "パーティに残り" in text for text in app.texts), app.texts)
+
+app, ctx, clock, mod, areas = setup()
 QuestEndManager(app).method_1("71")
 app.add_text("旅人はパーティから離脱した。")
 check("引き留めていない相手の離脱文は書き換えない",

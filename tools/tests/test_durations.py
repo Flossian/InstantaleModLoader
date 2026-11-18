@@ -347,6 +347,18 @@ def main():
     ok &= check("馬車の 7 日も直す",
                 durations.correct_travel_records(types.SimpleNamespace(player=short, party={})) == 1
                 and "馬車を利用し、7日間の時間をかけて" in short.life_log[0]["content"], short.life_log)
+    long_walk = types.SimpleNamespace(life_log=[record(walk, 0, 390)])
+    long_app = types.SimpleNamespace(player=long_walk, party={})
+    for _ in range(3):
+        durations.correct_travel_records(long_app)
+    ok &= check("直した後の 13ヵ月を次の見直しで積み増さない",
+                "徒歩で、13ヵ月の時間をかけて" in long_walk.life_log[0]["content"], long_walk.life_log)
+    long_coach = types.SimpleNamespace(life_log=[record(coach, 0, 114)])
+    long_coach_app = types.SimpleNamespace(player=long_coach, party={})
+    for _ in range(3):
+        durations.correct_travel_records(long_coach_app)
+    ok &= check("直した後の 114日間を次の見直しで積み増さない",
+                "馬車を利用し、114日間の時間をかけて" in long_coach.life_log[0]["content"], long_coach.life_log)
     same_day = types.SimpleNamespace(life_log=[record(walk, 5, 5)])
     ok &= check("範囲が 0 日なら書き換えない（まだ進んでいない）",
                 durations.correct_travel_records(types.SimpleNamespace(player=same_day, party={})) == 0)

@@ -45,6 +45,7 @@ import json
 import os
 import zipfile
 
+from instantale_modloader import npcs as _npcs
 from instantale_modloader import saves as _saves
 from instantale_modloader.saves import data_dir, worlds_dir
 
@@ -238,8 +239,8 @@ def affinity_of(npc) -> tuple:
     player = ((npc or {}).get("relationship") or {}).get("player")
     if not isinstance(player, dict):
         return None, ""
-    value = player.get("affinity")
-    affinity = value if isinstance(value, int) and not isinstance(value, bool) else None
+    # 数の読み方はローダの1か所（float は切り捨てた int。読めないものとして扱わない）
+    affinity = _npcs.affinity_value(npc)
     text = player.get("affinity_text")
     if isinstance(text, list):
         text = next((item for item in text if isinstance(item, str)), "")
@@ -319,7 +320,7 @@ def name_exists(npcs, name: str, except_id: str = None) -> bool:
 # ---- エクスポート（zip の書き）------------------------------------------
 
 def export(npc, world: str, npc_id: str, dest: str, extra=None,
-           base: str = "") -> str:
+           base: str = "", image_world: str = "") -> str:
     r"""NPC 1体を zip に書き出す。書けたら書いた場所を返す。
 
     | 引数 | |
@@ -328,6 +329,7 @@ def export(npc, world: str, npc_id: str, dest: str, extra=None,
     | `world` / `npc_id` | 出どころ。取り込み側の表示と記録に使う |
     | `dest` | 書き出す先の zip |
     | `extra` | `carryover.json` に入れる追加分（記憶）。無ければ書かない |
+    | `image_world` | 立ち絵を探す `worlds\` の下のフォルダ名。省けば `world`（世界名とフォルダ名が食い違う世界では道具がフォルダ名を渡す） |
 
     `display_position_in_battle` だけ落とす（エディタの `SanitizeForExport` と
     同じ。戦闘中の並び順は持ち越さない）。
@@ -351,7 +353,7 @@ def export(npc, world: str, npc_id: str, dest: str, extra=None,
     tmp = dest + ".writing"
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(NPC_ENTRY, json.dumps(wrapper, ensure_ascii=False, indent=1))
-        for path, arcname in image_files(world, record, base):
+        for path, arcname in image_files(image_world or world, record, base):
             zf.write(path, IMAGE_PREFIX + arcname)
         if extra:
             zf.writestr(EXTRA_ENTRY,
@@ -365,7 +367,8 @@ def image_files(world: str, npc, base: str = "") -> list:
 
     場所は `image_dir_of`（`image_src` の絶対パス由来）。
     """
-    folder = image_dir_of(npc, world, base) if isinstance(npc, dict) else         characters_dir(world, npc or "", base)
+    folder = (image_dir_of(npc, world, base) if isinstance(npc, dict)
+              else characters_dir(world, npc or "", base))
     if not folder:
         return []
     try:
@@ -529,12 +532,26 @@ def pending_path(state_dir: str) -> str:
     return os.path.join(carryover_dir(state_dir), PENDING_NAME)
 
 
-def load_pending(state_dir: str) -> list:
-    """予約の一覧。読めなければ空。"""
+class PendingUnreadable(Exception):
+    """予約のファイルは在るのに読めない（一時的なロック・破損）。"""
+
+
+def load_pending(state_dir: str, strict: bool = False) -> list:
+    """予約の一覧。無ければ空。
+
+    在るのに読めないときは、`strict` なら `PendingUnreadable` を投げ、そうでなければ空。
+    読んだ一覧を次の書き込みの土台にする側は `strict=True` で読み、読めなければ書かない
+    （空に倒した一覧へ1行足して書くと、待機中の予約も置いた記録も全部消える）。
+    BOM 付きの UTF-8 も読む（手で直してエディタが BOM を付けて保存した控え）。
+    """
     try:
-        with io.open(pending_path(state_dir), encoding="utf-8") as fh:
+        with io.open(pending_path(state_dir), encoding="utf-8-sig") as fh:
             data = json.load(fh)
-    except (OSError, ValueError):
+    except FileNotFoundError:
+        return []
+    except (OSError, ValueError) as exc:
+        if strict:
+            raise PendingUnreadable("{}: {}".format(type(exc).__name__, exc))
         return []
     if isinstance(data, dict):
         data = data.get("pending")

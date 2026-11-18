@@ -124,8 +124,12 @@ def make_holder(app, name, write=None):
     return holder
 
 
-def fill(app, holder, records, write=None):
+def fill(app, holder, records, write=None, skipped=None):
     """控えから持ち主の持ち物を作り直す。作れた件数を返す。
+
+    作り直せない1件（ゲームの更新や MOD の入れ替えで組めなくなった品）は飛ばして先へ進む。
+    `skipped` に辞書を渡すと、飛ばした控えを `{鍵: 辞書}` で入れる（閉じるときに控えへ戻すため）。
+    渡さなければ従来どおり例外を投げ直す。
 
     作るのはゲーム自身の `generate_item_from_dict`。
     戻り値で受け取れる実装と、持ち物へ直に入れる実装（`generate_item_in_shopping`
@@ -140,10 +144,14 @@ def fill(app, holder, records, write=None):
             continue
         try:
             item = app.generate_item_from_dict(dict(data), str(key), holder)
-        except Exception:
+        except Exception as exc:
             if write:
-                write("WARN storage: cannot rebuild {} {}".format(key, describe(data)))
-            raise
+                write("WARN storage: cannot rebuild {} {} ({}: {})".format(
+                    key, describe(data), type(exc).__name__, exc))
+            if skipped is None:
+                raise
+            skipped[str(key)] = data
+            continue
         if item is not None and inv.get(str(key)) is not item:
             inv[str(key)] = item
         if str(key) in inv:

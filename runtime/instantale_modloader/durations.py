@@ -43,8 +43,9 @@ from . import arrivals, gates, log_exc
 
 #: 街を移ったときにゲームが `life_log` へ書く記録（exe の定数。徒歩 3ヵ月・馬車 14日間に決め打ち）。
 #: 日数の範囲（`day_start` / `day_end`）は実際の値で入るので、文だけを範囲に合わせる（VERIFICATION.md §3.126）。
+#: 直近の記録は街を移るたびに見直すので、直した後の「13ヵ月」「114日間」の中に当たらないよう、数字の直後は除く。
 TRAVEL_RECORD_MARK = "<旅の記録>"
-TRAVEL_RECORD_DAYS = re.compile(r"(3ヵ月|14日間)(の時間をかけて)")
+TRAVEL_RECORD_DAYS = re.compile(r"(?<!\d)(3ヵ月|14日間)(の時間をかけて)")
 TRAVEL_RECORD_LOOK_BACK = 4
 TRAVEL_RECORD_OWNER = "(durations)"
 

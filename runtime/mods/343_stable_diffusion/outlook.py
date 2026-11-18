@@ -364,7 +364,8 @@ def method_cells(kind, values, custom, family, game_model):
         return "使えない", "使えない"
     head = SIZE_HEADS[kind]
     text = lambda key: str(values.get(key) or "").strip()
-    redraw = method_model(text("IMG2IMG_{}_PRESET".format(head)), custom, game_model)         if values.get("IMG2IMG") else "切"
+    redraw = (method_model(text("IMG2IMG_{}_PRESET".format(head)), custom, game_model)
+              if values.get("IMG2IMG") else "切")
     if not values.get("CHAIN"):
         return redraw, "切"
     chain = "{} → {}".format(method_model(text("CHAIN_{}_FIRST".format(head)), custom, game_model),

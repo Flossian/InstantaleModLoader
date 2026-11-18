@@ -6,7 +6,7 @@
   読む   … 実行時の人物（属性）でもセーブの素データ（辞書）でも読む。真偽値と数でないものは None
   float  … None にせず、0 の方向に切り捨てた int で返す。セーブの値は書き換えない
   下がる … 実行時の名簿に居ない相手はセーブの素データから読む
-  書く   … 実行時の人物と素データの全部に書く。`player` の欄が無い所には書かない
+  書く   … 実行時の人物と素データの全部に書く。`player` の欄が無い所には書かない（実行時の人物だけ欄が無ければ素データの欄を写す）
 """
 import copy
 import os
@@ -95,6 +95,15 @@ def main():
     app = make_app({"6": raw("6", with_row=False)}, {})
     ok &= check("player の欄が無い所には書かない", npcs.set_affinity(app, "6", 20) == 0
                 and app.save_data_dict["npcs"]["6"]["relationship"] == {})
+
+    bare = types.SimpleNamespace(relationship={})
+    app = make_app({"5": raw("5", 30)}, {"5": bare})
+    npcs.set_affinity(app, "5", 35)
+    row = bare.relationship.get("player") or {}
+    ok &= check("実行時の人物に欄が無ければ素データの欄を丸ごと写して書く（保存で消えない）",
+                row.get("affinity") == 35 and row.get("affinity_text") == "警戒心がある")
+    ok &= check("  → 写した欄は素データと別の辞書",
+                row is not app.save_data_dict["npcs"]["5"]["relationship"]["player"])
 
     print("PASS" if ok else "FAIL")
     return 0 if ok else 1

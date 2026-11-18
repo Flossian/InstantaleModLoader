@@ -525,3 +525,89 @@ def describe_instance(obj, attrs=("id", "npc_id", "name", "npc_name", "character
         # キーの型が問題になるバグがあったため。
         bits.append("{}={!r}({})".format(name, value, type(value).__name__))
     return " ".join(bits)
+
+
+# ローダ本体のフォルダ（`mod_caller` が飛ばす枠）。区切りを末尾に付けて隣のフォルダを巻き込まない。
+_LOADER_DIR = os.path.join(
+    os.path.normcase(os.path.dirname(os.path.abspath(__file__))).lower(), "")
+
+
+def _norm_path(filename) -> str:
+    try:
+        return os.path.normcase(os.path.abspath(filename)).lower()
+    except Exception:
+        return ""
+
+
+def passes_to_orig(frame, inner) -> bool:
+    """MOD の枠 `frame` が、受け取った `orig` を呼んでいる最中か（＝通過用の包みの層か）。
+
+    `@ctx.wrap` の層は第1引数の `orig` を呼んで内側へ降りる。
+    1つ内側の枠 `inner` がその `orig` の実行中なら、この枠は包みの層で、呼び出しの起点ではない。
+    包みの本体からゲームの別の関数を呼んでいる最中なら `inner` は `orig` ではないので、起点として数える。
+
+    `214_` と `219_` に一字一句同じ写しがあった。
+    """
+    if inner is None:
+        return False
+    code = frame.f_code
+    if code.co_argcount < 1:
+        return False
+    try:
+        orig = frame.f_locals.get(code.co_varnames[0])
+    except Exception:
+        return False
+    if orig is None or not callable(orig):
+        return False
+    original = getattr(orig, "__original__", None)
+    if inner.f_code is getattr(orig, "__code__", None):
+        if original is None:
+            return True
+        # ローダの素の包み（`patch.py` の `wrapper` / `guarded`）は同じ種類どうしでコードを共有するので、
+        # 包んでいる中身（`old`）まで同じかで見分ける。
+        try:
+            return inner.f_locals.get("old") is original
+        except Exception:
+            return False
+    # ゲームの関数は Nuitka で組まれていて、関数とフレームのコードが同じ物とは限らない。
+    # 包みが素の関数を直に呼んでいる形だけ、名前で見る。
+    return (original is None and not is_ours(inner.f_code.co_filename)
+            and getattr(orig, "__name__", None) == inner.f_code.co_name)
+
+
+def mod_caller(start, own_file=None, scan_depth: int = 80):
+    """呼び出しの起点が MOD なら、その枠の説明を返す。ゲーム側なら None。
+
+    `start`（フレーム）から外へ辿る。
+    `own_file`（呼んだ側のファイル。`_norm_path` と同じ均し方の文字列）・ローダ本体・
+    `orig` を呼んでいる最中の包みの層は飛ばす。
+    最も内側から続くゲーム側の枠を抜けた直後の1枚が MOD の枠なら、その MOD が呼んだとみなす。
+    ゲーム側の枠より先に MOD の枠に当たったとき（MOD が直に呼んだ）も MOD とみなす。
+    抜けた直後の1枚がゲーム側なら、ゲームの呼び出しとみなして止める。
+    辿るのは `scan_depth` 枚まで。
+
+    `214_` と `219_` に一字一句同じ写しがあった。
+    """
+    inner = None
+    frame = start
+    in_game = left_game = False
+    depth = 0
+    while frame is not None and depth < scan_depth:
+        depth += 1
+        code = frame.f_code
+        name = code.co_filename
+        if is_ours(name):
+            path = _norm_path(name)
+            if (path == own_file or path.startswith(_LOADER_DIR)
+                    or passes_to_orig(frame, inner)):
+                if in_game:
+                    left_game = True
+            else:
+                return "{} ({}:{})".format(code.co_name, name, frame.f_lineno)
+        else:
+            if left_game:
+                return None
+            in_game = True
+        inner = frame
+        frame = frame.f_back
+    return None

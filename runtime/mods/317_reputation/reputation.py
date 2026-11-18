@@ -1515,28 +1515,31 @@ def apply(ctx):
         """
         if not IN_NARRATION:
             return orig(*args, **kwargs)
+        # 組み直すのは引数だけ。orig は try の外で1回だけ呼ぶ（orig 自身の例外で推論を二度走らせない）。
+        call_args, call_kwargs = args, kwargs
         try:
             app = ui.find_app()
             addition = block_for(app) if app is not None else ""
             if addition:
                 if isinstance(kwargs.get("player_profile"), str):
-                    merged = dict(kwargs)
-                    merged["player_profile"] = (
+                    call_kwargs = dict(kwargs)
+                    call_kwargs["player_profile"] = (
                         kwargs["player_profile"].rstrip() + "\n\n" + addition)
                     note_inject("narrator: player_profile に{}字を足した".format(
                         len(addition)))
-                    return orig(*args, **merged)
-                if len(args) >= 3 and isinstance(args[2], str):
+                elif len(args) >= 3 and isinstance(args[2], str):
                     merged = list(args)
                     merged[2] = args[2].rstrip() + "\n\n" + addition
+                    call_args = tuple(merged)
                     note_inject("narrator: player_profile に{}字を足した".format(
                         len(addition)))
-                    return orig(*merged, **kwargs)
-                note_inject("narrator: player_profile を見つけられない"
-                            "（位置引数{}個）".format(len(args)))
+                else:
+                    note_inject("narrator: player_profile を見つけられない"
+                                "（位置引数{}個）".format(len(args)))
         except Exception:
             ctx.log_exc("reputation: 情景描写への注入に失敗した")
-        return orig(*args, **kwargs)
+            call_args, call_kwargs = args, kwargs
+        return orig(*call_args, **call_kwargs)
 
     # -------------------------------------------------- 素材を照合する場面（3つ）
     # 着いた後・日数が進んだ後はローダの窓口（`arrivals` / `durations.on_days`。TECH.md §3.3.21）
@@ -1695,9 +1698,15 @@ def apply(ctx):
                      "exclude_nickname": clean_epithet(record.get(KEY_NICKNAME, "")),
                      "keep_reputation": record.get("fingerprint") == mark,
                      "why": "評判の画面の呼び名の再生成"})
+        # 印は積む前に付ける。積んだ後だと、ワーカーが先に終えて外した後に付き、
+        # 「再生成中」が残る。積めなかったら、前から付いていた印（待っている同じ土地の仕事）は残す
+        busy = state.setdefault("rerolling_lands", set())
+        was_busy = str(area_id) in busy
+        busy.add(str(area_id))
         if not enqueue(shot):
+            if not was_busy:
+                busy.discard(str(area_id))
             return False
-        state.setdefault("rerolling_lands", set()).add(str(area_id))
         return True
 
     hudicons.add(ctx, ICON_KEY, toggle_view, images=icon_images, order=ICON_ORDER,

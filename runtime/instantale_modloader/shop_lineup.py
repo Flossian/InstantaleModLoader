@@ -24,7 +24,7 @@ MOD どうしは import しない（TECH.md §3.2.3）。
 """
 import sys
 
-from . import alive
+from . import window_call, window_entries, window_put
 
 STORE_ATTR = "_instantale_shop_lineup"
 
@@ -39,9 +39,7 @@ def _store():
 
 def provide(owner, ctx, fn, exclude=None):
     """`owner` の傾向を決める関数を登録する。同じ持ち主の登録は差し替える（新しい登録として後ろへ）。"""
-    providers = _store()["providers"]
-    providers.pop(str(owner), None)
-    providers[str(owner)] = (ctx, fn, exclude)
+    window_put(_store()["providers"], owner, (ctx, fn, exclude))
 
 
 def withdraw(owner):
@@ -52,9 +50,9 @@ def withdraw(owner):
 def lineup_of(facility):
     """`(傾向の一文, 決めた持ち主)`。誰も口を出さなければ `(None, None)`。"""
     store = _store()
-    for owner, entry in reversed(list(store["providers"].items())):
-        ctx, fn, _exclude = _parts(entry)
-        got = _ask(store, owner, ctx, fn, facility)
+    for owner, entry in window_entries(store["providers"], newest_first=True):
+        _ctx, fn, _exclude = _parts(entry)
+        got = _ask(store, owner, fn, facility)
         if isinstance(got, str) and got.strip():
             return got.strip(), owner
     return None, None
@@ -63,11 +61,11 @@ def lineup_of(facility):
 def excluded_of(facility):
     """その店に並べない品の種類（小文字の `item_type` の tuple）。誰も口を出さなければ空。"""
     store = _store()
-    for owner, entry in reversed(list(store["providers"].items())):
-        ctx, _fn, exclude = _parts(entry)
+    for owner, entry in window_entries(store["providers"], newest_first=True):
+        _ctx, _fn, exclude = _parts(entry)
         if exclude is None:
             continue
-        got = _ask(store, owner, ctx, exclude, facility)
+        got = _ask(store, owner, exclude, facility)
         if isinstance(got, (list, tuple, set, frozenset)):
             return tuple(sorted(str(kind).strip().lower() for kind in got if kind))
     return ()
@@ -78,21 +76,17 @@ def _parts(entry):
     return (tuple(entry) + (None, None, None))[:3]
 
 
-def _ask(store, owner, ctx, fn, facility):
-    """登録の関数を1つ呼ぶ。用済みの ctx・投げた関数は None（投げたら `errors` に残す）。"""
-    if not callable(fn) or not alive(ctx):
+def _ask(store, owner, fn, facility):
+    """登録の関数を1つ呼ぶ（用済みの ctx は `window_entries` が除いてある）。呼べない・投げた関数は None。"""
+    if not callable(fn):
         return None
-    try:
-        return fn(facility)
-    except Exception as exc:
-        store["errors"].append("{}: {}: {}".format(owner, type(exc).__name__, exc))
-        del store["errors"][:-20]
-        return None
+    _ok, got = window_call(store, owner, fn, facility)
+    return got
 
 
 def owners():
     """いま聞いている登録の持ち主。ログ用。"""
-    return [owner for owner, entry in _store()["providers"].items() if alive(entry[0])]
+    return [owner for owner, _entry in window_entries(_store()["providers"])]
 
 
 def reset():

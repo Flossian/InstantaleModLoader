@@ -411,6 +411,12 @@ def main():
         check("記録に切り直しが出る",
               any("顔: " in line and "に戻して切り直した" in line for line in log_lines(module, ctx)),
               log_lines(module, ctx))
+        module._LOCAL.crop_size = 192                  # 検出に crop_size=192 が渡った回
+        small = tuple(int(round(v * 330 / 512.0)) for v in (140, 0, 332, 192))
+        extract(game_extract, standing, small, out_path)
+        check("検出に渡った crop_size の一辺で切り直す（定数の 256 を使わない）",
+              PIL.Image.open(out_path).size == (192, 192), PIL.Image.open(out_path).size)
+        module._LOCAL.crop_size = None
 
     print("設定で切る")
     module, ctx, pixel, reduce_ = fresh_mod(SHARP_PORTRAIT=False)
