@@ -186,8 +186,8 @@ with tempfile.TemporaryDirectory() as temp:
 
 # ------------------------------------------------------------------ 切り出しの位置
 try:
-    import cv2  # noqa: F401
-    import numpy  # noqa: F401
+    import cv2
+    importlib.import_module("numpy")
 except ImportError:
     cv2 = None
 if Image is not None and cv2 is not None:
