@@ -1630,6 +1630,13 @@ def apply(ctx):
                 elif "progress" in kwargs:
                     kwargs = dict(kwargs, progress=recording)
             result = orig(*args, **kwargs)
+            # 一括生成の開始で読み込まれたモジュールに、ローダが当て直している最中のことがある（ゲームの仕事が
+            # 無いと、その間に終わる）。最新の描き足しと表情を見せる MOD の宣言が揃うまで待つ（VERIFICATION.md §3.132）
+            waiting = time.time()
+            if not booted():
+                write("一括生成: {:.0f} 秒待っても当て直しが終わらなかったので、このまま描き足す".format(REAPPLY_WAIT))
+            elif time.time() - waiting >= 0.1:
+                write("一括生成: ローダの当て直しが終わるのを {:.1f} 秒待ってから描き足す".format(time.time() - waiting))
             backfill = BULK.get("backfill")
             if callable(backfill):
                 stop_event = frames.arg(args, kwargs, "stop_event", 2)
@@ -1656,6 +1663,15 @@ def apply(ctx):
     def stopped(stop_event):
         is_set = frames.attr(stop_event, "is_set", None)
         return callable(is_set) and bool(is_set())
+
+    def booted():
+        """ローダの当て直しが走っていれば終わるまで待つ（`ctx.wait_booted`）。待てた・走っていなければ真。"""
+        wait_booted = getattr(ctx, "wait_booted", None)
+        return not callable(wait_booted) or bool(wait_booted(REAPPLY_WAIT))
+
+    def show_wanted():
+        """表情を見せる MOD が居るか。当て直しの最中は宣言が一時的に消えるので、終わるのを待ってから数え直す。"""
+        return expressions.wanted() or (booted() and expressions.wanted())
 
     def portrait_route():
         """差分だけ描くときの、立ち絵を描いたのと同じ組（ゲームの通常の生成と同じ選び方）。
@@ -1916,9 +1932,10 @@ def apply(ctx):
         reported = False
         live.refresh()
         face_conf = faces.config(live.faces, face_models) if live.faces["existing"] else None
-        if (face_conf is None and not expressions.wanted()) or stopped(stop_event):
-            if handed and not stopped(stop_event):
-                write("一括生成: 前の世代から受け取ったが、表情を見せる MOD の宣言が無いので描かない")
+        if (face_conf is None and not show_wanted()) or stopped(stop_event):
+            if not stopped(stop_event):
+                write("一括生成: {}表情を見せる MOD の宣言が無いので、表情差分を描かない".format(
+                    "前の世代から受け取ったが、" if handed else ""))
             return reported
         # 表情を見せる MOD が居た回か（当て直しの間は宣言が数えられないので、受け渡しの前に戻るのを待つ）
         wanted_at_start = expressions.wanted()
@@ -1973,7 +1990,7 @@ def apply(ctx):
 
         def variant_todo():
             # 描けない設定なら数えない（ゲームの用意へ進んで、全員を「描けなかった」と数えないため）
-            if not expressions.wanted() or variant_blocked() is not None:
+            if not show_wanted() or variant_blocked() is not None:
                 return []
             wanted = variants.wanted_rows(live.variants)
             return [(name, folder) for name, folder in people if variants.needs_variants(folder, expressions, wanted)]

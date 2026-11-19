@@ -762,6 +762,24 @@ class ModContext:
         """
         return _superseded(self.generation)
 
+    def wait_booted(self, timeout: float = 60.0) -> bool:
+        """当て直し（boot）が走っていれば、終わるまで待つ。走っていない・待てたら True、時間切れなら False。
+
+        ゲームの裏のスレッドで、ほかの MOD の宣言や登録を数える前に呼ぶ（TECH.md §3.1.3）。
+        当て直しの最中は、適用順で後ろの MOD がまだ apply し直しておらず、宣言が一時的に無く見える。
+        boot の錠を取ってすぐ放すだけで、錠を持ったまま戻らない。
+        メインスレッドからは待たない（画面が止まる）。そのときは走っていなければ True、走っていれば False。
+        boot の中（apply の中）から呼べば、同じスレッドが錠を持っているので待たずに True。
+        """
+        lock = _boot_lock()
+        if threading.current_thread() is threading.main_thread():
+            got = lock.acquire(blocking=False)
+        else:
+            got = lock.acquire(timeout=max(0.0, float(timeout)))
+        if got:
+            lock.release()
+        return bool(got)
+
     def refresh_status(self) -> str | None:
         """`out/status.json` を今の台帳で書き直す。書けたらそのパス。
 

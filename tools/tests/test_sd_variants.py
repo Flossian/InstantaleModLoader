@@ -376,6 +376,9 @@ else:
         def superseded(self):
             return False
 
+        def wait_booted(self, timeout=60.0):
+            return ml.ModContext.wait_booted(self, timeout)
+
         def on_ready(self, fn, key=None, delay=0):
             return True
 
@@ -757,13 +760,62 @@ else:
             mine(os.path.join(wdir, "world_data.json"), threading.Event(), None, handed=True)
             expressions.want("347_conversation_expressions", Owner())
             check("受け取った回に宣言が無ければ、描かない理由をログに残す",
-                  any("宣言が無いので描かない" in n for n in ctx.notes[seen_notes:]), ctx.notes[seen_notes:])
+                  any("宣言が無いので、表情差分を描かない" in n for n in ctx.notes[seen_notes:]), ctx.notes[seen_notes:])
             loaded["calls"] = 1
             VarSD.calls[:] = []
             expressions.clear(ana)
             ctx.hooks[MOD.BULK_TARGET](game_bulk, object(), os.path.join(wdir, "world_data.json"),
                                        threading.Event(), [].append)
             check("用意されていれば、ゲームの用意は呼ばない", loaded["calls"] == 1 and len(VarSD.calls) == 4, loaded)
+
+            # 一括生成がローダの当て直しの最中に終わった回（ゲームの仕事が無い。VERIFICATION.md §3.132）。
+            # 当て直しは boot の錠を持って走り、347 の宣言はその終わり近くで戻る。一括生成はゲームの裏のスレッドで走る
+            boot_lock = ml._boot_lock()
+            booting = threading.Event()
+
+            def boot_then_declare():
+                with boot_lock:
+                    booting.set()
+                    time.sleep(0.5)
+                    expressions.want("347_conversation_expressions", Owner())
+
+            def bulk_in_thread():
+                worker = threading.Thread(target=lambda: ctx.hooks[MOD.BULK_TARGET](
+                    game_bulk, object(), os.path.join(wdir, "world_data.json"), threading.Event(), [].append))
+                worker.start()
+                worker.join(30)
+            expressions.withdraw("347_conversation_expressions")
+            expressions.clear(ana)
+            VarSD.calls[:] = []
+            seen_notes = len(ctx.notes)
+            booter = threading.Thread(target=boot_then_declare)
+            booter.start()
+            booting.wait(5)
+            check("当て直しの最中は、メインスレッドからは待たずに偽を返す（画面を止めない）",
+                  ctx.wait_booted(5) is False)
+            bulk_in_thread()
+            booter.join(5)
+            check("一括生成が当て直しの最中に終わっても、当て直しが終わるのを待って差分を描く",
+                  len(VarSD.calls) == 4 and expressions.image(ana, "smile") is not None
+                  and not any("宣言が無い" in n for n in ctx.notes[seen_notes:])
+                  and any("当て直しが終わるのを" in n for n in ctx.notes[seen_notes:]), (VarSD.calls, ctx.notes[seen_notes:]))
+            check("当て直しが終われば、メインスレッドからも真", ctx.wait_booted(5) is True)
+            expressions.withdraw("347_conversation_expressions")
+            expressions.clear(ana)
+            VarSD.calls[:] = []
+            seen_notes = len(ctx.notes)
+            began = time.time()
+            bulk_in_thread()
+            expressions.want("347_conversation_expressions", Owner())
+            check("表情を見せる MOD が居なければ、待たずに描かない理由をログに残す",
+                  VarSD.calls == [] and time.time() - began < 5
+                  and any("宣言が無いので、表情差分を描かない" in n for n in ctx.notes[seen_notes:]),
+                  ctx.notes[seen_notes:])
+            loaded["calls"] = 1
+            VarSD.calls[:] = []
+            expressions.clear(ana)
+            ctx.hooks[MOD.BULK_TARGET](game_bulk, object(), os.path.join(wdir, "world_data.json"),
+                                       threading.Event(), [].append)
 
             class AIManager(object):              # 題の画面から始めた回: まだ組まれていないので、ゲームと同じ引数で組む
                 built = []
