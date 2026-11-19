@@ -230,6 +230,17 @@ try:
     on_prompt({"site": "conversation_facilitator", "npc_id": "8", "args": {"response_prompt_instruction": ""}})
     send(orig, "conversation_facilitator", [], Response)
     check("同じ型は作り直さない", passed[-1] is widened and len(made) == 1, len(made))
+    # 表情の一覧が変わった（343 の追加の表情）: 説明の1行と型の説明を今の一覧で組み直す
+    expressions.define("343_stable_diffusion", Ctx(tempfile.mkdtemp(prefix="conversation_expressions_def_")),
+                       lambda: [{"name": "smile"}, {"name": "shy", "meaning": "照れる"}])
+    args = {"response_prompt_instruction": ""}
+    on_prompt({"site": "conversation_facilitator", "npc_id": "8", "args": args})
+    send(orig, "conversation_facilitator", [], Response)
+    check("表情の一覧が変われば、説明の1行は今の一覧で組み、型も説明ごと作り直す",
+          "shy=照れる" in args["response_prompt_instruction"] and "angry" not in args["response_prompt_instruction"]
+          and len(made) == 2 and passed[-1] is not widened
+          and "shy=照れる" in made[-1][2]["expression"][1].description, (args, len(made)))
+    expressions.undefine("343_stable_diffusion")
     passed[:] = []
     send(orig, "conversation_facilitator", [], Response)
     check("控えは1回の送信で使い切る（プロンプトを組まなかった返事は型を替えず、前の相手の表情にしない）",

@@ -7,6 +7,8 @@
   置き場 … 立ち絵のフォルダの下の expressions\\<表情>.png
   印     … 描き終えたら元の絵の印を書く。今の元の絵と合う差分だけ image が返す
   消す   … clear は表情の一覧のファイルと印だけ消し、ほかの物は残す
+  一覧   … 描く側が登録した一覧（追加の表情）に、説明・名前の見分けが従う
+  判定   … plan が描く・名前を変える・消す表情を、印のタグと id から見分ける
 """
 import io
 import os
@@ -194,6 +196,83 @@ def main():
         check("部品がほかの人物の絵を出しているときは触らない",
               expressions.show(other_widget, folder, "smile", portrait) is None
               and other_widget.source.endswith(os.path.join("someone", "reduced_color_image.png")))
+
+        print("一覧の登録")
+        check("登録が無ければ基本表情の5つ", expressions.names() == expressions.NAMES
+              and expressions.guide() == expressions.GUIDE)
+        owner = Ctx()
+        rows = [{"name": "smile"}, {"name": "shy", "meaning": "照れる\n恥ずかしがる"}, {"name": "shy"},
+                {"name": "Bad Name"}, {"name": "neutral"}, "x"]
+        expressions.define("343", owner, lambda: rows)
+        check("登録した一覧（ふだんの顔が先頭。重なり・使えない名前は飛ばし、基本表情の意味は窓口のもの）",
+              expressions.entries() == [("neutral", "普段の顔"), ("smile", "笑う・機嫌がよい"),
+                                        ("shy", "照れる 恥ずかしがる")], expressions.entries())
+        check("説明・名前の見分け・値の直し方は今の一覧に従う（外した基本表情は選ばせない）",
+              "shy=照れる 恥ずかしがる" in expressions.guide() and "angry" not in expressions.guide()
+              and expressions.name_of(" SHY ") == "shy" and expressions.name_of("angry") == "neutral"
+              and expressions.variants() == ("smile", "shy"), expressions.guide())
+        rows.append({"name": "pout", "meaning": "むくれる"})
+        check("一覧は使うたびに読む（設定を変えれば次の会話から効く）", "pout" in expressions.names())
+        expressions.define("343", owner, lambda: 1 / 0)
+        check("読み出しに失敗したら基本表情の5つ", expressions.names() == expressions.NAMES)
+        expressions.define("343", owner, lambda: rows)
+        owner.old = True
+        check("用済みの ctx の登録は使わない", expressions.names() == expressions.NAMES)
+        expressions.define("343", Ctx(), lambda: rows)
+        expressions.undefine("343")
+        check("undefine で下げる", expressions.names() == expressions.NAMES)
+        check("追加の表情の名前の形", expressions.is_valid_name("shy_2") and not expressions.is_valid_name("smile")
+              and not expressions.is_valid_name("2shy") and not expressions.is_valid_name("Shy")
+              and not expressions.is_valid_name("a" * 33))
+
+        print("描き直しの判定")
+        person = expressions.character_dir("世界", "ボブ", base)
+        write(os.path.join(person, expressions.SOURCE), b"bob portrait")
+        now = expressions.stamp(person)
+        tags = {"smile": "s1", "angry": "a1", "shy": "blush"}
+        wanted = [{"name": "smile", "tags": "s1"}, {"name": "angry", "tags": "a1"},
+                  {"name": "shy", "tags": "blush", "id": "x1"}]
+        check("印が無ければ None（全部描く）", expressions.plan(person, wanted) is None
+              and expressions.needs(person, wanted))
+        for e in ("smile", "angry", "shy"):
+            write(expressions.variant_path(person, e), e.encode())
+        expressions.seal(person, now, names=["smile", "angry", "shy"], tags=tags, ids={"shy": "x1"})
+        got = expressions.plan(person, wanted)
+        check("描き揃っていれば何もしない",
+              got == {"keep": ["smile", "angry", "shy"], "draw": [], "rename": [], "remove": [], "stale": {}}
+              and not expressions.needs(person, wanted), got)
+        got = expressions.plan(person, [dict(wanted[0], tags="s2")] + wanted[1:]
+                               + [{"name": "pout", "tags": "pout", "id": "x2"}])
+        check("タグの変わった表情と足した表情を描く（変わった表情は前のタグを返す）",
+              got["draw"] == ["smile", "pout"] and got["stale"] == {"smile": "s1"}
+              and got["keep"] == ["angry", "shy"], got)
+        got = expressions.plan(person, wanted[:2] + [{"name": "blushing", "tags": "blush", "id": "x1"}])
+        check("id が同じで名前だけ変わった表情はファイル名を変える", got["rename"] == [("shy", "blushing")]
+              and got["draw"] == [] and got["remove"] == [], got)
+        got = expressions.plan(person, wanted[:2] + [{"name": "blushing", "tags": "red face", "id": "x1"}])
+        check("名前とタグが両方変わったら描く（前の名前は消す）", got["rename"] == [] and got["draw"] == ["blushing"]
+              and got["remove"] == ["shy"], got)
+        got = expressions.plan(person, wanted[:1])
+        check("一覧から外した表情は消す", got["remove"] == ["angry", "shy"] and got["draw"] == [], got)
+        moved = expressions.tidy(person, expressions.plan(
+            person, wanted[:1] + [{"name": "blushing", "tags": "blush", "id": "x1"}]))
+        check("tidy は名前を変え、外した表情を消す", moved == ["blushing"]
+              and os.path.isfile(expressions.variant_path(person, "blushing"))
+              and not os.path.isfile(expressions.variant_path(person, "shy"))
+              and not os.path.isfile(expressions.variant_path(person, "angry")))
+        expressions.seal(person, now, names=["smile"])                 # 前の版の印（タグが無い）
+        got = expressions.plan(person, [{"name": "smile", "tags": "anything"}, {"name": "sad", "tags": "x"}])
+        check("タグの無い印は今のタグで描いたものとみなし、足りない表情だけ描く",
+              got["keep"] == ["smile"] and got["draw"] == ["sad"], got)
+        expressions.seal(person, now, names=[])
+        check("顔が見つからなかった印には何もしない",
+              expressions.plan(person, wanted) == {"keep": [], "draw": [], "rename": [], "remove": [], "stale": {}})
+        write(expressions.variant_path(person, "pout"), b"pout")
+        expressions.seal(person, now, names=["pout"])
+        expressions.clear(person)
+        check("clear は印に載った追加の表情も消す（一覧にも印にも無いファイルは残す）",
+              not os.path.isfile(expressions.variant_path(person, "pout"))
+              and os.path.isfile(expressions.variant_path(person, "blushing")))
     finally:
         shutil.rmtree(base, ignore_errors=True)
         expressions.reset()

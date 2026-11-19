@@ -108,7 +108,7 @@ check("強さの欄の既定は mod.json と同じ（SD1.5 0.5・SDXL・その�
       and decls[V.BY_MODEL]["default"] == V.DEFAULT_BY_MODEL == MOD.EXPRESSION_STRENGTH_BY_MODEL == "")
 got = V.derive({})
 check("値が無ければ既定", got == {"strength": 0.35, "sd15": 0.5, "by_model": [], "bad": [],
-                           "tags": V.DEFAULT_TAGS}, got)
+                           "tags": V.DEFAULT_TAGS, "ids": {}, "meanings": {}, "skipped": []}, got)
 rows, bad = V.model_rows(" sd15=0.5 ;\npony / !score=0.4;; x ; sdxl=abc; sdxl=0; sdxl=1.5; =0.3; sdxl=1 ")
 check("モデル名で分ける: ; と改行で区切り、読めない区切り（= が無い・数でない・0 以下・1 超え・条件が空）は飛ばす",
       rows == [("sd15", 0.5), ("pony / !score", 0.4), ("sdxl", 1.0)]
@@ -189,6 +189,43 @@ check("空のタグの表情は描かない（前後の空白は外す）",
 check("強さの範囲の外と読めない値は既定、1 を超える値は 1",
       [V.derive({V.STRENGTH: v})["strength"] for v in (0, -1, "x", None, float("nan"), 3)]
       == [0.35, 0.35, 0.35, 0.35, 0.35, 1.0])
+
+print("追加の表情")
+check("基本表情と名前の形はローダの窓口と同じ",
+      V.BUILTIN == expressions.NAMES and V.ADDED_PATTERN.pattern == expressions.NAME_PATTERN.pattern)
+added = [{"id": "x1", "name": "shy", "meaning": "照れる", "tags": " blush "},
+         {"name": "smile", "tags": "grin"}, {"name": "Bad", "tags": "x"}, {"name": "shy", "tags": "y"},
+         {"id": "x3", "name": "quiet", "meaning": "黙る", "tags": ""}]
+got = V.derive({"EXPRESSION_SAD": ""}, added)
+check("追加の表情はタグのある行だけ基本表情の後に並ぶ（基本表情と重なる・使えない・重なる名前は飛ばす）",
+      list(got["tags"]) == ["smile", "angry", "surprised", "shy"] and got["tags"]["shy"] == "blush"
+      and got["ids"] == {"shy": "x1"} and got["meanings"] == {"shy": "照れる"}
+      and got["skipped"] == ["smile", "Bad", "shy"], got)
+check("描くはずの表情と窓口に登録する一覧",
+      V.wanted_rows(got)[-1] == {"name": "shy", "tags": "blush", "id": "x1"}
+      and V.wanted_rows(got)[0] == {"name": "smile", "tags": V.DEFAULT_TAGS["smile"]}
+      and V.entry_rows(got) == [{"name": "smile"}, {"name": "angry"}, {"name": "surprised"},
+                                {"name": "shy", "meaning": "照れる"}], V.entry_rows(got))
+errors = V.check_added([{"name": "ok_1", "meaning": "m", "tags": "t"}, {"name": "2x", "tags": ""},
+                        {"name": "sad"}, {"name": "ok_1", "meaning": "m"}, {"name": "nomean", "tags": "t"}])
+check("保存の前の検査（名前の形・基本表情と重なる・行どうしで重なる・タグのある行の意味が空）",
+      [e.split(":")[0] for e in errors] == ["2 行目", "3 行目", "4 行目", "5 行目"], errors)
+got = V.normalize_added([{"name": " a ", "meaning": "x\ny"}, {"id": "x1", "name": "b"}, {"id": "x1", "name": "c"}])
+check("id の無い行と重なった id の行には、空いている id を付ける（改行は空白に）",
+      [r["id"] for r in got] == ["x2", "x1", "x3"] and got[0]["name"] == "a" and got[0]["meaning"] == "x y", got)
+temp_dir = tempfile.mkdtemp(prefix="sd_added_")
+try:
+    path = V.added_path(temp_dir)
+    check("無い置き場は見本の shy", V.load_added(path) == [dict(row) for row in V.SAMPLE_ADDED]
+          and V.load_added(path)[0]["name"] == "shy" and not V.check_added(V.load_added(path)))
+    check("空で保存したら見本は戻らない", V.save_added(path, []) and V.load_added(path) == [])
+    check("書いて読み直せる", V.save_added(path, [{"id": "x1", "name": "shy", "meaning": "照れる", "tags": "blush"}])
+          and V.load_added(path) == [{"id": "x1", "name": "shy", "meaning": "照れる", "tags": "blush"}])
+    with io.open(path, "w", encoding="utf-8") as fh:
+        fh.write("{broken")
+    check("壊れた置き場は空", V.load_added(path) == [])
+finally:
+    shutil.rmtree(temp_dir, ignore_errors=True)
 
 print("文")
 got = V.expression_prompt("masterpiece, full body, standing, young man, cloak", "light smile, closed mouth")
@@ -415,6 +452,8 @@ else:
     try:
         values = {key: decls[key]["default"] for key in decls}
         ctx = Ctx(tempfile.mkdtemp(prefix="sd_variants_ctx_"), values)
+        # 追加の表情は空で始める（置き場が無いと見本の shy を描く。見本は「追加の表情」の節の終わりで確かめる）
+        V.save_added(V.added_path(ctx.state_dir), [])
         MOD.apply(ctx)
         pipe = manager.txt2img_pipe
         exit_target = "fake_var.stable_diffusion:VarSD.generate_image"
@@ -426,6 +465,8 @@ else:
               sorted(ctx.hooks))
         check("一括生成の本体を包む", MOD.BULK_TARGET in ctx.hooks)
 
+        draws = [0]
+
         def game_draw(world_name, name, category, prompt):
             """ゲームの立ち絵の入口の代わり。描いて、背景を抜いて、縮小・2倍・減色して保存する。"""
             MOD.MARKS.func = "generate_image_real_lcm"
@@ -434,7 +475,10 @@ else:
                                                 negative_prompt="neg", width=512, height=1024)
             finally:
                 MOD.MARKS.func = None
-            image = result[0]
+            # 描くたびに違う絵にする（同じ絵なら印が合い、差分は描き直さない。expressions.plan）
+            draws[0] += 1
+            image = result[0].copy()
+            image.putpixel((0, 0), tuple([draws[0] % 256] * len(image.getbands())))
             folder = expressions.character_dir(world_name, name)
             os.makedirs(folder, exist_ok=True)
             image.save(os.path.join(folder, "generated_image.png"))
@@ -763,6 +807,68 @@ else:
             check("描いている間に当て直されたら、描きかけの人物を終えて、残りを新しい登録に任せる",
                   len(VarSD.calls) == 4 and len(handed) == 1 and got is True, (VarSD.calls, handed, got))
             expressions.seal(bob, expressions.stamp(bob))
+
+            # ---- 追加の表情（state\stable_diffusion\expressions.json）
+            added_file = V.added_path(ctx.state_dir)
+
+            def set_added(rows):
+                check("追加の表情を書ける", V.save_added(added_file, rows))
+
+            def bulk_once():
+                VarSD.calls[:] = []
+                ctx.hooks[MOD.BULK_TARGET](game_bulk, object(), os.path.join(wdir, "world_data.json"),
+                                           threading.Event(), [].append)
+                return list(VarSD.calls)
+
+            def record_of(folder):
+                with io.open(os.path.join(expressions.folder_of(folder), expressions.SEAL), encoding="utf-8") as fh:
+                    return json.load(fh)
+            check("ここまでで Ana は4表情を描き揃え、印に表情ごとのタグが載る",
+                  record_of(ana).get("tags") == V.DEFAULT_TAGS and expressions.complete(ana), record_of(ana))
+            set_added([{"id": "x1", "name": "shy", "meaning": "照れる", "tags": "blush"}])
+            check("追加の表情は登録した一覧に入り、LLM への説明にも載る",
+                  expressions.names()[-1] == "shy" and "shy=照れる" in expressions.guide(), expressions.names())
+            calls = bulk_once()
+            check("表情を足したら、描き揃った人物にも次の一括生成で足した表情だけ描く",
+                  len(calls) == 1 and "blush" in calls[0]["prompt"] and expressions.image(ana, "shy") is not None
+                  and expressions.image(ana, "smile") is not None and expressions.complete(ana)
+                  and record_of(ana)["ids"] == {"shy": "x1"}, (calls, record_of(ana)))
+            set_added([{"id": "x1", "name": "blushing", "meaning": "照れる", "tags": "blush"}])
+            calls = bulk_once()
+            check("名前だけ変えたら描き直さず、ファイル名を変える",
+                  calls == [] and expressions.image(ana, "blushing") is not None
+                  and not os.path.isfile(expressions.variant_path(ana, "shy")), (calls, record_of(ana)))
+            set_added([{"id": "x1", "name": "blushing", "meaning": "顔を赤らめる", "tags": "blush, embarrassed"}])
+            calls = bulk_once()
+            check("タグを変えた表情だけ描き直す（意味の変更では描かない）",
+                  len(calls) == 1 and "embarrassed" in calls[0]["prompt"]
+                  and record_of(ana)["tags"]["blushing"] == "blush, embarrassed", (calls, record_of(ana)))
+            set_added([{"id": "x1", "name": "blushing", "meaning": "顔を赤らめる", "tags": "blush, nervous smile"}])
+            VarSD.empty_at = 1
+            try:
+                calls = bulk_once()
+            finally:
+                VarSD.empty_at = None
+            check("タグを変えて描き直せなかった表情は、前のタグの絵のまま見せ、描き揃っていない印にする",
+                  len(calls) == 1 and expressions.image(ana, "blushing") is not None and not expressions.complete(ana)
+                  and record_of(ana)["tags"]["blushing"] == "blush, embarrassed", record_of(ana))
+            calls = bulk_once()
+            check("次の一括生成で描き直す", len(calls) == 1 and expressions.complete(ana), calls)
+            set_added([])
+            calls = bulk_once()
+            check("一覧から外した表情は描かずに消す",
+                  calls == [] and not os.path.isfile(expressions.variant_path(ana, "blushing"))
+                  and "blushing" not in expressions.names() and record_of(ana)["expressions"] == list(expressions.VARIANTS),
+                  (calls, record_of(ana)))
+            os.remove(added_file)
+            calls = bulk_once()
+            check("置き場が無ければ見本の shy を描く",
+                  len(calls) == 1 and "blush, embarrassed" in calls[0]["prompt"]
+                  and expressions.image(ana, "shy") is not None and "shy" in expressions.names(), calls)
+            set_added([])
+            calls = bulk_once()
+            check("見本を消して保存したら、描いた見本も消す",
+                  calls == [] and not os.path.isfile(expressions.variant_path(ana, "shy")), calls)
 
             # ---- 既存の立ち絵に顔の描き直しをかける（高度設定の顔の描き直しと「既存の立ち絵にも」が入）
             check("顔の描き直しが切なら、既存の立ち絵の顔は描き直さない（ここまでの一括生成で控えが無い）",

@@ -170,20 +170,28 @@ JSONオブジェクト1つだけ。説明・コードフェンス禁止。
 #: 表情を見せる MOD（`347_`）が入っているときに RULES へ足す、表情の説明（`with_expressions`）。
 EXPRESSION_ITEM = ("各要素はspeaker（【参加NPC】の名前）とstatement（返答文または（行動描写））。",
                    "各要素はspeaker（【参加NPC】の名前）とstatement（返答文または（行動描写））とexpression（そのNPCの表情）。")
-EXPRESSION_GUIDE = "- 表情: あわせて、各NPCが返答文を言うときの表情(expression)を出力する。" + expressions.GUIDE
+EXPRESSION_GUIDE_HEAD = "- 表情: あわせて、各NPCが返答文を言うときの表情(expression)を出力する。"
+#: 基本表情の一覧での説明（表情の一覧を登録した MOD が無いときと同じ）。プロンプトには `expression_guide` を使う
+EXPRESSION_GUIDE = EXPRESSION_GUIDE_HEAD + expressions.GUIDE
 EXPRESSION_EXAMPLE = ('"statement":"返答文または（行動描写）"}',
                       '"statement":"返答文または（行動描写）","expression":"neutral"}')
+
+
+def expression_guide():
+    """表情の説明の1行（今の表情の一覧から組む。`343_` の追加の表情で変わる）。"""
+    return EXPRESSION_GUIDE_HEAD + expressions.guide()
 
 
 def with_expressions(rules):
     """RULES に表情の欄の説明を足した文。見出しが見つからない部分は飛ばす（足せた分だけ足す）。"""
     got = rules.replace(EXPRESSION_ITEM[0], EXPRESSION_ITEM[1], 1)
     got = got.replace(EXPRESSION_EXAMPLE[0], EXPRESSION_EXAMPLE[1])
+    line = expression_guide()
     head = "\n\n【出力形式】"
     at = got.find(head)
     if at < 0:
-        return got.rstrip("\n") + "\n\n" + EXPRESSION_GUIDE + "\n"
-    return got[:at] + "\n" + EXPRESSION_GUIDE + got[at:]
+        return got.rstrip("\n") + "\n\n" + line + "\n"
+    return got[:at] + "\n" + line + got[at:]
 
 
 def _field(record, key):

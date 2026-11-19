@@ -436,6 +436,74 @@ class _ListTable(object):
         return out
 
 
+class _ExpressionTable(object):
+    """追加の表情の表（名前・意味・タグ）。行の id は画面に出さず、保存へ持ち回る（名前を変えても同じ表情と分かる）。"""
+
+    COLUMNS = (("name", "名前", 16), ("meaning", "意味（LLM に渡す説明）", 30), ("tags", "タグ", 40))
+
+    def __init__(self, parent, rows):
+        import tkinter as tk
+        from tkinter import ttk
+
+        self._tk, self._ttk = tk, ttk
+        self.rows = []
+        #: 行や欄が変わったときに呼ぶ関数（表情の数の目安を書き直す）。
+        self.listeners = []
+        frame = ttk.Frame(parent)
+        frame.pack(anchor="w", padx=(14, 0), pady=(4, 0))
+        head = ttk.Frame(frame)
+        head.pack(fill="x")
+        for _key, label, width in self.COLUMNS:
+            ttk.Label(head, text=label, width=width).pack(side="left", padx=(0, 4))
+        self.body = ttk.Frame(frame)
+        self.body.pack(fill="x")
+        ttk.Button(frame, text="表情を追加", width=12, command=lambda: self.add({})).pack(anchor="w", pady=(6, 0))
+        for row in rows:
+            self.add(row, notify=False)
+
+    def _changed(self, *_args):
+        for listener in list(self.listeners):
+            listener()
+
+    def add(self, row, notify=True):
+        tk, ttk = self._tk, self._ttk
+        line = ttk.Frame(self.body)
+        line.pack(fill="x", pady=1)
+        state = {"id": str(row.get("id") or ""), "vars": {}}
+        for key, _label, width in self.COLUMNS:
+            var = tk.StringVar(value=str(row.get(key) or ""))
+            ttk.Entry(line, textvariable=var, width=width).pack(side="left", padx=(0, 4))
+            var.trace_add("write", self._changed)
+            state["vars"][key] = var
+
+        def drop():
+            line.destroy()
+            self.rows.remove(state)
+            self._changed()
+
+        ttk.Button(line, text="×", width=3, command=drop).pack(side="left", padx=(2, 0))
+        self.rows.append(state)
+        if notify:
+            self._changed()
+
+    def get(self):
+        """書ける形の行（`variants.normalize_added`）。名前・意味・タグが全部空の行は落とす。
+
+        id の無い行（足したばかり）には、ここで付けて覚える（保存の前後で同じ id を返す）。
+        """
+        rows = []
+        for state in self.rows:
+            row = dict((key, variants.clean_text(var.get())) for key, var in state["vars"].items())
+            if not any(row.values()):
+                continue
+            row["id"] = state["id"]
+            rows.append((state, row))
+        got = variants.normalize_added([row for _state, row in rows])
+        for (state, _row), normalized in zip(rows, got):
+            state["id"] = normalized["id"]
+        return got
+
+
 def _reopen(rules_in, settings, note):
     """取り込んだ内容で窓を開き直す（規則の欄は組み直しが要るため）。"""
     window = build_window(rules_in, settings, note)
@@ -1241,13 +1309,36 @@ def build_window(rules_in=None, settings_in=None, note=""):
         cell.grid(row=index, column=1, sticky="w")
         ttk.Entry(cell, textvariable=var_for(key), width=width).pack(side="left")
         ttk.Label(cell, text=note, style="Faint.TLabel").pack(side="left", padx=(10, 0))
-    ttk.Label(expression_frame, text="表情ごとに足すタグ（画像生成の英語のタグ。空にした表情は描かない）", font=bold).pack(
-        anchor="w", pady=(10, 2))
+    ttk.Label(expression_frame, text="基本表情のタグ（画像生成の英語のタグ。空にした表情は描かず、会話でも選ばせない）",
+              font=bold).pack(anchor="w", pady=(10, 2))
     tag_grid = ttk.Frame(expression_frame)
     tag_grid.pack(anchor="w", padx=(14, 0))
     for index, ((_expression, key), label) in enumerate(zip(variants.TAGS, ("笑う", "怒る", "悲しむ", "驚く"))):
         ttk.Label(tag_grid, text=label).grid(row=index, column=0, sticky="w", padx=(0, 10), pady=2)
         ttk.Entry(tag_grid, textvariable=var_for(key), width=40).grid(row=index, column=1, sticky="w")
+    ttk.Label(expression_frame, text="追加の表情", font=bold).pack(anchor="w", pady=(10, 2))
+    ttk.Label(expression_frame, wraplength=900, justify="left", text="\n".join([
+        "名前は英小文字で始まる英小文字・数字・_（会話の LLM が返す値になる）。",
+        "意味は会話の LLM に渡す説明（例: 照れる・恥ずかしがる）。タグを空にした行は描かず、会話でも選ばせない。"])).pack(
+        anchor="w", padx=(14, 0))
+    added_table = _ExpressionTable(expression_frame, variants.load_added(variants.added_path(state_dir)))
+    expression_cost = ttk.Label(expression_frame, text="", style="Faint.TLabel", wraplength=900, justify="left")
+    expression_cost.pack(anchor="w", padx=(14, 0), pady=(6, 0))
+
+    def expression_cost_refresh(*_args):
+        """表情の数と1人あたりの時間の目安を書き直す。"""
+        # 欄の変数は `entries` から読む（`var_for` は呼ぶたびに変数を作り直す）
+        count = sum(1 for _expression, key in variants.TAGS if str(entries[key].get() or "").strip())
+        count += sum(1 for row in added_table.get() if row["tags"])
+        expression_cost.configure(text="\n".join([
+            "表情 {} 個 → 新しい立ち絵1人あたり約 {} 秒（SDXL で1表情約 {} 秒）".format(
+                count, count * variants.SECONDS_PER_EXPRESSION, variants.SECONDS_PER_EXPRESSION),
+            "タグを変えた表情は、立ち絵の在る人物には次の一括生成で描き直す。名前と意味の変更では描き直さない。"]))
+
+    added_table.listeners.append(expression_cost_refresh)
+    for _expression, key in variants.TAGS:
+        entries[key].trace_add("write", expression_cost_refresh)
+    expression_cost_refresh()
 
     def expression_refresh(raw, custom, model):
         """顔を描くモデルの決まり方の各行と、いま当てはまる行の強さを書き直す（`band_refresh` の後に呼ぶ）。"""
@@ -1331,18 +1422,29 @@ def build_window(rules_in=None, settings_in=None, note=""):
 
     # 規則は設定とは別の保存物。開いた時点の中身を覚えて、未保存の変更があるかを見る。
     # 取り込んだ直後（`rules_in` / `settings_in` が在る）は、保存するまで未保存の変更として扱う。
-    pending = {"rules": gather_rules(), "imported": rules_in is not None or bool(settings_in)}
+    pending = {"rules": gather_rules(), "imported": rules_in is not None or bool(settings_in),
+               "added": added_table.get()}
 
     def save_rules(_values):
+        errors = variants.check_added(added_table.get())
+        if errors:
+            messagebox.showerror("追加の表情を直してください", "\n".join(errors), parent=window)
+            return False
         if not rulebook.save(state_dir, gather_rules()):
             messagebox.showerror("規則を保存できませんでした",
                                  "{} に書けませんでした。".format(rulebook.rules_path(state_dir)), parent=window)
+            return False
+        if added_table.get() != pending["added"] \
+                and not variants.save_added(variants.added_path(state_dir), added_table.get()):
+            messagebox.showerror("追加の表情を保存できませんでした",
+                                 "{} に書けませんでした。".format(variants.added_path(state_dir)), parent=window)
             return False
         return True
 
     def saved(_values):
         pending["rules"] = gather_rules()
         pending["imported"] = False
+        pending["added"] = added_table.get()
         messagebox.showinfo(
             "保存しました",
             "次に生成される絵から効きます。\n"
@@ -1362,7 +1464,8 @@ def build_window(rules_in=None, settings_in=None, note=""):
         window, bar, MOD_DIR, root_dir, decls, values, current, set_values, fill=False,
         note="次に生成される絵から効く。モデルの差し替えだけはゲームを起動し直すと効く",
         reset_label="設定を既定に戻す", before_save=save_rules, after_save=saved,
-        extra_dirty=lambda: pending["imported"] or gather_rules() != pending["rules"])
+        extra_dirty=lambda: (pending["imported"] or gather_rules() != pending["rules"]
+                             or added_table.get() != pending["added"]))
     return window
 
 

@@ -846,6 +846,16 @@ FakeClock.run_all()
 check("立ち絵が描き直されて印の合わない差分は使わず、ゲームの立ち絵のまま",
       APP.root.character_image.source == anchor_base, APP.root.character_image.source)
 
+# 表情の一覧が変わった（343 の追加の表情）: 説明は今の一覧で組み、足した表情を受け取る
+expressions.define("343_stable_diffusion", Owner(), lambda: [{"name": "smile"}, {"name": "shy", "meaning": "照れる"}])
+answers.append({"content_violation": "false", "responses": [
+    {"speaker": "アリス", "statement": "e", "expression": "shy"}]})
+facilitate(ctx, APP.world.characters["8"])
+check("表情の一覧が変われば、RULES の説明は今の一覧で組み、足した表情を受け取る",
+      "shy=照れる" in asked[-1] and MOD.expression_guide() in asked[-1] and MOD.EXPRESSION_GUIDE not in asked[-1]
+      and store["expressions"]["8"] == "shy", store["expressions"])
+expressions.undefine("343_stable_diffusion")
+
 ctx.hooks[END](lambda self: None, object())
 check("会話を終えると表情の控えも捨てる", store["expressions"] == {}, store["expressions"])
 expressions.reset()

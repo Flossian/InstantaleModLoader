@@ -2,7 +2,7 @@
 r"""会話の相手の表情を、台詞に合わせて変える（DOC.md）。
 
 会話の返事（`conversation_facilitator` / `_after_retrieval` / `_in_quest`）の返却型に表情の欄
-`expression`（5択）を足し、【返答の要素】（`response_prompt_instruction`）に表情の説明を1行足す。
+`expression`（ローダの窓口の表情の一覧から1つ）を足し、【返答の要素】（`response_prompt_instruction`）に表情の説明を1行足す。
 LLM が台詞を書いた後に選んだ表情の差分を、会話の立ち絵（`hud.character_image`）に出す。
 
     返事のプロンプトを組む直前   modnpc の prompt で説明を足し、相手の id をスレッドに控える
@@ -47,9 +47,24 @@ IMAGE_TARGET = "__main__:InstantaleApp.update_character_image"
 #: 会話の立ち絵の部品（HUD の属性。GAME.md §2.5）。
 PORTRAIT_WIDGET = "character_image"
 
-#: 表情の説明（型の description と【返答の要素】の1行）。表情の一覧の説明はローダの窓口のもの。
-GUIDE = "この返答を言うときの話し手の表情。" + expressions.GUIDE
-GUIDE_LINE = "- 表情: あわせて、返答文を言うときのあなたの表情(expression)を出力する。" + expressions.GUIDE
+#: 表情の説明（型の description と【返答の要素】の1行）の頭。続く表情の一覧の説明はローダの窓口のもの。
+#: 一覧は `343_` の追加の表情で変わるので、プロンプトを組むたびに `guide` / `guide_line` で組む。
+GUIDE_HEAD = "この返答を言うときの話し手の表情。"
+GUIDE_LINE_HEAD = "- 表情: あわせて、返答文を言うときのあなたの表情(expression)を出力する。"
+
+#: 基本表情の一覧での説明（表情の一覧を登録した MOD が無いときと同じ）。
+GUIDE = GUIDE_HEAD + expressions.GUIDE
+GUIDE_LINE = GUIDE_LINE_HEAD + expressions.GUIDE
+
+
+def guide():
+    """型の description（今の表情の一覧から組む）。"""
+    return GUIDE_HEAD + expressions.guide()
+
+
+def guide_line():
+    """【返答の要素】に足す1行（今の表情の一覧から組む）。"""
+    return GUIDE_LINE_HEAD + expressions.guide()
 
 #: いま見せている表情（`sys` の属性。注入し直しても続きが分かる）。
 SHOWN_ATTR = "_mod347_shown_expression"
@@ -76,29 +91,32 @@ def apply(ctx):
     write = ctx.logger(LOG_BASENAME, tag="expressions:")
     screen = ui.Screen(ctx, write, tag="conversation expressions")
     # 広げた型は強く持つ（弱参照では、ほかに持ち手の無い子クラスがすぐ消えて毎回作り直す）。
-    # 返却型はゲームのモジュールの定数で数が少ないので、増え続けない
+    # 返却型はゲームのモジュールの定数で数が少ないので、増え続けない。表情の一覧が変われば説明ごと作り直す
     extended = {}
     seen = set()
 
     expressions.want(OWNER, ctx)
 
-    def widen(structure):
+    def widen(structure, description=None):
         """返却型に表情の欄を足した子クラス。足せなければ None。
+
+        `description` は欄の説明（省けば今の一覧から組む）。説明が前と違えば作り直す。
 
         欄は `str` で受け、一覧に照らすのは受け取った側（`expression_of`）。型で縛ると、一覧に無い値で
         返事ごとゲームの検証に落ちて台詞が出なくなる（`404_` も同じ）。
         """
+        description = guide() if description is None else description
         got = extended.get(structure)
-        if got is not None:
-            return got
+        if got is not None and got[0] == description:
+            return got[1]
         pydantic_module = sys.modules.get("pydantic")
         fields = getattr(structure, "model_fields", None)
         if pydantic_module is None or not isinstance(fields, dict) or "expression" in fields:
             return None
         got = pydantic_module.create_model(
             structure.__name__, __base__=structure,
-            expression=(str, pydantic_module.Field(..., description=GUIDE)))
-        extended[structure] = got
+            expression=(str, pydantic_module.Field(..., description=description)))
+        extended[structure] = (description, got)
         return got
 
     # ------------------------------------------------------------ 見せる
@@ -153,7 +171,7 @@ def apply(ctx):
             return
         text = args.get("response_prompt_instruction")
         if isinstance(text, str):
-            args["response_prompt_instruction"] = text.rstrip() + "\n" + GUIDE_LINE
+            args["response_prompt_instruction"] = text.rstrip() + "\n" + guide_line()
         _LOCAL.pending = (site, npc_id)
 
     def forget(_info=None):

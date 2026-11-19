@@ -9,6 +9,7 @@ r"""生成のたびに読み直す設定と規則（元 MOD のホットリロ�
 
     settings\mod_settings.json     寸法・サンプラー・安全弁（ローダの設定）
     state\stable_diffusion\prompt_rules.json   プロンプトの規則
+    state\stable_diffusion\expressions.json    追加の表情（表情差分）
 
 読み直すのは更新時刻と大きさの組が変わったときだけで、普段は属性を1回見るだけ。
 書く側はどちらも隣に書いてから `os.replace` で差し替えるので、半端なファイルは掴まない。
@@ -23,6 +24,7 @@ TAESD / VAE を渡さない指定。パイプラインが建つ瞬間にしか�
 import io
 import json
 import os
+import threading
 
 from instantale_modloader import config as loader_config
 from instantale_modloader import frames
@@ -110,12 +112,17 @@ class Live(object):
         self._settings_path = (loader_config.store_path(self._runtime_dir)
                                if self._runtime_dir else None)
         self._rules_path = rulebook.rules_path(self._state_dir)
+        self._added_path = variants.added_path(self._state_dir)
+        # 会話の表情の一覧を引くとき（ローダの窓口 `expressions`）は LLM のスレッドからも読み直す
+        self._lock = threading.Lock()
 
         # 最初の値は apply() の ctx から（読み直しの経路と同じファイルの中身）。
         self.values = dict((name, ctx.setting(name)) for name in HOT_NAMES)
         self._settings_stamp = stamp_of(self._settings_path) if self._settings_path else None
         self.rules = rulebook.load(self._state_dir)
         self._rules_stamp = stamp_of(self._rules_path)
+        self.added = variants.load_added(self._added_path)
+        self._added_stamp = stamp_of(self._added_path)
         self._apply(self.values)
 
     @staticmethod
@@ -143,7 +150,7 @@ class Live(object):
         #: 顔だけ描き直す（`faces.derive`）。
         self.faces = faces.derive(values)
         #: 表情差分（`variants.derive`）。描くかはローダの窓口 `expressions` で決まる。
-        self.variants = variants.derive(values)
+        self.variants = variants.derive(values, self.added)
 
     def hot(self):
         """読み直しができる状態か（場所が控えられていて、宣言も読めた）。"""
@@ -173,6 +180,8 @@ class Live(object):
             self.variants["sd15"], self.variants["strength"],
             "; ".join("{}={}".format(c, s) for c, s in self.variants["by_model"]),
             ", ".join("{}={}".format(e, t) for e, t in sorted(self.variants["tags"].items()))))
+        if self.variants["skipped"]:
+            lines.append("追加の表情で名前が使えない・重なる行を飛ばした: {}".format(", ".join(self.variants["skipped"])))
         if self.variants["bad"]:
             lines.append("表情差分の「モデル名で分ける」で読めない区切りを飛ばした: {}".format(
                 " / ".join(self.variants["bad"])))
@@ -185,6 +194,10 @@ class Live(object):
 
     def refresh(self):
         """変わっていたら読み直す。読み直したものの名前を返す（無ければ空）。"""
+        with self._lock:
+            return self._refresh()
+
+    def _refresh(self):
         changed = []
         try:
             if self.hot():
@@ -198,6 +211,12 @@ class Live(object):
                 self._rules_stamp = stamp
                 self.rules = rulebook.load(self._state_dir)
                 changed.append("rules")
+            stamp = stamp_of(self._added_path)
+            if stamp != self._added_stamp:
+                self._added_stamp = stamp
+                self.added = variants.load_added(self._added_path)
+                self._apply(self.values)
+                changed.append("expressions")
         except Exception:
             self._log_exc("image quality: reload failed; keeping the previous values")
             return changed

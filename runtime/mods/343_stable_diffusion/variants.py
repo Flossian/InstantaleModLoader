@@ -16,10 +16,15 @@ r"""会話の立ち絵の表情差分を描くための部品。DOC.md「表情�
 一括生成では、立ち絵が既にある人物にも差分だけ描く（ゲームの仕事が済んだ後）。
 立ち絵を描かないので、ゲームが立ち絵を描いたときの呼び方（部品の引数と工程の引数）を
 `state\stable_diffusion\expression_template.json` に控えておき、文は人物のフォルダの `prompts.json` から取る。
+
+表情は基本表情（笑う・怒る・悲しむ・驚く。タグは設定）と、追加の表情（`state\stable_diffusion\expressions.json`。
+名前・意味・タグを道具画面で編む）。タグのある表情を、ローダの窓口に一覧として登録する（`entry_rows`）。
+タグを変えた表情は、印のタグと比べて次の一括生成で描き直す（ローダの窓口の `expressions.plan`）。
 """
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 import threading
@@ -39,6 +44,24 @@ BY_MODEL = "EXPRESSION_STRENGTH_BY_MODEL"
 TAGS = (("smile", "EXPRESSION_SMILE"), ("angry", "EXPRESSION_ANGRY"),
         ("sad", "EXPRESSION_SAD"), ("surprised", "EXPRESSION_SURPRISED"))
 NAMES = (STRENGTH_SD15, STRENGTH, BY_MODEL) + tuple(name for _expression, name in TAGS)
+
+#: ふだんの顔（差分を描かない。ローダの窓口の `expressions.NEUTRAL` と同じ）。
+NEUTRAL = "neutral"
+
+#: 基本表情の名前（ふだんの顔と `TAGS` の表情。ローダの窓口の `expressions.NAMES` と同じ並び）。
+BUILTIN = (NEUTRAL,) + tuple(expression for expression, _name in TAGS)
+
+#: 追加の表情の置き場（`state\stable_diffusion\` の下。道具画面で編む）。
+ADDED_NAME = "expressions.json"
+
+#: 置き場が無いときの追加の表情（見本を兼ねる。道具画面で消して保存すれば、空の一覧が置き場に残って戻らない）。
+SAMPLE_ADDED = ({"id": "x1", "name": "shy", "meaning": "照れる・恥ずかしがる", "tags": "blush, embarrassed"},)
+
+#: 追加の表情の名前に使える形（ローダの窓口の `expressions.NAME_PATTERN` と同じ）。
+ADDED_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
+
+#: 1表情を描くのにかかる時間の目安（秒。SDXL の一括生成で差分4枚が1人約27秒。VERIFICATION.md §3.132）。
+SECONDS_PER_EXPRESSION = 7
 
 #: SDXL・その他のモデルの強さの既定（mod.json と同じ値。決めた経緯は VERIFICATION.md §3.132）。
 DEFAULT_STRENGTH = 0.35
@@ -162,13 +185,109 @@ def world_npc_names(world_data, save_data=None):
     return names
 
 
-def needs_variants(folder, expressions):
-    """差分だけ描く人物か（立ち絵の元の絵があり、その印に合う差分の控えが無いか、控えが描き揃っていない）。
+def needs_variants(folder, expressions, wanted=None):
+    """差分に手を入れる人物か（立ち絵の元の絵があり、その印に合う差分の控えが無いか、控えが描き揃っていないか、
+    描き足す・タグの変わった・名前の変わった・消す表情がある）。
 
     `expressions` はローダの窓口（道具画面からこのファイルを読むときに要らない import を避けて渡す）。
+    `wanted` は描くはずの表情（`wanted_rows`）。省けば印の合い方と揃い方だけ見る。
     """
+    if wanted is not None:
+        return expressions.needs(folder, wanted)
     stamp = expressions.stamp(folder)
     return stamp is not None and (expressions.sealed(folder) != stamp or not expressions.complete(folder))
+
+
+# ---- 追加の表情 --------------------------------------------------------------
+
+def added_path(state_dir):
+    r"""追加の表情の置き場（`state\stable_diffusion\expressions.json`）。"""
+    return os.path.join(state_dir, rules.STATE_DIRNAME, ADDED_NAME)
+
+
+def clean_text(value):
+    """1行の文字列にする（改行と続いた空白を1つの空白に）。"""
+    return " ".join(str(value or "").split())
+
+
+def check_added(rows):
+    """追加の表情の行の誤り（行の番号は1から）。無ければ空。
+
+    名前は英小文字で始まる英小文字・数字・`_`（32字まで）で、基本表情と、ほかの行と重ならない。
+    タグのある行は意味が要る（LLM に渡す説明になる）。
+    """
+    errors, seen = [], set()
+    for index, row in enumerate(rows, 1):
+        name = clean_text(row.get("name"))
+        if not ADDED_PATTERN.match(name):
+            errors.append("{} 行目: 名前は英小文字で始まる英小文字・数字・_ にする（32字まで）: {!r}".format(index, name))
+        elif name in BUILTIN:
+            errors.append("{} 行目: 名前 {} は基本表情と重なる".format(index, name))
+        elif name in seen:
+            errors.append("{} 行目: 名前 {} はほかの行と重なる".format(index, name))
+        seen.add(name)
+        if clean_text(row.get("tags")) and not clean_text(row.get("meaning")):
+            errors.append("{} 行目: 意味が空（LLM に渡す説明になる）".format(index))
+    return errors
+
+
+def new_id(taken):
+    """追加の表情の id（`taken` に無いもの）。名前を変えても同じ表情と分かるように、行に1つ持たせる。"""
+    number = 1
+    while "x{}".format(number) in taken:
+        number += 1
+    return "x{}".format(number)
+
+
+def normalize_added(rows):
+    """追加の表情の行を、置き場に書く形 `[{"id", "name", "meaning", "tags"}]` にする。id の無い行には付ける。"""
+    out, taken = [], set(clean_text(row.get("id")) for row in rows if isinstance(row, dict))
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        ident = clean_text(row.get("id"))
+        if not ident or any(ident == got["id"] for got in out):
+            ident = new_id(taken | set(got["id"] for got in out))
+            taken.add(ident)
+        out.append({"id": ident, "name": clean_text(row.get("name")), "meaning": clean_text(row.get("meaning")),
+                    "tags": clean_text(row.get("tags"))})
+    return out
+
+
+def load_added(path):
+    """追加の表情の行（`normalize_added` の形）。無いなら `SAMPLE_ADDED`、壊れているなら空。"""
+    if not os.path.exists(path):
+        return normalize_added([dict(row) for row in SAMPLE_ADDED])
+    got = load_template(path)
+    rows = got.get("expressions") if isinstance(got, dict) else None
+    return normalize_added(rows) if isinstance(rows, list) else []
+
+
+def save_added(path, rows):
+    """追加の表情を書く（隣に書いてから差し替える）。書けたか。"""
+    body = json.dumps({"expressions": normalize_added(rows)}, ensure_ascii=False, indent=1)
+    folder = os.path.dirname(path)
+    try:
+        os.makedirs(folder, exist_ok=True)
+        handle, temp = tempfile.mkstemp(prefix=os.path.basename(path) + ".", suffix=".tmp", dir=folder)
+        with io.open(handle, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(body + "\n")
+        os.replace(temp, path)
+        return True
+    except OSError:
+        return False
+
+
+def wanted_rows(conf):
+    """描くはずの表情（ローダの窓口の `expressions.plan` に渡す形）。タグのある表情だけ、基本表情が先。"""
+    return [dict({"name": name, "tags": tags}, **({"id": conf["ids"][name]} if conf["ids"].get(name) else {}))
+            for name, tags in conf["tags"].items()]
+
+
+def entry_rows(conf):
+    """ローダの窓口に登録する表情の一覧（`expressions.define`）。基本表情の意味は窓口のものを使う。"""
+    return [dict({"name": name}, **({"meaning": conf["meanings"][name]} if conf["meanings"].get(name) else {}))
+            for name in conf["tags"]]
 
 
 #: 一括生成の画面に出す、何を描いているかの言い方。
@@ -211,23 +330,36 @@ def model_rows(text):
     return got, bad
 
 
-def derive(values):
-    """設定の値を描く形に組む。空のタグの表情は描かない。
+def derive(values, added=None):
+    """設定の値と追加の表情を描く形に組む。空のタグの表情は描かない（LLM にも選ばせない）。
 
     `{"strength": SDXL・その他の強さ, "sd15": SD1.5 の強さ, "by_model": [(条件, 強さ)], "bad": [読めなかった区切り],
-    "tags": {表情: タグ}}`。
+    "tags": {表情: タグ}（基本表情が先、追加の表情は行の順）, "ids": {追加の表情: id}, "meanings": {追加の表情: 意味},
+    "skipped": [使えない追加の表情の名前]}`。
+    名前が使えない・重なる追加の表情は飛ばす（道具画面は保存の前に断る。手で書き換えた置き場のため）。
     """
-    tags = {}
+    tags, ids, meanings, skipped = {}, {}, {}, []
     for expression, name in TAGS:
         text = values.get(name)
         text = str(DEFAULT_TAGS[expression] if text is None else text).strip()
         if text:
             tags[expression] = text
+    seen = set(BUILTIN)
+    for row in added or ():
+        name, text = row.get("name"), clean_text(row.get("tags"))
+        if not isinstance(name, str) or not ADDED_PATTERN.match(name) or name in seen:
+            skipped.append(str(name))
+            continue
+        seen.add(name)
+        if text:
+            tags[name] = text
+            ids[name] = row.get("id") or ""
+            meanings[name] = clean_text(row.get("meaning"))
     by_model = values.get(BY_MODEL)
     rows, bad = model_rows(DEFAULT_BY_MODEL if by_model is None else by_model)
     return {"strength": strength_of(values.get(STRENGTH)),
             "sd15": strength_of(values.get(STRENGTH_SD15), DEFAULT_SD15),
-            "by_model": rows, "bad": bad, "tags": tags}
+            "by_model": rows, "bad": bad, "tags": tags, "ids": ids, "meanings": meanings, "skipped": skipped}
 
 
 def strength_for(conf, model):

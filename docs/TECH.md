@@ -2374,29 +2374,38 @@ battle_effects.text_of(kind, amount, target, lang)   # `ボス戦 +30%`・`受�
 ```python
 # 見せる側（apply() の中）
 expressions.want(owner, ctx)                    # 差分を描いてほしいと宣言する
+# 描く側（apply() の中）
+expressions.define(owner, ctx, rows)            # 使う表情の一覧を返す関数を登録する（追加の表情）
 # 描く側
 if expressions.wanted():                        # 宣言した MOD が居るときだけ描く
     folder = expressions.character_dir(world, name)
     stamp = expressions.stamp(folder)           # 元の絵（generated_image.png）の印。描き始める前に取る
-    expressions.clear(folder)
+    plan = expressions.plan(folder, wanted, stamp)  # 印が今の絵のものなら、描く・名前を変える・消す表情。違えば None
+    if plan is None:
+        expressions.clear(folder)               # 全部描き直す
+    else:
+        expressions.tidy(folder, plan)          # 名前の変更と削除を済ませ、plan["draw"] だけ描く
     ...差分を expressions.variant_path(folder, "smile") などへ書く
-    expressions.seal(folder, stamp, names=描けた表情, complete=描き揃ったか)  # 描き終えたら印を書く（描けない人物は差分の無い印）
+    expressions.seal(folder, stamp, names=見せる表情, complete=描き揃ったか, tags=表情ごとのタグ, ids=追加の表情の id)
 # 見せる側（見せるとき）
 expressions.image(folder, "smile")              # 今の元の絵と印の合う差分。無ければ None（ゲームの立ち絵を見せる）
 base = expressions.portrait_path(character)     # 人物の立ち絵のパス（image_src の fullbody）
 expressions.show(widget, folder, "smile", base) # 部品の絵を差分（無ければ base）に替える。ほかの人物の絵なら触らない
 # 見せる側（選ばせるとき）
-expressions.GUIDE                               # LLM に渡す表情の説明（5つの表情と選び方）
-expressions.name_of(answer.get("expression"))   # 返った値を表情の名前に直す。一覧に無ければ neutral
+expressions.guide()                             # LLM に渡す表情の説明（今の一覧の表情と選び方）
+expressions.name_of(answer.get("expression"))   # 返った値を表情の名前に直す。今の一覧に無ければ neutral
 ```
 
-表情は `expressions.NAMES`（`neutral` / `smile` / `angry` / `sad` / `surprised`）。`neutral` は差分を描かず、ゲームの立ち絵を見せる。
+基本表情は `expressions.NAMES`（`neutral` / `smile` / `angry` / `sad` / `surprised`）。`neutral` は差分を描かず、ゲームの立ち絵を見せる。
+今の一覧（`names()` / `entries()`）は、描く側が `define` で登録したもの（`343_` なら基本表情のうちタグのあるものと、追加の表情）。
+登録が無い・読み出しに失敗したときは基本表情の5つ。
+`NAMES` / `VARIANTS` / `GUIDE` は基本表情の値として残している（公開している I/F は消さない。§3.9「次の API（v2.0.0）で外すもの」）。
 
 | 決まり | 理由 |
 |---|---|
 | 差分の置き場は立ち絵のフォルダの `expressions\<表情>.png` | 名前で引く立ち絵の再利用（同じ名前の人物は同じフォルダ）と寿命を揃える |
 | 描き終えたら元の絵の SHA-1 を `source.json` に書き、`image` は今の元の絵と合うときだけ返す | 立ち絵はゲームの再生成のボタンやほかの MOD からも描き直される。どの経路でも古い差分を見せない |
-| 描いている途中は印を書かない（`clear` が前の印を消す） | 書きかけの4枚の一部だけを見せない |
+| 全部描き直すときは、描いている途中は印を書かない（`clear` が前の印を消す） | 書きかけの差分の一部だけを見せない |
 | 印には描けた表情を載せ、`image` は載った表情だけ返す | 前の立ち絵の仕事が、新しい仕事の `clear` の後に差分を書いても見せない |
 | 欠けた表情があれば、描けた分を載せて `complete=False` の印にする。描く側は `complete` が偽の人物を描き直す | 一度の描画の失敗で、その表情が立ち絵を描き直すまで欠けたままにならない。描けた分はそのあいだも見せる |
 | 顔が見つからない人物には差分の無い印を書く | 描く側が、同じ元の絵へ顔の検出と描画の用意を繰り返さない。立ち絵が描き直されれば印が外れて、また描く |
@@ -2406,6 +2415,11 @@ expressions.name_of(answer.get("expression"))   # 返った値を表情の名前
 | 見せる処理（`show`）と表情の説明（`GUIDE`）・値の直し方（`name_of`）も窓口に置く | 会話（`347_`）とパーティー会話（`404_`）で同じ判定と説明を使う。片方だけ直して食い違わない |
 | `show` は前に見せたときと更新時刻が違う絵を読み直す | 差分は同じファイル名へ描き直されるので、Kivy の画像のキャッシュが古い差分を出し続ける（`138_` が立ち絵で直しているのと同じ） |
 | 返却型の表情の欄は `str` で受け、`name_of` で一覧に照らす | 型で縛ると、一覧に無い値で返事ごとゲームの検証に落ちて台詞が出ない。§5.3 の「構造化出力の型に `Literal` を使わない」と同じ |
+| 表情の一覧は描く側が登録し、窓口は使うたびに登録した関数を呼ぶ | 表情を足すのは描く側の設定（タグが要る）。見せる側は説明と照合を窓口から取るだけで、一覧を持たない。道具画面で保存した一覧が、ゲームを起動し直さずに次の会話から効く |
+| 追加の表情の名前は英小文字で始まる英小文字・数字・`_`（`NAME_PATTERN`） | ファイル名と LLM の返す値を兼ねる。`name_of` は小文字に均して照らす |
+| 印に表情ごとのタグと追加の表情の id を書き、`plan` で今の一覧と比べる | 表情を足した・タグを変えたときに、描き揃った人物の全部の表情を描き直さない。タグの無い印（前の版）は今のタグで描いたものとみなす |
+| 名前だけ変わった追加の表情（id が同じでタグも同じ）はファイル名を変えるだけ | 名前の変更を「削除と追加」と取り違えて、全員の表情を描き直さない |
+| タグを変えて描き直せなかった表情は、前のタグの絵と前のタグを印に残す | 描き直しの失敗で、その表情がふだんの顔に戻らない。印のタグが今と違うので次に描き直す |
 | 描く側の ON / OFF は持たない（宣言だけで決まる） | 見せる MOD が無いと差分は使われない。描く側に別の切り替えを置くと、片方だけ入れて効かない組み合わせができる |
 
 `343_` の描き方（描く時機・描く順番の錠・ゲームの工程の通し方）は `343_stable_diffusion/variants.py` の先頭の説明にある。

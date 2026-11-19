@@ -229,6 +229,9 @@ BULK_TARGET = "__main__:InstantaleApp.run_world_bulk_generation"
 #: `sys` に置いて当て直しをまたぐ（一括生成を始めた後にローダが MOD を当て直す。variants.shared）。
 BULK = variants.shared()
 
+#: ローダの窓口 `expressions` に表情の一覧を登録するときの名前。
+EXPRESSION_OWNER = "343_stable_diffusion"
+
 #: 表情差分を通すゲームの工程（`image_generation_creature` の写し。GAME.md §2.30）。
 VARIANT_STEPS = ("pixel_art_process", "reduce_image_colors")
 #: `InstantaleApp` が `AIManager` を持つ属性（綴りの違う2つが在った。`210_probe_character_state` の属性の記録）。先頭が、組んだときに置く先。
@@ -478,6 +481,16 @@ def apply(ctx):
     face_models = faces.models_dir(frames.attr(ctx, "mod_dir", None))
     for line in live.describe():
         write(line)
+
+    def expression_rows():
+        """会話の表情の一覧（基本表情と追加の表情のうちタグのあるもの。`variants.entry_rows`）。
+
+        ローダの窓口が一覧を使うたびに呼ぶ。設定と追加の表情が変わっていれば読み直すので、次の会話から効く。
+        """
+        live.refresh()
+        return variants.entry_rows(live.variants)
+
+    expressions.define(EXPRESSION_OWNER, ctx, expression_rows)
     if not live.hot():
         write("hot reload: off (場所が控えられない。設定は注入し直しで効く)")
 
@@ -1892,7 +1905,8 @@ def apply(ctx):
 
         顔の描き直しは、高度設定の顔の描き直しと「既存の立ち絵にもかける」が入のときだけ、
         控え（`faces.DONE_NAME`）が今の絵に合わない人物へかける。描き直すと元の絵が変わるので、差分はその後に数える。
-        差分は、表情を見せる MOD が居るときだけ、差分の無い人物へ描く。
+        差分は、表情を見せる MOD が居るときだけ、差分の無い人物と、描き足す・タグの変わった・名前の変わった・
+        一覧から外した表情のある人物へ手を入れる（`variant_job`）。
         人物は世界の骨格とセーブの名簿から。文は人物のフォルダの `prompts.json`。
         「中断する」で止まり、次の一括生成で残りから描く（済んだ人物は控えと印で外れる）。
         描いている間は一括生成の画面に件数を渡す（`variants.progress_state`）。
@@ -1961,15 +1975,32 @@ def apply(ctx):
             # 描けない設定なら数えない（ゲームの用意へ進んで、全員を「描けなかった」と数えないため）
             if not expressions.wanted() or variant_blocked() is not None:
                 return []
-            return [(name, folder) for name, folder in people if variants.needs_variants(folder, expressions)]
-        todo = variant_todo()
+            wanted = variants.wanted_rows(live.variants)
+            return [(name, folder) for name, folder in people if variants.needs_variants(folder, expressions, wanted)]
+
+        def tidy_only(rows):
+            """描く表情が無く、名前を変える・消すだけの人物を先に済ませ、残り（描く人物）を返す。
+
+            名前の変更と削除は絵を描かないので、ゲームの用意（`backfill_materials`）を待たない。
+            """
+            wanted, left, tidied = variants.wanted_rows(live.variants), [], 0
+            for name, folder in rows:
+                planned = expressions.plan(folder, wanted)
+                if planned is not None and not planned["draw"]:
+                    tidied += variant_job(None, folder, name, None) is True
+                else:
+                    left.append((name, folder))
+            if tidied:
+                write("表情差分（一括生成）[{}]: {} 人の差分の名前を変えた・消した（描き直しは無し）".format(world, tidied))
+            return left
+        todo = tidy_only(variant_todo())
         if not redo and not todo:
             if face_conf is not None:
                 write("顔の描き直し（一括生成）[{}]: 描き直していない立ち絵は無い".format(world))
             if expressions.wanted():
                 blocked = variant_blocked()
                 write("表情差分（一括生成）[{}]: {}".format(
-                    world, "差分の無い人物は居ない" if blocked is None else blocked))
+                    world, "差分の無い人物・描き足す表情・タグの変わった表情は無い" if blocked is None else blocked))
             return reported
         materials, why = backfill_materials()
         if materials is None:
@@ -2052,7 +2083,7 @@ def apply(ctx):
                     failed += 1
             write("顔の描き直し（一括生成）[{}]: {} 人の顔を描き直した（顔が見つからない {} 人、描けなかった {} 人、計 {:.0f} 秒）".format(
                 world, done, missed, failed, time.time() - started))
-            todo = variant_todo()
+            todo = tidy_only(variant_todo())
         if not todo:
             return reported
         write("表情差分（一括生成）[{}]: 立ち絵のある {} 人に差分だけ描く".format(world, len(todo)))
@@ -2123,6 +2154,8 @@ def apply(ctx):
         顔が見つからないときは差分の無い印を書く（一括生成のたびに数え直して、ゲームの用意と顔の検出を
         繰り返さないため。立ち絵が描き直されれば印が外れて、また描く）。
         描けない・途中で立ち絵が描き直された・`stop_event` が立ったときは印を書かない。
+        印が今の立ち絵のものなら、足りない表情とタグの変わった表情だけ描き、名前の変わった表情はファイル名を変え、
+        一覧から外した表情は消す（ローダの窓口の `expressions.plan`）。描き直しに失敗した表情は前の絵のまま見せる。
         `steps` は工程の引数（無ければこの起動で控えたもの）、`how` はログの描いた場面。
         """
         started = time.time()
@@ -2130,13 +2163,32 @@ def apply(ctx):
             conf = live.variants
             if not conf["tags"]:
                 return False
-            detector = faces.config(dict(live.faces, on=True), face_models)
-            if detector is None:
-                warn("expression-no-detector", "顔の検出器が見つからないので、表情差分を描かない")
-                return False
             stamp = expressions.stamp(folder)
             if stamp is None:
                 write("表情差分 [{}]: 元の絵（{}）が無いので描かない".format(name, expressions.SOURCE))
+                return False
+            planned = expressions.plan(folder, variants.wanted_rows(conf), stamp)
+            kept, stale = [], {}
+            if planned is None:
+                todo = list(conf["tags"])
+            else:
+                moved = expressions.tidy(folder, planned)
+                kept, stale = planned["keep"] + moved, dict(planned["stale"])
+                todo = [e for e in conf["tags"] if e in planned["draw"]
+                        or any(new == e and e not in moved for _old, new in planned["rename"])]
+                if planned["rename"] or planned["remove"]:
+                    # 描く前に印を書き直す（描いている途中で止まっても、名前を変えた表情を見せられる）
+                    tags = dict(conf["tags"], **stale)
+                    expressions.seal(folder, stamp, names=kept + list(stale), complete=not todo, tags=tags,
+                                     ids=conf["ids"])
+                    write("表情差分 [{}]: 名前を変えた {}、消した {}".format(
+                        name, ", ".join("{}→{}".format(old, new) for old, new in planned["rename"]) or "無し",
+                        ", ".join(planned["remove"]) or "無し"))
+                if not todo:
+                    return True
+            detector = faces.config(dict(live.faces, on=True), face_models)
+            if detector is None:
+                warn("expression-no-detector", "顔の検出器が見つからないので、表情差分を描かない")
                 return False
             module = sys.modules.get(module_name or "")
             funcs = [frames.attr(module, step, None) for step in VARIANT_STEPS]
@@ -2150,9 +2202,12 @@ def apply(ctx):
             cutout = img2img.load_image(cutout_path) if os.path.isfile(cutout_path) else None
             found = faces.find(base, detector)
             if found is None:
-                expressions.clear(folder)
-                expressions.seal(folder, stamp, names=[])
-                write("表情差分 [{}]: 顔が見つからないので描かない（この立ち絵には次から描かない）".format(name))
+                if planned is None:
+                    expressions.clear(folder)
+                    expressions.seal(folder, stamp, names=[])
+                    write("表情差分 [{}]: 顔が見つからないので描かない（この立ち絵には次から描かない）".format(name))
+                else:
+                    write("表情差分 [{}]: 顔が見つからないので描き足さない".format(name))
                 return faces.NO_FACE
             route = captured["route"]
             if live.faces["on"] and live.faces["preset"]:
@@ -2160,10 +2215,11 @@ def apply(ctx):
             model = route["model"] if route else (FAMILY.get("name"), FAMILY.get("path"))
             # 強さは描くモデルで決める（モデル名で分ける行、無ければ系統の欄。variants.strength_for）
             strength, matched = variants.strength_for(conf, model)
-            cut = face_cut(base, found, route)          # 4表情とも同じ切り出し
-            expressions.clear(folder)
-            done, drawn, wanted = [], [], [e for e in expressions.VARIANTS if conf["tags"].get(e)]
-            for expression in wanted:
+            cut = face_cut(base, found, route)          # どの表情も同じ切り出し
+            if planned is None:
+                expressions.clear(folder)
+            done, drawn = [], []
+            for expression in todo:
                 tags = conf["tags"][expression]
                 if expressions.stamp(folder) != stamp:
                     write("表情差分 [{}]: 描いている間に立ち絵が描き直されたので止める".format(name))
@@ -2190,17 +2246,24 @@ def apply(ctx):
                 variants.save_replacing(shown, expressions.variant_path(folder, expression))
                 drawn.append(expression)
                 done.append("{} {:.1f}秒".format(expression, time.time() - one))
-            # 欠けた表情があれば、描けた分を見せつつ描き揃っていない印にする（次の一括生成で描き直す）
-            whole = len(drawn) == len(wanted)
-            if drawn and expressions.stamp(folder) == stamp \
-                    and expressions.seal(folder, stamp, names=drawn, complete=whole):
-                write("表情差分 [{}]: {}（計 {:.1f} 秒、{}、強さ {}{}）{}".format(
-                    name, "、".join(done), time.time() - started,
-                    how or ("一括生成なので続けて描いた" if BULK["depth"] > 0 else "裏で描いた"), strength,
-                    "（{}）".format(matched),
-                    "" if whole else "。描けなかった表情があるので、次の一括生成で描き直す"))
-                return whole
-            return False
+            # 欠けた表情があれば、描けた分を見せつつ描き揃っていない印にする（次の一括生成で描き直す）。
+            # タグを変えて描き直せなかった表情は、前のタグの絵と前のタグを印に残す（次の一括生成で描き直す）
+            whole = len(drawn) == len(todo)
+            tags = dict(conf["tags"])
+            failed_stale = [e for e in stale if e not in drawn]
+            tags.update((e, stale[e]) for e in failed_stale)
+            shown_names = kept + drawn + failed_stale
+            # 1枚も描けなかった回も、前の差分が残っていれば描き揃っていない印に書き直す
+            if not (drawn or (planned is not None and shown_names)) or expressions.stamp(folder) != stamp \
+                    or not expressions.seal(folder, stamp, names=shown_names, complete=whole, tags=tags,
+                                            ids=conf["ids"]):
+                return False
+            write("表情差分 [{}]: {}（計 {:.1f} 秒、{}、強さ {}{}）{}".format(
+                name, "、".join(done) or "描けた表情は無し", time.time() - started,
+                how or ("一括生成なので続けて描いた" if BULK["depth"] > 0 else "裏で描いた"), strength,
+                "（{}）".format(matched),
+                "" if whole else "。描けなかった表情があるので、次の一括生成で描き直す"))
+            return whole
         except Exception as exc:
             ctx.log_exc("image quality: drawing the expression variants failed")
             warn("expression-failed", "表情差分を描けなかった（{}: {}: {}）".format(name, type(exc).__name__, exc))
