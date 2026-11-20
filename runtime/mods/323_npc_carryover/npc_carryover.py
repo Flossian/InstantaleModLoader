@@ -84,7 +84,7 @@ import random
 import sys
 
 import instantale_modloader as loader
-from instantale_modloader import choices, frames, loads, npcs, state as loader_state, ui
+from instantale_modloader import choices, frames, loads, npcs, saving, state as loader_state, ui
 from instantale_modloader.npcs import make_npc
 
 from . import carryover
@@ -123,7 +123,7 @@ MEMORY_STORES = (("npc_profiles", "profile"),
 SOCIAL_KEY = "social"
 
 #: ゲームの保存。ここを通ったら、置いた NPC はファイルにも残る。
-SAVE_TARGET = "__main__:InstantaleApp.save_game"
+SAVE_TARGET = saving.TARGET   # ローダの窓口 `saving` が1枚だけ包む
 
 ARRIVED = "{name}が旅の末に{where}へ流れて来たらしい。"
 SKIPPED = "{name}はこの世界に同名の人物が居るため現れなかった。"
@@ -668,40 +668,37 @@ def apply(ctx):
     # 同じ持ち主の登録は差し替わるので、`on_load`（後の処理）とは別の名で登録する。
     loads.on(owner + ":new_game", ctx, (loads.NEW_GAME,), before=new_game_before, write=write)
 
-    @ctx.wrap(SAVE_TARGET, required=False, safe=True)
-    def save_game(orig, self, *args, **kwargs):
-        """保存が済んだら、置いた予約に印を付ける。
+    def save_after(call):
+        """保存が済んだら、置いた予約に印を付ける（ローダの窓口 `saving`）。
 
         ここを通るまでは、置いた NPC はメモリの中にしか居ない。
         """
-        result = orig(self, *args, **kwargs)
+        self = call.app
+        app = (self if getattr(self, "save_data_dict", None) is not None
+               else ui.find_app())
+        world = loader_state.world_key(app) if app is not None else ""
         try:
-            app = (self if getattr(self, "save_data_dict", None) is not None
-                   else ui.find_app())
-            world = loader_state.world_key(app) if app is not None else ""
-            try:
-                rows = carryover.load_pending(state_dir, strict=True)
-            except carryover.PendingUnreadable as exc:
-                write("WARN save: the reservations cannot be read ({}); not stamped".format(exc))
-                return result
-            stamped = []
-            for row in rows:
-                if (row.get("status") == carryover.PLACED
-                        and row.get("target_world") == world
-                        and not row.get("saved")):
-                    row["saved"] = datetime.datetime.now().isoformat(
-                        timespec="seconds")
-                    stamped.append(row.get("name"))
-            if stamped:
-                if carryover.save_pending(state_dir, rows):
-                    write("saved: {} now live in {}".format(
-                        "、".join(str(name) for name in stamped), world))
-                else:
-                    write("WARN save: could not stamp {} as saved".format(
-                        "、".join(str(name) for name in stamped)))
-        except Exception:
-            ctx.log_exc("npc carryover: cannot record the save")
-        return result
+            rows = carryover.load_pending(state_dir, strict=True)
+        except carryover.PendingUnreadable as exc:
+            write("WARN save: the reservations cannot be read ({}); not stamped".format(exc))
+            return
+        stamped = []
+        for row in rows:
+            if (row.get("status") == carryover.PLACED
+                    and row.get("target_world") == world
+                    and not row.get("saved")):
+                row["saved"] = datetime.datetime.now().isoformat(
+                    timespec="seconds")
+                stamped.append(row.get("name"))
+        if stamped:
+            if carryover.save_pending(state_dir, rows):
+                write("saved: {} now live in {}".format(
+                    "、".join(str(name) for name in stamped), world))
+            else:
+                write("WARN save: could not stamp {} as saved".format(
+                    "、".join(str(name) for name in stamped)))
+
+    saving.on("323_npc_carryover", ctx, after=save_after, write=write)
 
     def refresh_choice_buttons(self, _buttons):
         # 言付けはロードの直後ではなく、画面が出来てから出す。

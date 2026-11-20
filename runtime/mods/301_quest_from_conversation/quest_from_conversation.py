@@ -115,7 +115,7 @@ import threading
 import time
 
 from instantale_modloader import (arrivals, board, choices, confinement, frames, loads, modnpc, quest_claims,
-                                  quest_clients, ui)
+                                  quest_clients, quest_ends, quest_generation, ui)
 from instantale_modloader.state import (PLAYTHROUGH_SEP, UNKNOWN_WORLD, WorldStore, key_in_world,
                                         other_playthroughs, playthrough_key, retire_entries,
                                         world_filename, world_key)
@@ -181,9 +181,6 @@ END_TEXT = "<行動: 依頼の話を切り出すため、会話を切り上げ�
 # 重複ボタンになるだけ。
 OFFER_SITES = ("conversation",)
 
-# `random_quest_generator` の引数の並び（recon の signatures.json）。書き起こしは `area_description` に足す。
-QUEST_GENERATOR_ARGS = ("world_overview", "settlement_name", "settlement_overview",
-                        "settlement_structure_description", "area_description", "quest_difficulty")
 
 # 施設側から入ったときも「この話から依頼を作る」を使えるようにするため、
 # 会話が終わるときに書き起こしを控えておく。
@@ -374,8 +371,6 @@ def apply(ctx):
         "owner": None,           # 窓口 `choices` の持ち主の名前（`provide` が返す）
         "npc_id": None,          # 会話の開始で控えた相手。相手の引き方は talking_partner
         "generating": False,
-        "inject": None,          # random_quest_generator に渡す会話の書き起こし
-        "inject_at": 0.0,
         # 会話が終わった後も「この話から依頼を作る」を使えるようにするための控え。
         # {"text": 書き起こし, "npc_id": ..., "npc_name": ..., "moves": 残り手数,
         #  "world": world_key}
@@ -399,7 +394,6 @@ def apply(ctx):
         # ボタンを出さなかった理由。こちらも同じ理由が続く間は書かない。
         # `refresh_choice_buttons` は並べ直しのたびに走る。
     }
-    INJECT_TTL = 300.0
 
     write = ctx.logger(LOG_BASENAME)
     owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "301_quest_from_conversation"
@@ -1079,13 +1073,13 @@ def apply(ctx):
         # ゲームの状態（`world_key`）を触るのはこちら側に寄せる。
         persona = npc_memory(app, npc_id_at_start)
         state["generating"] = True
-        state["inject"] = {"transcript": transcript, "npc_name": npc_name,
-                           "persona": persona}
-        state["inject_at"] = time.monotonic()
+        # 生成の `area_description` に会話の書き起こしを足す（ローダの窓口。1回で使い切る。TECH.md §3.3.30）。
+        quest_generation.offer(owner, ctx, brief=conversation_brief(npc_name, transcript, persona),
+                               after=generated, tag="inject", write=write)
 
         def finish(quest_id):
             state["generating"] = False
-            state["inject"] = None
+            quest_generation.cancel(owner)
             write("generate: finished -> {}".format(wait_state(app)))
             if quest_id is None:
                 clear_busy(app)
@@ -1149,7 +1143,7 @@ def apply(ctx):
                 # 生成中の印が残ると依頼ボタンが二度と足されず、
                 # 待機表示が残ると画面が押せないままになる。
                 state["generating"] = False
-                state["inject"] = None
+                quest_generation.cancel(owner)
                 if screen.is_busy():
                     clear_busy(app)
 
@@ -1825,16 +1819,12 @@ def apply(ctx):
         state["npc_id"] = None
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap("__main__:QuestEndManager.execute", required=False, safe=True)
-    def quest_end(orig, self, *args, **kwargs):
-        """依頼の終わり。依頼のデータはこの中で片付くので、元の処理より前に控える。"""
-        try:
-            app = getattr(self, "app", None) or find_app()
-            if app is not None:
-                remember_quest_end(app)
-        except Exception:
-            ctx.log_exc("quest offer: cannot remember the end of the quest")
-        return orig(self, *args, **kwargs)
+    def quest_end_before(call):
+        """依頼の終わり。依頼のデータはこの中で片付くので、元の処理より前に控える（ローダの窓口 `quest_ends`）。"""
+        if call.app is not None:
+            remember_quest_end(call.app)
+
+    quest_ends.on(owner, ctx, before=quest_end_before, write=write)
 
     def before_move(call):
         """施設を移る前（ローダの窓口 `arrivals`。TECH.md §3.3.21）。"""
@@ -1854,25 +1844,16 @@ def apply(ctx):
     arrivals.on(owner, ctx, (arrivals.FACILITY,), before=before_move, write=write)
 
     # ------------------------------------- 生成プロンプトへ会話を差し込む
-    @ctx.wrap("scripts.llm.llm_manager_world_generate:random_quest_generator",
-              required=False)
-    def random_quest_generator(orig, *args, **kwargs):
-        """`area_description` にこの会話の書き起こしを添える。
+    # 生成への差し込みはローダの窓口が1枚だけ包む（`generate_quest` が `offer` で置く。TECH.md §3.3.30）。
+    quest_generation.install(ctx, write)
+
+    def conversation_brief(npc_name, transcript, persona):
+        """生成の `area_description` に足す文（会話の書き起こしと、過去の会話から分かっている人物像）。
 
         引数を足すのではなく既存の自由記述欄に載せるだけなので、
         出力スキーマ（QuestStructure）にも呼び出し側にも一切影響しない。
-        印は1回で使い切るので、掲示板から普通に作られた依頼は素通しする。
-        引数は受けた形（位置かキーワード）のまま渡し、`area_description` だけを差し替える（TECH.md の規則の表）。
         """
-        mark = state["inject"]
-        if mark is None:
-            return orig(*args, **kwargs)
-        state["inject"] = None
-        if time.monotonic() - state["inject_at"] > INJECT_TTL:
-            write("inject: stale marker, left untouched")
-            return orig(*args, **kwargs)
-        area_description = frames.arg(args, kwargs, "area_description", QUEST_GENERATOR_ARGS)
-
+        persona = persona or ""
         addition = (
             "\n\n【この依頼の発端 ― 最優先で反映すること】\n"
             "以下は依頼人「{npc}」が冒険者に持ちかけた会話の記録である。\n"
@@ -1883,13 +1864,12 @@ def apply(ctx):
             "- client_statement は、この会話から読み取れる依頼人の内心・事情とすること。\n"
             "- 舞台となるエリアは、会話で語られた場所に沿って設計すること。\n"
             "--- 会話の記録 ---\n{transcript}\n--- 記録ここまで ---"
-        ).format(npc=mark["npc_name"] or "依頼人", transcript=mark["transcript"])
+        ).format(npc=npc_name or "依頼人", transcript=transcript)
 
         # 過去の会話から分かっている依頼人の人となり（`311_` の控え）。
         # この会話の記録より後ろに置く。
         # 依頼の中身を決めるのはあくまで今の会話で、
         # 人物像は client_statement の口ぶりを寄せるためのもの。
-        persona = mark.get("persona") or ""
         if persona:
             addition += (
                 "\n\n【依頼人「{npc}」について過去の会話から分かっていること】\n"
@@ -1897,23 +1877,17 @@ def apply(ctx):
                 "ただし、ここに書かれた事柄を依頼の中身にしてはならない"
                 "（依頼の中身は上の会話の記録だけから決める）。\n"
                 "--- 人物像 ---\n{persona}\n--- 人物像ここまで ---"
-            ).format(npc=mark["npc_name"] or "依頼人", persona=persona)
+            ).format(npc=npc_name or "依頼人", persona=persona)
 
-        merged = (area_description or "") + addition
-        write("inject: area_description {} -> {} chars (npc={!r}, persona={} chars)"
-              .format(len(area_description or ""), len(merged), mark["npc_name"],
-                      len(persona)))
-        args, kwargs, placed = frames.replace_arg(args, kwargs, "area_description",
-                                                  QUEST_GENERATOR_ARGS, merged)
-        if not placed:
-            write("inject: area_description was not passed; left untouched")
-        result = orig(*args, **kwargs)
+        return addition
+
+    def generated(result):
+        """差し込んだ生成が返したもの（窓口の `after`）。"""
         if isinstance(result, dict):
             write("inject: generated {!r} client={!r}".format(
                 result.get("quest_title"), result.get("client_name")))
         else:
             write("inject: generator returned {}".format(frames.repr_value(result)))
-        return result
 
     # ------------------- 会話5関数に「片付いた依頼」を伝える
     # 5本ともプロフィール欄を通して伝える（引数を足さない）。

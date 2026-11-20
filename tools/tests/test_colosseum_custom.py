@@ -104,10 +104,16 @@ class FakeLLM(object):
 
 
 class FakeCtx(object):
+    _seq = 0
+
     _mod = "334_colosseum_custom"
 
     def __init__(self, out_dir):
         self.out_dir = out_dir
+        # 世代は apply() ごとに違う（本物の `ctx.generation`）。ローダの窓口の包みは世代ごとに1枚なので
+        # （`text_filters.install`）、ここが同じ値だと作り直した ctx に包みが渡らない。
+        FakeCtx._seq += 1
+        self.generation = FakeCtx._seq
         self.hooks = {}
         self.errors = []
         self.logs = []

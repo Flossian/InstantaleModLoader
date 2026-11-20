@@ -153,6 +153,16 @@ def find_app():
     return None
 
 
+def language():
+    """ゲームの表示言語（`scripts.languages.language`）。`"en"` か `"ja"`。読めなければ `"ja"`。
+
+    `134_` / `346_` / `409_` / `410_` / `411_` とローダの `battle_effects` に同じ本体が写されていた。
+    """
+    module = sys.modules.get("scripts.languages")
+    lang = getattr(module, "language", None) if module is not None else None
+    return "en" if lang == "en" else "ja"
+
+
 def spec_of(entry):
     if not isinstance(entry, dict):
         return None
@@ -1662,6 +1672,18 @@ def facility_type_of(facility):
     if value is None and isinstance(facility, dict):
         value = facility.get("facility_type")
     return value if isinstance(value, str) else ""
+
+
+def guild_of(area):
+    """そのエリアのギルド。`(施設 id（文字列）, 施設)`。無ければ `(None, None)`。
+
+    `320_` / `336_` に同じ本体が写されていた。
+    """
+    for node in nodes_of(area):
+        for key, facility in facilities_of(node).items():
+            if facility_type_of(facility) == GUILD_FACILITY_TYPE:
+                return str(key), facility
+    return None, None
 
 
 def find_facility(area, facility_id):

@@ -81,7 +81,7 @@ r"""闘技場の相手の強さと懸賞金を設定で決める。
 import sys
 import time
 
-from instantale_modloader import choices, defeat, frames, llm, loads, ui
+from instantale_modloader import choices, defeat, frames, llm, loads, text_filters, ui
 
 LOG_BASENAME = "colosseum_custom.log"
 MARK = "_mod_colosseum_custom"
@@ -859,32 +859,28 @@ def apply(ctx):
                 restore_lawfulness(app, "escaped")
 
     # -------------------------------------------------------------- 懸賞金
-    @ctx.wrap("__main__:InstantaleApp.add_text", required=False, safe=True)
-    def add_text(orig, self, *args, **kwargs):
-        """懸賞金の文の額を、こちらが払う額に書き換える。
+    def prize_text(context, app):
+        """懸賞金の文の額を、こちらが払う額に書き換える（ローダの窓口 `text_filters`）。
 
         試合の終わりの間（`state["reward"]`）だけ働く。
         書き換えられた回だけ、後で所持金の差額を足す（食い違わせないため）。
         """
         pending = state.get("reward")
-        context = frames.arg(args, kwargs, "context", 0)
-        if pending and isinstance(context, str) and REWARD_MARK in context:
-            try:
-                base = ui.parse_coin(context)
-                if base is not None and base > 0:
-                    want = max(0, int(round(base * pending["mult"])))
-                    rewritten = replace_amount(context, base, want)
-                    if rewritten is not None:
-                        pending["base"], pending["want"] = base, want
-                        args, kwargs, _ = frames.replace_arg(args, kwargs, "context", 0, rewritten)
-                        write("reward: {} -> {} (x{:.2f})".format(
-                            base, want, pending["mult"]))
-                    else:
-                        write("WARN reward: cannot rewrite the amount in {!r}".format(
-                            context))
-            except Exception:
-                ctx.log_exc("colosseum: cannot rewrite the prize")
-        return orig(self, *args, **kwargs)
+        if not pending or not isinstance(context, str) or REWARD_MARK not in context:
+            return None
+        base = ui.parse_coin(context)
+        if base is None or base <= 0:
+            return None
+        want = max(0, int(round(base * pending["mult"])))
+        rewritten = replace_amount(context, base, want)
+        if rewritten is None:
+            write("WARN reward: cannot rewrite the amount in {!r}".format(context))
+            return None
+        pending["base"], pending["want"] = base, want
+        write("reward: {} -> {} (x{:.2f})".format(base, want, pending["mult"]))
+        return rewritten
+
+    text_filters.on(OWNER, ctx, prize_text, write=write)
 
     def settle(app, before):
         """ゲームが入れた額と、こちらが言った額の差を埋める。"""

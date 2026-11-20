@@ -85,7 +85,7 @@
 
 import time
 
-from instantale_modloader import frames, ui
+from instantale_modloader import frames, text_filters, ui
 
 # `302_` / `303_` と同じログに書く（パーティの増減を1つの時系列で読むため）。
 LOG_BASENAME = "party_leave.log"
@@ -272,24 +272,20 @@ def apply(ctx):
             entry["name"]))
         return None
 
-    @ctx.wrap("__main__:InstantaleApp.add_text", required=False)
-    def add_text(orig, self, *args, **kwargs):
-        """「…はパーティから離脱した。」を、残った旨に差し替える。
+    def farewell_text(context, app):
+        """「…はパーティから離脱した。」を、残った旨に差し替える（ローダの窓口 `text_filters`）。
 
         引き留めた直後に**その相手の名前が入った離脱の文**だけを見る。
         控えが空なら何もせず抜けるので、普段の描画には触らない。
         """
-        if REPLACE_LEAVE_TEXT and state["kept"]:
-            try:
-                context = frames.arg(args, kwargs, "context", 0)
-                replaced = keep_text_for(context) if isinstance(context, str) else None
-                if replaced is not None:
-                    write("text: {!r} -> {!r}".format(frames.short(context, 60),
-                                                      frames.short(replaced, 60)))
-                    args, kwargs, _ = frames.replace_arg(args, kwargs, "context", 0, replaced)
-            except Exception:
-                ctx.log_exc("quest-end keep: cannot rewrite the farewell line")
-        return orig(self, *args, **kwargs)
+        if not REPLACE_LEAVE_TEXT or not state["kept"] or not isinstance(context, str):
+            return None
+        replaced = keep_text_for(context)
+        if replaced is not None:
+            write("text: {!r} -> {!r}".format(frames.short(context, 60), frames.short(replaced, 60)))
+        return replaced
+
+    text_filters.on("304_quest_end_keep_party", ctx, farewell_text, write=write)
 
     def keep_text_for(context):
         """離脱を告げる文なら、残った旨の文を返す。違えば None。"""

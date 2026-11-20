@@ -70,7 +70,7 @@ import os
 import random
 import sys
 
-from instantale_modloader import choices, durations, frames, loads, modnpc, npcs, ui
+from instantale_modloader import choices, durations, frames, loads, modnpc, npcs, saving, ui
 from instantale_modloader.state import WorldStore
 
 LOG_BASENAME = "inn_quality.log"
@@ -468,17 +468,24 @@ def apply(ctx):
             record["name"], record["stays"], record["by_quality"]))
 
     # ============================================================ 記録の確定
-    @ctx.wrap("__main__:InstantaleApp.save_game", required=False)
-    def save_game(orig, self, *args, **kwargs):
-        """ゲームの保存が通ったら、まだ書いていない記録を `state\\` へ書く。
+    def save_before(call):
+        """保存の間ずっと控えの錠を持つ（ローダの窓口 `saving`。放すのは `save_after`）。
 
-        錠は保存の間ずっと持つ。宿泊の書き換え（好感度と記録を同じ錠の中で動かす）が
+        宿泊の書き換え（好感度と記録を同じ錠の中で動かす）が
         保存の途中に割り込むと、セーブに入らなかった好感度の記録だけを確定してしまう。
-        `orig` が投げたら書かない（次の保存でまとめて書く）。
         """
-        with worlds.lock:
-            result = orig(self, *args, **kwargs)
-            try:
+        worlds.lock.acquire()
+        return True
+
+    def save_after(call):
+        """ゲームの保存が通ったら、まだ書いていない記録を `state\\` へ書いて錠を放す。
+
+        `orig` が投げたら書かない（次の保存でまとめて書く）。錠は投げた回も放す。
+        """
+        if not call.memo:
+            return
+        try:
+            if call.error is None:
                 for key in sorted(pending):
                     if worlds.cached(key) is None:
                         # 読み直しで捨てた控え。空の控えで上書きしない。
@@ -486,9 +493,10 @@ def apply(ctx):
                     elif worlds.save(key):
                         pending.discard(key)
                         write("save: records of {} written".format(key))
-            except Exception:
-                ctx.log_exc("inn quality: cannot write the records after the save")
-        return result
+        finally:
+            worlds.lock.release()
+
+    saving.on("327_inn_quality", ctx, before=save_before, after=save_after, always=True, write=write)
 
     def world_init(call):
         """ロードと新規開始（世界を組み立てた後。ローダの窓口 `loads`）。

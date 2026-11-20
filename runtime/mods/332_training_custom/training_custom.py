@@ -64,7 +64,7 @@ import re
 import sys
 import time
 
-from instantale_modloader import choices, durations, frames, llm, ui
+from instantale_modloader import choices, durations, frames, llm, text_filters, ui
 from instantale_modloader.state import UNKNOWN_WORLD, WorldStore, world_key
 
 LOG_BASENAME = "training_custom.log"
@@ -942,37 +942,32 @@ def apply(ctx):
             return None
         return max(1, int(COURSE_YEARS))
 
-    @ctx.wrap("__main__:InstantaleApp.add_text", required=False)
-    def add_text(orig, self, *args, **kwargs):
-        """訓練の窓の間だけ、文言の「N年間」を実際の期間に直す。
+    def training_text(context, app):
+        """訓練の窓の間だけ、文言の「N年間」を実際の期間に直す（ローダの窓口 `text_filters`）。
 
         窓の外（他の場面の文言）には一切触らない。
         当たらなかった文はログに残す（ゲームの言い回しが変わったときの手掛かり）。
         """
-        try:
-            window = state["phase"]
-            context = frames.arg(args, kwargs, "context", 0)
-            if (window is not None or state["start"]) and isinstance(context, str):
-                refresh_world(self)
-                activity = window.get("activity") if window is not None else None
-                budget = fresh_budget()
-                if budget is not None:
-                    said = COUNT_YEARS_RE.search(context)
-                    if said is not None and int(said.group(1)) != budget:
-                        write("text: the start line still said {} year(s); using the "
-                              "{} we set".format(said.group(1), budget))
-                replaced = reword(context, activity, phase=window is not None,
-                                  budget=budget)
-                if replaced is not None and replaced != context:
-                    write("text: {!r} -> {!r}".format(context, replaced))
-                    args, kwargs, _ = frames.replace_arg(args, kwargs, "context", 0, replaced)
-                    return orig(self, *args, **kwargs)
-                if PERIOD_WORDING and "年" in context and len(context) < 40:
-                    write("text passing through (no year mark matched): {!r}"
-                          .format(context))
-        except Exception:
-            ctx.log_exc("training custom: cannot reword the training text")
-        return orig(self, *args, **kwargs)
+        window = state["phase"]
+        if (window is None and not state["start"]) or not isinstance(context, str):
+            return None
+        refresh_world(app)
+        activity = window.get("activity") if window is not None else None
+        budget = fresh_budget()
+        if budget is not None:
+            said = COUNT_YEARS_RE.search(context)
+            if said is not None and int(said.group(1)) != budget:
+                write("text: the start line still said {} year(s); using the "
+                      "{} we set".format(said.group(1), budget))
+        replaced = reword(context, activity, phase=window is not None, budget=budget)
+        if replaced is not None and replaced != context:
+            write("text: {!r} -> {!r}".format(context, replaced))
+            return replaced
+        if PERIOD_WORDING and "年" in context and len(context) < 40:
+            write("text passing through (no year mark matched): {!r}".format(context))
+        return None
+
+    text_filters.on(owner, ctx, training_text, write=write)
 
     def rewrite_outgoing(texts, site):
         """AI へ出ていく頼み文の年数を実際の期間に直す。

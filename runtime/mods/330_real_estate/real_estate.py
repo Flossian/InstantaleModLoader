@@ -160,7 +160,7 @@ import datetime
 import sys
 
 from instantale_modloader import (choices, confinement, durations, frames, holdings, llm, loads, modfacility,
-                                  modnpc, prices, ui)
+                                  modnpc, prices, saving, ui)
 from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, playthrough_key,
                                         playthrough_key_of_dict)
 
@@ -2172,33 +2172,40 @@ def apply(ctx):
             len(kept)))
         return inv, kept
 
-    @ctx.wrap("__main__:InstantaleApp.save_game", required=False)
-    def save_game(orig, self, *args, **kwargs):
-        """保管庫を開いたまま保存するときの後始末（売買中の旗と、管理人の手元）。
+    def save_before(call):
+        """保管庫を開いたまま保存するときの後始末（売買中の旗と、管理人の手元）。ローダの窓口 `saving`。
 
         立ち位置（建て直されない建物の中に居るとき入口へ移す）と、
         建物を指す選択肢の掃除はローダの関所が持つ（TECH.md §5.8）。
         生きている契約の建物は `keeps_inside` で「中のままでよい」と名乗ってある。
         """
-        shopping, stored = None, None
+        # 1つずつ読む。後ろが投げても、先に下ろした売買中の旗は `save_after` で戻す。
+        shopping = stored = None
         try:
-            shopping = quiet_shopping_flag(self)
-            stored = quiet_storage_items(self)
+            shopping = quiet_shopping_flag(call.app)
         except Exception:
-            ctx.log_exc("real estate: cannot check the place before the save")
+            ctx.log_exc("real estate: cannot lower in_shopping before the save")
         try:
-            return orig(self, *args, **kwargs)
-        finally:
-            if stored is not None:
-                try:
-                    stored[0].update(stored[1])
-                except Exception:
-                    ctx.log_exc("real estate: cannot put the stored items back")
-            if shopping is not None:
-                try:
-                    self.in_shopping = shopping
-                except Exception:
-                    ctx.log_exc("real estate: cannot restore in_shopping")
+            stored = quiet_storage_items(call.app)
+        except Exception:
+            ctx.log_exc("real estate: cannot empty the keeper's hands before the save")
+        return shopping, stored
+
+    def save_after(call):
+        """保存が済んだら（投げた回も）、伏せた旗と管理人の手元を戻す。"""
+        shopping, stored = call.memo or (None, None)
+        if stored is not None:
+            try:
+                stored[0].update(stored[1])
+            except Exception:
+                ctx.log_exc("real estate: cannot put the stored items back")
+        if shopping is not None:
+            try:
+                call.app.in_shopping = shopping
+            except Exception:
+                ctx.log_exc("real estate: cannot restore in_shopping")
+
+    saving.on(OWNER, ctx, before=save_before, after=save_after, always=True, write=write)
 
     def after_days(call):
         """日付が進んだら家賃を精算する。日付を動かすのは `elapse_days` の1箇所（GAME.md §2.16）。

@@ -76,7 +76,7 @@ import sys
 import re
 import time
 
-from instantale_modloader import choices, durations, frames, llm, prices, ui
+from instantale_modloader import choices, durations, frames, llm, prices, text_filters, ui
 
 LOG_BASENAME = "vacation_custom.log"
 
@@ -647,27 +647,25 @@ def apply(ctx):
     durations.claim_days(owner, days_wish, note=days_note, write=write)
     durations.install(ctx, write)
 
-    @ctx.wrap("__main__:InstantaleApp.add_text", required=False)
-    def add_text(orig, self, *args, **kwargs):
-        """週単位のときだけ「1ヵ月泊まることにした。」を実際の期間に直す。
+    def stay_text(context, app):
+        """週単位のときだけ「1ヵ月泊まることにした。」を実際の期間に直す（ローダの窓口 `text_filters`）。
 
         窓の中で、名指しの手掛かりに当たった文言だけ。
         テンプレートが空ならゲームのまま。
         月単位はゲームが正しい月数を言うので触らない。
         """
-        try:
-            block = state["block"]
-            if block is not None and state["depth"] > 0:
-                context = frames.arg(args, kwargs, "context", 0)
-                template = str(STAY_TEXT)
-                if isinstance(context, str) and STAY_TEXT_MARK in context and template:
-                    replaced = fmt(template, length=block["length"])
-                    if replaced != context:
-                        write("text: {!r} -> {!r}".format(context, replaced))
-                        args, kwargs, _ = frames.replace_arg(args, kwargs, "context", 0, replaced)
-        except Exception:
-            ctx.log_exc("vacation custom: cannot reword the stay text")
-        return orig(self, *args, **kwargs)
+        block = state["block"]
+        if block is None or state["depth"] <= 0:
+            return None
+        template = str(STAY_TEXT)
+        if isinstance(context, str) and STAY_TEXT_MARK in context and template:
+            replaced = fmt(template, length=block["length"])
+            if replaced != context:
+                write("text: {!r} -> {!r}".format(context, replaced))
+                return replaced
+        return None
+
+    text_filters.on(owner, ctx, stay_text, write=write)
 
     # ================================================ LLM へ出ていく文の月数
     def rewrite_outgoing(texts, site):

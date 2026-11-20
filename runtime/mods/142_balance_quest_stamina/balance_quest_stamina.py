@@ -40,7 +40,7 @@
 import sys
 import threading
 
-from instantale_modloader import frames, ui
+from instantale_modloader import frames, quest_ends, saving, ui
 
 LOG_BASENAME = "quest_stamina.log"
 INSTALLED_MARK = "_instantale_balance_quest_stamina_installed"
@@ -71,8 +71,8 @@ PARTY_TOO = True
 GAME_PERCENT = 50
 
 QUEST_START = "__main__:QuestStartManager.start_quest"
-QUEST_END = "__main__:QuestEndManager.execute"
-SAVE_GAME = "__main__:InstantaleApp.save_game"
+QUEST_END = quest_ends.TARGET   # ローダの窓口 `quest_ends` が1枚だけ包む
+SAVE_GAME = saving.TARGET   # ローダの窓口 `saving` が1枚だけ包む
 
 
 def _number(value):
@@ -187,63 +187,59 @@ def apply(ctx):
             ctx.log_exc("quest stamina: cannot start counting the damage")
         return result
 
-    @ctx.wrap(SAVE_GAME, required=False, safe=True)
-    def saved(orig, self, *args, **kwargs):
-        try:
-            quest_id = ui.current_quest_id(self)
-            if quest_id is not None:
-                sample(self, quest_id)
-        except Exception:
-            ctx.log_exc("quest stamina: cannot count the damage at a save")
-        return orig(self, *args, **kwargs)
+    def save_before(call):
+        """保存のたびに、依頼の最中なら受けた傷を数える（ローダの窓口 `saving`）。"""
+        quest_id = ui.current_quest_id(call.app)
+        if quest_id is not None:
+            sample(call.app, quest_id)
 
-    @ctx.wrap(QUEST_END, required=False, safe=True)
-    def quest_ended(orig, self, *args, **kwargs):
-        app, before, quest = None, [], {}
-        try:
-            app = frames.attr(self, "app", None) or ui.find_app()
-            data = frames.attr(app, "current_quest_data", None)
-            quest_id = ui.current_quest_id(app)
-            if data is not None and quest_id is not None:
-                sample(app, quest_id)
-                with lock:
-                    hits = {k: dict(v) for k, v in track["people"].items()}
-                    clean = bool(track.get("clean"))
-                quest = {"id": quest_id,
-                         "difficulty": _number(ui.quest_value(data, "difficulty"))}
-                for person, character in participants(app):
-                    pi = _number(frames.attr(character, "physical_integrity", None))
-                    max_pi = _number(frames.attr(character, "max_physical_integrity", None))
-                    if pi is None or not max_pi:
-                        continue
-                    hp = _number(frames.attr(character, "current_hp", None))
-                    max_hp = _number(frames.attr(character, "max_hp", None))
-                    row = hits.get(person) or {}
-                    base_hp = row.get("max_hp") or max_hp
-                    loss = row.get("loss") or 0
-                    if hp is not None and max_hp and not clean:
-                        # ロードをまたいで途中から数え始めた回だけ、取りこぼしを補う。
-                        # 受けた時点から数えた回で補うと、依頼の前から減っていた体力まで被弾に数える
-                        loss = max(loss, max_hp - hp)
-                    before.append({
-                        "who": person, "character": character, "pi": pi, "max_pi": max_pi,
-                        "level": _number(frames.attr(character, "experience_level", None)),
-                        "share": (loss / float(base_hp)) if base_hp else 0.0, "loss": loss})
-        except Exception:
-            ctx.log_exc("quest stamina: cannot read the party before the quest clear")
-            before = []
-        result = orig(self, *args, **kwargs)
-        if before:
-            try:
-                if settle(quest, before) and app is not None:
-                    save_soon(app, "quest stamina")
-            except Exception:
-                ctx.log_exc("quest stamina: cannot settle the stamina after the quest clear")
+    saving.on("142_balance_quest_stamina", ctx, before=save_before)
+
+    def quest_end_before(call):
+        """依頼を片付ける前に、仲間の今の体力と、依頼の間に受けた傷を読む（ローダの窓口 `quest_ends`）。"""
+        app, data, quest_id = call.app, call.quest, call.quest_id
+        before, quest = [], {}
+        if data is None or quest_id is None:
+            return app, quest, before
+        sample(app, quest_id)
         with lock:
-            track["quest"] = None
-            track["people"] = {}
-            track["clean"] = False
-        return result
+            hits = {k: dict(v) for k, v in track["people"].items()}
+            clean = bool(track.get("clean"))
+        quest = {"id": quest_id,
+                 "difficulty": _number(ui.quest_value(data, "difficulty"))}
+        for person, character in participants(app):
+            pi = _number(frames.attr(character, "physical_integrity", None))
+            max_pi = _number(frames.attr(character, "max_physical_integrity", None))
+            if pi is None or not max_pi:
+                continue
+            hp = _number(frames.attr(character, "current_hp", None))
+            max_hp = _number(frames.attr(character, "max_hp", None))
+            row = hits.get(person) or {}
+            base_hp = row.get("max_hp") or max_hp
+            loss = row.get("loss") or 0
+            if hp is not None and max_hp and not clean:
+                # ロードをまたいで途中から数え始めた回だけ、取りこぼしを補う。
+                # 受けた時点から数えた回で補うと、依頼の前から減っていた体力まで被弾に数える
+                loss = max(loss, max_hp - hp)
+            before.append({
+                "who": person, "character": character, "pi": pi, "max_pi": max_pi,
+                "level": _number(frames.attr(character, "experience_level", None)),
+                "share": (loss / float(base_hp)) if base_hp else 0.0, "loss": loss})
+        return app, quest, before
+
+    def quest_end_after(call):
+        """依頼を片付けた。スタミナの上限を清算し、数えていた傷を捨てる。"""
+        app, quest, before = call.memo or (call.app, {}, [])
+        try:
+            if before and settle(quest, before) and app is not None:
+                save_soon(app, "quest stamina")
+        finally:
+            with lock:
+                track["quest"] = None
+                track["people"] = {}
+                track["clean"] = False
+
+    quest_ends.on("142_balance_quest_stamina", ctx, before=quest_end_before, after=quest_end_after)
 
     def settle(quest, before):
         """依頼のクリアで引かれたスタミナを決め直す。決め直した人数を返す。"""

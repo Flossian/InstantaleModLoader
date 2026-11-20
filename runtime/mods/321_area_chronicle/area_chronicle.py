@@ -68,7 +68,7 @@ import os
 import sys
 import time
 
-from instantale_modloader import arrivals, durations, frames, jobs, llm, loads, modnpc, ui
+from instantale_modloader import arrivals, durations, frames, jobs, llm, loads, modnpc, quest_ends, ui
 from instantale_modloader.state import WorldStore
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
@@ -583,32 +583,22 @@ def apply(ctx):
         modnpc.unregister(owner, modnpc.ANY)
 
     # ------------------------------------------------------------------ フック
-    @ctx.wrap("__main__:QuestEndManager.execute", required=False, safe=True)
-    def quest_end(orig, self, *args, **kwargs):
-        """依頼を片付けた。その依頼の土地の編纂を予約する。
+    def quest_end_before(call):
+        """依頼を片付ける前に、その依頼の土地を読む（`orig` の中で依頼のデータが片付く。`318_` と同じ）。"""
+        return area_of_quest(call.quest) if call.quest is not None else None
 
-        **どの依頼が終わるのかは `orig` の前に読む**
-        （終わった後では `current_quest_data` が片付いている。`318_` と同じ）。
-        """
-        app = getattr(self, "app", None) or ui.find_app()
-        area_id = None
-        try:
-            quest = getattr(app, "current_quest_data", None) if app is not None else None
-            if quest is not None:
-                area_id = area_of_quest(quest)
-        except Exception:
-            ctx.log_exc("area chronicle: 終わる依頼を読めなかった")
-        result = orig(self, *args, **kwargs)
-        try:
-            if app is not None and area_id:
-                enqueue({"world": worlds.playthrough(app), "area_id": area_id,
-                         "why": "クリア", "wait": True,
-                         "queued": time.monotonic()})
-            elif app is not None:
-                write("clear: 終わった依頼の土地が読めなかった（編纂しない）")
-        except Exception:
-            ctx.log_exc("area chronicle: クリアで予約できなかった")
-        return result
+    def quest_end_after(call):
+        """依頼を片付けた。その依頼の土地の編纂を予約する（ローダの窓口 `quest_ends`）。"""
+        app = call.app
+        area_id = call.memo
+        if app is not None and area_id:
+            enqueue({"world": worlds.playthrough(app), "area_id": area_id,
+                     "why": "クリア", "wait": True,
+                     "queued": time.monotonic()})
+        elif app is not None:
+            write("clear: 終わった依頼の土地が読めなかった（編纂しない）")
+
+    quest_ends.on(owner, ctx, before=quest_end_before, after=quest_end_after, write=write)
 
     def world_loaded(call):
         """セーブを読み込んだ。控えのある土地の案内文を当て直す。

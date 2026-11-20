@@ -9,7 +9,7 @@
 片付けると移動する依頼は、移動で日数が進むので重ねない（窓口 `durations.quest_travels`。TECH.md §3.3.3）。
 """
 
-from instantale_modloader import durations, ui
+from instantale_modloader import durations, quest_ends, ui
 
 ENABLED = False
 MAX_DAYS = 30
@@ -19,7 +19,7 @@ LOG_BASENAME = "quest_return_days.log"
 #: 日付が進んだことを知らせる本文。{days} は日数。
 RETURN_TEXT = "帰還までに{days}日経過した。"
 
-QUEST_END_TARGET = "__main__:QuestEndManager.execute"
+QUEST_END_TARGET = quest_ends.TARGET   # ローダの窓口 `quest_ends` が1枚だけ包む
 QUEST_RETIRE_TARGET = "__main__:QuestRetireManager.execute"
 
 
@@ -55,23 +55,19 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("quest return days: cannot advance the calendar")
 
-    @ctx.wrap(QUEST_END_TARGET, required=False, safe=True)
-    def quest_end(orig, self, *args, **kwargs):
-        app = getattr(self, "app", None) or ui.find_app()
-        quest_id, travels = None, False
-        try:
-            # 依頼のデータは元の処理の中で片付くので、先に読む。
-            quest_id = ui.current_quest_id(app)
-            travels = durations.quest_travels(app, quest_id, write=write)
-        except Exception:
-            ctx.log_exc("quest return days: cannot read the quest")
-        result = orig(self, *args, **kwargs)
-        if travels:
+    def quest_end_before(call):
+        """依頼のデータは元の処理の中で片付くので、先に読む（ローダの窓口 `quest_ends`）。"""
+        return durations.quest_travels(call.app, call.quest_id, write=write)
+
+    def quest_end_after(call):
+        """依頼から帰った。続けて別の土地へ旅立つ依頼でなければ、帰りの日数を進める。"""
+        if call.memo:
             write("cleared: quest {!r} moves on to another area; the journey takes its own days"
-                  .format(quest_id))
+                  .format(call.quest_id))
         else:
-            after_return(app, "cleared", quest_id)
-        return result
+            after_return(call.app, "cleared", call.quest_id)
+
+    quest_ends.on("344_quest_return_days", ctx, before=quest_end_before, after=quest_end_after, write=write)
 
     @ctx.wrap(QUEST_RETIRE_TARGET, required=False, safe=True)
     def quest_retire(orig, self, *args, **kwargs):

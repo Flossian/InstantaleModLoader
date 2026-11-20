@@ -45,7 +45,7 @@
 import sys
 import threading
 
-from instantale_modloader import quest_bands, ui
+from instantale_modloader import quest_bands, text_filters, ui
 
 LOG_BASENAME = "ui_area_difficulty.log"
 
@@ -407,24 +407,23 @@ def apply(ctx):
                     ctx.log_exc("area difficulty label: "
                                 "cannot add the confirmation line")
 
-    @ctx.wrap("__main__:InstantaleApp.add_text", required=False)
-    def add_text(orig, self, context=None, *args, **kwargs):
-        """確認画面の窓の間だけ、土地の名前を含む文言に帯を添える。"""
-        try:
-            window = state["confirm"].get(threading.get_ident())
-            if window is not None and isinstance(context, str) and context.strip():
-                name = window["name"]
-                label = window["label"]
-                if name and name in context and label not in context:
-                    replaced = context.replace(name, label, 1)
-                    window["seen"] += 1
-                    write("confirm text: {!r} -> {!r}".format(context, replaced))
-                    return orig(self, replaced, *args, **kwargs)
-                if context.strip(".。 　"):
-                    write("confirm text passing through: {!r}".format(context))
-        except Exception:
-            ctx.log_exc("area difficulty label: cannot reword the confirmation text")
-        return orig(self, context, *args, **kwargs)
+    def confirm_text(context, app):
+        """確認画面の窓の間だけ、土地の名前を含む文言に帯を添える（ローダの窓口 `text_filters`）。"""
+        window = state["confirm"].get(threading.get_ident())
+        if window is None or not isinstance(context, str) or not context.strip():
+            return None
+        name = window["name"]
+        label = window["label"]
+        if name and name in context and label not in context:
+            replaced = context.replace(name, label, 1)
+            window["seen"] += 1
+            write("confirm text: {!r} -> {!r}".format(context, replaced))
+            return replaced
+        if context.strip(".。 　"):
+            write("confirm text passing through: {!r}".format(context))
+        return None
+
+    text_filters.on("133_ui_area_difficulty", ctx, confirm_text, write=write)
 
     # ------------------------------------------------------------ 自己検証
     # 実経路は一覧を開くまで通らない。

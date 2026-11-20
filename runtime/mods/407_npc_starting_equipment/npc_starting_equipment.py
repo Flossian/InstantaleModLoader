@@ -29,7 +29,7 @@ import sys
 import threading
 import typing
 
-from instantale_modloader import equipment, frames, ids, items, jobs, llm, loads, npcs, state, ui
+from instantale_modloader import equipment, frames, ids, items, jobs, llm, loads, npcs, saving, state, ui
 
 
 # ---- MOD固有の設定 ---------------------------------------------------------
@@ -538,17 +538,23 @@ def apply(ctx):
             ctx.log_exc("npc starting equipment: party join hook failed")
         return result
 
-    @ctx.wrap("__main__:InstantaleApp.save_game", required=False)
-    def save_game(orig, self, *args, **kwargs):
-        """ゲームの保存が通ったら、保存を待っている印を state へ書く。
+    def save_before(call):
+        """保存の間ずっと控えの錠を持つ（ローダの窓口 `saving`。放すのは `save_after`）。
 
-        錠は保存の間ずっと持つ。保存の途中で印が増えると、
-        セーブに入らなかった装備の印だけを確定してしまう。
-        ``orig`` が投げたら書かない（次の保存でまとめて書く）。
+        保存の途中で印が増えると、セーブに入らなかった装備の印だけを確定してしまう。
         """
-        with worlds.lock:
-            result = orig(self, *args, **kwargs)
-            try:
+        worlds.lock.acquire()
+        return True
+
+    def save_after(call):
+        """ゲームの保存が通ったら、保存を待っている印を state へ書いて錠を放す。
+
+        ``orig`` が投げたら書かない（次の保存でまとめて書く）。錠は投げた回も放す。
+        """
+        if not call.memo:
+            return
+        try:
+            if call.error is None:
                 for key in sorted(marks):
                     bucket = worlds.load(key)
                     records = bucket.setdefault("npcs", {})
@@ -566,9 +572,10 @@ def apply(ctx):
                     if worlds.save(key):
                         write("save: marked {} of {}".format(sorted(marks[key]), key))
                         del marks[key]
-            except Exception:
-                ctx.log_exc("npc starting equipment: cannot write the marks after the save")
-        return result
+        finally:
+            worlds.lock.release()
+
+    saving.on("407_npc_starting_equipment", ctx, before=save_before, after=save_after, always=True, write=write)
 
     # ロード・新規開始・世界の組み立ての前後はローダの窓口 `loads` から呼ばれる（TECH.md §3.3.21）。
     owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "407_npc_starting_equipment"

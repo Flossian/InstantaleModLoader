@@ -138,7 +138,11 @@ runtime/instantale_modloader/
                   仲間の装備を扱う MOD が聞く（§3.3.6）
     arrivals.py   施設に着いた場面で誰が話しかけるかを、会話を始める MOD どうしで分け合う連携 API（§3.3.7）。施設・街に着いた前後の処理もここで呼ぶ（§3.3.21）
     loads.py      ロード・新規開始・世界の組み立ての前後の処理を、1か所だけフックして呼ぶ連携 API（§3.3.21）
-    gates.py      共通フック（1か所だけフックし、MOD の前後の処理を順に呼ぶ）の共通部品。loads / durations / arrivals が使う（§3.3.21）
+    quest_ends.py  依頼が終わる場面（`QuestEndManager.execute`）の前後の処理を、1か所だけフックして呼ぶ連携 API。終わる依頼は `orig` の前に読んで渡す（§3.3.21）
+    saving.py     ゲームの保存（`save_game`）の前後の処理を、1か所だけフックして呼ぶ連携 API（§3.3.21）。セーブを読む `saves.py` とは別
+    gates.py      共通フック（1か所だけフックし、MOD の前後の処理を順に呼ぶ）の共通部品。loads / durations / arrivals / quest_ends / saving が使う（§3.3.21）
+    quest_generation.py  依頼の生成（`random_quest_generator`）に足す指示と難易度の連携 API。1回だけの指示と、生成ごとの書き換え（§3.3.30）
+    text_filters.py  本文の1行（`add_text`）の書き換え・出さないの連携 API。ラッパーはここ1つ（§3.3.31）
     talk_affinity.py  会話で上げられる好感度の上限の連携 API。相手を持つ MOD が狭め、会話で好感度を動かす MOD が聞く（§3.3.8）
     talk_summary.py  会話を閉じるときのゲームの要約のリクエストに、MOD の判定の項目を一緒に載せる連携 API。ラッパーはここ1組（§3.3.16）
     wanted.py     手配の重さの数え方と、全域手配の線・追手の戦闘の終わり・店の値の圧の連携 API。追手を出す MOD が線を置いて終わりを知らせ、手配を動かす MOD が聞く。手配を数える MOD が店の値の率を置き、店主の応じ方を決める MOD が引き受ける（§3.3.9）
@@ -1077,6 +1081,9 @@ MOD 同梱の設定画面（`tool.py`。§3.12）はゲームの中では走ら�
 | 窓口が持つ登録の ctx が用済みでないかの確かめ | `instantale_modloader.alive`（`gates.alive` は同じ関数） | 17本（窓口の14モジュールと `gates`・`holdings`・`hudicons`）。新しい窓口を作るたびに写されていた。`llm` の見張りの登録だけは、`superseded` が例外を送出した ctx を用済みとみなしていた |
 | 小さな窓口の登録簿の出し入れ（同じ持ち主の差し替え・生きている登録の並び・`fn` の呼び出しと `errors` の末尾20件） | `instantale_modloader.window_put` / `window_entries` / `window_call` | 7本（`quest_bands` / `quest_claims` / `quest_clients` / `shop_lineup` / `talk_affinity` / `value_limits` / `wanted`）。差し替えた登録を後ろへ回す窓口と元の位置に残す窓口に分かれていたので、後ろへ回すほうに揃えた（注入し直した後の並びが今の世代の登録の順になる） |
 | 宣言の設定の画面の組み立てと、設定の出し入れ・下の欄・控えの頁 | `modtool.SettingsWindow` / `SettingsFooter` / `RecordsPage`（§3.12） | 6本（`331_` / `336_` / `338_` / `342_` / `343_` / `911_` の `tool.py`）。画面に置いていない項目の扱いと、未保存の判定の比べ先が3通りに分かれ、`343_` には閉じるときの未保存の確認が無かった |
+| ゲームの表示言語 | `ui.language` | 5本（`134_` / `346_` / `409_` / `410_` / `411_`）とローダの `battle_effects`。一字一句同じ写しだった（各モジュールの `language` は名前を残して `ui.language` を指す） |
+| エリアのギルドの引き当て | `ui.guild_of` | 2本（`320_` / `336_`） |
+| LLM に書かせた NPC の項目を均す（名前・見た目の種類と語・土地の説明・経験値レベル） | `npcs.clean_text` / `clean_name` / `clean_category` / `clean_look` / `area_notes` / `exp_level`、`npcs.NAME_MAX` / `LOOK_CATEGORIES` | 3本（`320_` / `336_` の同房者 / `339_` の追手）。`339_` の `area_notes` だけ文字列の説明を空にしていたので、文字列はそのまま返す側に揃えた |
 | 閉じるときの未保存の確認 | `modtool.close_window` / `confirm_unsaved`（§3.12） | 6本（`111_` / `322_` / `324_` / `922_` の `tool.py`、`modtool` のワールド別設定画面と `SettingsFooter`） |
 
 ```python
@@ -2105,7 +2112,7 @@ save_lookup.in_world(app, *keys)              # 本来の世界の辞書をキ�
 
 置き場は `sys` の属性（`_instantale_save_lookup`）。検査は `tools\tests\test_save_only_entities.py`。
 
-#### 3.3.21 何本もの MOD が前後に処理を挟む関数は、ローダが1つだけフックする（`loads` / `durations.on_days` / `arrivals.on`）
+#### 3.3.21 何本もの MOD が前後に処理を挟む関数は、ローダが1つだけフックする（`loads` / `durations.on_days` / `arrivals.on` / `quest_ends` / `saving`）
 
 ロードの後・日数が進んだ後・施設や街に着いた後に処理を挟む MOD は十数本ある
 （2026-10-22 のレジストリで `elapse_days` 13本・`load_game_new` 12本・`move_phase` 10本・`World.__init__` 9本。VERIFICATION.md §3.113）。
@@ -2118,6 +2125,8 @@ loads.on(owner, ctx, (loads.WORLD,), before=fn, after=fn)           # 世界を�
 durations.on_days(owner, ctx, before=fn, after=fn)                  # 日数が進む前後（call.granted / call.moved）
 arrivals.on(owner, ctx, (arrivals.FACILITY,), after=fn)             # 施設に着いた後
 arrivals.on(owner, ctx, (arrivals.AREA,), before=fn, after=fn, always=True)   # 街を移る前後
+quest_ends.on(owner, ctx, before=fn, after=fn)                      # 依頼が終わる前後（call.quest_id / call.quest は orig の前に読んである）
+saving.on(owner, ctx, before=fn, after=fn, always=True)             # ゲームの保存の前後
 fn(call)    # gates.Call: call.app / call.obj（フックした関数の self）/ call.args / call.result / call.error / call.memo
 ```
 
@@ -2127,19 +2136,23 @@ fn(call)    # gates.Call: call.app / call.obj（フックした関数の self）
 | 日数 | `InstantaleApp.elapse_days` | 日数送りの共通フック（§3.3.3）。前の処理は日数を決める前、後の処理は `orig` の後 |
 | `arrivals.FACILITY` | `MovePhaseManager.move_phase` | 到着の番号を数えるラッパー（§3.3.7）。前後の処理の時点で番号は進んでいる |
 | `arrivals.AREA` | `AreaMoveManager.execute` | 連携 API `arrivals` |
+| 依頼の終わり | `QuestEndManager.execute` | 連携 API `quest_ends`。依頼のデータは `orig` の中で片付くので、終わる依頼（`call.quest_id` / `call.quest`）を `orig` の前に読んで渡す |
+| 保存 | `InstantaleApp.save_game` | 連携 API `saving`。保存の間だけ素の値へ戻す形（前で戻して後で掛け直す）と、保存が通ったら控えを書く形（前で錠を取り、後で `call.error` を見て書いて放す）。ローダ自身の保存の関所（`choices` / `modfacility` / `modnpc`）は別 |
 
 | 決まり | 理由 |
 |---|---|
 | ラッパーは1つの世代につき1つ。登録は持ち主ごとに1つ（同じ持ち主は差し替える） | 注入し直すたびに `apply()` が走る |
+| `quest_ends` / `saving` と、§3.3.30 の `quest_generation`・§3.3.31 の `text_filters` のラッパーは、全 MOD の適用の後にローダが一番外側に立てる（`gates.defer_outermost`・`_install_outer_windows`）。MOD の適用の間に `on` / `install` を呼んでも包まない | 最初に登録した MOD の位置に立てると、その後に適用した MOD の直のラッパー（`125_` / `306_` / probe）と、MOD が立てるローダの関所（最初の注入の `modnpc` の保存の関所は `336_` の適用の時）より内側になる。保存の間だけ素の値へ戻す処理が `modnpc` の写しの後に走り、写しに伏せた値が残る。外側に立てれば、注入の何回目でも並びが同じになる |
 | `before` は登録の新しい順、`after` は古い順（登録は `apply()` の順） | MOD が自分でフックしたときの重なりと同じ。後から適用した MOD ほど外側に載る |
 | `before` の戻り値は同じ持ち主の `after` に `call.memo` で渡る | 前の暦・前の土地・開いたウィンドウのように、前後で値を受け渡す形が多い |
 | `after` は `orig` が返ったときだけ。`always=True` なら例外のときも来る（`call.error`） | `try/finally` で囲む形（ロード中のフラグ・移動中のウィンドウ・関係の一時値）のため |
 | 前後の処理の例外は捕捉して記録し、残りの MOD と `orig` を止めない | 各 MOD がフックすると、`safe=True` を付ける MOD と付けない MOD が混ざる |
-| 前後の処理は引数も戻り値も変えない | 変えるものは用途ごとの連携 API で決める（日数は `claim_days`、値段は `prices`）。引数や戻り値を変えるラッパー（`random_quest_generator` の差し込みなど）は MOD に残す |
+| 前後の処理は引数も戻り値も変えない | 変えるものは用途ごとの連携 API で決める（日数は `claim_days`、値段は `prices`、依頼の生成は `quest_generation`（§3.3.30）、本文の1行は `text_filters`（§3.3.31）） |
 | 登録した ctx が用済み（`ctx.superseded()`）なら呼ばない | OFF にした MOD・前の世代の登録が `sys` に残っても効かない |
 
 同じ関数を probe（200番台）がフックするのは構わない（観察が目的なので外側から直に見る）。
 `tools/check_mods.py` は、probe 以外の MOD がこれらの対象を自分でフックしていたら note を出す（CI の `--strict` では問題）。
+依頼の終わりは `125_`（評価の保ち方）が、本文の `add_text` は `306_`（1行の後ろへ仲間の話を足す）が、前後の形が違うので自分でフックしており、この2つの対象は検査に載せていない。
 
 偽の ctx を作り直して `apply()` し直す検査は、2回目の ctx にラッパーが渡らない（1世代に1つのため）。
 `apply()` の前に `gates.reset_all()` を呼ぶ。本番は1回の boot に ctx が1つなので、世代と ctx は同じ意味になる。
@@ -2426,6 +2439,69 @@ expressions.name_of(answer.get("expression"))   # 返った値を表情の名前
 
 `343_` の描き方（描く時機・描く順番の錠・ゲームの工程の通し方）は `343_stable_diffusion/variants.py` の先頭の説明にある。
 置き場は `sys` の属性（`_instantale_expressions`）。検査は `test_expressions.py`（窓口）、`test_sd_variants.py`（描く側）、`test_conversation_expressions.py`（`347_`）、`test_party_talk.py` の「表情」の節（`404_`）。
+
+#### 3.3.30 依頼の生成に足す指示と難易度も連携 API で（`quest_generation`）
+
+依頼の中身を寄せたい MOD は、生成（`random_quest_generator`）に渡る `area_description` に指示を足し、`quest_difficulty` を差し替える（GAME.md §2.9）。
+7本（301 / 307 / 318 / 325 / 328 / 336 / 338）がこの関数を自分でフックし、引数の並びと印の有効期限（300秒）をそれぞれに写していた。
+フックはローダの1つ（`instantale_modloader/quest_generation.py`）にし、MOD は「次の生成に足すもの」を置く。
+
+```python
+quest_generation.install(ctx, write)            # apply() の中で（offer を使う MOD。ラッパーを立てる）
+# 生成を呼ぶ直前に置き、呼び終えたら（失敗しても）下げる
+quest_generation.offer(owner, ctx, brief="…", difficulty=12, rewrite=None, after=fn, tag="road", write=write)
+quest_generation.cancel(owner)
+# 生成ごとに引数を見て決める
+quest_generation.on(owner, ctx, rewrite, write=write)   # apply() の中で
+rewrite(request)    # request.get(name) / request.set(name, value)
+after(result)       # orig の戻り値
+```
+
+1回の生成で当てる順は次のとおり。前に各 MOD が自分でフックしていたときの重なり（後から適用した MOD ほど外側で、先に引数を見る）と同じ結果になる。
+
+| 順 | 当てるもの | 使う MOD |
+|---|---|---|
+| 1 | `on` の `rewrite`（登録の新しい順） | `328_`（街の3欄を伏せる） |
+| 2 | `offer` の `rewrite`（置いた順の逆） | `318_`（土地の難易度を上乗せする） |
+| 3 | `offer` の `brief` を `area_description` の後ろへ足し、`difficulty` で `quest_difficulty` を差し替える（置いた順） | `301_` / `307_` / `325_` / `336_`（裏の仕事・処刑場からの脱出）/ `338_` |
+| 4 | `orig` | |
+| 5 | `offer` の `after(result)`（置いた順） | `301_` / `307_` / `325_`（作られた依頼の題を記録する） |
+
+| 決まり | 理由 |
+|---|---|
+| `offer` はラッパーを立てない。使う MOD は `apply()` の中で `install` を呼ぶ（本番では適用の間は包まず、全 MOD の後にローダが外側に立てる。§3.3.21） | `offer` は生成の直前、`apply()` の外で呼ばれる（ctx の値は `apply()` の間だけ）。`install` は検査と、ローダの外側の立て方が失敗したときの受け皿 |
+| `offer` は持ち主ごとに1つ。当てたら（期限切れでも）下げる。置いてから `ttl` 秒（既定 300）を過ぎたものは当てずに捨てて1行残す | 生成が走らずに残った印を、次の別の生成へ持ち越さない |
+| 明示の難易度（3）は上乗せ（2）の後に当てる | 道・裏の仕事・脱出は難易度を選んで見せている。`318_` の上乗せで食い違わせない |
+| 伏せる（1）は指示を足す（3）より先 | 伏せた回でも、会話・道のり・裏の仕事の指示は伏せた後の `area_description` に足されて消えない |
+| int でない難易度は WARN を出して外し、指示だけ当てる | 生成の直前に投げると、呼んだ MOD の操作ごと止まる |
+| 引数は受け取った形（位置かキーワード）のまま渡し、来ていない引数は足さない | `frames.replace_arg` の既定 |
+| `rewrite` と `after` の例外は捕捉して記録し、残りと `orig` を止めない | 1本の不具合で依頼の生成を巻き込まない |
+
+置き場は `sys` の属性（`_instantale_quest_generation`）。検査は `test_quest_generation.py`。
+
+#### 3.3.31 本文の1行の書き換えも連携 API で（`text_filters`）
+
+ゲームが本文へ1行足すたびに、その場面の間だけ文言を直す・伏せる MOD が10本（133 / 134 / 304 / 307 / 314 / 315 / 325 / 332 / 334 / 336）あり、どれも `InstantaleApp.add_text` を自分でフックしていた。
+どの書き換えが先に見るかが適用順で決まり、`context` の読み方も MOD ごとに写されていた。
+フックはローダの1つ（`instantale_modloader/text_filters.py`）にし、MOD は1行を受けて返す関数だけを渡す。
+
+```python
+text_filters.on(owner, ctx, fn, write=write)    # apply() の中で
+fn(text, app) -> None                # そのまま（次の MOD へ）
+             -> "直した文"           # 差し替える（次の MOD はこの文を見る）
+             -> text_filters.DROP    # この行を出さない（残りの MOD と orig を呼ばない）
+```
+
+| 決まり | 理由 |
+|---|---|
+| 呼ぶ順は登録の新しい順 | 前に各 MOD が自分でフックしていたときの重なり（外側だった順）と同じ |
+| `app` はフックした関数の `self` | 窓の状態を読み直す MOD（`314_` / `332_`）と、移動中かを見る MOD（`325_`）が要る |
+| `text` は文字列でないこともある | ゲームの呼び方で決まる。`fn` の側で見る |
+| `fn` の例外は捕捉して記録し、その MOD は何もしなかったものとして続ける | 1本の不具合で本文が出なくならない |
+| 1行の後ろに自分の行を足す処理（`306_`）は対象にしない | 書き換えではなく後処理。`306_` は自分でフックする |
+
+`336_` は機能ごとの書き換え（盗みの購入の文を止める・裏の仕事の報酬の額）を自分の中の一覧に持ち、窓口には1つの関数で渡している。
+置き場は `sys` の属性（`_instantale_text_filters`）。検査は `test_text_filters.py`。
 
 ### 3.4 まだ現れていない対象を狙う（保留と再適用）
 

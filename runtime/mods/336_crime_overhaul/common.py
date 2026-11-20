@@ -145,7 +145,6 @@ class Env(object):
         self.carry_playthrough = None
         #: 次の依頼の生成（`random_quest_generator`）へ差し込む指示と難易度。1回で使い切る（`office` が包む）。
         #: 裏の仕事（`office`）と処刑場からの脱出（`rescue`）が使う。
-        self.quest_inject = {"brief": None, "difficulty": None, "at": 0.0, "tag": ""}
         #: 品の値段の段。`fn(item, key, price) -> 新しい額 | None`。`law` が置く1枚（`prices.adjust` は持ち主ごとに1枚）の中で、
         #: 「店が委縮して値を下げる」の後に順に通す。盗品の買い取り額（`theft`）が使う。
         self.price_layers = []

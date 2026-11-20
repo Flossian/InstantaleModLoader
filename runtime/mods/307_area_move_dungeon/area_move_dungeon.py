@@ -112,7 +112,7 @@ import os
 import random
 import time
 
-from instantale_modloader import choices, durations, frames, loads, ui
+from instantale_modloader import choices, durations, frames, loads, quest_ends, quest_generation, text_filters, ui
 from instantale_modloader import state as state_api
 
 from . import world
@@ -120,10 +120,6 @@ from .journey import Journey
 
 
 LOG_BASENAME = "road_travel.log"
-
-# `random_quest_generator` の引数の並び（recon の signatures.json）。
-QUEST_GENERATOR_ARGS = ("world_overview", "settlement_name", "settlement_overview",
-                        "settlement_structure_description", "area_description", "quest_difficulty")
 
 # 進行中の道中の控え。
 # セーブには書かない。
@@ -232,11 +228,6 @@ ARRIVAL_NOTE_MARK = "※このクエストをクリアすると"
 # 他の値は `story_quests` 側の分岐に落ちて `KeyError` になる。
 QUEST_TYPE = "settlement_quest"
 
-# 生成の印の寿命（秒）。
-# 押してから生成が始まるまでの間に別の生成が割り込んだ場合に、
-# そちらへ付いてしまうのを防ぐ。
-INJECT_TTL = 300.0
-
 # 控えの寿命（秒）。
 # これを過ぎた道中は忘れる（7日）。
 PENDING_TTL = 7 * 24 * 3600.0
@@ -319,8 +310,6 @@ def apply(ctx):
     journey.reload()
 
     state = {
-        "inject": None,      # random_quest_generator への差し込み（1回で使い切る）
-        "inject_at": 0.0,
         "generating": False,
         "departing": False,  # 自分が起こした AreaMoveManager かどうかの印
         # 確認画面で読み取ったゲーム自身の移動ボタン（`(entry, args)` の一覧）。
@@ -494,7 +483,7 @@ def apply(ctx):
                 # `busy_on` の後に投げた回。生成中の印が残ると次の「危険な道」が
                 # 「いま道の話を聞いている」で断られ、待機表示が残ると画面が押せない。
                 state["generating"] = False
-                state["inject"] = None
+                quest_generation.cancel(owner)
                 if screen.is_busy():
                     screen.busy_off(app)
 
@@ -511,9 +500,9 @@ def apply(ctx):
             return None, None
 
         state["generating"] = True
-        state["inject"] = {"origin": origin_name, "target": target_name,
-                           "difficulty": difficulty}
-        state["inject_at"] = time.monotonic()
+        # 生成に道中の性質と選んだ難易度を渡す（ローダの窓口。1回で使い切る。TECH.md §3.3.30）。
+        quest_generation.offer(owner, ctx, brief=road_brief(origin_name, target_name, difficulty),
+                               difficulty=difficulty, after=generated, tag="inject", write=write)
         screen.busy_on(app)
         screen.say(app, LOOKING_TEXT.format(target=target_name))
 
@@ -524,13 +513,13 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("road travel: generate_random_quest failed")
             state["generating"] = False
-            state["inject"] = None
+            quest_generation.cancel(owner)
             screen.busy_off(app)
             settle(app, lambda: screen.say(app, NO_QUEST_TEXT))
             return None, None
         added = sorted(set(world.quest_ids(app)) - before, key=world.id_sort)
         state["generating"] = False
-        state["inject"] = None
+        quest_generation.cancel(owner)
         write("start: took {:.1f}s; new quest ids={}".format(
             time.monotonic() - started, added))
 
@@ -810,44 +799,34 @@ def apply(ctx):
             ctx.log_exc("road travel: cannot arm the road")
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap("__main__:QuestEndManager.execute", required=False)
-    def quest_end(orig, self, *args, **kwargs):
-        """踏破。帰還処理が済んだその場で移動する。
+    def quest_end_before(call):
+        """踏破の前。道中の控えを寄せる（どの依頼が終わるかは窓口が `orig` の前に読む）。"""
+        journey.sync()
+
+    def quest_end_after(call):
+        """踏破。帰還処理が済んだその場で移動する（ローダの窓口 `quest_ends`。登録は `owner` の後）。
 
         戦利品（`LootPhaseManager`）はこれより前なので、
         ここで動かしても取りこぼすものは無い（GAME.md §2.9）。
         報酬・才能のテキストを流している最中には割り込まないよう
         `when_idle` を通す。
         """
-        app = getattr(self, "app", None) or ui.find_app()
-        # **どのクエストが終わるのかは `orig` を呼ぶ前に読む**（終わった後では
-        # `current_quest_data` が片付いている）。
-        ended = None
-        try:
-            journey.sync()
-            ended = world.current_quest_id(app)
-        except Exception:
-            ctx.log_exc("road travel: cannot read the current quest")
-        result = orig(self, *args, **kwargs)
-        try:
-            record = road_of(app, "offered", "armed")
-            # id で一致したなら段階は問わない。
-            # `armed` を取りこぼしていても、
-            # 終わったのが道中のクエストであることはゲーム自身が言っている。
-            if record is not None and (ended == record.get("quest_id")
-                                       or (ended is None
-                                           and record.get("stage") == "armed")):
-                journey.advance("ready", at=time.time())
-                write("cleared: quest {!r} ended; the road to {!r} is open".format(
-                    ended or record.get("quest_id"), record.get("target_area_name")))
-                if app is not None:
-                    settle(app, lambda: depart(app))
-            elif record is not None:
-                write("quest {!r} ended but the road is for {!r}; not moving".format(
-                    ended, record.get("quest_id")))
-        except Exception:
-            ctx.log_exc("road travel: cannot mark the road as cleared")
-        return result
+        app, ended = call.app, call.quest_id
+        record = road_of(app, "offered", "armed")
+        # id で一致したなら段階は問わない。
+        # `armed` を取りこぼしていても、
+        # 終わったのが道中のクエストであることはゲーム自身が言っている。
+        if record is not None and (ended == record.get("quest_id")
+                                   or (ended is None
+                                       and record.get("stage") == "armed")):
+            journey.advance("ready", at=time.time())
+            write("cleared: quest {!r} ended; the road to {!r} is open".format(
+                ended or record.get("quest_id"), record.get("target_area_name")))
+            if app is not None:
+                settle(app, lambda: depart(app))
+        elif record is not None:
+            write("quest {!r} ended but the road is for {!r}; not moving".format(
+                ended, record.get("quest_id")))
 
     @ctx.wrap("__main__:QuestRetireManager.execute", required=False)
     def quest_retire(orig, self, *args, **kwargs):
@@ -877,9 +856,8 @@ def apply(ctx):
             ctx.log_exc("road travel: cannot cancel the road")
         return result
 
-    @ctx.wrap("__main__:InstantaleApp.add_text", required=False)
-    def add_text(orig, self, *args, **kwargs):
-        """到着の移動中だけ、ゲームの「徒歩で目指す。長旅だ...」を伏せる。
+    def arrival_text(context, app):
+        """到着の移動中だけ、ゲームの「徒歩で目指す。長旅だ...」を伏せる（ローダの窓口 `text_filters`。登録は `owner` の後）。
 
         危険な道は道中をクエストとして踏破しているので、
         そこから改めて長旅だと言われると筋が合わない（出発の一言はこちらが出している）。
@@ -889,18 +867,14 @@ def apply(ctx):
         普通の徒歩・馬車の移動、到着の合図（`辿り着いた。`）、
         待機表示の点はそのまま通す。
         """
-        try:
-            record = journey.record
-            context = frames.arg(args, kwargs, "context", 0)
-            if HIDE_TRAVEL_TEXT and isinstance(context, str) \
-                    and isinstance(record, dict) \
-                    and record.get("stage") == "moving" \
-                    and any(word in context for word in MUTED_MOVE_TEXTS):
-                write("muted while arriving: {!r}".format(context))
-                return None
-        except Exception:
-            ctx.log_exc("road travel: cannot filter the travel text")
-        return orig(self, *args, **kwargs)
+        record = journey.record
+        if HIDE_TRAVEL_TEXT and isinstance(context, str) \
+                and isinstance(record, dict) \
+                and record.get("stage") == "moving" \
+                and any(word in context for word in MUTED_MOVE_TEXTS):
+            write("muted while arriving: {!r}".format(context))
+            return text_filters.DROP
+        return None
 
     # `elapse_days` はこちらでは包まない。包むのはローダの関所1枚だけで
     # （TECH.md §3.3.3）、ここは「この道は何日か」を答える側に回る。
@@ -982,6 +956,10 @@ def apply(ctx):
         journey.drop("a new protagonist started in {!r}".format(place))
 
     loads.on(owner + ":new_game", ctx, (loads.NEW_GAME,), before=new_game_before, write=write)
+    # 依頼の終わり（踏破）はローダの窓口が1枚だけ包む（前後の処理は上の `quest_end_before` / `quest_end_after`）。
+    quest_ends.on(owner, ctx, before=quest_end_before, after=quest_end_after, write=write)
+    # 到着の移動中の文言はローダの窓口が1枚だけ包む（上の `arrival_text`）。
+    text_filters.on(owner, ctx, arrival_text, write=write)
 
     @ctx.wrap("__main__:AreaMoveManager.__init__", required=False)
     def area_move(orig, self, *args, **kwargs):
@@ -1002,36 +980,13 @@ def apply(ctx):
         return orig(self, *args, **kwargs)
 
     # ---------------------------------------- 生成プロンプトに道中の性質を差し込む
-    @ctx.wrap("scripts.llm.llm_manager_world_generate:random_quest_generator",
-              required=False)
-    def random_quest_generator(orig, *args, **kwargs):
-        """`area_description` に道中の性質を、`quest_difficulty` に選んだ値を渡す。
+    # 生成への差し込みはローダの窓口が1枚だけ包む（`generate` が `offer` で置く。TECH.md §3.3.30）。
+    quest_generation.install(ctx, write)
 
-        印は1回で使い切るので、掲示板から普通に作られた依頼は素通しする。
-        引数は受け取った形（位置かキーワード）のまま渡し、2つだけを差し替える（TECH.md の規則の表）。
-        """
-        mark = state["inject"]
-        state["inject"] = None
-        if mark is None or time.monotonic() - state["inject_at"] > INJECT_TTL:
-            if mark is not None:
-                write("inject: stale marker, left untouched")
-            return orig(*args, **kwargs)
-
-        area_description = frames.arg(args, kwargs, "area_description", QUEST_GENERATOR_ARGS)
-        quest_difficulty = frames.arg(args, kwargs, "quest_difficulty", QUEST_GENERATOR_ARGS)
-        merged = (area_description or "") + road_brief(
-            mark["origin"], mark["target"], mark["difficulty"])
-        write("inject: area_description {} -> {} chars; difficulty {!r} -> {}".format(
-            len(area_description or ""), len(merged), quest_difficulty,
-            mark["difficulty"]))
-        args, kwargs, _ = frames.replace_arg(args, kwargs, "area_description",
-                                             QUEST_GENERATOR_ARGS, merged)
-        args, kwargs, _ = frames.replace_arg(args, kwargs, "quest_difficulty",
-                                             QUEST_GENERATOR_ARGS, mark["difficulty"])
-        result = orig(*args, **kwargs)
+    def generated(result):
+        """差し込んだ生成が返したもの（窓口の `after`）。"""
         if isinstance(result, dict):
             write("inject: generated {!r}".format(result.get("quest_title")))
-        return result
 
     ctx.log("area move dungeon: difficulty={} offset={} days<={} stamina>={}% "
             "arrival={} log={}".format(DIFFICULTY_MODE, DIFFICULTY_OFFSET,

@@ -17,7 +17,6 @@
 `status` は "jailed"（牢の中）/ "breaking"（決行の戦闘に加勢中）/ "party"（一緒に外へ出て仲間）/ "free"（ギルドの冒険者）/
 "dead"（決行の戦闘で倒れた。ゲームは倒れた仲間を死なせる（`config['is_dead']`。GAME.md §2.22）。実機）。
 """
-import sys
 
 from instantale_modloader import choices, confinement, frames, llm, modnpc, npcs, ui
 
@@ -27,14 +26,13 @@ TALK_LABEL = "{name}と話す"
 MANAGER_NAME = "mod_crime_cellmate"
 COMPOSE_TIMEOUT = 90.0
 COMPOSE_MAX_TOKENS = 900
-NAME_MAX = 24
+NAME_MAX = npcs.NAME_MAX
 TAKEN_NAMES_MAX = 15
 DIFFICULTY_MAX = 76                 # get_npc_employ_price の定義域（`320_` と同じ）
 CONVERSATION_SPEC = "ConversationStartManager"
 #: 作るときの関係の印（`relationship.player.relationship` の並び。ゲームは「家族」「同行中」などをここに足す）。
 RELATION_TAG = "同房の囚人"
-CATEGORIES = ("young man", "young woman", "teenage boy", "teenage girl",
-              "middle-aged man", "middle-aged woman", "old man", "old woman")
+CATEGORIES = npcs.LOOK_CATEGORIES   # 立ち絵の見た目の種類（ローダの npcs が持つ）
 
 ARRIVE_TEXT = "同じ房に、もう一人の囚人がいた。{name}。{crime}で捕まったという。"
 YEAR_TEXT = "{name}と同じ房で一年を過ごした。（好感度 {before} → {after}）"
@@ -75,35 +73,16 @@ PROMPT = (
 )
 
 
-def clean_text(value, limit=400):
-    if not isinstance(value, str):
-        return ""
-    return " ".join(value.split())[:limit]
+clean_text = npcs.clean_text
 
 
-def clean_name(value):
-    """名前はそのままファイルパスになる（GAME.md §2.15）。危ない字は落とす（`320_` と同じ）。"""
-    name = clean_text(value, NAME_MAX * 2)
-    for bad in "\\/:*?\"<>|":
-        name = name.replace(bad, "")
-    return name.strip()[:NAME_MAX]
+clean_name = npcs.clean_name
 
 
-def clean_category(value):
-    text = clean_text(value, 40).lower().strip()
-    for known in CATEGORIES:
-        if known in text:
-            return known
-    return CATEGORIES[0]
+clean_category = npcs.clean_category
 
 
-def clean_look(value, category):
-    tokens = []
-    for token in clean_text(value, 240).split(","):
-        token = token.strip()
-        if token and token.lower() != category:
-            tokens.append(token)
-    return [category] + tokens[:7]
+clean_look = npcs.clean_look
 
 
 def raised_affinity(before, step, ceiling=None):
@@ -177,38 +156,16 @@ def install(env):
                 worlds.save(playthrough)
 
     # ---------------------------------------------------- 作る
-    def area_notes(area):
-        notes = frames.attr(area, "descriptions", None)
-        if isinstance(notes, dict):
-            for key in ("overview", "area_description", "facilities"):
-                value = notes.get(key)
-                if isinstance(value, str) and value.strip():
-                    return value
-        return notes if isinstance(notes, str) else ""
+    area_notes = npcs.area_notes
 
     def taken_names(app):
         characters = getattr(getattr(app, "world", None), "characters", None)
         names = [getattr(character, "name", None) for character in (characters or {}).values()]
         return [name for name in names if isinstance(name, str) and name][-TAKEN_NAMES_MAX:]
 
-    def exp_level_for(difficulty):
-        """経験値レベル。ゲーム自身の対応表で引く（呼べなければ近似。`320_` と同じ）。"""
-        table = getattr(sys.modules.get("scripts.functions"), "get_npc_exp_level", None)
-        if callable(table):
-            try:
-                level = table(difficulty)
-                if isinstance(level, int) and not isinstance(level, bool):
-                    return min(100, max(1, level))
-            except Exception:
-                ctx.log_exc("crime incentive: get_npc_exp_level failed")
-        return min(100, max(1, difficulty + 5))
+    exp_level_for = npcs.exp_level
 
-    def guild_of(area):
-        for node in ui.nodes_of(area):
-            for key, facility in ui.facilities_of(node).items():
-                if ui.facility_type_of(facility) == ui.GUILD_FACILITY_TYPE:
-                    return str(key), facility
-        return None, None
+    guild_of = ui.guild_of
 
     def compose(app, area, difficulty):
         """囚人1人ぶんの項目と罪状。書けなければ `(None, None)`。"""

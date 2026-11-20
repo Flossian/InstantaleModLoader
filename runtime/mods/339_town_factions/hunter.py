@@ -46,7 +46,7 @@ NOTE = ("【刺客】あなたは{faction}の{title}。{faction}の命を受け�
 MANAGER_NAME = "mod_town_factions_hunter"
 COMPOSE_TIMEOUT = 90.0
 COMPOSE_MAX_TOKENS = 900
-NAME_MAX = 24
+NAME_MAX = npcs.NAME_MAX
 TITLE_MAX = 16
 TAKEN_NAMES_MAX = 20
 #: ゲームが人物の難易度を切る上限（`scripts.functions.clamp_npc_difficulty_value`。10-21 に実測）
@@ -61,8 +61,7 @@ BATTLE_CLS = "BattleStartManager"
 SPECIFIC_ENEMY = "specific"
 BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle", "in_conversation",
               "in_free_input", "in_action_in_conversation")
-CATEGORIES = ("young man", "young woman", "teenage boy", "teenage girl",
-              "middle-aged man", "middle-aged woman", "old man", "old woman")
+CATEGORIES = npcs.LOOK_CATEGORIES   # 立ち絵の見た目の種類（ローダの npcs が持つ）
 
 PROMPT = (
     "あなたはゲームの世界で、ある勢力が主人公のもとへ差し向ける刺客の人物を1人考える係です。\n"
@@ -86,31 +85,16 @@ PROMPT = (
 )
 
 
-def clean_text(value, limit=400):
-    if not isinstance(value, str):
-        return ""
-    return " ".join(value.split())[:limit]
+clean_text = npcs.clean_text
 
 
-def clean_name(value, limit=NAME_MAX):
-    """名前はそのままファイルパスになる（GAME.md §2.15）。危ない字は落とす（`320_` と同じ）。"""
-    name = clean_text(value, limit * 2)
-    for bad in "\\/:*?\"<>|":
-        name = name.replace(bad, "")
-    return name.strip()[:limit]
+clean_name = npcs.clean_name
 
 
-def clean_category(value):
-    text = clean_text(value, 40).lower().strip()
-    for known in CATEGORIES:
-        if known in text:
-            return known
-    return CATEGORIES[0]
+clean_category = npcs.clean_category
 
 
-def clean_look(value, category):
-    tokens = [token.strip() for token in clean_text(value, 240).split(",")]
-    return [category] + [token for token in tokens if token and token.lower() != category][:7]
+clean_look = npcs.clean_look
 
 
 def install(env):
@@ -157,17 +141,7 @@ def install(env):
             return 20
         return min(DIFFICULTY_MAX, max(1, int(round(value))))
 
-    def exp_level_for(difficulty):
-        """経験値レベル。ゲーム自身の対応表で引く（呼べなければ近似。`320_` / `336_` と同じ）。"""
-        table = getattr(sys.modules.get("scripts.functions"), "get_npc_exp_level", None)
-        if callable(table):
-            try:
-                level = table(difficulty)
-                if isinstance(level, int) and not isinstance(level, bool):
-                    return min(100, max(1, level))
-            except Exception:
-                ctx.log_exc("town factions: get_npc_exp_level failed")
-        return min(100, max(1, difficulty + 5))
+    exp_level_for = npcs.exp_level
 
     def faction_here(app, ledger):
         """いまの街の勢力 `(勢力, 段階)`。勢力の街でなければ `(None, None)`。"""
@@ -382,13 +356,7 @@ def install(env):
         return [name for name in (getattr(c, "name", None) for c in (characters or {}).values())
                 if isinstance(name, str) and name]
 
-    def area_notes(area):
-        notes = getattr(area, "descriptions", None)
-        if isinstance(notes, dict):
-            for key in ("overview", "area_description", "facilities"):
-                if isinstance(notes.get(key), str) and notes[key].strip():
-                    return notes[key]
-        return ""
+    area_notes = npcs.area_notes
 
     # ------------------------------------------------------------ 呼び止める
     def launch(app, npc_id):

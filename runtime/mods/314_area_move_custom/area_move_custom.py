@@ -77,7 +77,7 @@ import re
 import sys
 import time
 
-from instantale_modloader import arrivals, choices, durations, frames, ui
+from instantale_modloader import arrivals, choices, durations, frames, text_filters, ui
 from instantale_modloader.state import UNKNOWN_WORLD, WorldStore, playthrough_key, world_key
 
 LOG_BASENAME = "area_move_custom.log"
@@ -762,25 +762,23 @@ def apply(ctx):
         write("text passing through (no mark matched): {!r}".format(text))
         return None
 
-    @ctx.wrap("__main__:InstantaleApp.add_text", required=False)
-    def add_text(orig, self, *args, **kwargs):
-        # orig は try の外で1回だけ呼ぶ（orig 自身の例外で本文を二度足さない）。
+    def travel_text(context, app):
+        """エリア移動の窓の中だけ、移動の文言を言い換える（ローダの窓口 `text_filters`）。"""
         if state["window"] is None:
             # 言い換えはエリア移動の窓の中だけ。窓の外の本文では設定も読み直さない
             # （窓を開く `area_move_begin` が開く前に読み直している）。
-            return orig(self, *args, **kwargs)
-        try:
-            refresh_world(self)
-            window = state["window"]
-            context = frames.arg(args, kwargs, "context", 0)
-            if window is not None and isinstance(context, str):
-                replaced = reword(window, context)
-                if replaced is not None and replaced != context:
-                    write("text: {!r} -> {!r}".format(context, replaced))
-                    args, kwargs, _ = frames.replace_arg(args, kwargs, "context", 0, replaced)
-        except Exception:
-            ctx.log_exc("area move custom: cannot reword the travel text")
-        return orig(self, *args, **kwargs)
+            return None
+        refresh_world(app)
+        window = state["window"]
+        if window is None or not isinstance(context, str):
+            return None
+        replaced = reword(window, context)
+        if replaced is not None and replaced != context:
+            write("text: {!r} -> {!r}".format(context, replaced))
+            return replaced
+        return None
+
+    text_filters.on(owner, ctx, travel_text, write=write)
 
     # ------------------------------------------------------------ 自己検証
     # 実経路はエリア移動を1回するまで通らない。

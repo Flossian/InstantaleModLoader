@@ -130,24 +130,16 @@ import os
 import random
 import sys
 import threading
-import time
 
-from instantale_modloader import frames, loads, ui
+from instantale_modloader import frames, loads, quest_ends, quest_generation, ui
 from instantale_modloader.state import UNKNOWN_WORLD, WorldStore
 
 LOG_BASENAME = "area_difficulty.log"
 
-# `random_quest_generator` の引数の並び（recon の signatures.json）。
-QUEST_GENERATOR_ARGS = ("world_overview", "settlement_name", "settlement_overview",
-                        "settlement_structure_description", "area_description", "quest_difficulty")
 STATE_DIRNAME = "area_difficulty"
 
 # グローバルの `random` から引くとゲーム自身の乱数列がずれる（TECH.md §6.1）。
 _RNG = random.Random()
-
-#: 生成へ渡す上昇量の印の寿命（秒）。`301_` / `307_` と同じ形。
-#: 生成が始まらなかった回の印を、次の生成が拾わないための時限。
-INJECT_TTL = 300.0
 
 #: ゲーム自身の難易度の下限（`scripts.functions.QUEST_DIFFICULTY_VALUE_MIN`）。引けなかったときの落とし先。
 GAME_DIFFICULTY_MIN = 0
@@ -184,6 +176,7 @@ def by_area_id(bucket):
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
+    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "318_area_difficulty_growth"
     screen = ui.Screen(ctx, write, tag="area difficulty")
 
     # 控えはゲームのスレッドと Clock コールバックの両方から触る。
@@ -191,8 +184,6 @@ def apply(ctx):
     # 上限で頭打ちになった土地は一度だけ知らせる（毎回の掲示板で出さない）。
     capped = set()
     state = {
-        "inject": None,        # 生成へ渡す上昇量（1回で使い切る）
-        "inject_at": 0.0,
         "warned_store": False,
     }
 
@@ -518,45 +509,43 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("area difficulty: ロード直後に寄せ直せなかった")
 
-    loads.on(os.path.basename(getattr(ctx, "mod_dir", "") or "") or "318_area_difficulty_growth", ctx, (loads.WORLD,), after=world_loaded, write=write)
+    loads.on(owner, ctx, (loads.WORLD,), after=world_loaded, write=write)
 
-    @ctx.wrap("__main__:QuestEndManager.execute", required=False, safe=True)
-    def quest_end(orig, self, *args, **kwargs):
-        """依頼を片付けた。その依頼の土地を1回ぶん進める。
+    def quest_end_before(call):
+        """依頼を片付ける前。終わる依頼の土地と、数えない理由を読む（`after` に渡す）。"""
+        quest = call.quest
+        if quest is None:
+            return None, None
+        # 1つずつ読む。数えない理由が読めなくても、土地が読めていれば数える（前と同じ）。
+        area_id = area_of_quest(quest)
+        try:
+            story = story_reason(call.app, quest)
+        except Exception:
+            ctx.log_exc("area difficulty: 終わる依頼の種類を読めなかった")
+            story = None
+        return area_id, story
 
-        **どの依頼が終わるのかは `orig` の前に読む**
-        （終わった後では `current_quest_data` が片付いている。`307_` と同じ）。
-        """
-        app = getattr(self, "app", None) or ui.find_app()
-        area_id = None
-        story = None
-        try:
-            quest = getattr(app, "current_quest_data", None) if app is not None else None
-            if quest is not None:
-                area_id = area_of_quest(quest)
-                story = story_reason(app, quest)
-        except Exception:
-            ctx.log_exc("area difficulty: 終わる依頼を読めなかった")
-        result = orig(self, *args, **kwargs)
-        try:
-            if story is not None:
-                write("clear: 依頼は通常依頼ではない（{}。数えない）".format(story))
-            elif app is not None and area_id is not None:
-                key = worlds.playthrough(app)
-                raised = count_clear(key, area_id)
-                reconcile(getattr(app, "world", None), key, area_id, "clear")
-                if raised and ANNOUNCE:
-                    # 依頼の終了は報酬・才能・要約と出力が続く。
-                    # その最中に差し込むと押し流されるので手が空くのを待つ
-                    # （`303_` と同じ。既に確定した出来事なので待ちきれなくても出す）。
-                    screen.when_idle(app, lambda: screen.say(app, ANNOUNCE),
-                                     proceed_on_timeout=True,
-                                     tag="area difficulty announce")
-            elif app is not None:
-                write("clear: 終わった依頼の土地が読めなかった（数えない）")
-        except Exception:
-            ctx.log_exc("area difficulty: クリアを数えられなかった")
-        return result
+    def quest_end_after(call):
+        """依頼を片付けた。その依頼の土地を1回ぶん進める（ローダの窓口 `quest_ends`）。"""
+        app = call.app
+        area_id, story = call.memo or (None, None)
+        if story is not None:
+            write("clear: 依頼は通常依頼ではない（{}。数えない）".format(story))
+        elif app is not None and area_id is not None:
+            key = worlds.playthrough(app)
+            raised = count_clear(key, area_id)
+            reconcile(getattr(app, "world", None), key, area_id, "clear")
+            if raised and ANNOUNCE:
+                # 依頼の終了は報酬・才能・要約と出力が続く。
+                # その最中に差し込むと押し流されるので手が空くのを待つ
+                # （`303_` と同じ。既に確定した出来事なので待ちきれなくても出す）。
+                screen.when_idle(app, lambda: screen.say(app, ANNOUNCE),
+                                 proceed_on_timeout=True,
+                                 tag="area difficulty announce")
+        elif app is not None:
+            write("clear: 終わった依頼の土地が読めなかった（数えない）")
+
+    quest_ends.on(owner, ctx, before=quest_end_before, after=quest_end_after, write=write)
 
     @ctx.wrap("__main__:DisplayQuestChoice.__init__", required=False, safe=True)
     def board(orig, self, *args, **kwargs):
@@ -592,12 +581,13 @@ def apply(ctx):
             area_id = ui.area_id_of(ui.current_area(app))
             bonus = bonus_of(worlds.playthrough(app), area_id) if area_id else 0
             if bonus:
-                state["inject"] = bonus
-                state["inject_at"] = time.monotonic()
+                # 生成へ渡す難易度に上乗せする（ローダの窓口。1回で使い切る。TECH.md §3.3.30）。
+                quest_generation.offer(owner, ctx, rewrite=lambda request: raise_difficulty(request, bonus),
+                                       tag="search", write=write)
         except Exception:
             ctx.log_exc("area difficulty: 生成の前に土地を読めなかった")
         result = orig(self, *args, **kwargs)
-        state["inject"] = None
+        quest_generation.cancel(owner)
         try:
             world = getattr(app, "world", None)
             key = worlds.playthrough(app)
@@ -646,32 +636,24 @@ def apply(ctx):
             ctx.log_exc("area difficulty: 受注の前に寄せ直せなかった")
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap("scripts.llm.llm_manager_world_generate:random_quest_generator",
-              required=False, safe=True)
-    def random_quest_generator(orig, *args, **kwargs):
-        """頼み文へ渡す難易度に、その土地の上昇量を乗せる。
+    # 生成への上乗せはローダの窓口が1枚だけ包む（`generate_random_quest` が `offer` で置く。TECH.md §3.3.30）。
+    quest_generation.install(ctx, write)
+
+    def raise_difficulty(request, bonus):
+        """頼み文へ渡す難易度に、その土地の上昇量を乗せる（窓口の `rewrite`）。
 
         出力スキーマにも呼び出し側にも影響しない（数を1つ差し替えるだけ）。
         印は1回で使い切るので、上昇量ゼロの土地の生成は素通しする。
-        `307_` は自分の難易度を持っているので、
-        こちらが乗せた値はあちらが上書きする（あちらが内側）。
-        引数は受け取った形（位置かキーワード）のまま渡し、難易度だけを差し替える（TECH.md の規則の表）。
+        `307_`・`325_`・`336_` が置く明示の難易度は、窓口がこの上乗せの後に当てる（あちらが勝つ）。
         """
-        bonus = state["inject"]
-        state["inject"] = None
-        quest_difficulty = frames.arg(args, kwargs, "quest_difficulty", QUEST_GENERATOR_ARGS)
-        raised = quest_difficulty
-        if (bonus and isinstance(quest_difficulty, int)
-                and not isinstance(quest_difficulty, bool)
-                and time.monotonic() - state["inject_at"] <= INJECT_TTL):
-            low, high = limits()
-            raised = _clip(quest_difficulty + bonus, low, high)
-            if raised != quest_difficulty:
-                write("search: 頼み文へ渡す難易度 {} -> {}".format(
-                    quest_difficulty, raised))
-                args, kwargs, _ = frames.replace_arg(args, kwargs, "quest_difficulty",
-                                                     QUEST_GENERATOR_ARGS, raised)
-        return orig(*args, **kwargs)
+        quest_difficulty = request.get("quest_difficulty")
+        if not bonus or not isinstance(quest_difficulty, int) or isinstance(quest_difficulty, bool):
+            return
+        low, high = limits()
+        raised = _clip(quest_difficulty + bonus, low, high)
+        if raised != quest_difficulty:
+            write("search: 頼み文へ渡す難易度 {} -> {}".format(quest_difficulty, raised))
+            request.set("quest_difficulty", raised)
 
     ctx.log("area difficulty growth: +{}..{} per clear, up to +{} (limit {}), "
             "scope={}{}; log goes to out/{}".format(

@@ -38,7 +38,7 @@
 
 import sys
 
-from instantale_modloader import frames, items
+from instantale_modloader import frames, items, ui
 
 # GUI から変えられる値（同じ名前と既定値が mod.json にもある。TECH.md §3.8）。
 FIX_ON_SIGHT = True         # 古いセーブの品も、画面に出た時点で直す
@@ -84,11 +84,8 @@ def needs_fix(item):
     return attributes.get("item_detail") in HEALING_DETAILS
 
 
-def language():
-    """ゲームの表示言語。`scripts.languages.language`。読めなければ ja（`134_` と同じ）。"""
-    module = sys.modules.get("scripts.languages")
-    lang = getattr(module, "language", None) if module is not None else None
-    return "en" if lang == "en" else "ja"
+#: ゲームの表示言語（`ui.language`。名前はこのモジュールから引く側のために残す）。
+language = ui.language
 
 
 def game_heal_values(value):

@@ -105,9 +105,14 @@ class FakeUI(object):
 
 class FakeCtx(object):
     _mod = "142_balance_quest_stamina"
+    _seq = 0
 
     def __init__(self, out_dir):
         self.out_dir = out_dir
+        # 世代は apply() ごとに違う（本物の `ctx.generation`）。ローダの窓口の包みは世代ごとに1枚なので
+        # （`saving.install`）、ここが同じ値だと作り直した ctx に包みが渡らない。
+        FakeCtx._seq += 1
+        self.generation = FakeCtx._seq
         self.hooks = {}
         self.errors = []
 

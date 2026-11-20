@@ -23,7 +23,7 @@ GAME.md §2.18、`217_` の `out\\area_move.log` で `days=[] texts=1`）。
 
 import os
 
-from instantale_modloader import arrivals, durations, frames, ui
+from instantale_modloader import arrivals, durations, frames, saving, ui
 
 LOG_BASENAME = "area_move_party.log"
 
@@ -121,10 +121,11 @@ def apply(ctx):
 
     durations.on_days(owner, ctx, before=days_begin, write=write)
 
-    @ctx.wrap("__main__:InstantaleApp.save_game", required=False, safe=True)
-    def save_game(orig, self, *args, **kwargs):
-        restore(self, "save_game")
-        return orig(self, *args, **kwargs)
+    def save_before(call):
+        """保存の前に、移動の間だけ変えていた仲間の値を戻す（ローダの窓口 `saving`）。"""
+        restore(call.app, "save_game")
+
+    saving.on(owner, ctx, before=save_before, write=write)
 
     @ctx.wrap("scripts.llm.llm_manager:area_move_rejector", required=False, safe=True)
     def area_move_rejector(orig, *args, **kwargs):

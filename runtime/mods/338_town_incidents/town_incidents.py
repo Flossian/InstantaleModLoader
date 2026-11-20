@@ -26,10 +26,9 @@ import random
 import re
 import sys
 import threading
-import time
 
-from instantale_modloader import (arrivals, choices, durations, frames, hudicons, jobs, llm, loads, modnpc,
-                                  prices, quest_claims, state as loader_state, ui)
+from instantale_modloader import (arrivals, choices, durations, hudicons, jobs, llm, loads, modnpc,
+                                  prices, quest_claims, quest_ends, quest_generation, state as loader_state, ui)
 
 from . import incidents, window
 
@@ -86,11 +85,6 @@ FIT_TRIES = 2                  # 世界に合わないと言われたときに�
 RUMOR_LIMIT = 2
 RUMOR_STAGE = 2                # よその街で噂になる段
 ENDED_SHOWN_DAYS = 360         # 窓に出す「終わったもの」の日数
-INJECT_TTL = 300.0
-
-# `random_quest_generator` の引数の並び（recon の signatures.json）。
-QUEST_GENERATOR_ARGS = ("world_overview", "settlement_name", "settlement_overview",
-                        "settlement_structure_description", "area_description", "quest_difficulty")
 SIZES = ("village", "town", "city")
 GUILD_TYPE = "guild"
 COMPLETED = "completed"
@@ -174,7 +168,7 @@ def _store():
     store = getattr(sys, STORE_ATTR, None)
     if not isinstance(store, dict):
         store = {"worlds": None, "worker": None, "reconcile": False,
-                 "rng": random.Random(), "inject": {}, "view": None, "here": None}
+                 "rng": random.Random(), "view": None, "here": None}
         setattr(sys, STORE_ATTR, store)
     store.setdefault("urgent", {})
     # 掲示板で出来事の依頼を作らせている間の錠。押下ごとに別スレッドで `execute` が走るので、2つ目は作らせない
@@ -257,7 +251,6 @@ def apply(ctx):
     worlds = store["worlds"].rebind(ctx, write)
     rng = store["rng"]
     screen = ui.Screen(ctx, write, tag="town incidents", mark=MARK)
-    inject = store["inject"]
 
     def ledger(app):
         key = worlds.playthrough(app)
@@ -712,14 +705,15 @@ def apply(ctx):
             brief = BRIEF.format(name=name_of(event), stage=stage_name(event), what=kind["what"],
                                  quest=incidents.text_of(event, "quest").rstrip("。"))
         # 待機の表示と押下の止め方は呼ぶ側（`board`）。掲示板の `execute` ではゲームは旗を下ろさない（VERIFICATION.md §3.97）
-        inject.update(brief=brief, at=time.monotonic())
+        # 生成に出来事の説明を足す（ローダの窓口。1回で使い切る。TECH.md §3.3.30）。
+        quest_generation.offer(OWNER, ctx, brief=brief, tag="quest", write=write)
         before = set(ui.quest_ids(app))
         try:
             display_cls(app).generate_random_quest()
         except Exception:
             ctx.log_exc("town incidents: generate_random_quest failed")
         finally:
-            inject.update(brief=None)
+            quest_generation.cancel(OWNER)
         added = sorted(set(ui.quest_ids(app)) - before, key=ui.id_sort_key)
         if not added:
             write("quest: no quest was generated for #{}".format(event_id))
@@ -784,54 +778,33 @@ def apply(ctx):
             making.release()
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap("scripts.llm.llm_manager_world_generate:random_quest_generator", required=False)
-    def random_quest_generator(orig, *args, **kwargs):
-        """出来事の依頼を作る回だけ、`area_description` に出来事の説明を足す。印は1回で使い切る。
+    # 生成への差し込みはローダの窓口が1枚だけ包む（出来事の依頼を作るときに `offer` で置く。TECH.md §3.3.30）。
+    quest_generation.install(ctx, write)
 
-        `328_`（街の描写を伏せる）より内側に居るので、伏せられた後の描写に足される（`336_` と同じ）。
-        引数は受け取った形（位置かキーワード）のまま渡し、`area_description` だけを来た側に合わせて差し替える。
-        """
-        brief, at = inject.get("brief"), inject.get("at") or 0.0
-        inject.update(brief=None)
-        if brief and time.monotonic() - at <= INJECT_TTL:
-            area_description = frames.arg(args, kwargs, "area_description", QUEST_GENERATOR_ARGS)
-            args, kwargs, _ = frames.replace_arg(args, kwargs, "area_description", QUEST_GENERATOR_ARGS,
-                                                 (area_description or "") + brief)
-            write("quest: injected the brief ({} chars)".format(len(brief)))
-        return orig(*args, **kwargs)
+    def quest_end_after(call):
+        """依頼から帰った。出来事の依頼を片付けていれば、その出来事は終わる（ローダの窓口 `quest_ends`）。"""
+        app, quest_id = call.app, call.quest_id
+        if quest_id is None or quest_status(app, quest_id) != COMPLETED:
+            return
+        lines = []
+        with worlds.lock:
+            key, bucket = ledger(app)
+            day = ui.game_day(app)
+            for event in incidents.events_of(bucket, incidents.ACTIVE):
+                if str(event.get("quest")) == str(quest_id):
+                    incidents.end(bucket, event, day, incidents.END_PLAYER, REST_DAYS)
+                    write("end: #{} {} at {} was solved by the player (quest {})".format(
+                        event.get("id"), name_of(event), event.get("area_name"), quest_id))
+                    lines.append(SOLVED_TEXT.format(town=event.get("area_name"),
+                                                    name=name_of(event)))
+            bucket["cleanup"] = [qid for qid in bucket.get("cleanup") or []
+                                 if str(qid) != str(quest_id)]
+            save(key, bucket)
+        if lines:
+            prices.refresh("town incidents solved")
+            say_when_idle(app, lines, "solved")
 
-    @ctx.wrap("__main__:QuestEndManager.execute", required=False, safe=True)
-    def quest_end(orig, self, *args, **kwargs):
-        """依頼から帰った。出来事の依頼を片付けていれば、その出来事は終わる。
-
-        どの依頼が終わるのかは `orig` の前に読む（終わった後は片付いている。`318_` と同じ）。
-        """
-        app = getattr(self, "app", None) or ui.find_app()
-        quest_id = ui.current_quest_id(app) if app is not None else None
-        result = orig(self, *args, **kwargs)
-        try:
-            if quest_id is None or quest_status(app, quest_id) != COMPLETED:
-                return result
-            lines = []
-            with worlds.lock:
-                key, bucket = ledger(app)
-                day = ui.game_day(app)
-                for event in incidents.events_of(bucket, incidents.ACTIVE):
-                    if str(event.get("quest")) == str(quest_id):
-                        incidents.end(bucket, event, day, incidents.END_PLAYER, REST_DAYS)
-                        write("end: #{} {} at {} was solved by the player (quest {})".format(
-                            event.get("id"), name_of(event), event.get("area_name"), quest_id))
-                        lines.append(SOLVED_TEXT.format(town=event.get("area_name"),
-                                                        name=name_of(event)))
-                bucket["cleanup"] = [qid for qid in bucket.get("cleanup") or []
-                                     if str(qid) != str(quest_id)]
-                save(key, bucket)
-            if lines:
-                prices.refresh("town incidents solved")
-                say_when_idle(app, lines, "solved")
-        except Exception:
-            ctx.log_exc("town incidents: cannot settle the quest end")
-        return result
+    quest_ends.on(OWNER, ctx, after=quest_end_after, write=write)
 
     def after_days(call):
         """日が進んだ後に見回る。日数の進め方には触らない（ローダの日数の関所 `durations.on_days`）。"""

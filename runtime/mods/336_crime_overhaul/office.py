@@ -14,9 +14,8 @@
 - 一覧は窓口の MOD だけの画面（`BOARD_SCREEN`）。下の事務所の選択肢は窓口が残すので、一覧で保存して読み直しても
   一覧に戻り、「やめる」で事務所の選択肢に戻る。依頼のボタンはゲームの `QuestChoiceManager` の写しで、押下はゲームへ流す
 """
-import time
 
-from instantale_modloader import board, choices, durations, frames, quest_clients, ui, wanted
+from instantale_modloader import board, choices, durations, quest_clients, quest_ends, quest_generation, ui, wanted
 
 from . import common, theft, underworld
 
@@ -41,12 +40,6 @@ JOB_LABEL_HEAD = "裏の仕事："
 #: `QuestChoiceManager(app, quest_type, quest_id)` の `quest_type`。`world.quests` に通るのはこれだけ（GAME.md §2.9）。
 QUEST_TYPE = "settlement_quest"
 QUEST_CHOICE_SPEC = "QuestChoiceManager"
-#: 生成の頼み文へ差し込む印の寿命（秒）。`307_` と同じ。
-INJECT_TTL = 300.0
-
-# `random_quest_generator` の引数の並び（recon の signatures.json）。
-QUEST_GENERATOR_ARGS = ("world_overview", "settlement_name", "settlement_overview",
-                        "settlement_structure_description", "area_description", "quest_difficulty")
 #: 裏の仕事の受注期限（ゲームの日数）。作ってからこの日数が経つと、受けている最中でなければ取り下げる（2026-10-25。版4）。
 DEADLINE_DAYS = 30
 LOOKING_TEXT = "{broker}が帳面をめくり、回せる仕事を探している……"
@@ -67,7 +60,6 @@ def install(env):
     # 呼び、その内側の `random_quest_generator` の頼み文へ種類ごとの指示を差し込む（`307_` と同じ形）。
     # 依頼の id と作った日は控え（`state\` の `underworld`）に持ち、依頼の辞書には鍵を足さない（GAME.md §2.9）。
     # ギルドの掲示板からは隠し、帰還のときに報酬へ倍率を掛け、依頼の街の手配度を下げる。
-    inject = env.quest_inject
     #: 公式の枠が実装されたことを1度だけ記録するための印。`board` は最後に記録した一覧の並び。
     office_notes = {}
 
@@ -275,8 +267,9 @@ def install(env):
             screen.say(app, NO_JOB_TEXT)
             screen.when_idle(app, lambda: show_board(app), proceed_on_timeout=True, tag="underworld board")
             return
-        inject.update(brief=underworld.brief(kind, town, broker), difficulty=None,
-                      at=time.monotonic(), tag="underworld")
+        # 生成に種類ごとの指示を足す（ローダの窓口。1回で使い切る。TECH.md §3.3.30）。
+        quest_generation.offer(env.owner, ctx, brief=underworld.brief(kind, town, broker),
+                               tag="underworld", write=write)
         screen.busy_on(app)
         screen.say(app, LOOKING_TEXT.format(broker=broker or "事務所の主"))
         before = set(ui.quest_ids(app))
@@ -285,7 +278,7 @@ def install(env):
         except Exception:
             ctx.log_exc("crime incentive: generate_random_quest failed")
         finally:
-            inject.update(brief=None, difficulty=None)
+            quest_generation.cancel(env.owner)
         added = sorted(set(ui.quest_ids(app)) - before, key=ui.id_sort_key)
         if not added:
             write("underworld: no quest was generated ({})".format(kind["name"]))
@@ -315,28 +308,8 @@ def install(env):
         # 探すのはフェーズの中（生成が重い）。塗るのはフェーズが終わって手が空いてから（前の受注画面の出し方と同じ）。
         screen.when_idle(app, lambda: show_board(app), proceed_on_timeout=True, tag="underworld board")
 
-    @ctx.wrap("scripts.llm.llm_manager_world_generate:random_quest_generator", required=False)
-    def random_quest_generator(orig, *args, **kwargs):
-        """裏の仕事・処刑場からの脱出を作る回だけ、`area_description` に指示を足す。印は1回で使い切る。
-
-        `328_`（街の描写を伏せる）より内側に居るので、伏せられた後の描写に足される。
-        難易度が置かれていれば `quest_difficulty` も差し替える（`307_` と同じ形。依頼の敵の強さはこの値で決まる）。
-        引数は受け取った形（位置かキーワード）のまま渡し、この2つだけを来た側に合わせて差し替える（TECH.md の規則の表）。
-        """
-        brief, at = inject.get("brief"), inject.get("at") or 0.0
-        difficulty, tag = inject.get("difficulty"), inject.get("tag") or "underworld"
-        inject.update(brief=None, difficulty=None)
-        if brief and time.monotonic() - at <= INJECT_TTL:
-            area_description = frames.arg(args, kwargs, "area_description", QUEST_GENERATOR_ARGS)
-            args, kwargs, _ = frames.replace_arg(args, kwargs, "area_description", QUEST_GENERATOR_ARGS,
-                                                 (area_description or "") + brief)
-            write("{}: injected the brief ({} chars)".format(tag, len(brief)))
-            if isinstance(difficulty, int) and not isinstance(difficulty, bool):
-                quest_difficulty = frames.arg(args, kwargs, "quest_difficulty", QUEST_GENERATOR_ARGS)
-                write("{}: quest difficulty {!r} -> {}".format(tag, quest_difficulty, difficulty))
-                args, kwargs, _ = frames.replace_arg(args, kwargs, "quest_difficulty",
-                                                     QUEST_GENERATOR_ARGS, difficulty)
-        return orig(*args, **kwargs)
+    # 生成への差し込みはローダの窓口が1枚だけ包む（裏の仕事と処刑場からの脱出が `offer` で置く。TECH.md §3.3.30）。
+    quest_generation.install(ctx, write)
 
     @ctx.wrap("__main__:DisplayQuestChoice.get_active_quest_count", required=False, safe=True)
     def active_quest_count(orig, self, *args, **kwargs):
@@ -366,30 +339,29 @@ def install(env):
 
     env.on_text(rewrite_reward)
 
-    @ctx.wrap("__main__:QuestEndManager.execute", required=False, safe=True)
-    def quest_end(orig, self, *args, **kwargs):
-        """裏の仕事を片付けた。報酬に倍率を掛け、依頼の街の手配度を下げ、控えを捨てる。
-
-        どの依頼が終わるのかは `orig` の前に読む（終わった後は片付いている。`318_` と同じ）。
-        """
-        app = getattr(self, "app", None) or ui.find_app()
-        quest_id = ui.current_quest_id(app) if app is not None else None
-        job = None
-        if cfg.UNDERWORLD_ENABLED and quest_id is not None:
-            with worlds.lock:
-                job = dict(jobs_of(app)[1].get(quest_id) or {}) or None
+    def quest_end_before(call):
+        """裏の仕事を片付ける前。終わる依頼が裏の仕事なら報酬の倍率を置く（`after` に控えを渡す）。"""
+        app, quest_id = call.app, call.quest_id
+        if not cfg.UNDERWORLD_ENABLED or quest_id is None or app is None:
+            return None
+        with worlds.lock:
+            job = dict(jobs_of(app)[1].get(quest_id) or {}) or None
         if job is None:
-            return orig(self, *args, **kwargs)
-        before_gold = ui.gold_of(app)
+            return None
+        memo = {"quest_id": quest_id, "job": job, "gold": ui.gold_of(app)}
         reward["pending"] = {"mult": float(job.get("mult") or 1.0), "base": None, "want": None}
-        try:
-            return orig(self, *args, **kwargs)
-        finally:
-            pending, reward["pending"] = reward["pending"], None
-            try:
-                settle_job(app, quest_id, job, pending, before_gold)
-            except Exception:
-                ctx.log_exc("crime incentive: cannot settle the underworld job")
+        return memo
+
+    def quest_end_after(call):
+        """裏の仕事を片付けた。報酬に倍率を掛け、依頼の街の手配度を下げ、控えを捨てる（ローダの窓口 `quest_ends`。投げた回も）。"""
+        memo = call.memo
+        if memo is None:
+            return
+        pending, reward["pending"] = reward["pending"], None
+        settle_job(call.app, memo["quest_id"], memo["job"], pending, memo["gold"])
+
+    quest_ends.on(env.owner + ":underworld", ctx, before=quest_end_before, after=quest_end_after,
+                  always=True, write=write)
 
     def settle_job(app, quest_id, job, pending, before_gold):
         kind = underworld.KIND_BY_KEY.get(job.get("kind")) or {"name": "裏の仕事"}

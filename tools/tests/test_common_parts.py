@@ -1040,6 +1040,51 @@ def test_window_parts():
           and llm._superseded(live) is False)
 
 
+def test_npc_fields():
+    print("npcs の項目を均す部品・ui.guild_of・ui.language（320_ / 336_ / 339_ と 5本の写しを寄せた先）")
+    check("clean_text は空白を畳んで切る", npcs.clean_text("  a  b\n c ", 4) == "a b ")
+    check("clean_text は文字列でなければ空", npcs.clean_text(None) == "")
+    check("clean_name はファイル名に使えない字を落とす", npcs.clean_name('鉄/拳:の"グ*ラ?ン<>|\\') == "鉄拳のグラン")
+    check("clean_name は上限で切る", npcs.clean_name("あ" * 40) == "あ" * npcs.NAME_MAX)
+    check("clean_name は上限を受ける", npcs.clean_name("abcdef", 3) == "abc")
+    check("clean_category は語彙に均す", npcs.clean_category("A Young Woman") == "young woman")
+    check("clean_category は当たらなければ先頭", npcs.clean_category("robot") == npcs.LOOK_CATEGORIES[0])
+    check("clean_category は候補を受ける", npcs.clean_category("x old y", ("new", "old")) == "old")
+    check("clean_look は種類を先頭に置き、同じ語を重ねない",
+          npcs.clean_look("young woman, red hair, , scar", "young woman") == ["young woman", "red hair", "scar"])
+    check("clean_look は語の数を切る", len(npcs.clean_look(",".join("t%d" % i for i in range(20)), "old man")) == 1 + npcs.LOOK_TOKENS_MAX)
+    area = types.SimpleNamespace(descriptions={"overview": " ", "area_description": "森の外れ"})
+    check("area_notes は空の overview を飛ばす", npcs.area_notes(area) == "森の外れ")
+    check("area_notes は文字列の説明をそのまま返す", npcs.area_notes(types.SimpleNamespace(descriptions="港町")) == "港町")
+    check("area_notes は無ければ空", npcs.area_notes(types.SimpleNamespace()) == "")
+    saved = sys.modules.get("scripts.functions")
+    try:
+        sys.modules["scripts.functions"] = types.SimpleNamespace(get_npc_exp_level=lambda d: d * 2)
+        check("exp_level はゲームの表で引いて 1〜100 に収める", npcs.exp_level(30) == 60 and npcs.exp_level(80) == 100)
+        sys.modules["scripts.functions"] = types.SimpleNamespace(get_npc_exp_level=lambda d: 1 / 0)
+        check("exp_level は表が投げたら近似", npcs.exp_level(48) == 53)
+        sys.modules.pop("scripts.functions")
+        check("exp_level は表が無ければ近似", npcs.exp_level(0) == 5 and npcs.exp_level(200) == 100)
+    finally:
+        if saved is not None:
+            sys.modules["scripts.functions"] = saved
+    guild = types.SimpleNamespace(facility_type="guild")
+    node = types.SimpleNamespace(facilities={"f1": types.SimpleNamespace(facility_type="inn"), "f2": guild})
+    check("guild_of はギルドの (id, 施設)", ui.guild_of(types.SimpleNamespace(nodes={"n": node})) == ("f2", guild))
+    check("guild_of は無ければ (None, None)", ui.guild_of(types.SimpleNamespace(nodes=[])) == (None, None))
+    saved = sys.modules.get("scripts.languages")
+    try:
+        sys.modules["scripts.languages"] = types.SimpleNamespace(language="en")
+        check("language は en", ui.language() == "en")
+        sys.modules["scripts.languages"] = types.SimpleNamespace(language="fr")
+        check("language は en 以外を ja", ui.language() == "ja")
+        sys.modules.pop("scripts.languages")
+        check("language は読めなければ ja", ui.language() == "ja")
+    finally:
+        if saved is not None:
+            sys.modules["scripts.languages"] = saved
+
+
 def test_rebuild_hook():
     print("llm.install_rebuild_hook（ゲームが送り口を作り直したら包み直す。作り直しの途中は当てさせない）")
     import instantale_modloader as ml
@@ -1189,6 +1234,7 @@ def main():
         test_watch_aliases_superseded()
         test_window_parts()
         test_rebuild_hook()
+        test_npc_fields()
     finally:
         shutil.rmtree(root, ignore_errors=True)
     if FAILURES:

@@ -11,7 +11,7 @@
 流れ:
     死刑の判決の画面（「嫌だ！」＝ `ExecutionPhaseManager`）に「〈名前〉の手引きに賭ける」を足す
     → 押すと、手引きした人物をパーティに入れ、依頼の生成に脱出の指示と難易度を差し込んで1件作り
-      （`office` と同じ口。`env.quest_inject`）、受注画面を通さず `QuestStartManager(app, 'settlement_quest', id)` で始める
+      （`office` と同じくローダの窓口 `quest_generation`）、受注画面を通さず `QuestStartManager(app, 'settlement_quest', id)` で始める
       （GAME.md §2.9 の進行ループ）。生成に渡した難易度は LLM への頼みの数字にしか効かず、依頼の記録はゲームが決めた値になる
       （2026-10-21 の実機。82 を渡して記録は 4、敵は HP 160）。だから作った直後と始める直前に、依頼の記録へ書き直す（`307_` と同じ形）
     → 帰還（`QuestEndManager`）: 外へ逃れた。報酬は出さず（本文の行を止め、入った額を引く）、捕まった土地の手配度を下げる
@@ -19,9 +19,8 @@
 控えは `state\\crime_overhaul\\<世界×主人公>.json` の `rescue`（依頼の id・土地・手引きした人）。終われば消す。
 """
 import sys
-import time
 
-from instantale_modloader import choices, npcs, ui
+from instantale_modloader import choices, npcs, quest_ends, quest_generation, ui
 
 from . import common, underworld
 
@@ -232,8 +231,9 @@ def install(env):
 
         difficulty = rescue_difficulty(env.area_difficulty(app), party_level(app),
                                        cfg.RESCUE_DIFFICULTY_PLUS, difficulty_max())
-        env.quest_inject.update(brief=BRIEF_TEXT.format(name=name, town=town),
-                                difficulty=difficulty, at=time.monotonic(), tag="rescue")
+        # 生成に脱出の指示と難易度を渡す（ローダの窓口。1回で使い切る。TECH.md §3.3.30）。
+        quest_generation.offer(env.owner, env.ctx, brief=BRIEF_TEXT.format(name=name, town=town),
+                               difficulty=difficulty, tag="rescue", write=env.write)
         screen.say(app, LOOKING_TEXT.format(name=name))
         before = set(ui.quest_ids(app))
         try:
@@ -241,7 +241,7 @@ def install(env):
         except Exception:
             ctx.log_exc("crime incentive: generating the rescue failed")
         finally:
-            env.quest_inject.update(brief=None, difficulty=None)
+            quest_generation.cancel(env.owner)
         added = sorted(set(ui.quest_ids(app)) - before, key=ui.id_sort_key)
         screen.busy_off(app, restore=False)
         if not added:
@@ -317,22 +317,26 @@ def install(env):
             return context, True
         return context, False
 
-    @ctx.wrap("__main__:QuestEndManager.execute", required=False, safe=True)
-    def quest_end(orig, self, *args, **kwargs):
-        app = getattr(self, "app", None) or ui.find_app()
+    def quest_end_before(call):
+        """処刑場からの脱出を片付ける前。こちらの依頼なら終わりの印を立てる（`after` に控えを渡す）。"""
+        app = call.app
         rescue = load_rescue(app) if app is not None else None
         if not is_ours(app, rescue):
-            return orig(self, *args, **kwargs)
-        before_gold = ui.gold_of(app)
+            return None
+        memo = {"rescue": rescue, "gold": ui.gold_of(app)}
         ending["on"] = True
-        try:
-            return orig(self, *args, **kwargs)
-        finally:
-            ending["on"] = False
-            try:
-                set_free(app, rescue, before_gold)
-            except Exception:
-                ctx.log_exc("crime incentive: cannot settle the rescue")
+        return memo
+
+    def quest_end_after(call):
+        """脱出を片付けた。印を下ろし、助けた人物を放す（ローダの窓口 `quest_ends`。投げた回も）。"""
+        memo = call.memo
+        if memo is None:
+            return
+        ending["on"] = False
+        set_free(call.app, memo["rescue"], memo["gold"])
+
+    quest_ends.on(env.owner + ":rescue", ctx, before=quest_end_before, after=quest_end_after,
+                  always=True, write=write)
 
     def set_free(app, rescue, before_gold):
         after_gold = ui.gold_of(app)

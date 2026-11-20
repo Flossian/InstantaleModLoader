@@ -29,7 +29,7 @@
 
 import random
 
-from instantale_modloader import choices, frames, wanted
+from instantale_modloader import choices, text_filters, wanted
 
 from . import cellmate, common, court, custody, encounter, fence, law, loot, office, prison, rescue, theft
 
@@ -144,20 +144,18 @@ def apply(ctx):
         feature.install(env)
 
     # ---- ゲームの入口は1枚だけ包み、機能へ配る ------------------------------------------
-    @ctx.wrap("__main__:InstantaleApp.add_text", required=False, safe=True)
-    def add_text(orig, self, *args, **kwargs):
+    def crime_text(context, app):
         """本文の1行を機能に通す（盗みで借りた購入の文を止める・裏の仕事の報酬の額を書き換える）。
 
-        受け取った形（位置かキーワード）のまま渡し、文だけを来た側に合わせて差し替える（TECH.md の規則の表）。
+        ローダの窓口 `text_filters` に1つだけ渡し、機能ごとの書き換え（`env.text_filters`）はここで順に回す。
         """
-        original = context = frames.arg(args, kwargs, "context", 0)
         for handler in env.text_filters:
             context, drop = handler(context)
             if drop:
-                return None
-        if context is not original:
-            args, kwargs, _ = frames.replace_arg(args, kwargs, "context", 0, context)
-        return orig(self, *args, **kwargs)
+                return text_filters.DROP
+        return context
+
+    text_filters.on(env.owner, ctx, crime_text, write=env.write)
 
     # ---- 選択肢と押下は、ローダの窓口 `choices`（TECH.md §3.3.14）に預ける ---------------------
     # 自前のボタンは宣言型の口で、組み直しのたびに機能の状態から作る（押下は窓口がボタンの処理を呼ぶ。

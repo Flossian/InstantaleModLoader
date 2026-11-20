@@ -70,7 +70,7 @@ import sys
 import threading
 import weakref
 
-from instantale_modloader import abilities, equipment, frames, items, llm, ui
+from instantale_modloader import abilities, equipment, frames, items, llm, saving, ui
 
 # GUI から変えられる値（同じ名前と既定値が mod.json にもある。TECH.md §3.8）。
 CHANCE_CRAFT = 20.0         # クラフトで作った武器（%）
@@ -120,7 +120,7 @@ BATTLE_START_TARGET = "__main__:BattleStartManager.start_battle"
 BATTLE_END_TARGETS = ("__main__:BattleEndManager.end_phase",
                       "__main__:BattleEndInColosseum.end_phase",
                       "__main__:BattleEndInFreeAction.end_phase")
-SAVE_TARGET = "__main__:InstantaleApp.save_game"
+SAVE_TARGET = saving.TARGET   # ローダの窓口 `saving` が1枚だけ包む
 REST_TARGET = "__main__:VacationRestManager.execute"
 
 # 本体の装備の2枠（GAME.md §2.13.3）と、`333_` の自由枠の名前の頭（手に持っていない品）。
@@ -161,11 +161,8 @@ def is_bare_weapon(item):
     return not frames.attr(item, "skill", None)
 
 
-def language():
-    """ゲームの表示言語。`scripts.languages.language`。読めなければ ja。"""
-    module = sys.modules.get("scripts.languages")
-    lang = getattr(module, "language", None) if module is not None else None
-    return "en" if lang == "en" else "ja"
+#: ゲームの表示言語（`ui.language`。名前はこのモジュールから引く側のために残す）。
+language = ui.language
 
 
 def usefulness_of(item):
@@ -782,13 +779,15 @@ def apply(ctx):
         for target in BATTLE_END_TARGETS:
             ctx.wrap(target, safe=True, required=False)(end_phase)
 
-        @ctx.wrap(SAVE_TARGET, safe=True, required=False)
-        def save_game(orig, self, *args, **kwargs):
-            gone = party.hidden()        # セーブの skills に品のスキルを入れない
-            try:
-                return orig(self, *args, **kwargs)
-            finally:
-                PartySkills.restore(gone)
+        def save_before(call):
+            """セーブの skills に品のスキルを入れない（ローダの窓口 `saving`）。"""
+            return party.hidden()
+
+        def save_after(call):
+            """保存が済んだら（投げた回も）品のスキルを戻す。"""
+            PartySkills.restore(call.memo or ())
+
+        saving.on("410_weapon_skill_chance", ctx, before=save_before, after=save_after, always=True)
 
         @ctx.wrap(REST_TARGET, safe=True, required=False)
         def rest(orig, self, *args, **kwargs):

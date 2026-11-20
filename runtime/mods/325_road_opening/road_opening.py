@@ -110,12 +110,8 @@ import random
 import sys
 import time
 
-from instantale_modloader import choices, durations, frames, loads, ui
+from instantale_modloader import choices, durations, frames, loads, quest_ends, quest_generation, text_filters, ui
 from instantale_modloader.state import UNKNOWN_WORLD, WorldStore
-
-# `random_quest_generator` の引数の並び（recon の signatures.json）。
-QUEST_GENERATOR_ARGS = ("world_overview", "settlement_name", "settlement_overview",
-                        "settlement_structure_description", "area_description", "quest_difficulty")
 
 
 LOG_BASENAME = "road_opening.log"
@@ -261,8 +257,8 @@ NO_QUEST_TEXT = "（道の話はまとまらなかった）"
 ARRIVAL_NOTE = "\n\n※このクエストをクリアすると「{origin}」と「{target}」を結ぶ道が開き、「{target}」に移動します。"
 ARRIVAL_NOTE_MARK = "※このクエストをクリアすると"
 
-#: 生成の印の寿命（秒）と、控えの寿命（秒）、最後の移動を外す期限（秒）。`307_` と同じ。
-INJECT_TTL = 300.0
+#: 控えの寿命（秒）と、最後の移動を外す期限（秒）。`307_` と同じ。
+#: 生成への差し込みの寿命はローダの窓口が持つ（`quest_generation.TTL`）。
 PENDING_TTL = 7 * 24 * 3600.0
 MOVE_TIMEOUT = 300.0
 SETTLE = 0.4
@@ -466,8 +462,6 @@ def apply(ctx):
         store = {
             "worlds": WorldStore(ctx, STATE_DIRNAME, order=ordered_bucket),
             "state": {
-                "inject": None,      # random_quest_generator への差し込み（1回で使い切る）
-                "inject_at": 0.0,
                 "generating": False,
                 "departing": False,  # 自分が起こした AreaMoveManager かどうかの印
                 # 自前のフェーズが動いている間の旗。押下はここが立っている間は無視する。
@@ -1141,9 +1135,9 @@ def apply(ctx):
             screen.say(app, NO_ROAD_TEXT)
             return None, None
         state["generating"] = True
-        state["inject"] = {"origin": origin_name, "target": target_name,
-                           "difficulty": difficulty}
-        state["inject_at"] = time.monotonic()
+        # 生成に道の性質と選んだ難易度を渡す（ローダの窓口。1回で使い切る。TECH.md §3.3.30）。
+        quest_generation.offer(owner, ctx, brief=road_brief(origin_name, target_name, difficulty),
+                               difficulty=difficulty, after=generated, tag="inject", write=write)
         screen.busy_on(app)
         screen.say(app, LOOKING_TEXT.format(target=target_name))
         started = time.monotonic()
@@ -1153,13 +1147,13 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("road opening: generate_random_quest failed")
             state["generating"] = False
-            state["inject"] = None
+            quest_generation.cancel(owner)
             screen.busy_off(app)
             settle(app, lambda: screen.say(app, NO_QUEST_TEXT))
             return None, None
         added = sorted(set(ui.quest_ids(app)) - before, key=ui.id_sort_key)
         state["generating"] = False
-        state["inject"] = None
+        quest_generation.cancel(owner)
         write("dungeon: took {:.1f}s; new quest ids={}".format(
             time.monotonic() - started, added))
         if not added:
@@ -1451,43 +1445,34 @@ def apply(ctx):
             ctx.log_exc("road opening: cannot arm the road")
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap("__main__:QuestEndManager.execute", required=False, safe=True)
-    def quest_end(orig, self, *args, **kwargs):
-        """踏破。道を開き、帰還処理が済んだその場で移動する。"""
-        app = getattr(self, "app", None) or ui.find_app()
-        ended = None
-        try:
-            ended = ui.current_quest_id(app)
-        except Exception:
-            ctx.log_exc("road opening: cannot read the current quest")
-        result = orig(self, *args, **kwargs)
-        try:
-            record = pending_of(app, "offered", "armed")
-            if record is not None and (ended == record.get("quest_id")
-                                       or (ended is None
-                                           and record.get("stage") == "armed")):
-                areas = ui.world_areas(app)
-                origin = areas.get(str(record.get("origin_id")))
-                target = areas.get(str(record.get("target_id")))
-                if origin is None or target is None:
-                    write("WARN cleared: areas {!r}/{!r} not found; cannot open".format(
-                        record.get("origin_id"), record.get("target_id")))
-                    drop_pending(app, "areas missing")
-                else:
-                    open_road(app, origin, target, "dungeon",
-                              {"difficulty": record.get("difficulty"),
-                               "hops": record.get("hops"),
-                               "quest_id": record.get("quest_id")})
-                    advance(app, "ready", at=time.time())
-                    write("cleared: quest {!r} ended; leaving for {!r}".format(
-                        ended or record.get("quest_id"), record.get("target_name")))
-                    settle(app, lambda: depart(app))
-            elif record is not None:
-                write("quest {!r} ended but the road is for {!r}; not opening".format(
-                    ended, record.get("quest_id")))
-        except Exception:
-            ctx.log_exc("road opening: cannot open the road on clear")
-        return result
+    def quest_end_after(call):
+        """踏破。道を開き、帰還処理が済んだその場で移動する（ローダの窓口 `quest_ends`）。"""
+        app, ended = call.app, call.quest_id
+        record = pending_of(app, "offered", "armed")
+        if record is not None and (ended == record.get("quest_id")
+                                   or (ended is None
+                                       and record.get("stage") == "armed")):
+            areas = ui.world_areas(app)
+            origin = areas.get(str(record.get("origin_id")))
+            target = areas.get(str(record.get("target_id")))
+            if origin is None or target is None:
+                write("WARN cleared: areas {!r}/{!r} not found; cannot open".format(
+                    record.get("origin_id"), record.get("target_id")))
+                drop_pending(app, "areas missing")
+            else:
+                open_road(app, origin, target, "dungeon",
+                          {"difficulty": record.get("difficulty"),
+                           "hops": record.get("hops"),
+                           "quest_id": record.get("quest_id")})
+                advance(app, "ready", at=time.time())
+                write("cleared: quest {!r} ended; leaving for {!r}".format(
+                    ended or record.get("quest_id"), record.get("target_name")))
+                settle(app, lambda: depart(app))
+        elif record is not None:
+            write("quest {!r} ended but the road is for {!r}; not opening".format(
+                ended, record.get("quest_id")))
+
+    quest_ends.on(owner, ctx, after=quest_end_after, write=write)
 
     @ctx.wrap("__main__:QuestRetireManager.execute", required=False, safe=True)
     def quest_retire(orig, self, *args, **kwargs):
@@ -1530,19 +1515,16 @@ def apply(ctx):
             ctx.log_exc("road opening: cannot clear the pending road")
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap("__main__:InstantaleApp.add_text", required=False)
-    def add_text(orig, self, *args, **kwargs):
-        """到着の移動中だけ、ゲームの「徒歩で目指す。長旅だ...」を伏せる（`307_` と同じ）。"""
-        try:
-            record = pending_of(self, "moving") if HIDE_TRAVEL_TEXT else None
-            context = frames.arg(args, kwargs, "context", 0)
-            if record is not None and isinstance(context, str) \
-                    and any(word in context for word in MUTED_MOVE_TEXTS):
-                write("muted while arriving: {!r}".format(context))
-                return None
-        except Exception:
-            ctx.log_exc("road opening: cannot filter the travel text")
-        return orig(self, *args, **kwargs)
+    def arrival_text(context, app):
+        """到着の移動中だけ、ゲームの「徒歩で目指す。長旅だ...」を伏せる（`307_` と同じ。ローダの窓口 `text_filters`）。"""
+        record = pending_of(app, "moving") if HIDE_TRAVEL_TEXT else None
+        if record is not None and isinstance(context, str) \
+                and any(word in context for word in MUTED_MOVE_TEXTS):
+            write("muted while arriving: {!r}".format(context))
+            return text_filters.DROP
+        return None
+
+    text_filters.on(owner, ctx, arrival_text, write=write)
 
     # 日数そのものはローダの関所が渡す（TECH.md §3.3.3）。
     # こちらは「到着の移動は何日か」を答える側に回る。
@@ -1597,34 +1579,13 @@ def apply(ctx):
 
     durations.on_days(owner, ctx, after=after_days, write=write)
 
-    @ctx.wrap("scripts.llm.llm_manager_world_generate:random_quest_generator",
-              required=False)
-    def random_quest_generator(orig, *args, **kwargs):
-        """`area_description` に道の性質を、`quest_difficulty` に選んだ値を渡す。1回で使い切る。
+    # 生成への差し込みはローダの窓口が1枚だけ包む（`generate` が `offer` で置く。TECH.md §3.3.30）。
+    quest_generation.install(ctx, write)
 
-        引数は受け取った形（位置かキーワード）のまま渡し、2つだけを差し替える（TECH.md の規則の表）。
-        """
-        mark = state["inject"]
-        state["inject"] = None
-        if mark is None or time.monotonic() - state["inject_at"] > INJECT_TTL:
-            if mark is not None:
-                write("inject: stale marker, left untouched")
-            return orig(*args, **kwargs)
-        area_description = frames.arg(args, kwargs, "area_description", QUEST_GENERATOR_ARGS)
-        quest_difficulty = frames.arg(args, kwargs, "quest_difficulty", QUEST_GENERATOR_ARGS)
-        merged = (area_description or "") + road_brief(
-            mark["origin"], mark["target"], mark["difficulty"])
-        write("inject: area_description {} -> {} chars; difficulty {!r} -> {}".format(
-            len(area_description or ""), len(merged), quest_difficulty,
-            mark["difficulty"]))
-        args, kwargs, _ = frames.replace_arg(args, kwargs, "area_description",
-                                             QUEST_GENERATOR_ARGS, merged)
-        args, kwargs, _ = frames.replace_arg(args, kwargs, "quest_difficulty",
-                                             QUEST_GENERATOR_ARGS, mark["difficulty"])
-        result = orig(*args, **kwargs)
+    def generated(result):
+        """差し込んだ生成が返したもの（窓口の `after`）。"""
         if isinstance(result, dict):
             write("inject: generated {!r}".format(result.get("quest_title")))
-        return result
 
     # ------------------------------------------------------------ 初回の当て直し
     def initial_apply():

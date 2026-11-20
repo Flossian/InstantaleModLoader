@@ -94,7 +94,7 @@ RECRUIT_TIMEOUT = 90.0              # LLM 1問の待ち。無期限にしない�
 RECRUIT_MAX_TOKENS = 800
 DIFFICULTY_FALLBACK = 4             # 土地の水準が読めないときの難易度（902_ と同じ）
 DIFFICULTY_MAX = 76                 # get_npc_employ_price の定義域（VERIFICATION_LOG.md §2.2）
-NAME_MAX = 24
+NAME_MAX = npcs.NAME_MAX
 TAKEN_NAMES_MAX = 15                # プロンプトに並べる既存名の上限
 REJECTED_MAX = 10                   # 控える改名前の名前の上限（古いものから落とす）
 STATE_DIRNAME = "adventurer_recruit"
@@ -109,8 +109,7 @@ OTHER_SCREEN_SPECS = ("ConversationEndManager", "MovePhaseManager",
 
 #: 実セーブに出てくる `category` の語彙（立ち絵の生成に使われる英語の句）。
 #: これ以外を返されたら先頭の候補へ倒す。
-CATEGORIES = ("young man", "young woman", "teenage boy", "teenage girl",
-              "middle-aged man", "middle-aged woman", "old man", "old woman")
+CATEGORIES = npcs.LOOK_CATEGORIES   # 立ち絵の見た目の種類（ローダの npcs が持つ）
 
 PROMPT = (
     "あなたはRPGの世界に新しく登場する冒険者NPCを1人考える係です。\n"
@@ -248,13 +247,7 @@ def apply(ctx):
         target = max(found) if found else DIFFICULTY_FALLBACK
         return min(max(target, 0), DIFFICULTY_MAX)
 
-    def guild_of(area):
-        """そのエリアのギルド。`(施設id, 施設)`。無ければ `(None, None)`。"""
-        for node in ui.nodes_of(area):
-            for key, facility in ui.facilities_of(node).items():
-                if ui.facility_type_of(facility) == ui.GUILD_FACILITY_TYPE:
-                    return str(key), facility
-        return None, None
+    guild_of = ui.guild_of
 
     def taken_names(app, area, made):
         """名前をかぶらせないための既存名。土地の冒険者 + 今回作った分。"""
@@ -285,62 +278,17 @@ def apply(ctx):
             worlds.save(key)
 
     # ================================================== LLMに1人書かせる
-    def clean_text(value, limit=400):
-        if not isinstance(value, str):
-            return ""
-        return " ".join(value.split())[:limit]
+    clean_text = npcs.clean_text
 
-    def clean_name(value):
-        """名前はそのままファイルパスになる（GAME.md §2.15）。危ない字は落とす。"""
-        name = clean_text(value, NAME_MAX * 2)
-        for bad in "\\/:*?\"<>|":
-            name = name.replace(bad, "")
-        return name.strip()[:NAME_MAX]
+    clean_name = npcs.clean_name
 
-    def area_notes(area):
-        """土地の説明。`descriptions` は dict（overview 等）にも文字列にもなりうる。"""
-        notes = frames.attr(area, "descriptions", None)
-        if isinstance(notes, dict):
-            for key in ("overview", "area_description", "facilities"):
-                value = notes.get(key)
-                if isinstance(value, str) and value.strip():
-                    return value
-        return notes if isinstance(notes, str) else ""
+    area_notes = npcs.area_notes
 
-    def clean_category(value):
-        """語彙の中の category に均す。読めなければ先頭の候補。"""
-        text = clean_text(value, 40).lower().strip()
-        for known in CATEGORIES:
-            if known in text:
-                return known
-        return CATEGORIES[0]
+    clean_category = npcs.clean_category
 
-    def clean_look(value, category):
-        """カンマ区切りの英語トークンをリストにする。先頭は category。"""
-        tokens = []
-        for token in clean_text(value, 240).split(","):
-            token = token.strip()
-            if token and token.lower() != category:
-                tokens.append(token)
-        return [category] + tokens[:7]
+    clean_look = npcs.clean_look
 
-    def exp_level_for(difficulty):
-        """経験値レベル。ゲーム自身の対応表で引く（呼べなければ近似）。
-
-        実セーブの生成直後の個体は experience_level が整数で入っている
-        （難易度48 → 51。GAME.md §2.23）。None のままにしない。
-        """
-        functions = sys.modules.get("scripts.functions")
-        table = getattr(functions, "get_npc_exp_level", None)
-        if callable(table):
-            try:
-                level = table(difficulty)
-                if isinstance(level, int) and not isinstance(level, bool):
-                    return min(100, max(1, level))
-            except Exception:
-                ctx.log_exc("adventurer recruit: get_npc_exp_level failed")
-        # 実測の対（0→7 / 20→24 / 48→51 / 60→69）に沿う近似。
-        return min(100, max(1, difficulty + 5))
+    exp_level_for = npcs.exp_level
 
     def compose(app, area, difficulty, made, key):
         """冒険者1人ぶんの項目。書けなければ None。"""

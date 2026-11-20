@@ -2248,6 +2248,36 @@ def _rebind_cloud_resources() -> None:
         log_exc("cannot rebind the cloud SDK resources")
 
 
+def _install_outer_windows(ctx) -> list[str]:
+    """外側に立てる窓口（`quest_generation` / `quest_ends` / `text_filters` / `saving`）の包みを立てる。立てた窓口を返す。
+
+    `boot()` が全 MOD の適用と保存の関所の立て直しの後に呼ぶ。MOD の適用の間は包まない（`gates.defer_outermost`）。
+    最初に登録した MOD の位置に立てると、その後に適用した MOD の直の包み（`306_` の本文・`125_` の依頼の終わり・probe）と、
+    MOD が立てるローダの関所（最初の注入の `modnpc` の保存の関所は 336 の適用の時）より内側になり、
+    保存の間だけ素の値へ戻す処理が `modnpc` の写しの後に走る。外側に立てれば、注入の何回目でも並びが同じになる。
+    登録する MOD が無くても立てる（素通しする）。
+    """
+    from . import gates as _gates_mod
+    from . import patch_registry as _registry
+    from . import quest_ends as _quest_ends
+    from . import quest_generation as _quest_generation
+    from . import saving as _saving
+    from . import text_filters as _text_filters
+    _gates_mod.defer_outermost(False)
+    done = []
+    for name, window in (("quest_generation", _quest_generation), ("quest_ends", _quest_ends),
+                         ("text_filters", _text_filters), ("saving", _saving)):
+        _registry.begin_mod("(loader)")
+        try:
+            window.install(ctx, log)
+            done.append(name)
+        except BaseException:
+            log_exc("cannot install the {} window".format(name))
+        finally:
+            _registry.end_mod()
+    return done
+
+
 def _keep_save_gates(ctx) -> list[str]:
     """前の世代で立っていて、今の世代でどの MOD も立てなかった保存の関所を立て直す。立て直した部品を返す。
 
@@ -2367,6 +2397,7 @@ def _boot(out_dir: str) -> dict:
     dirs = found.get("dirs") or {}
     manifests = found["manifests"]
     names = found["order"]
+    from . import gates as _gates
     _state["manifests"] = manifests
     _state["problems"] = found["problems"]
 
@@ -2409,6 +2440,9 @@ def _boot(out_dir: str) -> dict:
                 _registry.end_mod()
         except BaseException:
             log_exc("cannot install the new game gate")
+        # 外側に立てる窓口（quest_generation / quest_ends / text_filters / saving）は、適用の間は包まない。
+        # 全 MOD の適用の後に、下の `_install_outer_windows` がローダの ctx で外側に立てる（gates.defer_outermost）。
+        _gates.defer_outermost(True)
         for fname in names:
             manifest = manifests[fname]
 
@@ -2489,6 +2523,7 @@ def _boot(out_dir: str) -> dict:
                 log_unrepeated("applied: {}".format(fname))
             results[fname] = "ok"
 
+    _gates.defer_outermost(False)
     _state["mods"] = results
     _state["settings"] = settings
     _state["booted"] = True
@@ -2501,6 +2536,8 @@ def _boot(out_dir: str) -> dict:
         _keep_save_gates(ctx)
     except BaseException:
         log_exc("cannot keep the save gates")
+    # 窓口の4つを、全 MOD の層とローダの保存の関所より外側に1枚ずつ立てる（TECH.md §3.3.21）。
+    _install_outer_windows(ctx)
     # タイトル画面の右上の版の1行（title_version.py。v1.21.0 までは `126_ui_title_version`）。
     # 飾りは `on_ready` で流れるので、MOD の前後どちらで積んでも並びは `order` で決まる。
     try:

@@ -177,11 +177,8 @@ def _num(value):
     return value
 
 
-def language():
-    """ゲームの表示言語。`scripts.languages.language`。読めなければ ja。"""
-    module = sys.modules.get("scripts.languages")
-    lang = getattr(module, "language", None) if module is not None else None
-    return "en" if lang == "en" else "ja"
+#: ゲームの表示言語（`ui.language`。名前はこのモジュールから引く側のために残す）。
+language = ui.language
 
 
 def text_of(kind, amount, target, lang):

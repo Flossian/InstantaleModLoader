@@ -86,7 +86,7 @@ HP は**最大 HP に対する割合**で書く（`回復: 25%`）。
 import sys
 import threading
 
-from instantale_modloader import frames, items, ui
+from instantale_modloader import frames, items, saving, text_filters, ui
 
 from . import healing
 
@@ -135,11 +135,8 @@ is_reworked = healing.is_reworked
 effect_of = healing.effect_of
 
 
-def language():
-    """ゲームの表示言語。`scripts.languages.language`。読めなければ ja。"""
-    module = sys.modules.get("scripts.languages")
-    lang = getattr(module, "language", None) if module is not None else None
-    return "en" if lang == "en" else "ja"
+#: ゲームの表示言語（`ui.language`。名前はこのモジュールから引く側のために残す）。
+language = ui.language
 
 
 def labels_of():
@@ -223,19 +220,23 @@ def apply(ctx):
     # `回復` を 0 にしている間の控え。{スレッド: Silenced}。間にゲームが保存したら元の値で保存させる（`save_game`）
     silenced = {}
 
-    @ctx.wrap("__main__:InstantaleApp.save_game", required=False)
-    def save_game(orig, self, *args, **kwargs):
-        # 本体の consume_item の中で保存が走っても、セーブには元の `回復` を入れる。
-        # 0 のまま保存し、品を外さずに終わる（断られた）と、読み込んだ後その品は二度と回復しない
+    def save_before(call):
+        """本体の consume_item の中で保存が走っても、セーブには元の `回復` を入れる（ローダの窓口 `saving`）。
+
+        0 のまま保存し、品を外さずに終わる（断られた）と、読み込んだ後その品は二度と回復しない。
+        """
         quiet = list(silenced.values())
         for entry in quiet:
             entry.restore()
-        try:
-            return orig(self, *args, **kwargs)
-        finally:
-            for entry in quiet:
-                if entry in silenced.values():
-                    entry.silence()
+        return quiet
+
+    def save_after(call):
+        """保存が済んだら（投げた回も）伏せ直す。"""
+        for entry in call.memo or ():
+            if entry in silenced.values():
+                entry.silence()
+
+    saving.on("134_balance_item_effects", ctx, before=save_before, after=save_after, always=True)
 
     # ---- 品を作り直す --------------------------------------------------
     def rework_one(item, why, rng=None):
@@ -376,15 +377,17 @@ def apply(ctx):
         refresh(app)
         return result
 
-    @ctx.wrap("__main__:InstantaleApp.add_text", safe=True)
-    def add_text(orig, self, context=None, *args, **kwargs):
+    def use_text(context, app):
+        """使った品の名前が入った1行を、作り直した効き目の文に替える（ローダの窓口 `text_filters`）。"""
         ticket = active.get(threading.get_ident())
         if (ticket is not None and not ticket["shown"]
                 and isinstance(context, str) and ticket["name"]
                 and ticket["name"] in context):
             ticket["shown"] = True
-            context = ticket["text"]
-        return orig(self, context, *args, **kwargs)
+            return ticket["text"]
+        return None
+
+    text_filters.on("134_balance_item_effects", ctx, use_text)
 
     write("---- installed  healing: stamina={:g}+{:g}*value drink={:g} var={:g} | "
           "hp={:g}%+{:g}%*value var={:g} potion={:g} | rarity={} herb good={:g} min={:g} "

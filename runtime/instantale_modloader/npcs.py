@@ -592,3 +592,74 @@ def enroll(app, area, area_id, npc_id) -> list:
                 raw.append(npc_id)
                 wrote.append(label)
     return wrote
+
+
+# --------------------------------------------------------------------------
+# LLM に書かせた NPC の項目を均す（`320_` / `336_` の同房者 / `339_` の追手に同じ本体が写されていた）
+# --------------------------------------------------------------------------
+#: 名前の長さの上限（字）。名前はそのまま立ち絵のフォルダ名になる（GAME.md §2.15）。
+NAME_MAX = 24
+#: 立ち絵の見た目の種類（`look` の先頭の語）。LLM に選ばせる語彙。
+LOOK_CATEGORIES = ("young man", "young woman", "teenage boy", "teenage girl",
+                   "middle-aged man", "middle-aged woman", "old man", "old woman")
+#: `look` に残す語の数（種類を除く）。
+LOOK_TOKENS_MAX = 7
+
+
+def clean_text(value, limit=400):
+    """空白を1つに畳んで `limit` 字で切る。文字列でなければ空文字。"""
+    if not isinstance(value, str):
+        return ""
+    return " ".join(value.split())[:limit]
+
+
+def clean_name(value, limit=NAME_MAX):
+    """名前はそのままファイルパスになる（GAME.md §2.15）。ファイル名に使えない字は落とす。"""
+    name = clean_text(value, limit * 2)
+    for bad in "\\/:*?\"<>|":
+        name = name.replace(bad, "")
+    return name.strip()[:limit]
+
+
+def clean_category(value, categories=LOOK_CATEGORIES):
+    """見た目の種類を語彙の中のどれかに均す。当たらなければ先頭の候補。"""
+    text = clean_text(value, 40).lower().strip()
+    for known in categories:
+        if known in text:
+            return known
+    return categories[0]
+
+
+def clean_look(value, category, limit=LOOK_TOKENS_MAX):
+    """カンマ区切りの英語の語をリストにする。先頭は `category`（同じ語は重ねない）。"""
+    tokens = [token.strip() for token in clean_text(value, 240).split(",")]
+    return [category] + [token for token in tokens if token and token.lower() != category][:limit]
+
+
+def area_notes(area):
+    """土地の説明。`descriptions` は dict（overview / area_description / facilities）にも文字列にもなりうる。無ければ空文字。"""
+    notes = frames.attr(area, "descriptions", None)
+    if isinstance(notes, dict):
+        for key in ("overview", "area_description", "facilities"):
+            value = notes.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
+    return notes if isinstance(notes, str) else ""
+
+
+def exp_level(difficulty):
+    """難易度に当たる経験値レベル（1〜100）。ゲーム自身の対応表（`scripts.functions.get_npc_exp_level`）で引く。
+
+    呼べなければ実測の対（0→7 / 20→24 / 48→51 / 60→69）に沿う近似。
+    実セーブの生成直後の個体は `experience_level` が整数で入っている（GAME.md §2.23）ので、None にしない。
+    """
+    table = getattr(sys.modules.get("scripts.functions"), "get_npc_exp_level", None)
+    if callable(table):
+        try:
+            level = table(difficulty)
+            if isinstance(level, int) and not isinstance(level, bool):
+                return min(100, max(1, level))
+        except Exception:
+            from . import log_exc
+            log_exc("npcs: get_npc_exp_level failed")
+    return min(100, max(1, difficulty + 5))

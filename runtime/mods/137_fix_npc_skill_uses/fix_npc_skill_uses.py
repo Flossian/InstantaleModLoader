@@ -36,7 +36,7 @@ NPC の審判の記録 344 件のうち 137 件が強化・弱体のスキルだ
 MOD を外せば元どおり（使い切ったスキルも選ばれる）。セーブに独自の鍵は増やさない。
 """
 
-from instantale_modloader import frames, ui
+from instantale_modloader import frames, saving, ui
 
 LOG_BASENAME = "npc_skill_uses.log"
 LOG_TAG = "npc skill uses"
@@ -224,18 +224,20 @@ def apply(ctx):
         last_rest.clear()
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap("__main__:InstantaleApp.save_game", required=False)
-    def save_game(orig, self, *args, **kwargs):
-        # 審判の途中で保存が走っても、セーブには元の辞書を入れる
+    def save_before(call):
+        """審判の途中で保存が走っても、セーブには元の辞書を入れる（ローダの窓口 `saving`）。"""
         entries = list(hidden.values())
         for holder, original, _kept in entries:
             holder.skills = original
-        try:
-            return orig(self, *args, **kwargs)
-        finally:
-            for holder, original, kept in entries:
-                if id(holder) in hidden:
-                    holder.skills = kept
+        return entries
+
+    def save_after(call):
+        """保存が済んだら（投げた回も）、審判の間の辞書へ戻す。"""
+        for holder, original, kept in call.memo or ():
+            if id(holder) in hidden:
+                holder.skills = kept
+
+    saving.on("137_fix_npc_skill_uses", ctx, before=save_before, after=save_after, always=True)
 
     @ctx.wrap(REST_TARGET, required=False, safe=True)
     def rest(orig, self, *args, **kwargs):

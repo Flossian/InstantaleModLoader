@@ -37,6 +37,22 @@ from . import alive, log_exc
 _GATES = []
 _INSTALL_ATTRS = []
 
+#: MOD を適用している間は、外側に立てる窓口（`quest_generation` / `quest_ends` / `text_filters` / `saving`）の包みを立てない。
+#: 最初に登録した MOD の位置に立てると、後から適用した MOD の直の包みや、MOD が立てるローダの関所
+#: （`modnpc` の保存の関所は最初の注入では 336 の適用の時に立つ）より内側になり、前後の処理が見る値が変わる。
+#: `boot()` が全 MOD の適用の後にローダの ctx で立てる（MOD の層より外側。TECH.md §3.3.21）。
+_OUTERMOST = {"deferring": False}
+
+
+def defer_outermost(on):
+    """外側に立てる窓口の包みを、MOD の適用の間だけ見送る（`boot()` が呼ぶ）。"""
+    _OUTERMOST["deferring"] = bool(on)
+
+
+def deferring():
+    """外側に立てる窓口の包みを、今は見送るなら True。"""
+    return bool(_OUTERMOST.get("deferring"))
+
 
 def track_install_attr(attr):
     """窓口が自分で持つ包みの印（`sys` の属性名）を `reset_all` の対象に足す。"""
@@ -90,10 +106,12 @@ class Call(object):
 class Gate(object):
     """1つの対象の関所。窓口がモジュール変数に1つ持つ。"""
 
-    def __init__(self, name, target, attr):
+    def __init__(self, name, target, attr, outermost=False):
         self.name = name
         self.target = target
         self.attr = attr
+        #: True なら MOD の適用の間は包まず、`boot()` が全 MOD の後に外側へ立てる（`defer_outermost`）。
+        self.outermost = bool(outermost)
         _GATES.append(self)
 
     # -- 登録 -----------------------------------------------------------------
@@ -151,6 +169,8 @@ class Gate(object):
         done = self.installed()
         if done is not None and done.get("generation") == generation:
             return list(done.get("targets") or [])
+        if self.outermost and deferring():
+            return []
         ctx.wrap(self.target, required=False)(wrapper)
         self._store()["gate"] = {"generation": generation, "targets": [self.target]}
         if write:

@@ -235,7 +235,12 @@ GATE_TARGETS = {
     "__main__:InstantaleApp.elapse_days": "durations.on_days(owner, ctx, ...)（日数を変えるなら claim_days）",
     "__main__:MovePhaseManager.move_phase": "arrivals.on(owner, ctx, (arrivals.FACILITY,), ...)",
     "__main__:AreaMoveManager.execute": "arrivals.on(owner, ctx, (arrivals.AREA,), ...)",
+    "__main__:InstantaleApp.save_game": "saving.on(owner, ctx, ...)",
+    "scripts.llm.llm_manager_world_generate:random_quest_generator":
+        "quest_generation.offer / on（引数を書き換える。TECH.md §3.3.30）",
 }
+# `QuestEndManager.execute`（`quest_ends`）と `InstantaleApp.add_text`（`text_filters`）も窓口が包むが、
+# 前後で処理の形が違う MOD（125 の評価の保ち方・306 の行の後ろへの足し方）が自分で包んでいるので、ここには載せない。
 
 
 def check_gate_targets(path):
