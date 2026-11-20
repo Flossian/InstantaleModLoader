@@ -168,6 +168,10 @@ SF武器は `python build_medieval.py --set sf` で、`sf_weapons/` の一枚絵
 `../data/tags.json` は、説明文の分かる画像ごとの (色, 材質) の語の組（`"red,white|metal"` の形）。`own` は足した画像（`*_captions.txt`）と追加辞書の画像（`captions_*.json`）、
 `redraw` は描き直しの一文から。語の組の決まりは本体の `tags_of`（`COLOR_WORDS`・`MATERIAL_WORDS`）。足した画像を作り直したときも `build_redraw_data.py` を回す。
 
+`../data/captions.json` は、足した画像と追加辞書の画像の説明文（{品種: {鍵: 文}}）。同じ `build_redraw_data.py` が書く。
+本体は「物の種類を AI に確かめる」（`KIND_CHECK`）が入のとき、これと `../data/redraw/captions.json` の文を LLM に見せる。
+説明文が画像と違う物を指していると、その画像は違う種類として外れるか、違う種類の品に付く。
+
 ## 外した画像の付け替え先
 
 `python build_retired.py` で、描き直しで外したキーの付け替え先の表 `data/retired.json` を書く。外したキーは、git の履歴にある分類の辞書に一度でも載って今の辞書に無いキーで、付け替え先は同じ品種の今ある画像のうち、辞書のベクトルがいちばん近い画像（外したキーの最後の分類が今もあればその中から）。本体は、品が作られるとき（セーブの読み込みも通る）に画像が見つからなければこの表で `image_src` を付け替え、次の保存でセーブに残る。一枚絵を外したら、外す前の版をコミットしてから、ほかの build_*.py の後で回す。

@@ -64,8 +64,9 @@ import re
 import shutil
 import sys
 import threading
+import typing
 
-from instantale_modloader import patch
+from instantale_modloader import llm, patch
 from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore,
                                         world_filename, world_key)
 
@@ -120,6 +121,67 @@ MATERIAL_WORDS = {
 # セーブの image_src は素の絵のパスのまま。切れば素の絵と素の説明に戻る。描き直しの無い鍵は素の絵のまま。既定は切
 USE_REDRAW = False
 REDRAW_DIRNAME = "redraw"
+
+# 物の種類を LLM に確かめる。文の埋め込みは色・材質・付属物の一致を物の名前より重く見ることがあり、
+# 革のベルトに革の小袋、短い槍に長剣が付く。似た順の上位 KIND_TOP 枚のキャプションを LLM に見せて、外見文と同じ種類の物を
+# 写している絵と、その中でいちばん合う1枚を答えさせる。いちばん似た絵がその1枚なら、候補から違う種類の絵だけを外す
+# （使用数で散らすのは今までどおり）。別の絵なら、その1枚を付ける。LLM が答えない・同じ種類の絵が無い
+# ときは、確かめないときと同じ選び方。聞くのは初めての外見文だけ（同じ外見文は対応表から引く）。既定は切
+# （素のゲームに無い LLM へのリクエストが1品につき1回増える。測った値は VERIFICATION.md §3.26）
+KIND_CHECK = False
+KIND_TOP = 10
+KIND_TIMEOUT = 20
+KIND_MAX_TOKENS = 96
+KIND_MANAGER = "mod_item_image_kind"
+CAPTIONS_FILE = "captions.json"
+KIND_SYSTEM = ("You check which pictures show the same kind of object as a game item. "
+               "Each picture is described by a caption.\n"
+               "List every picture whose caption shows the same kind of object as the item "
+               "(a belt is not a pouch, a spear is not a sword, a pot of ointment is not a cup of tea, a tooth is not a paw). "
+               "Ignore colour, material and small details: a red vial and a blue vial are the same kind.\n"
+               "If no caption shows the same kind of object, answer with an empty list.\n"
+               "Then give in \"best\" the number of the one listed picture that fits the item best (0 if the list is empty).")
+
+
+def kind_prompt(text, captions):
+    """物の種類を確かめるリクエストの本文。絵は似た順に 1 から番号を振る。"""
+    lines = ["Item: " + text, "Pictures:"]
+    lines += ["{}. {}".format(n, caption) for n, caption in enumerate(captions, 1)]
+    lines.append('Answer with JSON: {"same_kind": [<numbers of the pictures>], "best": <number>}')
+    return "\n".join(lines)
+
+
+def kind_numbers(data, count):
+    """LLM の答えから、同じ種類と答えた絵の番号（1〜count、重複なし、小さい順）。
+    同じ種類の絵が無いという答えは空のリスト。読めない答えは None。"""
+    if isinstance(data, dict):
+        data = data.get("same_kind")
+    if not isinstance(data, (list, tuple)):
+        return None
+    numbers = set()
+    for value in data:
+        if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+            return None
+        try:
+            number = int(value)
+        except ValueError:
+            return None
+        if 1 <= number <= count:
+            numbers.add(number)
+    return sorted(numbers)
+
+
+def kind_best(data, numbers):
+    """LLM がいちばん合うと答えた絵の番号。同じ種類と答えた番号（`kind_numbers`。空でないこと）に無い・読めない答えなら、
+    その中でいちばん似た絵（番号の小さいもの）。"""
+    best = data.get("best") if isinstance(data, dict) else None
+    if isinstance(best, bool) or not isinstance(best, (int, float, str)):
+        return numbers[0]
+    try:
+        best = int(best)
+    except ValueError:
+        return numbers[0]
+    return best if best in numbers else numbers[0]
 
 # 同梱の追加辞書（素の辞書に無かった305枚。`data/<品種>.json`）を使うか。
 # 切ると素の辞書だけで均しをかける（切り分け用）。足した絵の分類（下の IMAGE_SETS）は別の設定。
@@ -485,7 +547,7 @@ GENRE_WEIGHTS_FILE = "weights.json"
 SETTINGS_DIRNAME = "item_image_variety"
 SETTINGS_STORE_ATTR = "_iml_item_image_world_settings"
 # 世界ごとに上書きできる設定（mod.json の settings と同じ並び）
-SETTING_NAMES = (("TOP_K", "SIM_FLOOR", "SIM_GAP", "TAG_PENALTY", "USE_EXTRA_DICT", "USE_REDRAW", "CROSS_SLOT")
+SETTING_NAMES = (("TOP_K", "SIM_FLOOR", "SIM_GAP", "TAG_PENALTY", "USE_EXTRA_DICT", "USE_REDRAW", "CROSS_SLOT", "KIND_CHECK")
                  + tuple(setting for _genre, setting in GENRE_SETTINGS) + ("GENRE_BONUS",)
                  + tuple(setting for _name, setting in IMAGE_SETS))
 
@@ -693,7 +755,9 @@ def apply(ctx):
         "usage": {},     # (sub_type, 絵) -> 使用数（images の値 + legacy から導出）
         "pools": {},     # (sub_type, 分類の使い方の署名) -> (keys, 正規化済み行列, キー集合, 側) のキャッシュ
         "tags": None,    # data/tags.json（{"own": {品種: {鍵: 語の組}}, "redraw": {...}}）。初めて辞書を組むときに読む
-        "checked": set(),  # (世界, 辞書の署名, 外見文, 絵)。覚えている絵が今も候補に入ると確かめた組
+        "captions": None,  # (足した絵, 描き直し) の {品種: {鍵: キャプション}}。物の種類を初めて確かめるときに読む
+        "kind": {},        # 物の種類を確かめる LLM の返却型の控え
+        "checked": set(),  #(世界, 辞書の署名, 外見文, 絵)。覚えている絵が今も候補に入ると確かめた組
     }
 
     # ワールド個別の設定。控えのある世界ではその値を、無い世界では一括設定（ローダが注入した値）を使う。
@@ -923,6 +987,7 @@ def apply(ctx):
         top_sim, top_idx = sims.max(dim=0)
         top_sim, top_idx = float(top_sim), int(top_idx)
         qualified = [top_idx]
+        listed = [top_idx]
         if top_sim > 0:
             ranked = sims.argsort(descending=True).tolist()
             side = sides[top_idx]
@@ -931,18 +996,86 @@ def apply(ctx):
                 if float(raw[top_idx]) < SEPARATE_MIN_SIM or (
                         plain is not None and top_sim - float(sims[plain]) < SEPARATE_MARGIN):
                     side = ""
-            order = [i for i in ranked if sides[i] == side][:TOP_K]
-            if order:
-                top_idx = order[0]
-                top_sim = float(sims[order[0]])
-            # 候補の幅は足す前の値で決め、比べるのは足した後の値（VERIFICATION.md §3.26）。
-            # 比を足した後の値に掛けると、全部の絵に同じだけ足す世界で幅が 0.2 × 加算だけ広がった
-            floor = top_sim - (1.0 - SIM_FLOOR) * float(raw[top_idx])
-            if SIM_GAP > 0:
-                floor = max(floor, top_sim - SIM_GAP)
-            qualified = [i for i in order if float(sims[i]) >= floor]
+            listed = [i for i in ranked if sides[i] == side][:max(TOP_K, KIND_TOP)]
+            top_idx, top_sim, qualified = qualify(listed[:TOP_K], sims, raw, top_idx, top_sim)
         return {"keys": keys, "raw": raw, "bonus": bonus, "penalty": penalty, "top": top_idx, "top_sim": top_sim,
-                "qualified": qualified}
+                "qualified": qualified, "sims": sims, "listed": listed}
+
+    def qualify(order, sims, raw, top_idx, top_sim):
+        """似た順の並びから (いちばん似た絵, その値, 使用数で選ぶ候補)。並びが空なら渡された top だけ。"""
+        if order:
+            top_idx = order[0]
+            top_sim = float(sims[order[0]])
+        # 候補の幅は足す前の値で決め、比べるのは足した後の値（VERIFICATION.md §3.26）。
+        # 比を足した後の値に掛けると、全部の絵に同じだけ足す世界で幅が 0.2 × 加算だけ広がった
+        floor = top_sim - (1.0 - SIM_FLOOR) * float(raw[top_idx])
+        if SIM_GAP > 0:
+            floor = max(floor, top_sim - SIM_GAP)
+        return top_idx, top_sim, [i for i in order if float(sims[i]) >= floor] or [top_idx]
+
+    def captions_of(sub_type):
+        """鍵 → キャプション（足した絵と、描き直した素の絵）。初めて使うときに読む。
+        描き直しは素の絵と同じ物を描いているので、描き直しを見せない設定でも物の種類の判定には使える。"""
+        if state["captions"] is None:
+            own = ctx.read_json(os.path.join(mod_dir, "data", CAPTIONS_FILE), default=None)
+            redraw = ctx.read_json(os.path.join(mod_dir, "data", REDRAW_DIRNAME, CAPTIONS_FILE), default=None)
+            state["captions"] = (own if isinstance(own, dict) else {}, redraw if isinstance(redraw, dict) else {})
+        own, redraw = state["captions"]
+        table = dict(redraw.get(sub_type) or {})
+        table.update(own.get(sub_type) or {})
+        return table
+
+    def kind_structure():
+        """LLM の返却型（同じ種類の絵の番号の並びと、いちばん合う1枚の番号）。作れなければ None。並びには件数の上限を付ける
+        （ローカルの LLM は上限が無いと同じ番号を書き続けて出力を使い切る。VERIFICATION.md §3.26）。"""
+        if "structure" not in state["kind"]:
+            field = (typing.List[int], ...)
+            try:
+                import pydantic
+                limit = "max_length" if str(getattr(pydantic, "VERSION", "1")).split(".")[0] != "1" else "max_items"
+                field = (typing.List[int], pydantic.Field(..., **{limit: KIND_TOP}))
+            except Exception:
+                pass
+            state["kind"]["structure"] = llm.create_structure(ctx, "ModItemImageKind", {"same_kind": field, "best": (int, ...)},
+                                                              label="item image kind")
+        return state["kind"]["structure"]
+
+    def same_kind(sub_type, pick, query_text):
+        """上位の絵のうち、外見文と同じ種類の物を写している絵に候補を絞った `rank` の結果。
+        いちばん似た絵が LLM の答えたいちばん合う1枚なら、候補から違う種類の絵だけを外す。別の絵なら、その1枚だけを候補にする。
+        確かめない・キャプションの分かる絵が2枚に満たない・LLM が答えない・同じ種類の絵が無いときは、渡された結果のまま。"""
+        if not KIND_CHECK or pick["top_sim"] <= 0:
+            return pick
+        captions = captions_of(sub_type)
+        keys = pick["keys"]
+        shown = [(i, captions[keys[i]]) for i in pick["listed"][:KIND_TOP] if captions.get(keys[i])]
+        if len(shown) < 2:
+            return pick
+        structure = kind_structure()
+        if structure is None:
+            return pick
+        message = [{"role": "system", "content": KIND_SYSTEM},
+                   {"role": "user", "content": kind_prompt(query_text, [text for _i, text in shown])}]
+        data = llm.ask(ctx, KIND_MANAGER, message, timeout=KIND_TIMEOUT, structure=structure,
+                       max_tokens=KIND_MAX_TOKENS, label="item image kind", write=log)
+        numbers = kind_numbers(data, len(shown))
+        if numbers is None:
+            log("{}: kind: no answer for {!r}".format(sub_type, query_text[:80]))
+            return pick
+        if not numbers:
+            # 合う絵が無い外見文。足す絵を決める材料になるので、いちばん似た絵と一緒に残す
+            log("{}: kind: no picture of the same kind among {} (top1 {} {:.3f}) for {!r}".format(
+                sub_type, len(shown), keys[pick["top"]], pick["top_sim"], query_text[:80]))
+            return pick
+        allowed = {shown[n - 1][0] for n in numbers}
+        best = shown[kind_best(data, numbers) - 1][0]
+        if best == pick["top"]:
+            return dict(pick, qualified=[i for i in pick["qualified"] if i in allowed] or [best])
+        log("{}: kind: top1 {} {:.3f} {}; {} of {} are the same kind, now {} {:.3f} for {!r}".format(
+            sub_type, keys[pick["top"]], pick["top_sim"],
+            "is the same kind but fits less" if pick["top"] in allowed else "is another kind",
+            len(allowed), len(shown), keys[best], float(pick["sims"][best]), query_text[:80]))
+        return dict(pick, top=best, top_sim=float(pick["sims"][best]), qualified=[best])
 
     def best_other_slot(sub_type, query, query_tags=None):
         """ほかの 32x32 の部位で、いちばん似た絵（足す前の値）が最も高い部位とその候補。無ければ None。"""
@@ -1018,7 +1151,7 @@ def apply(ctx):
             # 片方が足した対応を、もう片方が読み直した表で上書きして失う。
             ensure_world(settings=False)
             stale = kept_image(item_sub_type, query_text, key_set)
-            checked = (state["world"], pool[5], TOP_K, SIM_FLOOR, SIM_GAP, TAG_PENALTY, query_text, stale)
+            checked = (state["world"], pool[5], TOP_K, SIM_FLOOR, SIM_GAP, TAG_PENALTY, KIND_CHECK, query_text, stale)
             if stale is not None and checked in state["checked"]:
                 log("{}: kept {} for {!r}".format(item_sub_type, stale, query_text[:80]))
                 return stale
@@ -1031,11 +1164,16 @@ def apply(ctx):
         own = rank(pool, query, query_tags)
         # 覚えている絵は、今の辞書と設定でも候補に入っているときだけ使い続ける。辞書の説明が替わって
         # （描き直し・足した絵）候補から外れた絵は捨てて選び直す。確かめるのは外見文ごとに1回（VERIFICATION.md §3.26）
-        if stale is not None and still_candidate(stale, own, query, query_tags):
+        # 物の種類を確かめて選んだ絵は似た順の候補の外にありうるので、確かめる設定の間は LLM に見せる範囲に
+        # 入っていれば使い続ける（外すと、同じ外見文が来るたびに LLM に聞き直し、同じ外見文に別の絵が付く）
+        if stale is not None and (still_candidate(stale, own, query, query_tags) or (
+                KIND_CHECK and any(own["keys"][i] == stale for i in own["listed"][:KIND_TOP]))):
             with lock:
                 state["checked"].add(checked)
             log("{}: kept {} for {!r}".format(item_sub_type, stale, query_text[:80]))
             return stale
+        # 外見文と違う種類の物を写している絵を候補から外す（KIND_CHECK。錠の外で LLM に聞く）
+        own = same_kind(item_sub_type, own, query_text)
         # 部位をまたぐ候補。比べる自分の値は実際に見せる絵（使用数で選ぶ）の値なので、候補の中に
         # 0.55 未満の絵があれば先に探しておく（選んだ試算と同じ比べ方。VERIFICATION.md §3.26）
         other = None

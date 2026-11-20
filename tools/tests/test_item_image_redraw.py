@@ -321,6 +321,70 @@ check("選び直した後は同じ絵", pick("redraw-like") == "1" and pick("nea
 log = io.open(os.path.join(OUT, "item_image.log"), encoding="utf-8").read().splitlines()
 check("捨てた絵を記録に残す", any("dropped 2 " in l and "redraw-like" in l for l in log))
 
+# 物の種類を LLM に確かめる（KIND_CHECK）: 似た順は 2（0.60）・3（0.57）・1。LLM の答えは偽の送信口で決める
+with io.open(os.path.join(MOD_DIR, "mod.json"), encoding="utf-8") as f:
+    shipped = json.load(f)["settings"]["KIND_CHECK"]["default"]
+check("種類の確かめの既定は切（mod.json と本体）", shipped is False and default_mod.KIND_CHECK is False)
+check("答えの番号は範囲内だけを重複なしで", pure.kind_numbers({"same_kind": [3, 1, 3, 9, 0]}, 3) == [1, 3])
+check("無しの答えは空", pure.kind_numbers({"same_kind": []}, 3) == [])
+check("読めない答えは None", pure.kind_numbers(None, 3) is None and pure.kind_numbers({"same_kind": "1"}, 3) is None
+      and pure.kind_numbers({"same_kind": [[1]]}, 3) is None)
+check("いちばん合う1枚は同じ種類の中から", pure.kind_best({"best": 3}, [1, 3]) == 3 and pure.kind_best({"best": "3"}, [1, 3]) == 3)
+check("同じ種類に無い・読めない1枚なら、いちばん似た絵", pure.kind_best({"best": 2}, [1, 3]) == 1
+      and pure.kind_best({}, [2, 3]) == 2 and pure.kind_best({"best": None}, [2, 3]) == 2)
+check("本文は似た順に番号を振る", pure.kind_prompt("A belt.", ["A pouch.", "A band."]).splitlines()[:4]
+      == ["Item: A belt.", "Pictures:", "1. A pouch.", "2. A band."])
+with io.open(os.path.join(MOD_DIR, "data", "captions.json"), encoding="utf-8") as f:
+    shipped_captions = json.load(f)
+check("同梱のキャプションは {品種: {鍵: 文}}", shipped_captions and all(
+    isinstance(t, dict) and all(isinstance(v, str) and v for v in t.values()) for t in shipped_captions.values()))
+json.dump({"tool": {"2": "A brown leather pouch.", "3": "A leather band."}},
+          open(os.path.join(FAKE_MOD, "data", "captions.json"), "w"))
+json.dump({"tool": {"1": "A grey iron key."}}, open(os.path.join(FAKE_MOD, "data", "redraw", "captions.json"), "w"))
+asked = []
+ANSWER = {"value": {"same_kind": [2], "best": 2}}
+
+
+def fake_ask(ctx, manager_name, message, **kw):
+    asked.append((manager_name, message, kw))
+    return ANSWER["value"]
+
+
+llm.ask = fake_ask
+llm.create_structure = lambda ctx, name, fields, **kw: (name, fields)
+QUERIES["a leather belt"] = unit(0.0, 0.60, 0.57)
+_ctx, pick = load(SIM_GAP=0.02, TAG_PENALTY=0.0)
+check("切なら LLM に聞かない", pick("a leather belt") == "2" and not asked)
+_ctx, pick = load(SIM_GAP=0.02, TAG_PENALTY=0.0, KIND_CHECK=True)
+check("違う種類の1位を外して同じ種類の絵を選ぶ", pick("a leather belt") == "3", asked[-1:] and asked[-1][1])
+check("似た順にキャプションを見せる", len(asked) == 1 and asked[0][0] == "mod_item_image_kind"
+      and "1. A brown leather pouch.\n2. A leather band.\n3. A grey iron key." in asked[0][1][-1]["content"]
+      and asked[0][2].get("timeout") and asked[0][2].get("structure") is not None, asked)
+check("同じ外見文は聞き直さない", pick("a leather belt") == "3" and len(asked) == 1)
+log = io.open(os.path.join(OUT, "item_image.log"), encoding="utf-8").read().splitlines()
+check("外した1位を記録に残す", any("kind: top1 2 " in l and "is another kind" in l and "now 3 " in l for l in log))
+_ctx, pick = load(keep_state=True, SIM_GAP=0.02, TAG_PENALTY=0.0, KIND_CHECK=True)
+check("読み直しても、確かめて選んだ絵は聞き直さずに使い続ける", pick("a leather belt") == "3" and len(asked) == 1)
+for answer, want, label in (({"same_kind": [], "best": 0}, "2", "同じ種類の絵が無ければ今までどおり"),
+                            (None, "2", "答えが無ければ今までどおり"),
+                            ({"same_kind": [1, 2], "best": 1}, "2", "1位がいちばん合う1枚なら1位のまま"),
+                            ({"same_kind": [1, 2], "best": 2}, "3", "同じ種類でも、いちばん合う1枚が別ならその絵"),
+                            ({"same_kind": [2, 3]}, "3", "1枚の答えが無ければ、同じ種類の中でいちばん似た絵")):
+    ANSWER["value"] = answer
+    del asked[:]
+    _ctx, pick = load(SIM_GAP=0.02, TAG_PENALTY=0.0, KIND_CHECK=True)
+    got = pick("a leather belt")
+    check(label, got == want and len(asked) == 1, (got, asked))
+# 1位がいちばん合う1枚のとき、候補から外すのは違う種類の絵だけ（幅の内の 3 が違う種類なら、2つ目の外見文も 2）
+QUERIES["a leather pouch"] = unit(0.0, 0.60, 0.57)
+QUERIES["another leather pouch"] = unit(0.0, 0.60, 0.57)
+ANSWER["value"] = {"same_kind": [1], "best": 1}
+_ctx, pick = load(SIM_GAP=0.05, TAG_PENALTY=0.0, KIND_CHECK=True)
+first, second = pick("a leather pouch"), pick("another leather pouch")
+check("使用数で散らす先から違う種類の絵を外す", (first, second) == ("2", "2"), (first, second))
+log = io.open(os.path.join(OUT, "item_image.log"), encoding="utf-8").read().splitlines()
+check("合う絵が無い外見文を記録に残す", any("kind: no picture of the same kind among 3" in l and "a leather belt" in l for l in log))
+
 # 品の絵を描く所: 描き直しのある素の絵だけ、描く部品に渡すパスを替える。品の image_src は変えない
 for flag in (True, False):
     ctx, _pick = load(USE_REDRAW=flag)

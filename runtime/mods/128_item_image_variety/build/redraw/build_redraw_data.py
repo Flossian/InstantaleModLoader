@@ -6,7 +6,8 @@ r"""描き直しの絵の説明（埋め込み）と、絵ごとの色・材質�
 - `data\redraw\<品種>.json`: `images\redraw\<品種>\<鍵>.png` の描き直しを頼んだ一文（作業場の `refs\captions\<手本>.json`。
   写した絵は写しの元の一文。`refs\reused.json`）の埋め込み。形は足した絵の辞書と同じ {"index": {鍵: 番号}, "vectors": [...]}
   （同じ一文は1つのベクトルにまとめる）。本体は描き直しのある素の絵の説明を、これに替えて選ぶ
-- `data\redraw\captions.json`: 埋め込んだ一文（{品種: {鍵: 一文}}）。測る道具と見直し用
+- `data\redraw\captions.json`: 埋め込んだ一文（{品種: {鍵: 一文}}）。本体が物の種類を LLM に確かめるときに見せる。測る道具と見直しにも使う
+- `data\captions.json`: 足した絵と追加辞書の絵の説明文（{品種: {鍵: 文}}）。同じく本体が LLM に見せる
 - `data\tags.json`: 説明文の分かる絵の (色, 材質) の語の組。`own` は足した絵（`*_captions.txt`）と追加辞書の絵
   （`captions_<品種>*.json`）、`redraw` は描き直しの一文から。語の組の決まりは本体の `tags_of`
 
@@ -99,10 +100,13 @@ def main():
             if len(parts) >= 3:
                 added[parts[0]] = parts[-1]
     own = {}
+    own_captions = {}
     for cat in load(os.path.join(MOD, "categories.json")):
         for path in glob.glob(os.path.join(MOD, "data", cat["id"], "*.json")):
             slot = os.path.basename(path)[:-5]
             for key in load(path)["index"]:
+                if added.get(key):
+                    own_captions.setdefault(slot, {})[key] = added[key]
                 text = body.tags_text(body.tags_of(added.get(key, "")))
                 if text:
                     own.setdefault(slot, {})[key] = text
@@ -110,6 +114,8 @@ def main():
         name = os.path.basename(path)[len("captions_"):-5]
         slot = name if os.path.isfile(os.path.join(MOD, "data", name + ".json")) else name.rsplit("_", 1)[0]
         for key, text in load(path).items():
+            if text:
+                own_captions.setdefault(slot, {})[key] = text
             tags = body.tags_text(body.tags_of(text))
             if tags:
                 own.setdefault(slot, {})[key] = tags
@@ -120,6 +126,7 @@ def main():
             if tags:
                 redraw.setdefault(slot, {})[key] = tags
     write(os.path.join(MOD, "data", body.TAGS_FILE), {"own": own, "redraw": redraw})
+    write(os.path.join(MOD, "data", body.CAPTIONS_FILE), own_captions)
 
     print("描き直しの埋め込み {} 枚（一文 {} 種）、語の組 own {} 枚・redraw {} 枚".format(
         sum(len(t) for t in used.values()), len(cache), sum(len(t) for t in own.values()), sum(len(t) for t in redraw.values())))

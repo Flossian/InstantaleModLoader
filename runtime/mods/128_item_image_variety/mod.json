@@ -134,6 +134,22 @@
         "en": "How images are picked"
       }
     },
+    "KIND_CHECK": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "物の種類を AI に確かめる",
+        "en": "Ask the AI to check the kind of object"
+      },
+      "note": {
+        "ja": "革のベルトに革の小袋、槍に剣のような、色や材質は合うが物が違う絵を候補から外す。初めて出た品1つにつき、AI への短い問い合わせが1回増える",
+        "en": "Drops images that match in colour or material but show another object (a leather pouch for a leather belt, a sword for a spear). Adds one short AI request per newly seen item"
+      },
+      "group": {
+        "ja": "選び方",
+        "en": "How images are picked"
+      }
+    },
     "GENRE_MEDIEVAL": {
       "type": "float",
       "default": 0.0,
