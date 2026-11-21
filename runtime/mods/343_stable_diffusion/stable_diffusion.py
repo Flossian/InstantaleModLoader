@@ -213,7 +213,7 @@ FACE_REDRAW_EXISTING = False
 
 #: 会話の立ち絵の表情差分の強さとタグ（variants.py）。描くかは設定でなく、
 #: 表情を見せる MOD がローダの窓口 `expressions` に宣言しているかで決まる。sdcpp 系だけ。
-#: 強さは「モデル名で分ける」の行（`条件=強さ`）の最初に当たったもの、無ければ系統で SD1.5 か SDXL・その他。
+#: 強さは「モデルごとに変える」の行（`条件=強さ`）の最初に当たったもの、無ければ系統で SD1.5 か SDXL・その他。
 EXPRESSION_STRENGTH_SD15 = 0.5
 EXPRESSION_STRENGTH = 0.35
 EXPRESSION_STRENGTH_BY_MODEL = ""
@@ -2230,7 +2230,7 @@ def apply(ctx):
             if live.faces["on"] and live.faces["preset"]:
                 route = method_route(live.faces["preset"], "表情差分")
             model = route["model"] if route else (FAMILY.get("name"), FAMILY.get("path"))
-            # 強さは描くモデルで決める（モデル名で分ける行、無ければ系統の欄。variants.strength_for）
+            # 強さは描くモデルで決める（モデルごとに変える行、無ければ系統の欄。variants.strength_for）
             strength, matched = variants.strength_for(conf, model)
             cut = face_cut(base, found, route)          # どの表情も同じ切り出し
             if planned is None:
@@ -2275,7 +2275,7 @@ def apply(ctx):
                     or not expressions.seal(folder, stamp, names=shown_names, complete=whole, tags=tags,
                                             ids=conf["ids"]):
                 return False
-            write("表情差分 [{}]: {}（計 {:.1f} 秒、{}、強さ {}{}）{}".format(
+            write("表情差分 [{}]: {}（計 {:.1f} 秒、{}、描き直しの強さ {}{}）{}".format(
                 name, "、".join(done) or "描けた表情は無し", time.time() - started,
                 how or ("一括生成なので続けて描いた" if BULK["depth"] > 0 else "裏で描いた"), strength,
                 "（{}）".format(matched),

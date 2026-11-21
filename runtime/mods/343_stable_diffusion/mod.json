@@ -804,12 +804,12 @@
       "min": 0.05,
       "max": 1.0,
       "label": {
-        "ja": "表情差分の強さ（SD1.5 のモデル）",
-        "en": "Expression strength (SD1.5 models)"
+        "ja": "表情差分の描き直しの強さ（SD1.5 のモデル）",
+        "en": "Expression redraw strength (SD1.5 models)"
       },
       "note": {
-        "ja": "会話の表情を見せる MOD（347 など）が入っているときに描く、立ち絵の表情差分の強さ。顔を描くモデルが SD1.5 のときに使う。顔の周りを表情のタグを足して描き直す。大きいほど表情がはっきりするが、顔立ちや目の色も元の立ち絵から離れる。既定 0.5",
-        "en": "Strength of the expression variants of portraits, drawn when a mod that shows conversation expressions (347 and so on) is installed. Used when the model that draws the face is SD1.5. The area around the face is redrawn with the expression tags added. Higher makes the expression clearer but moves the features and eye colour away from the portrait. Default 0.5"
+        "ja": "会話の表情を見せる MOD（347 など）が入っているときに描く立ち絵の表情差分で、元の顔をどれだけ描き変えるか。顔を描くモデルが SD1.5 のときに使う。顔の周りを表情のタグを足して描き直す。小さいほど元の顔が残り、大きいほど表情がはっきりするが、顔立ちや目の色も元の立ち絵から離れる。既定 0.5",
+        "en": "How much the original face is redrawn for the expression variants of portraits, drawn when a mod that shows conversation expressions (347 and so on) is installed. Used when the model that draws the face is SD1.5. The area around the face is redrawn with the expression tags added. Lower keeps the original face. Higher makes the expression clearer but moves the features and eye colour away from the portrait. Default 0.5"
       }
     },
     "EXPRESSION_STRENGTH": {
@@ -818,24 +818,24 @@
       "min": 0.05,
       "max": 1.0,
       "label": {
-        "ja": "表情差分の強さ（SDXL・その他のモデル）",
-        "en": "Expression strength (SDXL and other models)"
+        "ja": "表情差分の描き直しの強さ（SDXL・その他のモデル）",
+        "en": "Expression redraw strength (SDXL and other models)"
       },
       "note": {
-        "ja": "顔を描くモデルが SD1.5 でないとき（SDXL・系統の読めないモデル）の表情差分の強さ。大きいほど表情がはっきりするが、顔立ちや目の色も元の立ち絵から離れる。既定 0.35",
-        "en": "Strength of the expression variants when the model that draws the face is not SD1.5 (SDXL, or a model whose family cannot be read). Higher makes the expression clearer but moves the features and eye colour away from the portrait. Default 0.35"
+        "ja": "顔を描くモデルが SD1.5 でないとき（SDXL・系統の読めないモデル）に、表情差分で元の顔をどれだけ描き変えるか。小さいほど元の顔が残り、大きいほど表情がはっきりするが、顔立ちや目の色も元の立ち絵から離れる。既定 0.35",
+        "en": "How much the original face is redrawn for the expression variants when the model that draws the face is not SD1.5 (SDXL, or a model whose family cannot be read). Lower keeps the original face. Higher makes the expression clearer but moves the features and eye colour away from the portrait. Default 0.35"
       }
     },
     "EXPRESSION_STRENGTH_BY_MODEL": {
       "type": "str",
       "default": "",
       "label": {
-        "ja": "表情差分の強さ（モデル名で分ける）",
-        "en": "Expression strength (by model name)"
+        "ja": "表情差分の描き直しの強さ（モデルごとに変える）",
+        "en": "Expression redraw strength (per model)"
       },
       "note": {
-        "ja": "同じ系統の中でもモデルごとに強さを変えたいときに書く。「チェックポイントのファイル名の一部=強さ」を ; で区切って並べ、前から見て最初に当たった行を使う。SD1.5・SDXL の欄より先に見る。書き方はプロンプトの規則のモデルの列と同じで、/ でどれか、! で除く。sd15 / sdxl と書くと系統を指す。既定は空",
-        "en": "Fill this in to use different strengths for models of the same family. List \"part of the checkpoint file name=strength\" separated by ; and the first matching line wins. Checked before the SD1.5 and SDXL settings. Written like the model column of the prompt rules: / means any of, ! excludes, and sd15 / sdxl name a family. Empty by default"
+        "ja": "同じ系統の中でもモデルごとに描き直しの強さを変えたいときに書く。「チェックポイントのファイル名の一部=強さ」を ; で区切って並べ、前から見て最初に当たった行を使う。当てはまれば SD1.5・SDXL の欄より優先する。書き方はプロンプトの規則のモデルの列と同じで、/ でどれか、! で除く。sd15 / sdxl と書くと系統を指す。既定は空",
+        "en": "Fill this in to use different redraw strengths for models of the same family. List \"part of the checkpoint file name=strength\" separated by ; and the first matching line wins. A matching line takes priority over the SD1.5 and SDXL settings. Written like the model column of the prompt rules: / means any of, ! excludes, and sd15 / sdxl name a family. Empty by default"
       }
     },
     "EXPRESSION_SMILE": {

@@ -4,7 +4,7 @@
     python tools/tests/test_sd_variants.py
 
   設定   … 既定は強さ 0.35 と4つのタグ。空のタグの表情は描かない。壊れた強さは既定へ
-           強さはモデル名で分ける行、無ければ系統で SD1.5（既定 0.5）か SDXL・その他（0.35）
+           強さはモデルごとに変える行、無ければ系統で SD1.5（既定 0.5）か SDXL・その他（0.35）
            顔を描くモデルの決まり方（道具画面の表示）は本体と同じ順
   文     … 顔の寄りのタグの直後に表情のタグを入れる
   順番   … ゲームの絵は差分より先。差分はゲームが待っていれば譲る。同じスレッドは入り直せる
@@ -103,26 +103,26 @@ check("工程の引数は数・文字列だけ控える", V.step_call((165, 330)
 check("名簿は骨格の順、セーブにだけ居る人物を後ろに（重複は除く）",
       V.world_npc_names({"npcs": {"0": {"name": "A"}, "1": {"name": "B"}}},
                         {"npcs": {"5": {"name": "B"}, "6": {"name": "C"}}}) == ["A", "B", "C"])
-check("強さの欄の既定は mod.json と同じ（SD1.5 0.5・SDXL・その他 0.35・モデル名で分けるは空）",
+check("強さの欄の既定は mod.json と同じ（SD1.5 0.5・SDXL・その他 0.35・モデルごとに変えるは空）",
       decls[V.STRENGTH_SD15]["default"] == V.DEFAULT_SD15 == MOD.EXPRESSION_STRENGTH_SD15 == 0.5
       and decls[V.BY_MODEL]["default"] == V.DEFAULT_BY_MODEL == MOD.EXPRESSION_STRENGTH_BY_MODEL == "")
 got = V.derive({})
 check("値が無ければ既定", got == {"strength": 0.35, "sd15": 0.5, "by_model": [], "bad": [],
                            "tags": V.DEFAULT_TAGS, "ids": {}, "meanings": {}, "skipped": []}, got)
 rows, bad = V.model_rows(" sd15=0.5 ;\npony / !score=0.4;; x ; sdxl=abc; sdxl=0; sdxl=1.5; =0.3; sdxl=1 ")
-check("モデル名で分ける: ; と改行で区切り、読めない区切り（= が無い・数でない・0 以下・1 超え・条件が空）は飛ばす",
+check("モデルごとに変える: ; と改行で区切り、読めない区切り（= が無い・数でない・0 以下・1 超え・条件が空）は飛ばす",
       rows == [("sd15", 0.5), ("pony / !score", 0.4), ("sdxl", 1.0)]
       and bad == ["x", "sdxl=abc", "sdxl=0", "sdxl=1.5", "=0.3"], (rows, bad))
 conf = V.derive({V.BY_MODEL: "pony=0.4; sdxl/!wai=0.3", V.STRENGTH_SD15: 0.6})
 cases = [
     (("sd15", r"C:\m\sotemix_v30.safetensors"), (0.6, V.LABEL_SD15)),
-    (("sdxl", r"C:\m\ponyDiffusionV6XL.safetensors"), (0.4, "モデル名で分ける: pony=0.4")),
-    (("sdxl", r"C:\m\animagine.safetensors"), (0.3, "モデル名で分ける: sdxl/!wai=0.3")),
+    (("sdxl", r"C:\m\ponyDiffusionV6XL.safetensors"), (0.4, "モデルごとに変える: pony=0.4")),
+    (("sdxl", r"C:\m\animagine.safetensors"), (0.3, "モデルごとに変える: sdxl/!wai=0.3")),
     (("sdxl", r"C:\m\WAI-Nsfw-Illustrious-17.safetensors"), (0.35, V.LABEL_OTHER)),
     ((None, None), (0.35, V.LABEL_OTHER)),
 ]
 got = [V.strength_for(conf, model) for model, _want in cases]
-check("強さ: モデル名で分ける行を前から見て最初に当たったもの、無ければ SD1.5 の系統は SD1.5 の欄、"
+check("強さ: モデルごとに変える行を前から見て最初に当たったもの、無ければ SD1.5 の系統は SD1.5 の欄、"
       "ほか（SDXL・読めない系統）は SDXL・その他の欄", got == [want for _model, want in cases], got)
 check("SD1.5 の欄の読めない値は SD1.5 の既定",
       [V.derive({V.STRENGTH_SD15: v})["sd15"] for v in (0, "x", None, 2)] == [0.5, 0.5, 0.5, 1.0])
@@ -1022,7 +1022,7 @@ else:
                   MOD.faces.load_done(done_file).get("w"))
             check("顔の描き直しで例外を出していない", ctx_on.errors == [], ctx_on.errors)
 
-            # ---- 強さの「モデル名で分ける」は、ゲームの部品で描くときも建っているチェックポイントの名前で当てる
+            # ---- 強さの「モデルごとに変える」は、ゲームの部品で描くときも建っているチェックポイントの名前で当てる
             by_values = dict(values, EXPRESSION_STRENGTH_BY_MODEL="ponyish=0.42")
             ctx_by = Ctx(ctx.out_dir, by_values)
             MOD.apply(ctx_by)
@@ -1036,7 +1036,7 @@ else:
             finally:
                 MOD.FAMILY.clear()
                 MOD.FAMILY.update(saved_family)
-            check("ゲームの部品で描く差分も、モデル名で分ける行がチェックポイントの名前に当たる",
+            check("ゲームの部品で描く差分も、モデルごとに変える行がチェックポイントの名前に当たる",
                   len(VarSD.calls) == 5 and all(c["strength"] == 0.42 for c in VarSD.calls[1:]),
                   [c["strength"] for c in VarSD.calls])
 

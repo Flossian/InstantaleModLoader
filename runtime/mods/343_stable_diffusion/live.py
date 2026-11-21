@@ -176,14 +176,14 @@ class Live(object):
         if self.faces["on"]:
             lines.append("顔だけ描き直す: preset={}, strength={}".format(
                 self.faces["preset"] or "（立ち絵を描いたプリセット）", self.faces["strength"]))
-        lines.append("表情差分（表情を見せる MOD があるとき）: SD1.5={}, SDXL・その他={}, モデル名で分ける=[{}], {}".format(
+        lines.append("表情差分（表情を見せる MOD があるとき）: 描き直しの強さ SD1.5={}, SDXL・その他={}, モデルごとに変える=[{}], {}".format(
             self.variants["sd15"], self.variants["strength"],
             "; ".join("{}={}".format(c, s) for c, s in self.variants["by_model"]),
             ", ".join("{}={}".format(e, t) for e, t in sorted(self.variants["tags"].items()))))
         if self.variants["skipped"]:
             lines.append("追加の表情で名前が使えない・重なる行を飛ばした: {}".format(", ".join(self.variants["skipped"])))
         if self.variants["bad"]:
-            lines.append("表情差分の「モデル名で分ける」で読めない区切りを飛ばした: {}".format(
+            lines.append("表情差分の「モデルごとに変える」で読めない区切りを飛ばした: {}".format(
                 " / ".join(self.variants["bad"])))
         counts = sum(len(rows) for rows in self.rules.values())
         if counts:

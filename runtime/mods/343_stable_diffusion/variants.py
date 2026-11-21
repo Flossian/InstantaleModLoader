@@ -69,13 +69,13 @@ DEFAULT_STRENGTH = 0.35
 #: SD1.5 のモデルの強さの既定（mod.json と同じ値。0.45 以下では表情がほとんど付かなかった。§3.132）。
 DEFAULT_SD15 = 0.5
 
-#: モデル名で分ける強さの既定（空。SD1.5・SDXL の欄より先に見る）。
+#: モデルごとに変える強さの既定（空。SD1.5・SDXL の欄より先に見る）。
 DEFAULT_BY_MODEL = ""
 
 #: 強さがどの欄で決まったかの言い方（道具画面とログ）。
 LABEL_SD15 = "SD1.5 のモデル"
 LABEL_OTHER = "SDXL・その他のモデル"
-LABEL_BY_NAME = "モデル名で分ける"
+LABEL_BY_NAME = "モデルごとに変える"
 
 #: 表情のタグの既定（mod.json と同じ値）。
 DEFAULT_TAGS = {"smile": "light smile, closed mouth",
@@ -365,7 +365,7 @@ def derive(values, added=None):
 def strength_for(conf, model):
     """描くモデル（`(系統, チェックポイントのパス)`）で使う強さと、どの欄で決まったかの言い方。
 
-    「モデル名で分ける」の行を前から見て最初に当たった行。無ければ SD1.5 の系統なら SD1.5 の欄、
+    「モデルごとに変える」の行を前から見て最初に当たった行。無ければ SD1.5 の系統なら SD1.5 の欄、
     ほか（SDXL・読めない系統）は SDXL・その他の欄。
     """
     for condition, strength in conf.get("by_model") or ():

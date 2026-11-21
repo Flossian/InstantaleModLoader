@@ -31,7 +31,7 @@ TECH.md §3.12 の契約で動く（`131_sharp_portrait` の道具と同じ）�
 | 完全置き換え | 完全置き換え | 同じ |
 | サンプラー | サンプラー | 種類ではなく段（1段目 / 2段目 / LCM の段）で持つ |
 | （無し） | モデル別 | 版26。`model` の付いた行と、モデルの系統に合わせたプロンプトの雛形（`profiles.py`） |
-| （無し） | 高度設定 | 今の絵を下絵にした描き直し（img2img）と、2つのモデルで続けて描く（txt2img→img2img）。部品は `img2img.py`。版29 で立ち絵の顔だけの描き直し（`faces.py`）、版30 で表情差分の強さ（SD1.5・SDXL・その他・モデル名で分ける）とタグ（`variants.py`）と、顔を描くモデルの決まり方の表示（`outlook.expression_models`）を足した |
+| （無し） | 高度設定 | 今の絵を下絵にした描き直し（img2img）と、2つのモデルで続けて描く（txt2img→img2img）。部品は `img2img.py`。版29 で立ち絵の顔だけの描き直し（`faces.py`）、版30 で表情差分の描き直しの強さ（SD1.5・SDXL・その他・モデルごとに変える）とタグ（`variants.py`）と、顔を描くモデルの決まり方の表示（`outlook.expression_models`）を足した |
 | （無し） | 次に描く絵（タブの上の帯） | 種類ごとのモデル・寸法・サンプラーと、効いていない設定。計算は `outlook.py`（VERIFICATION.md §3.65） |
 
 一覧の行は「選択行を削除」ではなく行ごとの `×` で消す（Tk の表に合わせた）。
@@ -532,7 +532,9 @@ def build_window(rules_in=None, settings_in=None, note=""):
 
     window = tk.Tk()
     window.title("Stable Diffusionの各種差し替え（ModLoader 版）")
-    modtool.setup_theme(window, root_dir)
+    theme = modtool.setup_theme(window, root_dir)
+    # 表情差分の枠で、いま使っているモデルの行と強さの欄を青太字にする（青は設定画面の主操作の色）
+    ttk.Style().configure("InUse.TLabel", foreground=(getattr(theme, "PALETTE", None) or {}).get("accent", "#2f6feb"))
     modtool.restore_window(root_dir, MOD_DIR, window, fallback="940x780")
 
     # タブの上の帯。どのタブで値を変えても、保存の前に次に描く絵の中身が変わる（`outlook.py`）。
@@ -1276,39 +1278,48 @@ def build_window(rules_in=None, settings_in=None, note=""):
                                       padding=8)
     expression_frame.pack(fill="x", pady=(0, 12))
     ttk.Label(expression_frame, wraplength=900, justify="left", text="\n".join([
-        "会話の表情を見せる MOD（347 など）が入っているときだけ、立ち絵の顔の周りを描き直して表情差分を作る。ここでは入切しない。",
-        "強さが大きいほど表情ははっきりするが、顔立ちや目の色も元の立ち絵から離れる。"])).pack(anchor="w")
+        "会話の表情を見せる MOD（347 など）が入っているときだけ、立ち絵の顔の周りを描き直して表情差分を作る。ここでは入切しない。"])).pack(
+        anchor="w")
     bold = tkfont.nametofont("TkDefaultFont").copy()
     bold.configure(weight="bold")
     # 顔を描くモデルの決まり方（上から順に、最初に当てはまるもの）と、いま当てはまる行（`outlook.expression_models`）
-    ttk.Label(expression_frame, text="顔を描くモデル（上から順に、最初に当てはまるもの）", font=bold).pack(
-        anchor="w", pady=(10, 2))
+    model_head = ttk.Frame(expression_frame)
+    model_head.pack(anchor="w", fill="x", pady=(10, 2))
+    ttk.Label(model_head, text="顔を描くモデル（上から順に、最初に当てはまるもの）", font=bold).pack(side="left")
+    ttk.Label(model_head, text="青太字は使用中", font=bold, style="InUse.TLabel").pack(side="left", padx=(16, 0))
     model_grid = ttk.Frame(expression_frame)
     model_grid.pack(anchor="w", padx=(14, 0))
     expression_cells = []
     for index, (_key, label) in enumerate(outlook.EXPRESSION_STEPS):
         cells = (ttk.Label(model_grid, text="{}.".format(index + 1)), ttk.Label(model_grid, text=label),
-                 ttk.Label(model_grid, text=""), ttk.Label(model_grid, text=""))
+                 ttk.Label(model_grid, text=""))
         for column, cell in enumerate(cells):
             cell.grid(row=index, column=column, sticky="w", padx=(0, 12), pady=1)
         expression_cells.append(cells)
     ttk.Label(expression_frame, style="Faint.TLabel", wraplength=900, justify="left",
               text="再生成のボタンの img2img・txt2img→img2img で描いた立ち絵は、1 が無ければそのボタンの描き方のモデルで描く。").pack(
         anchor="w", padx=(14, 0), pady=(2, 0))
-    # 強さ（モデル名で分ける行 → 系統の欄の順。variants.strength_for）
-    ttk.Label(expression_frame, text="強さ", font=bold).pack(anchor="w", pady=(10, 2))
+    # 描き直しの強さ（モデルごとに変える行 → 系統の欄の順。variants.strength_for）
+    ttk.Label(expression_frame, text="描き直しの強さ（小さいほど元の顔が残り、大きいほど表情がはっきりする）",
+              font=bold).pack(anchor="w", pady=(10, 2))
     strength_grid = ttk.Frame(expression_frame)
     strength_grid.pack(anchor="w", padx=(14, 0))
+    strength_labels = {}                         # 欄の名前 → 名前の部品（いま効いている行を太字にする）
     for index, (key, label, width, note) in enumerate((
             (variants.STRENGTH_SD15, variants.LABEL_SD15, 8, "既定 {}".format(variants.DEFAULT_SD15)),
             (variants.STRENGTH, variants.LABEL_OTHER, 8, "既定 {}".format(variants.DEFAULT_STRENGTH)),
             (variants.BY_MODEL, variants.LABEL_BY_NAME, 40,
-             "チェックポイントのファイル名の一部=強さ（; で区切る）。上の2つより先に見る"))):
-        ttk.Label(strength_grid, text=label).grid(row=index, column=0, sticky="w", padx=(0, 10), pady=2)
+             "チェックポイントのファイル名の一部=強さ（; で区切る。例: anime=0.3; real=0.45）。上の2つより優先"))):
+        strength_labels[label] = ttk.Label(strength_grid, text=label)
+        strength_labels[label].grid(row=index, column=0, sticky="w", padx=(0, 10), pady=2)
         cell = ttk.Frame(strength_grid)          # 注記は欄のすぐ右（長い欄に列の幅を引っ張られない）
         cell.grid(row=index, column=1, sticky="w")
         ttk.Entry(cell, textvariable=var_for(key), width=width).pack(side="left")
-        ttk.Label(cell, text=note, style="Faint.TLabel").pack(side="left", padx=(10, 0))
+        if key == variants.BY_MODEL:
+            # 長い注記は欄の下へ（右に並べると既定の窓の幅で切れる）
+            ttk.Label(strength_grid, text=note, style="Faint.TLabel").grid(row=index + 1, column=1, sticky="w")
+        else:
+            ttk.Label(cell, text=note, style="Faint.TLabel").pack(side="left", padx=(10, 0))
     ttk.Label(expression_frame, text="基本表情のタグ（画像生成の英語のタグ。空にした表情は描かず、会話でも選ばせない）",
               font=bold).pack(anchor="w", pady=(10, 2))
     tag_grid = ttk.Frame(expression_frame)
@@ -1341,24 +1352,28 @@ def build_window(rules_in=None, settings_in=None, note=""):
     expression_cost_refresh()
 
     def expression_refresh(raw, custom, model):
-        """顔を描くモデルの決まり方の各行と、いま当てはまる行の強さを書き直す（`band_refresh` の後に呼ぶ）。"""
+        """顔を描くモデルの決まり方の各行を書き直し、いま当てはまるモデルの行と強さの欄を太字にする（`band_refresh` の後に呼ぶ）。"""
         merged = dict(values)
         merged.update(raw)
         rows = outlook.expression_models(merged, custom, outlook.game_of(model, band_log["value"]), game_dir)
         conf = variants.derive(merged)
+        in_use = None                            # 強さを決めた欄の名前
         for cells, row in zip(expression_cells, rows):
+            used = row["model"] is not None and row["used"]
+            for cell in cells[:2]:
+                cell.configure(font=bold if used else "", style="InUse.TLabel" if used else "TLabel")
             if row["model"] is None:
                 cells[2].configure(text="（使っていない）", style="Faint.TLabel", font="")
-                cells[3].configure(text="")
                 continue
             family = {"sd15": "SD1.5", "sdxl": "SDXL"}.get(row["family"], "系統を読めない")
             cells[2].configure(text="{}（{}）".format(row["model"], family),
-                               style="TLabel" if row["used"] else "Faint.TLabel", font=bold if row["used"] else "")
-            if row["used"]:
-                strength, how = variants.strength_for(conf, (row["family"], row["path"]))
-                cells[3].configure(text="← いまはこれ。強さ {}（{}）".format(strength, how), font=bold)
-            else:
-                cells[3].configure(text="")
+                               style="InUse.TLabel" if used else "Faint.TLabel", font=bold if used else "")
+            if used:
+                _strength, how = variants.strength_for(conf, (row["family"], row["path"]))
+                in_use = variants.LABEL_BY_NAME if how.startswith(variants.LABEL_BY_NAME) else how
+        for label, widget in strength_labels.items():
+            widget.configure(font=bold if label == in_use else "",
+                             style="InUse.TLabel" if label == in_use else "TLabel")
 
     human_check = ttk.Checkbutton(tab, text="人間の敵（闘技場の相手など）を立ち絵の描き方で描く",
                                   variable=var_for("HUMAN_ENEMY_AS_PORTRAIT"))

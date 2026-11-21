@@ -303,7 +303,7 @@ def expression_models(values, custom, game, game_dir=""):
     """
     text = lambda key: str(values.get(key) or "").strip()
     replaced = text("CHECKPOINT_PATH")
-    # ゲームの選んだモデル。名前はチェックポイントの名前なので、モデル名で分ける行の照合にも使う
+    # ゲームの選んだモデル。名前はチェックポイントの名前なので、モデルごとに変える行の照合にも使う
     original = {"model": game.get("model") or "ゲーム既定", "family": game.get("family"),
                 "path": game.get("model") or None}
     if replaced:
