@@ -145,8 +145,11 @@ def load_speed_module():
     folder = os.path.join(MODS_DIR, matches[0])
     with io.open(os.path.join(folder, "mod.json"), encoding="utf-8") as fh:
         entry = json.load(fh)["entry"]
-    spec = importlib.util.spec_from_file_location("llm_speed_mod", os.path.join(folder, entry))
+    # 127_ は同じフォルダの schema_compact を相対 import で読むので、フォルダをパッケージとして読む
+    spec = importlib.util.spec_from_file_location("llm_speed_mod", os.path.join(folder, entry),
+                                                  submodule_search_locations=[folder])
     module = importlib.util.module_from_spec(spec)
+    sys.modules["llm_speed_mod"] = module
     spec.loader.exec_module(module)
     return module
 

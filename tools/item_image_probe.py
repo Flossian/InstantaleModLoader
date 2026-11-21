@@ -5,6 +5,24 @@
     python tools\\item_image_probe.py --backend local                  # config.json のローカルモデル（Gemma4 系）
     python tools\\item_image_probe.py --backend local --sources restock --genres sf,modern
     python tools\\item_image_probe.py --sheet out\\item_image_probe_<時刻>_claude.jsonl   # 一覧の画像だけ作り直す
+    python tools\\item_image_probe.py --backend local --world <世界名> --part 1/2   # 遊んでいる世界の記録を送り直す
+
+## 遊んでいる世界で作られる品（`--world`）
+
+ジャンルの世界ではなく、`worlds\\<世界名>\\world_data.json` の世界で作られる品を録る。`--sources` は次の組から選ぶ
+（既定は全部）。
+
+- `world`: 世界データに最初から書かれた品（依頼の敵の落とし物・店の雛形など）。LLM には送らず、絵だけ付ける
+- `shop` / `restock` / `economy` / `lineup` / `event`: ゲームと MOD が組み立てた頼みの記録
+  （`shop_item_generator_ordinary`・`mod_shop_restock`・`mod_regional_economy`・`mod_shop_lineup`・
+  `field_event_evaluator` / `quest_referee_event_resolve`）のうち、その世界のエリアの名前を含むものを、頼み文を変えずに送り直す。
+  同じ頼み文は1つにまとめる。型の埋め込まれていない記録（クラウドで動いた回）は、頼み文の書き出しが同じ別の記録の型の指示を先頭に足す
+  （店の価値の段の一覧は、その記録の段と違うことがある）
+- `quest`: ギルドの依頼の生成（`settlement_quest_generator`）。記録の system はそのままで、user の世界と拠点の欄に、
+  世界データの依頼の題・概要と、依頼元のギルドのある街を入れる（遊んでいる世界の依頼の記録が無いことが多いため）
+
+`--part i/n` は頼みを n 組に分けた i 組目だけ送る（2つのモデルで半分ずつ送るときに使う）。`--runs` は頼み1件あたりの回数。
+`--per-place N` は送り直す記録を店（場所）ごとに新しい N 件までにする。
 
 ## 見るもの
 
@@ -359,6 +377,152 @@ def event_requests(game_dir, runs, with_note):
 
 
 # ------------------------------------------------------------------ 型
+# ------------------------------------------------------------------ 遊んでいる世界（--world）
+#: 送り直す記録の種類（組の名前 → 記録の名前）
+WORLD_REPLAY = {"shop": ("shop_item_generator_ordinary",), "restock": ("mod_shop_restock",),
+                "economy": ("mod_regional_economy",), "lineup": ("mod_shop_lineup",), "event": EVENT_MANAGERS}
+WORLD_SOURCES = ("world", "shop", "restock", "economy", "lineup", "event", "quest")
+
+
+def read_world_data(world):
+    """`worlds\\<世界名>\\world_data.json`（難読化されていれば解く）。"""
+    from instantale_modloader import saves
+    path = os.path.join(saves.worlds_dir(), world, "world_data.json")
+    with open(path, "rb") as fh:
+        raw = fh.read()
+    if raw[:1] in (b"{", b"\xef"):
+        return json.loads(raw.decode("utf-8-sig"))
+    return json.loads(saves.xor(raw).decode("utf-8"))
+
+
+def world_area_names(data):
+    return sorted({a.get("name") for a in (data.get("areas") or {}).values() if a.get("name")}, key=len, reverse=True)
+
+
+def world_items(data):
+    """世界データに書かれた品: `(置き場所, 名前, 説明, 外見文, type, sub_type)`。"""
+    out = []
+
+    def walk(node, where):
+        if isinstance(node, dict):
+            if isinstance(node.get("item_appearance"), str) and "item_name" in node:
+                cat = node.get("item_category") or {}
+                out.append((where, node.get("item_name"), node.get("description") or "", node["item_appearance"],
+                            cat.get("type") or node.get("item_type"), cat.get("sub_type") or node.get("item_sub_type")))
+            title = node.get("quest_title") or node.get("name")
+            for key, value in node.items():
+                walk(value, title if isinstance(title, str) and key in ("enemies", "boss", "events", "facilities", "goods", "config") else where)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value, where)
+    for key in ("quests", "story_quests", "areas", "npcs"):
+        walk(data.get(key), key)
+    return out
+
+
+#: 頼み文の中の店の名前（`312_` は「店: 」の行、ゲームの店は【現在地】の次の行）
+PLACE = re.compile(r"(?:^店: |【現在地】\n)([^\n（(]+)", re.MULTILINE)
+
+
+def prompt_kind(messages):
+    """頼みの種類（型の指示を除いた最初の文の書き出しと、価値の段の一覧があるか）。型を借りる相手を選ぶのに使う。"""
+    body = [m["content"] for m in messages if FORMAT_HEAD not in m["content"]]
+    # 改行の位置だけ違う版がある（店の頼みの「【指示】」の前の改行）ので、空白を除いて比べる
+    head = re.sub(r"\s", "", body[0])[:40] if body else ""
+    return head, any("許可された値のリスト" in b for b in body)
+
+
+def world_replay_requests(game_dir, sources, names, runs, per_place=0):
+    """その世界のエリアの名前を含む記録を、頼み文を変えずに送り直す頼みにする。
+    `per_place` が正なら、店（場所）ごとに新しい記録からその件数まで（`312_` の入れ替えは前の品揃えの欄だけ違う記録が重なる）。"""
+    out = []
+    for source in sources:
+        managers = WORLD_REPLAY[source]
+        paths = []
+        for manager in managers:
+            paths += glob.glob(os.path.join(str(game_dir), "output_data", "*", "*", manager, "*.json"))
+        paths.sort(key=os.path.getmtime)
+        records, fmts = [], {}
+        for path in paths:
+            try:
+                record = json.load(io.open(path, encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            messages = [{"role": m["role"], "content": m["content"]} for m in record.get("messages") or []
+                        if isinstance(m.get("content"), str)]
+            text = "\n".join(m["content"] for m in messages)
+            has_fmt = any(FORMAT_HEAD in m["content"] for m in messages)
+            if has_fmt:
+                # 型は頼みの種類ごとに違う（地域経済の特産品と値付け、店の初めての品揃えと足す品）。新しい記録で上書きする
+                fmts[prompt_kind(messages)] = next(m for m in messages if FORMAT_HEAD in m["content"])
+            if not any(n in text for n in names):
+                continue
+            # 品の型の記録だけ（店主の態度などの記録は同じ名前の種類に入らないが、念のため）
+            if "item_appearance" not in text and "item_appearance" not in json.dumps(record.get("response"), ensure_ascii=False):
+                continue
+            records.append((path, messages, has_fmt))
+        seen, per = set(), collections.Counter()
+        for path, messages, has_fmt in reversed(records):
+            body = "\n".join(m["content"] for m in messages if FORMAT_HEAD not in m["content"])
+            if body in seen:
+                continue
+            seen.add(body)
+            found = PLACE.search(body)
+            place = found.group(1).strip() if found else ""
+            per[place] += 1
+            if per_place > 0 and place and per[place] > per_place:
+                continue
+            if not has_fmt:
+                fmt = fmts.get(prompt_kind(messages))
+                if fmt is None:
+                    continue
+                messages = [dict(fmt)] + messages
+            where = place or next((n for n in names if n in body), "")
+            for run in range(runs):
+                out.append({"genre": "world", "source": source,
+                            "where": "{} {}{}".format(where, os.path.basename(path), " #{}".format(run + 1) if runs > 1 else ""),
+                            "messages": messages, "claude_user": "＜生成＞"})
+    return out
+
+
+def world_quest_requests(game_dir, data, runs):
+    """ギルドの依頼の生成を、世界データの依頼の題と概要で組む（記録の system はそのまま）。
+    型の埋め込まれた記録（ローカルで動いた回）を使う。クラウドで動いた回の記録には型が無い。"""
+    record = latest_record(game_dir, "settlement_quest_generator", FORMAT_HEAD)
+    systems = [m for m in record["messages"] if m["role"] == "system"]
+    wd = data.get("world_data") or {}
+    story = wd.get("story")
+    if isinstance(story, str):
+        try:
+            story = ast.literal_eval(story)
+        except (ValueError, SyntaxError):
+            story = {"world_situation": story}
+    story = story if isinstance(story, dict) else {}
+    # ギルドの名前 → (街の名前, 街の概要)
+    guild_town = {}
+    for area in (data.get("areas") or {}).values():
+        for node in (area.get("nodes") or {}).values():
+            for facility in (node.get("facilities") or {}).values():
+                guild_town[facility.get("name")] = (area.get("name"), area.get("overview") or area.get("description") or "")
+    quests = list((data.get("quests") or {}).values()) if isinstance(data.get("quests"), dict) else list(data.get("quests") or [])
+    out = []
+    for quest in quests:
+        town, town_overview = guild_town.get(quest.get("client_name"), ("", ""))
+        area = quest.get("area") or {}
+        user = ("【世界のデータ】\n- 世界の概要: {o}\n\n【世界のストーリー】\n- 世界の現状: {s}\n- ストーリーの流れの草稿: {d}\n"
+                "- 現在の段階: 2/5\n\n【クエストの概要】\n- title: {t}\n- overview: {q}\n\n【クエストエリアのデータ】\n"
+                "- settlement_name: {n}\n- settlement_overview: {so}\n- settlement_structure_description: \n"
+                "- area_description: {ad}\n- 想定段階: ゲーム序盤\n\n【補足】\n- このクエストの難易度は{k}/70である。").format(
+            o=wd.get("overview", ""), s=story.get("world_situation", ""), d=story.get("story_flow", ""),
+            t=quest.get("quest_title", ""), q=quest.get("request_summary", ""), n=town, so=town_overview,
+            ad=area.get("layout_description", ""), k=quest.get("difficulty") or 20)
+        for run in range(runs):
+            out.append({"genre": "world", "source": "quest",
+                        "where": "{} {}".format(town, quest.get("quest_title", "")),
+                        "messages": systems + [{"role": "user", "content": user}]})
+    return out
+
+
 def embedded_schema(messages, compact_mod):
     for message in messages:
         text = message["content"]
@@ -558,7 +722,8 @@ def items_of(data, source):
         if isinstance(node, dict):
             if isinstance(node.get("item_appearance"), str) and "item_name" in node:
                 cat = node.get("item_category") or {}
-                if source == "restock":
+                if source == "restock" or (not cat and node.get("item_type")):
+                    # `312_` と `340_` の足す品は item_type / item_sub_type の形
                     kind, sub = node.get("item_type"), node.get("item_sub_type")
                 else:
                     kind, sub = cat.get("type"), cat.get("sub_type")
@@ -779,7 +944,14 @@ def main():
     ap.add_argument("--event-note", action="store_true", help="event: 128_ のイベントの外見文の手当てを当てて送る")
     ap.add_argument("--event-runs", type=int, default=3, help="event: 記録1件あたりの回数")
     ap.add_argument("--genre-preset", action="store_true", help="世界ごとにジャンルの重み（GENRE_PRESET）を置いて選ぶ")
+    ap.add_argument("--world", help="遊んでいる世界（worlds の下のフォルダ名）の記録を送り直す")
+    ap.add_argument("--part", default="1/1", help="頼みを n 組に分けた i 組目だけ送る（i/n）")
+    ap.add_argument("--runs", type=int, default=1, help="--world: 頼み1件あたりの回数")
+    ap.add_argument("--per-place", type=int, default=0, help="--world: 記録を送り直す数の、店（場所）ごとの上限（0 は全部）")
     args = ap.parse_args()
+    part, parts = (int(x) for x in args.part.split("/"))
+    if not 1 <= part <= parts:
+        raise SystemExit("--part は 1/2 のように書く")
 
     game_dir = find_game_dir(args.game_dir)
     picker = Picker(game_dir)
@@ -791,18 +963,34 @@ def main():
         return 0
 
     genres = [g for g in GENRES if g["id"] in args.genres.split(",")]
-    sources = args.sources.split(",")
     compact = qgp.load_compact_module()
     runaway = qgp.load_runaway_module()   # ゲームと同じく 139_ の件数の上限を付ける（依頼の敵の一覧の暴走）
-    requests = []
-    if "shop" in sources:
-        requests += shop_requests(game_dir, genres)
-    if "quest" in sources:
-        requests += quest_requests(game_dir, genres)
-    if "restock" in sources:
-        requests += restock_requests(genres, args.restock_old)
-    if "event" in sources:
-        requests += event_requests(game_dir, args.event_runs, args.event_note)
+    requests, fixed = [], []
+    if args.world:
+        data = read_world_data(args.world)
+        sources = args.sources.split(",") if args.sources != ap.get_default("sources") else list(WORLD_SOURCES)
+        unknown = [s for s in sources if s not in WORLD_SOURCES]
+        if unknown:
+            raise SystemExit("--world で選べる組: {}".format(", ".join(WORLD_SOURCES)))
+        names = world_area_names(data)
+        requests += world_replay_requests(game_dir, [s for s in sources if s in WORLD_REPLAY], names, args.runs,
+                                          args.per_place)
+        if "quest" in sources:
+            requests += world_quest_requests(game_dir, data, args.runs)
+        if "world" in sources and part == 1:
+            fixed = world_items(data)
+    else:
+        sources = args.sources.split(",")
+        if "shop" in sources:
+            requests += shop_requests(game_dir, genres)
+        if "quest" in sources:
+            requests += quest_requests(game_dir, genres)
+        if "restock" in sources:
+            requests += restock_requests(genres, args.restock_old)
+        if "event" in sources:
+            requests += event_requests(game_dir, args.event_runs, args.event_note)
+    requests = [r for i, r in enumerate(requests) if i % parts == part - 1]
+    print("  頼み {} 件（{} 組目 / {}）・世界データの品 {} 件".format(len(requests), part, parts, len(fixed)), flush=True)
 
     os.makedirs(OUT_DIR, exist_ok=True)
     stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -812,8 +1000,26 @@ def main():
     rows, failures = [], 0
     try:
         with io.open(base + ".jsonl", "w", encoding="utf-8") as out:
+            for where, name, desc, appearance, kind, sub in fixed:
+                detail = detail_of(kind, sub)
+                picker.world_genres = {}
+                picked = picker.pick(detail, appearance) or {}
+                row = {"backend": "none", "model": None, "genre": "world", "source": "world", "where": where,
+                       "name": name, "description": desc, "appearance": appearance,
+                       "jp": bool(JP.search(appearance or "")), "item_type": kind, "sub_type": sub, "detail": detail,
+                       "key": picked.get("key"), "category": picked.get("category", "none"), "sim": picked.get("sim"),
+                       "top_sim": picked.get("top_sim")}
+                rows.append(row)
+                out.write(json.dumps(row, ensure_ascii=False) + "\n")
             for n, request in enumerate(requests, 1):
-                schema = request.get("schema") or embedded_schema(request["messages"], compact)
+                try:
+                    schema = request.get("schema") or embedded_schema(request["messages"], compact)
+                except SystemExit as exc:
+                    # 型の読めない頼みが1件あっても、残りは送る
+                    failures += 1
+                    print("  {:>3}/{} {} {} {}: 失敗 {}".format(n, len(requests), request["genre"], request["source"],
+                                                              request["where"], exc), flush=True)
+                    continue
                 if args.backend == "local":
                     schema, _applied = runaway.with_max_items(schema, runaway.limits())
                 try:
@@ -838,8 +1044,9 @@ def main():
                     rows.append(row)
                     out.write(json.dumps(row, ensure_ascii=False) + "\n")
                     out.flush()
-                print("  {:>3}/{} {} {} {}: {}品 {}秒".format(n, len(requests), request["genre"], request["source"],
-                                                          request["where"], len(items), got["seconds"]), flush=True)
+                print("  {:>3}/{} {} {} {}: {}品 {}秒{}".format(
+                    n, len(requests), request["genre"], request["source"], request["where"], len(items), got["seconds"],
+                    "" if items else "  返答: " + got["content"][:120].replace("\n", " ")), flush=True)
     finally:
         if isinstance(sender, LocalSender):
             sender.close()

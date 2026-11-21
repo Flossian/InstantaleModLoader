@@ -311,12 +311,15 @@ try:
     mod_dir = os.path.join(tmp, "999_x")
     os.makedirs(mod_dir)
     with io.open(os.path.join(mod_dir, "tool.py"), "w", encoding="utf-8") as fh:
-        # 隠した窓に1枚だけタブを持つ道具
+        # 隠した窓に1枚だけタブを持つ道具。入口は `main(argv)`、`build_window()` は引数なしの形（343 と同じ）
         fh.write("import tkinter as tk\nfrom tkinter import ttk\n\n"
-                 "def build_window(mod_dir):\n"
+                 "def build_window():\n"
                  "    root = tk.Tk()\n    root.withdraw()\n"
                  "    nb = ttk.Notebook(root)\n    nb.add(ttk.Frame(nb), text='tab')\n"
-                 "    nb.pack()\n    return root\n")
+                 "    nb.pack()\n    return root\n\n"
+                 "def main(argv):\n"
+                 "    open('called.txt', 'w').write(repr(argv))\n"
+                 "    build_window().mainloop()\n    return 0\n")
     runner = os.path.join(tmp, "run.py")
     with io.open(runner, "w", encoding="utf-8") as fh:
         fh.write("import sys\n"
@@ -334,6 +337,9 @@ try:
         finished, code, err = False, None, ""
     check("**無いタブを頼んでも窓を閉じて終わる**（固まらない）", finished, "30 秒で終わらなかった")
     check("撮れなかったら 0 以外で終わる", finished and code not in (0, None), (code, err[-200:]))
+    marker = os.path.join(mod_dir, "called.txt")
+    called = io.open(marker, encoding="utf-8").read() if os.path.isfile(marker) else None
+    check("道具の main(argv) を空の並びで呼ぶ（build_window の引数の形に依らない）", called == "[]", (called, err[-200:]))
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 

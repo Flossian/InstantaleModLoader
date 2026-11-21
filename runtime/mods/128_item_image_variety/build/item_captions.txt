@@ -3279,3 +3279,383 @@ itm_i111_06	large_weapon	A golf club with a steel head.
 itm_i111_07	medium_weapon	A folding army shovel.
 itm_i111_08	long_weapon	A firefighter's long steel pry tool with a claw and a spike.
 itm_i111_09	large_weapon	A bamboo kendo practice sword.
+itm_i112_00	other_material	A pair of realistic synthetic eyeballs in a small red velvet-lined metal case.
+itm_i112_01	other_material	A thin pearlescent sheet of synthetic skin with a curled edge.
+itm_i112_02	magical_material	A translucent synthetic skin sheet with fine silver circuitry inside.
+itm_i112_03	other_material	A polished steel skeletal frame of a ribcage and spine.
+itm_i112_04	other_material	A white ceramic arm skeleton frame with gold alloy joints.
+itm_i112_05	other_material	A chrome-plated motorized joint component.
+itm_i112_06	other_material	A bundle of iridescent artificial muscle fibers bound with a steel clamp.
+itm_i112_07	other_material	A steel spool of translucent synthetic nerve fiber.
+itm_i112_08	tool	A steel hand skeleton with articulated finger joints and tiny actuators.
+itm_i112_09	relic	A mechanical steel heart with tubes and cables and a red glow.
+itm_i113_00	other_material	A translucent pink data chip glowing with soft neon light.
+itm_i113_01	other_material	A black microchip with gold pins and circuitry.
+itm_i113_02	magical_material	A glowing blue microchip encased in clear resin in a steel frame.
+itm_i113_03	magical_material	A hexagonal violet crystal with a glowing processor chip inside.
+itm_i113_04	other_material	A small chrome plug with a glowing magenta core.
+itm_i113_05	other_material	A steel connector with a glowing blue core.
+itm_i113_06	tool	A thick steel plug with glowing pink rings and a looped cable.
+itm_i113_07	tool	A steel plug wrapped with glowing pink neon wires.
+itm_i113_08	tool	A steel neural link headset trailing many fiber-optic cables.
+itm_i113_09	tool	A steel hub with four glowing pink ports and tangled cables.
+itm_i114_00	scroll	A glowing pink neon memory stick.
+itm_i114_01	relic	A golden memory module glowing with bright light.
+itm_i114_02	document	A worn dark grey metal data disc with etched patterns.
+itm_i114_03	scrap	A jagged glass data shards glowing with neon blue light.
+itm_i114_04	scrap	A cracked dark data cache with a glowing pink seam.
+itm_i114_05	scroll	A microchip sealed in a violet crystal case.
+itm_i114_06	other_material	A grey circuit module with a speaker grille and blue indicator lights.
+itm_i114_07	scrap	A steel motor unit with copper wiring.
+itm_i114_08	tool	A rugged steel battery pack with a glowing blue core.
+itm_i114_09	magical_material	A violet crystal core glowing inside a steel cage housing.
+itm_i115_00	potion	A plain silver aerosol spray can.
+itm_i115_01	potion	A dark green aerosol can with a glowing green light strip.
+itm_i115_02	potion	An iridescent holographic aerosol spray can with a faint blue glow.
+itm_i115_03	potion	A dark steel spray canister with a glowing blue light strip.
+itm_i115_04	potion	A silver spray can with blue stripes and a blue nozzle and a faint blue glow.
+itm_i115_05	potion	A silver spray can with pink stripes and a pink nozzle.
+itm_i115_06	potion	A white aerosol can with a red medical cross.
+itm_i115_07	potion	A chrome spray canister with a window of glowing blue liquid.
+itm_i115_08	medicine	A grey pressurized canister with a long thin nozzle tube and an orange band.
+itm_i115_09	medicine	A pale blue pressurized canister with a white snowflake label.
+itm_i116_00	potion	A small silver tube of translucent blue gel with a faint blue glow.
+itm_i116_01	potion	A steel canister of cyan gel with yellow and black hazard stripes and a faint cyan glow.
+itm_i116_02	potion	A clear glass tube of transparent gel with a steel cap.
+itm_i116_03	potion	A steel-framed glass ampoule of glowing magenta liquid.
+itm_i116_04	potion	A green and silver capsule with a faint inner glow.
+itm_i116_05	medicine	A clear adhesive patch with glowing cyan circuit patterns.
+itm_i116_06	medicine	A round translucent patch with a glowing cyan cross.
+itm_i116_07	medicine	A beige patch in an opened silver foil wrapper.
+itm_i116_08	medicine	A silver tube of shimmering paste with a blue stripe.
+itm_i116_09	medicine	A steel-capped glass tube of glowing golden liquid.
+itm_i117_00	medicine	A translucent bright green capsule glowing with inner light.
+itm_i117_01	medicine	A steel capsule with glowing white windows.
+itm_i117_02	medicine	A single pearly white capsule.
+itm_i117_03	medicine	A steel capsule with a glowing blue core.
+itm_i117_04	medicine	A translucent capsule with silver beads inside on a white dish.
+itm_i117_05	medicine	A pale green tablet stamped with a leaf emblem.
+itm_i117_06	medicine	A white ceramic dish of round white tablets.
+itm_i117_07	medicine	A translucent green lozenge in a sealed silver foil wrapper.
+itm_i117_08	medicine	A small steel tin of white tablets stamped with a gear emblem.
+itm_i117_09	medicine	A faceted translucent pink candy drop.
+itm_i118_00	tool	A tan adhesive electronic patch with a metal pad and thin wires.
+itm_i118_01	tool	A clear adhesive patch with a microchip and gold circuitry.
+itm_i118_02	tool	A white adhesive patch sealed in a clear sterile wrapper.
+itm_i118_03	tool	An orange self-heating patch in a silver foil wrapper.
+itm_i118_04	tool	A steel spray canister releasing a white mist.
+itm_i118_05	tool	A white medical case holding three laser-tipped instruments.
+itm_i118_06	tool	A small steel capsule with fine vents and a cyan glow.
+itm_i118_07	tool	A tube of thick red adhesive gel.
+itm_i118_08	tool	A glass dropper bottle of iridescent oil.
+itm_i118_09	tool	A pair of worn brown leather roll of steel scalpels and scissors.
+itm_i119_00	food	A clear squeeze pouch of golden jelly with a white spout.
+itm_i119_01	food	A silver foil pouch of thick brown curry.
+itm_i119_02	food	A silver squeeze tube of gel with a teal stripe.
+itm_i119_03	food	An open silver foil pouch of translucent jelly cubes.
+itm_i119_04	food	A clear squeeze pouch of bright blue jelly with a white spout and a faint blue glow.
+itm_i119_05	food	A grey compressed food bar in a clear plastic wrapper.
+itm_i119_06	food	A clear snack pack of dried scallops.
+itm_i119_07	drink	A slim black drink can with neon pink and cyan stripes and a faint magenta glow.
+itm_i119_08	drink	A clear squeeze pouch of cyan jelly drink with a white spout and a faint cyan glow.
+itm_i119_09	drink	A plain silver drink canister.
+itm_i120_00	clothing	A translucent black cyberpunk corset bodysuit with glowing blue seams and straps.
+itm_i120_01	clothing	A black heat-resistant cyberpunk jumpsuit with orange trim and many pockets.
+itm_i120_02	clothing	A long liquid silver metallic cyberpunk dress.
+itm_i120_03	clothing	An iridescent synthetic silk hooded cyberpunk cape.
+itm_i120_04	clothing	A lavender satin cyberpunk slip dress.
+itm_i120_05	clothing	A long pale blue sheer lace veil.
+itm_i120_06	clothing	A translucent mauve embroidered silk camisole and panties set.
+itm_i120_07	legwear	A pair of iridescent lavender thigh-high stockings with pink lace tops.
+itm_i120_08	legwear	A pair of glossy black polymer cyberpunk leggings.
+itm_i120_09	legwear	A pair of dark grey layered polymer cyberpunk shin guards.
+itm_i121_00	accessory	A steel cyberpunk ear cuff with glowing cyan LED tips.
+itm_i121_01	accessory	A steel ear-mounted auditory enhancer with a glowing cyan ring.
+itm_i121_02	accessory	A steel cyberpunk monocle with a dark lens and a hanging chain.
+itm_i121_03	accessory	A pair of iridescent cyberpunk sunglasses with a thin silver frame.
+itm_i121_04	accessory	A set of pointed mirror chrome artificial fingernails.
+itm_i121_05	accessory	A draped iridescent translucent face veil.
+itm_i121_06	headgear	A black cyberpunk visor with a glowing magenta lens.
+itm_i121_07	headgear	A white cyberpunk filter mask with a round brass filter.
+itm_i121_08	headgear	A pair of rugged black cyberpunk goggles with smoked lenses and amber sensors.
+itm_i121_09	body_armor	A white ceramic cyberpunk chest plate with a glowing cyan seam.
+itm_i130_00	shield	A dented riveted iron cooking pot shield.
+itm_i130_01	shield	A large dented steel pot with a domed lid and curved handles.
+itm_i130_02	shield	A rusted iron manhole cover shield with a handle.
+itm_i130_03	shield	A faded red octagonal road sign shield.
+itm_i130_04	shield	A round black rubber tire shield with steel straps.
+itm_i130_05	shield	A rectangular steel-framed riot shield with a scratched silver panel.
+itm_i130_06	shield	A dented round metal trash can lid shield.
+itm_i130_07	shield	A wooden shield covered with rusted corrugated tin sheets.
+itm_i130_08	shield	A rusted old car door shield with a cracked window.
+itm_i130_09	shield	An olive hard suitcase shield reinforced with leather straps and metal corners.
+itm_i132_00	metal	A matte black grooved cylindrical silencer.
+itm_i132_01	potion	A black pistol magazine with brass bullets.
+itm_i132_02	document	A black tablet with a glowing medical chart screen.
+itm_i132_03	tool	A square data chip with glowing blue circuit lines.
+itm_i132_04	other_material	A steel projectile with a glowing blue core.
+itm_i132_05	magical_material	A jagged violet glass shard with a faint inner glow.
+itm_i132_06	potion	A faceted crystal flacon of golden liquid with a silver stopper.
+itm_i132_07	potion	A dented rusty oil can with a warning label and a dripping spout.
+itm_i132_08	gem	A cloudy crystal ball with a red glow inside on a purple velvet cushion.
+itm_i132_09	medicine	A wooden mug of honey-colored ginger drink.
+itm_i133_00	tool	A cracked blue and white ceramic bowl of thick brown bean soup.
+itm_i133_01	tool	A glass teacup of clear herbal tea with dried leaves.
+itm_i133_02	tool	A frosted glass mug of golden beer with thick foam.
+itm_i133_03	other_material	A pale blue veined crystalline cheese on a small wooden board.
+itm_i133_04	other_material	A glossy amber candy stones.
+itm_i133_05	scroll	An ornate silver incense burner.
+itm_i133_06	medicine	A brilliant white crystal cluster glowing softly.
+itm_i133_07	other_material	A glowing multicolored feather.
+itm_i133_08	tool	A painted ceramic bowl of noodle soup with sliced meat.
+itm_i133_09	tool	A glass of iced coffee with ice cubes.
+itm_i122_00	medicine	An amber dropper bottle of clear liquid with dried herbs inside.
+itm_i122_01	medicine	An amber dropper bottle of golden herbal oil with a leaf label.
+itm_i122_02	medicine	A green glass bottle of herbal tincture with a handwritten label.
+itm_i122_03	medicine	A sealed foil packet of fine green herbal powder.
+itm_i122_04	plant	A folded cloth compress with green herbs on its face.
+itm_i122_05	plant	A metal spray bottle of green herbal mist.
+itm_i122_06	plant	A small glass bottle of thick lavender syrup.
+itm_i122_07	plant	An ornate crystal bottle of shimmering white liquid.
+itm_i122_08	plant	A round medicinal patch in a sterile foil wrapper.
+itm_i122_09	tool	A white medical case with a glowing blue cross.
+itm_i123_00	tool	A handheld plasma welder with a blue glowing tip and a coiled cable.
+itm_i123_01	tool	A handheld measuring device with fine-tipped probes and a green screen.
+itm_i123_02	tool	A compact metal sensor device with blinking red and cyan lights.
+itm_i123_03	tool	A compact metal pump with frost-covered tubes.
+itm_i123_04	tool	An open metal toolbox of micro tools and conductive paste.
+itm_i123_05	tool	An open waterproof survival kit packed with gear.
+itm_i123_06	tool	A matte black handheld communication radio.
+itm_i123_07	tool	A cylindrical metal battery cell glowing yellow.
+itm_i123_08	tool	A pressurized spray can of lubricant.
+itm_i123_09	tool	A heavy metal canister of thick oil.
+itm_i124_00	metal	A set of dark reinforced steel industrial bolts and nuts.
+itm_i124_01	metal	A small clear pouch of shiny titanium bolts.
+itm_i124_02	metal	A small jar of shimmering silver dust.
+itm_i124_03	metal	A pair of polished white ceramic plates.
+itm_i124_04	metal	A dense dark metal hunk with an iridescent sheen.
+itm_i124_05	scrap	A small metal cylindrical component.
+itm_i124_06	scrap	A broken piece of a circuit board with glowing chips.
+itm_i124_07	scrap	A gold-plated neural connector with circuit patterns.
+itm_i124_08	scrap	A cracked silicon chip with copper traces.
+itm_i124_09	other_material	A thin flexible translucent circuit sheet.
+itm_i125_00	other_material	A bundle of glowing multicolored fiber optic strands.
+itm_i125_01	other_material	A polished optical lens with an iridescent coating.
+itm_i125_02	other_material	A realistic prosthetic arm with synthetic skin and visible micro joints.
+itm_i125_03	other_material	A roll of high-tech fabric with a glowing hexagonal pattern.
+itm_i125_04	other_material	A small open silver tin of sparkling powder.
+itm_i125_05	magical_material	A small electronic module with a glowing cyan core.
+itm_i125_06	magical_material	A metal orb with glowing circuit patterns.
+itm_i125_07	tool	A heavy metal cube pulsing with pink light.
+itm_i125_08	tool	A metal device with glowing fiber-optic connectors.
+itm_i125_09	document	A scratched handheld electronic device with a cracked screen.
+itm_i126_00	food	A small clear cup of magenta jelly with a faint magenta glow.
+itm_i126_01	food	An aluminum food tube with a nutrition label.
+itm_i126_02	food	A foil-wrapped protein bar.
+itm_i126_03	food	A steaming compressed bar of pasta and vegetables.
+itm_i126_04	food	A small plastic tub of beige paste.
+itm_i126_05	drink	A paper tea bag in a clear plastic pouch.
+itm_i126_06	food	An opened can of synthetic meat with a pull-tab lid.
+itm_i126_07	food	A tray of nutrition cubes.
+itm_i126_08	food	A vacuum-packed rice ball.
+itm_i126_09	drink	A plastic bottle of blue electrolyte drink with a faint cyan glow.
+itm_i127_00	drink	A glass of glowing pink neon cocktail with a purple flower.
+itm_i127_01	drink	A black cocktail in a martini glass with a gold garnish.
+itm_i127_02	drink	A glass of misty white liquid with rising vapor.
+itm_i127_03	drink	A glass of purple berry juice with ice and blackberries.
+itm_i127_04	drink	A decanter of dark amber liqueur.
+itm_i127_05	drink	A coconut drink with a straw and a purple flower.
+itm_i127_06	drink	A tall glass of foamy golden ale with a palm leaf.
+itm_i127_07	drink	A glass of glowing blue smoothie with whipped cream.
+itm_i127_08	drink	A glass of tropical fruit juice with ice, an orange slice and a hibiscus.
+itm_i127_09	drink	A glass of sparkling water with ice and a lime slice.
+itm_i128_00	food	A breakfast plate of fresh fruits and golden toast.
+itm_i128_01	food	A slice of golden apple pie dusted with sugar.
+itm_i128_02	food	A juicy hamburger with spicy sauce and herbs.
+itm_i128_03	food	A seared salmon nigiri on a black lacquer board.
+itm_i128_04	food	A star-shaped fruit jelly with mango and kiwi.
+itm_i128_05	food	A plate of golden chicken nuggets with blue spice and a lime.
+itm_i128_06	food	A plate of caviar on small blinis.
+itm_i128_07	food	A steamed bun drizzled with honey.
+itm_i128_08	food	A plate of golden scones dusted with flour.
+itm_i128_09	food	A bowl of mashed potatoes with spices.
+itm_i129_00	clothing	A long coat embedded with glowing cyan circuits.
+itm_i129_01	body_armor	A sleek black long coat with a belt.
+itm_i129_02	headgear	A damaged sensor headgear with glowing orange lenses.
+itm_i129_03	legwear	A pair of slender silver metal leg supports.
+itm_i129_04	accessory	An iridescent seashell ornament with pearl drops.
+itm_i129_05	body_armor	A white polymer chest plate.
+itm_i129_06	headgear	A tactical helmet with a dark visor.
+itm_i129_07	legwear	A layered composite shin guard.
+itm_i129_08	clothing	A black bomber jacket with glowing pink neon lines.
+itm_i129_09	gauntlets	A pair of fingerless electronic gloves with glowing cyan panels.
+itm_i134_00	small_weapon	A compact metal laser cutter with a glowing cyan cell.
+itm_i134_01	small_weapon	A worn handheld laser cutter with a scratched casing.
+itm_i134_02	medium_weapon	A slender rapier with blue electric currents along the blade and a faint blue glow.
+itm_i134_03	medium_weapon	A curved vibro-blade kukri with a dark wrapped handle.
+itm_i134_04	medium_weapon	A light collapsible spear with a polished steel tip.
+itm_i134_05	large_weapon	A large hammer with a pulsing purple energy core and a faint purple glow.
+itm_i134_06	long_weapon	An elegant long rod with gold and navy patterns.
+itm_i134_07	throwable_weapon	A small square metal device with a glowing cyan core thrown at electronics.
+itm_i134_08	throwable_weapon	A spherical canister with a textured grip and a pull-ring.
+itm_i134_09	long_weapon	A long spear with a glowing blue tip.
+itm_i136_00	tool	A smooth wooden rolling pin worn pale by years of use.
+itm_i136_01	tool	A polished brass measuring cup with volume markings.
+itm_i136_02	tool	A folding wooden stool with rusted metal hinges and a worn seat.
+itm_i136_03	tool	A cracked wooden photo frame with faded brass corners and an empty backing.
+itm_i136_04	tool	A long deep crimson silk ribbon.
+itm_i136_05	other_material	A heavy burlap sack of white flour.
+itm_i136_06	tool	A sleek surfboard with pink and cyan neon edges and a faint magenta glow.
+itm_i136_07	tool	A pair of worn wooden chopsticks.
+itm_i136_08	document	A worn handwritten notebook with nautical diagrams.
+itm_i136_09	document	An old cookbook with illustrations of sea creatures.
+itm_i135_00	small_weapon	A blackened iron ladle with a worn wooden handle.
+itm_i135_01	medium_weapon	A large dented iron ladle with a scorched wooden handle.
+itm_i135_02	small_weapon	A heavy grease-stained iron spanner.
+itm_i135_03	small_weapon	A sooty steel spatula with a wooden handle.
+itm_i135_04	small_weapon	A short wooden stick with cloth wrapped around its grip.
+itm_i135_05	throwable_weapon	A short piece of rusted iron pipe.
+itm_i135_06	throwable_weapon	A small leather pouch of pebbles.
+itm_i135_07	medium_weapon	A black iron frying pan.
+itm_i135_08	small_weapon	A metal meat tenderizer.
+itm_i135_09	medium_weapon	A dented metal baseball bat.
+itm_i137_00	potion	A slim glass vial of glowing blue liquid with a metal cap.
+itm_i137_01	potion	An amber dropper bottle of oil with a shimmering iridescent glob inside.
+itm_i137_02	potion	A heavy round glass flask with a pulsing red light inside.
+itm_i137_03	potion	A slim metal ampoule with a red stripe and a snap-off tip.
+itm_i137_04	potion	A sleek black bottle with a gold label.
+itm_i137_05	potion	A small vial of deep red liquid in a metal holder.
+itm_i137_06	potion	A small crystal vial of clear sparkling liquid.
+itm_i137_07	potion	A green glass vial with a cracked paper label and a cork.
+itm_i137_08	potion	A small vial of glowing amber liquid with a silver cap.
+itm_i137_09	medicine	A small jar of glossy black pills with a warning seal.
+itm_i138_00	small_weapon	A compact black stun baton with glowing blue electrode tips.
+itm_i138_01	small_weapon	A black baton with exposed copper coils and a glowing blue tip.
+itm_i138_02	small_weapon	A worn iron crowbar.
+itm_i138_03	small_weapon	A small dagger of tightly woven nano fibers.
+itm_i138_04	small_weapon	A white composite hilt with a glowing blue core and no blade.
+itm_i138_05	medium_weapon	A polished chrome short sword.
+itm_i138_06	medium_weapon	A high-frequency blade with a glowing blue edge.
+itm_i138_07	medium_weapon	An electrified saber with navy accents and a faint blue glow.
+itm_i138_08	long_weapon	A long sword with a white ceramic blade glowing faint blue.
+itm_i138_09	long_weapon	A long spear with a white-hot tip and copper wiring along the black shaft.
+itm_i139_00	body_armor	A segmented chest armor with exposed hydraulic joints.
+itm_i139_01	body_armor	A thick grey ballistic plate vest with faded military markings.
+itm_i139_02	body_armor	A white armor chest plate with a hexagonal pattern.
+itm_i139_03	body_armor	A lightweight dark carbon fiber vest.
+itm_i139_04	clothing	A neon-patterned jacket with purple and teal panels.
+itm_i139_05	gauntlets	A pair of armored gauntlets with glowing teal circuits along the fingers.
+itm_i139_06	gauntlets	A pair of black gloves covered in glowing pink fiber-optic wires.
+itm_i139_07	accessory	A slim silver headband with contact points and indicator lights.
+itm_i139_08	accessory	A sleek earpiece with a blue LED.
+itm_i139_09	headgear	A tactical visor with a glowing blue HUD.
+itm_i140_00	scrap	A small pile of mechanical parts with gears, springs and chips.
+itm_i140_01	other_material	A torn piece of synthetic skin with exposed circuit lines.
+itm_i140_02	other_material	A set of dark grey silicone gaskets.
+itm_i140_03	scrap	A pair of thin dark carbon fiber plates.
+itm_i140_04	scrap	A greasy silver servo motor.
+itm_i140_05	scrap	A rusted small cooling unit with blue coolant residue.
+itm_i140_06	metal	A dented black exoskeleton forearm plate with hydraulic joints.
+itm_i140_07	metal	A spool of silver welding rod in a clear case.
+itm_i140_08	magical_material	A glowing holographic data cube with iridescent patterns.
+itm_i140_09	scrap	A box of armor-piercing bullets.
+itm_i141_00	tool	A handheld wire gun with a coiled cable.
+itm_i141_01	tool	A pair of broken earbuds with frayed wires.
+itm_i141_02	tool	A small white spherical robot with a blue eye light.
+itm_i141_03	tool	A handheld monitor showing a pulse line.
+itm_i141_04	tool	A pair of open black case of precision screwdrivers, probes and tweezers.
+itm_i141_05	tool	A handheld electric brush with a faint blue glow.
+itm_i141_06	tool	A small tube of grey-white polishing paste.
+itm_i141_07	tool	A corroded metal nozzle with green residue.
+itm_i141_08	tool	A broken black speaker cone fragment.
+itm_i141_09	tool	A neon-trimmed multitool with a holographic display and a faint cyan glow.
+itm_i142_00	treasure	A small pack of pocket tissues.
+itm_i142_01	treasure	A red lipstick in a gold case.
+itm_i142_02	treasure	A small data storage card.
+itm_i142_03	medicine	A blister sheet of white pills.
+itm_i142_04	medicine	A gold compact with pink powder and a brush.
+itm_i142_05	medicine	A thin skin patch with an embedded sensor.
+itm_i142_06	medicine	A thin white cooling sheet in a sealed clear pack.
+itm_i142_07	other_material	A lifelike porcelain doll.
+itm_i142_08	document	A faded family photograph.
+itm_i142_09	document	A forged passport with a holographic emblem.
+itm_i143_00	relic	A smooth seamless white-grey board fragment.
+itm_i143_01	relic	A cracked glass panel with faint glowing lines.
+itm_i143_02	relic	A thin twisted unrusted metal strut.
+itm_i143_03	relic	A small unrusted ancient joint mechanism.
+itm_i143_04	relic	A blank white faceplate with a fine mesh on the back.
+itm_i143_05	relic	A thick white shoulder plate with a metal clasp.
+itm_i143_06	scrap	A detached pale construct arm with jointed fingers.
+itm_i143_07	relic	A large flawless metal ring link.
+itm_i143_08	relic	A white fragment of an ancient construct core glowing warm gold.
+itm_i143_09	relic	A hard bone-like rod with a bundle of fine wires in its core.
+itm_i144_00	tool	A grey hard-shell case with a seamless latch.
+itm_i144_01	relic	A thick seamless grey metal plate etched with unreadable symbols.
+itm_i144_02	relic	A corroded sealing ring stamped with tiny glyphs.
+itm_i144_03	scrap	A thin metal plate etched with lines and faint script.
+itm_i144_04	scrap	A pale metal valve cap crusted with white powder.
+itm_i144_05	scrap	A small dark jointed metal piece with fine grooves.
+itm_i144_06	relic	A thin pale grey panel densely etched with symbols.
+itm_i144_07	metal	A dull metal plate with faint unreadable inscriptions.
+itm_i144_08	relic	A curved white shell fragment with precise joint seams.
+itm_i144_09	scrap	A cracked glass panel wrapped in grey cloth.
+itm_i145_00	document	A small paper note of stone cargo prices.
+itm_i145_01	document	A small folded note of coded words.
+itm_i145_02	document	A leather-bound ledger of charcoal buyers.
+itm_i145_03	document	A bundle of crudely forged wooden toll passes.
+itm_i145_04	document	An open roll call book with repeated names.
+itm_i145_05	document	A wooden tag listing water rations on a cord.
+itm_i145_06	document	A bundle of stolen manuscript copies tied with string.
+itm_i145_07	document	A burned commander's journal.
+itm_i145_08	document	A bundle of copied sealing talismans.
+itm_i145_09	document	A formal witness letter sealed with red wax.
+itm_i146_00	treasure	A bundle of mixed soldier identity tags on a cord.
+itm_i146_01	document	A pile of small dented miner identification tags.
+itm_i146_02	document	A scorched metal soldier tag.
+itm_i146_03	treasure	A split wooden village meeting-hall token.
+itm_i146_04	treasure	A scorched wooden family name tag.
+itm_i146_05	treasure	A pair of small worn child's shoes.
+itm_i146_06	treasure	An old scribe's name tag on a red cord.
+itm_i146_07	treasure	A thin card with a tiny faded portrait.
+itm_i146_08	treasure	Broken fragments of a red wax seal.
+itm_i146_09	document	A small worn hidden logbook.
+itm_i147_00	other_material	Two scorched war banners tied together.
+itm_i147_01	other_material	A scorched relief corps armband.
+itm_i147_02	other_material	A worn leather jerkin.
+itm_i147_03	other_material	A worn soldier tunic turned inside out.
+itm_i147_04	other_material	A wooden yoke with rope bindings.
+itm_i147_05	tool	A worn cavalry saddle with its emblem scraped off.
+itm_i147_06	tool	A long heavy iron splitting wedge.
+itm_i147_07	tool	A thin bone whistle on a dark cord.
+itm_i147_08	tool	A small worn wooden whistle with three finger holes.
+itm_i147_09	tool	A broken brass measuring rod with tick marks.
+itm_i148_00	creature_part	A stiff black boar pelt soaked in oil.
+itm_i148_01	creature_part	A clay jar of thick yellow toad oil.
+itm_i148_02	creature_part	A grey toad skin covered in warts.
+itm_i148_03	creature_part	A thick boar tusk fused with a second tusk.
+itm_i148_04	creature_part	A dried pink lizard tongue.
+itm_i148_05	creature_part	A dried chalk-white leech hide.
+itm_i148_06	creature_part	A dried bundle of bear ears tied together.
+itm_i148_07	creature_part	A large clouded pale wolf eye.
+itm_i148_08	creature_part	A dark cracked antler.
+itm_i148_09	creature_part	A thick grey rat hide with pale streaks.
+itm_i149_00	tool	A pair of thick worn leather work gloves.
+itm_i149_01	medium_weapon	An old iron fire poker with a hooked tip and a carved wooden handle.
+itm_i149_02	medium_weapon	A salt-crusted rusty iron pick with a worn wooden handle.
+itm_i149_03	tool	An old iron chisel with a chipped edge and a carved wooden handle.
+itm_i149_04	magical_material	A heavy iron bell clapper with a faint white sheen.
+itm_i149_05	metal	A broken iron bell clapper etched with an unreadable glyph.
+itm_i149_06	drink	A small wooden barrel of mead with a brass tap.
+itm_i149_07	ore	A small cloth pouch filled with fine white powder.
+itm_i149_08	other_material	A burlap sack of salt sealed with red wax.
+itm_i149_09	tool	An open wooden tinderbox holding flint and a steel striker.
+itm_i150_00	creature_part	A massive curved beast tusk scarred at its base.
+itm_i150_01	creature_part	A pair of long rodent incisors with a dull metallic sheen.
+itm_i150_02	creature_part	A brittle dog fang stained black.
+itm_i150_03	creature_part	A small black fang with its root wrapped in cracked leather.
+itm_i150_04	creature_part	A chunk of white salt crust with a scale pattern.
+itm_i150_05	potion	A dark green gallbladder sac tied with cord.
+itm_i150_06	creature_part	A brittle shell plate with rust-brown stains.
+itm_i150_07	creature_part	A thick turtle shell fragment with dried roots.
+itm_i150_08	magical_material	A light hollow wing bones with torn membrane.
+itm_i150_09	magical_material	A hollow white lime shell shaped like a forearm.

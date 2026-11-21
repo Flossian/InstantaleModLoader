@@ -162,7 +162,7 @@ def main(say):
 
 | ファイル | すること |
 |---|---|
-| `toolshot.py MOD タブ [--out]` | MOD の設定画面を開き、指定のタブ（名前か番号）を選んで撮る。`check_tool_screens.py` は最初のタブしか撮れない |
+| `toolshot.py MOD タブ [--out] [--frame 見出し] [--size 幅x高さ]` | MOD の設定画面を道具の `main()` から開き、指定のタブ（名前か番号）を選んで撮る。`--frame` は見出しにその文字を含む枠までスクロールする。タブの無い画面は `0` で全体を撮る。`check_tool_screens.py` は最初のタブしか撮れない |
 | `modsettings.py MOD show / set 名=値 … / reset` | `settings/mod_settings.json` の MOD の欄を書き換える。次の注入から効き、注入し直しても残る。試し終えたら `reset` |
 | `records.py manager [-n 件] [--system]` | ゲームが残した LLM の入出力の記録を新しい順に読む。`out/drive/records_<manager>.txt` にも書く |
 

@@ -588,6 +588,16 @@
     "sheet": "stw11",
     "source": "sf_weapons/sf_rugged_throw_fist.png",
     "name": "SF武器_無骨な投げる武器と拳の武器"
+   },
+   {
+    "sheet": "i134",
+    "source": "sf_weapons/weapon_sf_i134.png",
+    "name": "SF武器_切断機と電気の刃と投げる装置"
+   },
+   {
+    "sheet": "i138",
+    "source": "sf_weapons/weapon_sf_i138.png",
+    "name": "SF武器_警棒と刃"
    }
   ]
  },
@@ -680,6 +690,11 @@
     "sheet": "ipa3",
     "source": "modern_sf/wasteland_clubs.png",
     "name": "現代とSF_荒野の手製の棍棒と手斧（描き直し）"
+   },
+   {
+    "sheet": "i135",
+    "source": "modern_sf/weapon_postapoc_i135.png",
+    "name": "荒野の武器_台所道具と運動用品"
    }
   ]
  },
@@ -1008,6 +1023,31 @@
     "sheet": "wca1",
     "source": "wear/wear_cyber_armor.png",
     "name": "防具類_サイバーパンクの胴"
+   },
+   {
+    "sheet": "i120",
+    "source": "wear/wear_cyber_i120.png",
+    "name": "防具類_サイバーパンクの服と脚"
+   },
+   {
+    "sheet": "i121",
+    "source": "wear/wear_cyber_i121.png",
+    "name": "防具類_サイバーパンクの装身具と頭"
+   },
+   {
+    "sheet": "i129",
+    "source": "wear/wear_cyber_i129.png",
+    "name": "防具類_サイバーパンクの外套と頭と脚"
+   },
+   {
+    "sheet": "i129b",
+    "source": "wear/wear_cyber_i129b.png",
+    "name": "防具類_サイバーパンクの指なし手袋の描き直し"
+   },
+   {
+    "sheet": "i139",
+    "source": "wear/wear_cyber_i139.png",
+    "name": "防具類_サイバーパンクの胸当てと籠手と頭の装備"
    }
   ]
  },
@@ -1075,6 +1115,11 @@
     "sheet": "w08",
     "source": "wear/wear_postapoc.png",
     "name": "防具類_ポストアポカリプス"
+   },
+   {
+    "sheet": "i130",
+    "source": "wear/wear_postapoc_i130.png",
+    "name": "防具類_ポストアポカリプスの手近な物の盾"
    }
   ]
  },
@@ -1161,6 +1206,36 @@
     "sheet": "i51",
     "source": "parts/part_sf_machines.png",
     "name": "機械部品_SFの機械の体と装置"
+   },
+   {
+    "sheet": "i112",
+    "source": "parts/part_sf_i112.png",
+    "name": "機械部品_人工の体の部品"
+   },
+   {
+    "sheet": "i113",
+    "source": "parts/part_sf_i113.png",
+    "name": "機械部品_チップとプラグと接続具"
+   },
+   {
+    "sheet": "i114",
+    "source": "parts/part_sf_i114.png",
+    "name": "機械部品_記憶媒体と電子部品"
+   },
+   {
+    "sheet": "i124",
+    "source": "parts/part_sf_i124.png",
+    "name": "機械部品_ボルトと板と回路の破片"
+   },
+   {
+    "sheet": "i125",
+    "source": "parts/part_sf_i125.png",
+    "name": "機械部品_光る部品と装置"
+   },
+   {
+    "sheet": "i140",
+    "source": "parts/part_sf_i140.png",
+    "name": "機械部品_機械の部品"
    }
   ]
  },
@@ -1234,6 +1309,16 @@
     "sheet": "i77",
     "source": "parts/part_magitech_i77.png",
     "name": "機械部品_古代の光る機械（欠片）"
+   },
+   {
+    "sheet": "i143",
+    "source": "parts/part_magitech_i143.png",
+    "name": "魔導機械_古代の施設の残骸（白い部品）"
+   },
+   {
+    "sheet": "i144",
+    "source": "parts/part_magitech_i144.png",
+    "name": "魔導機械_古代の施設の残骸（灰色の板と箱）"
    }
   ]
  },
@@ -1248,6 +1333,16 @@
     "sheet": "i3",
     "source": "food/food_ration.png",
     "name": "食料_携行食"
+   },
+   {
+    "sheet": "i119",
+    "source": "food/food_ration_i119.png",
+    "name": "食料_パウチと缶"
+   },
+   {
+    "sheet": "i126",
+    "source": "food/food_ration_i126.png",
+    "name": "食料_携行食の包みと容器"
    }
   ]
  },
@@ -1386,6 +1481,16 @@
     "sheet": "i12",
     "source": "food/food_western.png",
     "name": "食料_西洋料理"
+   },
+   {
+    "sheet": "i127",
+    "source": "food/food_dishes_i127.png",
+    "name": "食料_サイバーパンクの街の飲み物"
+   },
+   {
+    "sheet": "i128",
+    "source": "food/food_dishes_i128.png",
+    "name": "食料_サイバーパンクの街の料理"
    }
   ]
  },
@@ -1493,6 +1598,36 @@
     "sheet": "i53",
     "source": "medical/medic_modern_devices.png",
     "name": "医療品_現代とSFの医療品と器具"
+   },
+   {
+    "sheet": "i115",
+    "source": "medical/medic_modern_i115.png",
+    "name": "医療品_スプレー缶"
+   },
+   {
+    "sheet": "i116",
+    "source": "medical/medic_modern_i116.png",
+    "name": "医療品_ジェルとチューブと貼り薬"
+   },
+   {
+    "sheet": "i117",
+    "source": "medical/medic_modern_i117.png",
+    "name": "医療品_カプセルと錠剤"
+   },
+   {
+    "sheet": "i118",
+    "source": "medical/medic_modern_i118.png",
+    "name": "医療品_医療と整備の小物"
+   },
+   {
+    "sheet": "i122",
+    "source": "medical/medic_modern_i122.png",
+    "name": "医療品_薬草の瓶と医療の小物"
+   },
+   {
+    "sheet": "i137",
+    "source": "medical/medic_modern_i137.png",
+    "name": "医療品_薬瓶とアンプル"
    }
   ]
  },
@@ -1585,6 +1720,16 @@
     "sheet": "i101",
     "source": "monster_materials/material_creature_i101.png",
     "name": "素材_獣の皮と骨"
+   },
+   {
+    "sheet": "i148",
+    "source": "monster_materials/material_creature_i148.png",
+    "name": "魔物の素材_獣の皮と牙と油"
+   },
+   {
+    "sheet": "i150",
+    "source": "monster_materials/material_creature_i150.png",
+    "name": "魔物の素材_牙と殻"
    }
   ]
  },
@@ -1609,6 +1754,16 @@
     "sheet": "i103",
     "source": "modern_sf/material_modern_i103.png",
     "name": "素材_人工の結晶と鉱石"
+   },
+   {
+    "sheet": "i132",
+    "source": "modern_sf/material_modern_i132.png",
+    "name": "素材_現代とSFの雑品"
+   },
+   {
+    "sheet": "i142",
+    "source": "modern_sf/material_modern_i142.png",
+    "name": "素材_身の回りの小物"
    }
   ]
  },
@@ -1653,6 +1808,26 @@
     "sheet": "i74",
     "source": "tools/tool_fantasy_i74.png",
     "name": "道具_金属片と廃材"
+   },
+   {
+    "sheet": "i133",
+    "source": "tools/tool_fantasy_i133.png",
+    "name": "道具_食べ物と不思議な品"
+   },
+   {
+    "sheet": "i136",
+    "source": "tools/tool_fantasy_i136.png",
+    "name": "道具_台所の道具と日用品と本"
+   },
+   {
+    "sheet": "i147",
+    "source": "tools/tool_fantasy_i147.png",
+    "name": "道具_布と鞍と笛"
+   },
+   {
+    "sheet": "i149",
+    "source": "tools/tool_fantasy_i149.png",
+    "name": "道具_鑿と鐘の舌と袋"
    }
   ]
  },
@@ -1697,6 +1872,16 @@
     "sheet": "i54b",
     "source": "modern_sf/documents_badges.png",
     "name": "道具_鉄道と通行の証（近世）"
+   },
+   {
+    "sheet": "i123",
+    "source": "tools/tool_genre_i123.png",
+    "name": "道具_工業の工具と装置"
+   },
+   {
+    "sheet": "i141",
+    "source": "tools/tool_genre_i141.png",
+    "name": "道具_サイバーパンクの道具と小さな機械"
    }
   ]
  },
@@ -1884,6 +2069,16 @@
     "sheet": "i110",
     "source": "documents/document_fantasy_i110.png",
     "name": "文書_本と地図と告知（中世）"
+   },
+   {
+    "sheet": "i145",
+    "source": "documents/document_fantasy_i145.png",
+    "name": "文書_書付と帳面"
+   },
+   {
+    "sheet": "i146",
+    "source": "documents/document_fantasy_i146.png",
+    "name": "文書_名札と形見"
    }
   ]
  },

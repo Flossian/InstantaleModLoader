@@ -682,8 +682,8 @@
         "en": "weapon_sf"
       },
       "note": {
-        "ja": "280枚",
-        "en": "280 images"
+        "ja": "300枚",
+        "en": "300 images"
       }
     },
     "SET_WEAPON_WA": {
@@ -760,8 +760,8 @@
         "en": "weapon_postapoc"
       },
       "note": {
-        "ja": "30枚",
-        "en": "30 images"
+        "ja": "40枚",
+        "en": "40 images"
       }
     },
     "SET_WEAPON_HIGHFANTASY": {
@@ -1072,8 +1072,8 @@
         "en": "wear_cyber"
       },
       "note": {
-        "ja": "271枚",
-        "en": "271 images"
+        "ja": "311枚",
+        "en": "311 images"
       }
     },
     "SET_WEAR_SF": {
@@ -1150,8 +1150,8 @@
         "en": "wear_postapoc"
       },
       "note": {
-        "ja": "135枚",
-        "en": "135 images"
+        "ja": "145枚",
+        "en": "145 images"
       }
     },
     "SET_WEAR_WESTERN": {
@@ -1254,8 +1254,8 @@
         "en": "part_sf"
       },
       "note": {
-        "ja": "112枚",
-        "en": "112 images"
+        "ja": "172枚",
+        "en": "172 images"
       }
     },
     "SET_PART_STEAMPUNK": {
@@ -1306,8 +1306,8 @@
         "en": "part_magitech"
       },
       "note": {
-        "ja": "114枚",
-        "en": "114 images"
+        "ja": "134枚",
+        "en": "134 images"
       }
     },
     "SET_FOOD_RATION": {
@@ -1332,8 +1332,8 @@
         "en": "food_ration"
       },
       "note": {
-        "ja": "93枚",
-        "en": "93 images"
+        "ja": "113枚",
+        "en": "113 images"
       }
     },
     "SET_FOOD_BASIC": {
@@ -1384,8 +1384,8 @@
         "en": "food_dishes"
       },
       "note": {
-        "ja": "462枚",
-        "en": "462 images"
+        "ja": "482枚",
+        "en": "482 images"
       }
     },
     "SET_FOOD_EARLYMODERN": {
@@ -1462,8 +1462,8 @@
         "en": "medic_modern"
       },
       "note": {
-        "ja": "192枚",
-        "en": "192 images"
+        "ja": "252枚",
+        "en": "252 images"
       }
     },
     "SET_MEDIC_EARLYMODERN": {
@@ -1540,8 +1540,8 @@
         "en": "material_creature"
       },
       "note": {
-        "ja": "207枚",
-        "en": "207 images"
+        "ja": "227枚",
+        "en": "227 images"
       }
     },
     "SET_MATERIAL_MODERN": {
@@ -1566,8 +1566,8 @@
         "en": "material_modern"
       },
       "note": {
-        "ja": "113枚",
-        "en": "113 images"
+        "ja": "133枚",
+        "en": "133 images"
       }
     },
     "SET_TOOL_FANTASY": {
@@ -1592,8 +1592,8 @@
         "en": "tool_fantasy"
       },
       "note": {
-        "ja": "167枚",
-        "en": "167 images"
+        "ja": "207枚",
+        "en": "207 images"
       }
     },
     "SET_TOOL_GENRE": {
@@ -1618,8 +1618,8 @@
         "en": "tool_genre"
       },
       "note": {
-        "ja": "94枚",
-        "en": "94 images"
+        "ja": "114枚",
+        "en": "114 images"
       }
     },
     "SET_TOOL_JAPANESE": {
@@ -1826,8 +1826,8 @@
         "en": "document_fantasy"
       },
       "note": {
-        "ja": "30枚",
-        "en": "30 images"
+        "ja": "50枚",
+        "en": "50 images"
       }
     },
     "SET_DOCUMENT_EARLYMODERN": {
