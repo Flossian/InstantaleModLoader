@@ -2479,6 +2479,8 @@ NPC や第三者が起こした犯罪を、ゲームが主人公の犯罪とし�
 | `244_probe_ability_reads` | ゲームが能力値をどこで読み、そこから作る値（攻撃力・魔力・防御・最大 HP）をいつ組み直すかを録る。`update_ability_scores` / `update_max_hp` の前後で変わった項目と呼び出し元、能力値と攻撃力などへの代入、`calculate_attribute`（負傷や消耗での目減り）の引数と戻り、印象の計算に渡った魅力（ローダの連携 API が足した魅力の補正と並べて）を残す。戦闘の開始で1プロセス1回、フックする前の元の素点の計算と `get_npc_defense` を、乱数を同じ状態に戻しながら、攻撃力だけ・`ability_scores` だけ・`original_ability_scores` だけを変えて呼び比べる（変えた値はすぐ戻す）。能力値の補正をゲームが読む所で足すローダの連携 API と、`802_equipment_ability_bonus` をそこへ移す下調べ。出力は `out\ability_reads.log` / `out\ability_reads.jsonl` |
 | `245_probe_shop_negotiation` | 店の売買の画面で値切ったとき、決まった額が品のどこに書かれ、いつまで残るかを録る。`shopping_negotiator` に送った文と返った `player_attempt`、`ShoppingNegotiateManager` の前後で動いた店と手持ちの品の `買価` / `売価` と所持金を残す。値切った品はその後も id で追い、一覧の描き直し・品の詳細・売買・ゲームの付け直し・保存・画面を閉じる、の後で額が動いたら、いまローダで値段を決めている MOD と一緒に書く。値段の MOD を入れると値切りが効かないという指摘の切り分け。出力は `out\shop_negotiation.log` / `out\shop_negotiation.jsonl` |
 | `246_probe_charamake_traits` | キャラ作成画面が特質をどこに持ち、特質のウィンドウが何でできているかを録る。特質を作る・消す・ランダム作成・プリセットの読み込みの前後の `StoryApp.character_vm` の特質の欄、`TraitPopup` が受け取る名前・説明・消費の文と部品のツリー、`TraitButton` の番号、`TraitVM.to_dict`、`create_trait` の引数と戻りを残す。`346_player_trait_effects` の効果を作成画面の特質のウィンドウに出すための下調べ。出力は `out\charamake_traits.log` |
+| `247_probe_labor` | 役場の労働と裏の事務所の闇労働の流れを録る。賃金の出どころ、満了の割増が入る時点、途中でやめたときの扱い、各段階の暦と所持金の動き、労働の生成関数が呼ばれるか、労働中のセーブが対象。出力は `out\labor.log` / `out\labor.jsonl` |
+| `248_probe_medical` | 医療施設の治療で何が起きるかを録る。怪我が部位ごとにいくつ戻るか、体力・その上限・疲労の印・戦闘の HP が戻るか、暦と所持金の動き、料金が決まる時点、人生の記録に足される文、治療中のセーブが対象。出力は `out\medical.log` / `out\medical.jsonl` |
 
 ---
 

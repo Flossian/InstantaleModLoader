@@ -154,7 +154,9 @@
     "243_probe_value_curves",
     "244_probe_ability_reads",
     "245_probe_shop_negotiation",
-    "246_probe_charamake_traits"
+    "246_probe_charamake_traits",
+    "247_probe_labor",
+    "248_probe_medical"
   ],
   "disabled": []
 }

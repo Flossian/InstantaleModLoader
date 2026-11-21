@@ -1,0 +1,703 @@
+{
+  "entry": "labor_overhaul.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Jobs, incidents and seniority for labour",
+    "ja": "労働に職種と出来事を足す"
+  },
+  "description": {
+    "en": "Labour at the administrative office becomes a list of jobs at the town's own facilities: pay follows your ability scores and how long you have worked for that employer, incidents ask for a choice between terms, and town events change the pay or ask for hands. Illegal labour at the underworld office pays 2x to 4x by danger, with crackdowns, retaliation and betrayal that your ability scores make less likely",
+    "ja": "役場の労働が、その街の施設の仕事の一覧になる（3件が月ごとに入れ替わる）。賃金は能力値と雇い主ごとの勤続で変わり、働く合間に出来事が起きて選択肢で応じる。街の出来事で賃金が変わり、困り事には臨時の募集が出る。裏の事務所の闇労働は危険度に応じて賃金が 2〜4 倍になり、取り締まり・仕返し・裏切りが起きる（能力値が高いほど起きにくい）"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "state": [
+    "labor_overhaul"
+  ],
+  "settings": {
+    "TERM_DAYS": {
+      "type": "int",
+      "default": 90,
+      "min": 1,
+      "max": 720,
+      "label": {
+        "ja": "役場の「働く」1回の長さ（日）",
+        "en": "Days per work term at the office"
+      },
+      "note": {
+        "ja": "29歳までの長さ。素のゲームは 90（3ヵ月）。年齢の決まりが入っていれば、30歳から5歳ごとに3分の1ずつ伸びる（賃金は増えない）。賃金はこの長さに比例する",
+        "en": "Length up to age 29. The game's own value is 90 (3 months). With the age rule on, it grows by a third every 5 years from 30 (pay does not). Pay scales with this length"
+      }
+    },
+    "SHORT_TERMS": {
+      "type": "int",
+      "default": 4,
+      "min": 1,
+      "max": 48,
+      "label": {
+        "ja": "短い契約の回数",
+        "en": "Terms in the short contract"
+      },
+      "note": {
+        "ja": "素のゲームは 4（29歳までは12ヵ月）",
+        "en": "The game's own value is 4 (12 months up to age 29)"
+      }
+    },
+    "LONG_TERMS": {
+      "type": "int",
+      "default": 8,
+      "min": 1,
+      "max": 96,
+      "label": {
+        "ja": "長い契約の回数",
+        "en": "Terms in the long contract"
+      },
+      "note": {
+        "ja": "素のゲームは 8（29歳までは24ヵ月）",
+        "en": "The game's own value is 8 (24 months up to age 29)"
+      }
+    },
+    "ILLEGAL_TERM_DAYS": {
+      "type": "int",
+      "default": 90,
+      "min": 1,
+      "max": 720,
+      "label": {
+        "ja": "闇労働の1期の長さ（日）",
+        "en": "Days per term of illegal labour"
+      },
+      "note": {
+        "ja": "29歳までの長さ。素のゲームは 90（3ヵ月）。年齢では役場と同じく伸びる",
+        "en": "Length up to age 29. The game's own value is 90 (3 months). It grows with age like the office"
+      }
+    },
+    "ILLEGAL_TERMS": {
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 48,
+      "label": {
+        "ja": "闇労働の期の数",
+        "en": "Terms of illegal labour"
+      },
+      "note": {
+        "ja": "素のゲームは 3",
+        "en": "The game's own value is 3"
+      }
+    },
+    "AGE_RULES": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "年齢の決まり",
+        "en": "Age rule"
+      },
+      "note": {
+        "ja": "素のゲームと同じく、30歳から5歳ごとに1回が長くなり、老いると働けなくなる（乞食への道が出る）",
+        "en": "As in the base game, terms get longer every 5 years from 30 and old characters are turned away (and offered begging)"
+      }
+    },
+    "OFFICE_AGE_LIMIT": {
+      "type": "int",
+      "default": 55,
+      "min": 1,
+      "max": 200,
+      "label": {
+        "ja": "役場で断られる年齢",
+        "en": "Age turned away at the office"
+      },
+      "note": {
+        "ja": "素のゲームは 55",
+        "en": "The game's own value is 55"
+      }
+    },
+    "ILLEGAL_AGE_LIMIT": {
+      "type": "int",
+      "default": 50,
+      "min": 1,
+      "max": 200,
+      "label": {
+        "ja": "裏の事務所で断られる年齢",
+        "en": "Age turned away at the underworld office"
+      },
+      "note": {
+        "ja": "素のゲームは 50",
+        "en": "The game's own value is 50"
+      }
+    },
+    "EVENT_PERCENT": {
+      "type": "int",
+      "default": 50,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "出来事が起きる確率（%）",
+        "en": "Incident chance (%)"
+      },
+      "note": {
+        "ja": "90日あたりの確率。1回の長さを短くすると、1回あたりの確率も同じ割合で下がる。0 で起きない",
+        "en": "Per 90 days. Shorter terms get a proportionally lower chance each. 0 turns incidents off"
+      }
+    },
+    "ABILITY_MAX_PERCENT": {
+      "type": "int",
+      "default": 200,
+      "min": 100,
+      "max": 500,
+      "label": {
+        "ja": "能力値による賃金の上限（%）",
+        "en": "Top pay rate from ability scores (%)"
+      },
+      "note": {
+        "ja": "仕事に効く能力値2つの平均が 30 のときの賃金。11 で 100%。100 にすると能力値で賃金が上がらない",
+        "en": "Pay when the two abilities the job uses average 30. 11 gives 100%. 100 stops abilities from raising pay"
+      }
+    },
+    "SENIORITY": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "雇い主ごとの勤続",
+        "en": "Seniority with each employer"
+      },
+      "note": {
+        "ja": "同じ雇い主で働いた日数で賃金が上がる（480日・1,440日・2,880日で 125%・150%・200%）",
+        "en": "Pay rises with the days worked for the same employer (125% / 150% / 200% at 480 / 1,440 / 2,880 days)"
+      }
+    },
+    "SHOP_DISCOUNT": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "働いた店での値引き",
+        "en": "Discount at the shop you worked for"
+      },
+      "note": {
+        "ja": "勤続の段階に応じて、その店の買値が 5%・10%・15% 下がる",
+        "en": "Buying there costs 5% / 10% / 15% less by seniority rank"
+      }
+    },
+    "INCIDENT_LINK": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "街の出来事との連動",
+        "en": "Link with town events"
+      },
+      "note": {
+        "ja": "街の出来事の MOD が入っているときだけ効く。良い出来事で賃金が変わり、困り事には臨時の募集が出る",
+        "en": "Only with a town-event MOD installed. Good events change the pay; troubles add a relief job"
+      }
+    },
+    "ILLEGAL_PAY_MIN_PERCENT": {
+      "type": "int",
+      "default": 200,
+      "min": 100,
+      "max": 1000,
+      "label": {
+        "ja": "闇労働の賃金・危険度1（%）",
+        "en": "Illegal labour pay at danger 1 (%)"
+      },
+      "note": {
+        "ja": "役場の同じ長さの賃金に対する割合",
+        "en": "Against office pay for the same length"
+      }
+    },
+    "ILLEGAL_PAY_MAX_PERCENT": {
+      "type": "int",
+      "default": 400,
+      "min": 100,
+      "max": 1000,
+      "label": {
+        "ja": "闇労働の賃金・危険度3（%）",
+        "en": "Illegal labour pay at danger 3 (%)"
+      },
+      "note": {
+        "ja": "危険度2は危険度1と3の中間",
+        "en": "Danger 2 sits halfway between"
+      }
+    },
+    "RISK_STRENGTH_PERCENT": {
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 300,
+      "label": {
+        "ja": "闇労働の危険の起きやすさ（%）",
+        "en": "How often illegal labour goes wrong (%)"
+      },
+      "note": {
+        "ja": "取り締まり・仕返し・裏切りが起きる確率に掛ける。0 で起きない",
+        "en": "Scales the chance of crackdowns, retaliation and betrayal. 0 turns them off"
+      }
+    },
+    "LIST_JOBS": {
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 20,
+      "label": {
+        "ja": "一覧に並べる施設の仕事の数",
+        "en": "Facility jobs on the list"
+      },
+      "note": {
+        "ja": "日雇いの人足・前回の仕事・臨時の募集は、この数に入らない",
+        "en": "The day labourer, your previous job and the relief job do not count"
+      }
+    },
+    "ROTATE_DAYS": {
+      "type": "int",
+      "default": 30,
+      "min": 1,
+      "max": 720,
+      "label": {
+        "ja": "一覧の顔ぶれが入れ替わる間隔（日）",
+        "en": "Days between list rotations"
+      },
+      "note": {
+        "ja": "同じ間隔のうちは、開き直しても同じ顔ぶれ",
+        "en": "Reopening the list within the same span shows the same jobs"
+      }
+    },
+    "SHORT_BONUS_PERCENT": {
+      "type": "float",
+      "default": 12.5,
+      "min": 0,
+      "max": 200,
+      "label": {
+        "ja": "短い契約の満了の割増（%）",
+        "en": "Completion bonus, short contract (%)"
+      },
+      "note": {
+        "ja": "務め終えたときに、稼ぎに上乗せする割合",
+        "en": "Added to the earnings when the contract is finished"
+      }
+    },
+    "LONG_BONUS_PERCENT": {
+      "type": "float",
+      "default": 25.0,
+      "min": 0,
+      "max": 200,
+      "label": {
+        "ja": "長い契約の満了の割増（%）",
+        "en": "Completion bonus, long contract (%)"
+      }
+    },
+    "SHORT_AFFINITY": {
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 50,
+      "label": {
+        "ja": "短い契約の満了で上がる好感度",
+        "en": "Affinity gain, short contract"
+      },
+      "note": {
+        "ja": "雇い主の好感度",
+        "en": "The employer's affinity"
+      }
+    },
+    "LONG_AFFINITY": {
+      "type": "int",
+      "default": 6,
+      "min": 0,
+      "max": 50,
+      "label": {
+        "ja": "長い契約の満了で上がる好感度",
+        "en": "Affinity gain, long contract"
+      }
+    },
+    "QUIT_TENURE_DAYS": {
+      "type": "int",
+      "default": 240,
+      "min": 0,
+      "max": 3600,
+      "label": {
+        "ja": "途中でやめたときに減る勤続（日）",
+        "en": "Seniority lost on quitting (days)"
+      }
+    },
+    "QUIT_BARRED_DAYS": {
+      "type": "int",
+      "default": 180,
+      "min": 0,
+      "max": 3600,
+      "label": {
+        "ja": "途中でやめた雇い主が一覧に出ない日数",
+        "en": "Days an employer stays off the list after quitting"
+      },
+      "note": {
+        "ja": "暇を出されたときも同じ",
+        "en": "Also after being dismissed"
+      }
+    },
+    "RANK2_DAYS": {
+      "type": "int",
+      "default": 480,
+      "min": 1,
+      "max": 36000,
+      "label": {
+        "ja": "「一人前」になる勤続（日）",
+        "en": "Days to reach rank 2"
+      }
+    },
+    "RANK3_DAYS": {
+      "type": "int",
+      "default": 1440,
+      "min": 1,
+      "max": 36000,
+      "label": {
+        "ja": "「任される」になる勤続（日）",
+        "en": "Days to reach rank 3"
+      }
+    },
+    "RANK4_DAYS": {
+      "type": "int",
+      "default": 2880,
+      "min": 1,
+      "max": 36000,
+      "label": {
+        "ja": "「右腕」になる勤続（日）",
+        "en": "Days to reach rank 4"
+      }
+    },
+    "RANK2_PAY_PERCENT": {
+      "type": "int",
+      "default": 125,
+      "min": 100,
+      "max": 1000,
+      "label": {
+        "ja": "「一人前」の賃金（%）",
+        "en": "Pay at rank 2 (%)"
+      }
+    },
+    "RANK3_PAY_PERCENT": {
+      "type": "int",
+      "default": 150,
+      "min": 100,
+      "max": 1000,
+      "label": {
+        "ja": "「任される」の賃金（%）",
+        "en": "Pay at rank 3 (%)"
+      }
+    },
+    "RANK4_PAY_PERCENT": {
+      "type": "int",
+      "default": 200,
+      "min": 100,
+      "max": 1000,
+      "label": {
+        "ja": "「右腕」の賃金（%）",
+        "en": "Pay at rank 4 (%)"
+      }
+    },
+    "RANK2_DISCOUNT_PERCENT": {
+      "type": "int",
+      "default": 5,
+      "min": 0,
+      "max": 90,
+      "label": {
+        "ja": "「一人前」の店での値引き（%）",
+        "en": "Shop discount at rank 2 (%)"
+      }
+    },
+    "RANK3_DISCOUNT_PERCENT": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 90,
+      "label": {
+        "ja": "「任される」の店での値引き（%）",
+        "en": "Shop discount at rank 3 (%)"
+      }
+    },
+    "RANK4_DISCOUNT_PERCENT": {
+      "type": "int",
+      "default": 15,
+      "min": 0,
+      "max": 90,
+      "label": {
+        "ja": "「右腕」の店での値引き（%）",
+        "en": "Shop discount at rank 4 (%)"
+      }
+    },
+    "ABILITY_LOW_PERCENT": {
+      "type": "int",
+      "default": 80,
+      "min": 1,
+      "max": 100,
+      "label": {
+        "ja": "能力値が低いときの賃金の下限（%）",
+        "en": "Lowest pay rate from low ability scores (%)"
+      },
+      "note": {
+        "ja": "仕事に効く能力値の平均が 11 より低いと、この値まで下がる",
+        "en": "Pay falls towards this when the job's abilities average below 11"
+      }
+    },
+    "CHECK_PER_POINT": {
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 20,
+      "label": {
+        "ja": "出来事の判定で、能力値1つにつき上がる成功率（%）",
+        "en": "Success chance per ability point in incidents (%)"
+      },
+      "note": {
+        "ja": "能力値が 11 から1つ上がるごとに足す",
+        "en": "Added for each point above 11"
+      }
+    },
+    "GOOD_EVENT_STEP_PERCENT": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "良い出来事の段階ごとに上がる賃金（%）",
+        "en": "Pay gain per stage of a good town event (%)"
+      },
+      "note": {
+        "ja": "1段階めでこの値、段階が進むごとに同じだけ足す",
+        "en": "This much at the first stage, and again for each further stage"
+      }
+    },
+    "GOOD_EVENT_MAX_PERCENT": {
+      "type": "int",
+      "default": 130,
+      "min": 100,
+      "max": 500,
+      "label": {
+        "ja": "良い出来事で上がる賃金の上限（%）",
+        "en": "Top pay rate from a good town event (%)"
+      }
+    },
+    "BAD_STAGE_PERCENT": {
+      "type": "int",
+      "default": 70,
+      "min": 1,
+      "max": 100,
+      "label": {
+        "ja": "良い出来事が崩れた段階の賃金（%）",
+        "en": "Pay rate while a good event turns bad (%)"
+      }
+    },
+    "RELIEF_PAY_PERCENT": {
+      "type": "int",
+      "default": 150,
+      "min": 100,
+      "max": 1000,
+      "label": {
+        "ja": "臨時の募集の賃金（%）",
+        "en": "Relief job pay (%)"
+      },
+      "note": {
+        "ja": "困り事の対応の仕事",
+        "en": "The job that deals with a town trouble"
+      }
+    },
+    "RELIEF_TERM_DAYS": {
+      "type": "int",
+      "default": 30,
+      "min": 1,
+      "max": 720,
+      "label": {
+        "ja": "臨時の募集の1回の長さ（日）",
+        "en": "Days per term of the relief job"
+      },
+      "note": {
+        "ja": "役場の「働く」1回の長さがこれ以下なら、そちらの長さと短い契約の回数を使う",
+        "en": "If the office term is this short or shorter, that length and the short contract are used instead"
+      }
+    },
+    "RELIEF_TERMS": {
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 48,
+      "label": {
+        "ja": "臨時の募集の回数",
+        "en": "Terms of the relief job"
+      }
+    },
+    "RELIEF_STEPS": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 5,
+      "label": {
+        "ja": "臨時の募集を務め終えたときに収まる側へ動く段階の数",
+        "en": "Stages a finished relief job settles"
+      },
+      "note": {
+        "ja": "0 で動かさない",
+        "en": "0 leaves the event alone"
+      }
+    },
+    "ILLEGAL_TROUBLE_PERCENT": {
+      "type": "int",
+      "default": 130,
+      "min": 100,
+      "max": 1000,
+      "label": {
+        "ja": "困り事の間の闇労働の賃金（%）",
+        "en": "Illegal labour pay while the town is in trouble (%)"
+      }
+    },
+    "ILLEGAL_STEPS": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 5,
+      "label": {
+        "ja": "闇労働を務め終えたときに困り事が悪くなる側へ動く段階の数",
+        "en": "Stages a finished illegal job worsens a trouble"
+      },
+      "note": {
+        "ja": "0 で動かさない",
+        "en": "0 leaves the event alone"
+      }
+    },
+    "RISK_PERCENT_1": {
+      "type": "int",
+      "default": 10,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "危険度1の危険の確率（%）",
+        "en": "Risk chance at danger 1 (%)"
+      },
+      "note": {
+        "ja": "90日の1期あたり。能力値が 11 のとき",
+        "en": "Per 90-day term, at ability 11"
+      }
+    },
+    "RISK_PERCENT_2": {
+      "type": "int",
+      "default": 18,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "危険度2の危険の確率（%）",
+        "en": "Risk chance at danger 2 (%)"
+      }
+    },
+    "RISK_PERCENT_3": {
+      "type": "int",
+      "default": 28,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "危険度3の危険の確率（%）",
+        "en": "Risk chance at danger 3 (%)"
+      }
+    },
+    "CRACKDOWN_LAW": {
+      "type": "int",
+      "default": 2,
+      "min": 0,
+      "max": 50,
+      "label": {
+        "ja": "取り締まりで下がる手配度",
+        "en": "Lawfulness lost in a crackdown"
+      },
+      "note": {
+        "ja": "危険度1つにつき",
+        "en": "Per danger level"
+      }
+    },
+    "BETRAYAL_LAW": {
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 50,
+      "label": {
+        "ja": "裏切りで下がる手配度",
+        "en": "Lawfulness lost in a betrayal"
+      }
+    },
+    "BETRAYAL_TENURE_DAYS": {
+      "type": "int",
+      "default": 90,
+      "min": 0,
+      "max": 3600,
+      "label": {
+        "ja": "裏切りで減る勤続（日）",
+        "en": "Seniority lost in a betrayal (days)"
+      }
+    },
+    "RETALIATION_TERMS": {
+      "type": "int",
+      "default": 2,
+      "min": 0,
+      "max": 20,
+      "label": {
+        "ja": "仕返しで奪われる額（賃金の何期ぶんか）",
+        "en": "Gold lost to retaliation (terms of pay)"
+      }
+    },
+    "TOWN_GROWTH": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "街ごとの労働の実績",
+        "en": "Labour record in each town"
+      },
+      "note": {
+        "ja": "契約を務め終えるたびに、その街の賃金の基準が上がる。賃金の基準は、片付けた依頼の最高難易度にこの実績を足した難易度で決まる。闇労働は数えない",
+        "en": "Each finished contract raises the pay level of that town. Pay is set by your highest cleared quest difficulty plus this record. Illegal labour does not count"
+      }
+    },
+    "GROWTH_SHORT": {
+      "type": "int",
+      "default": 2,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "短い契約を務め終えたときに上がる実績",
+        "en": "Record gained by a short contract"
+      },
+      "note": {
+        "ja": "難易度いくつぶんか。臨時の募集も同じ",
+        "en": "In difficulty points. The relief job counts the same"
+      }
+    },
+    "GROWTH_LONG": {
+      "type": "int",
+      "default": 5,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "長い契約を務め終えたときに上がる実績",
+        "en": "Record gained by a long contract"
+      }
+    },
+    "GROWTH_MAX": {
+      "type": "int",
+      "default": 60,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "1つの街で上がる実績の上限",
+        "en": "Top record in one town"
+      },
+      "note": {
+        "ja": "途中でやめた契約は数えない",
+        "en": "Contracts you quit do not count"
+      }
+    }
+  },
+  "tool": {
+    "entry": "tool.py",
+    "label": {
+      "ja": "数の設定と試算",
+      "en": "Settings with a pay calculator"
+    },
+    "note": {
+      "ja": "左に、契約・勤続の段階・危険度ごとの数を表の形で入れる。右に、その設定での賃金・契約の稼ぎ・闇労働の危険の試算が出て、数を変えるとその場で変わる。どの世界でも効く",
+      "en": "Enter the numbers on the left as tables (contracts, seniority ranks, danger levels). The right side shows the pay, contract earnings and illegal-labour risk for those numbers and updates as you type. Applies to every world"
+    }
+  }
+}

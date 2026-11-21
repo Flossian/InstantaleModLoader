@@ -546,6 +546,40 @@ def end(bucket, event, day, by, rest_days=None, by_name=None):
     trim(bucket)
 
 
+def stage_tone(event):
+    """いまの段の調子（`good` / `bad` / `calm`）。表に無い出来事は、良い出来事なら good、ほかは bad。"""
+    kind = kind_of(event)
+    if kind is None:
+        return "good" if is_good(event) else "bad"
+    stage = min(max(_int(event.get("stage"), 1), 1), len(kind["tones"]))
+    return kind["tones"][stage - 1]
+
+
+def nudge(bucket, event, day, steps, rest_days=None):
+    """街での行動で段を動かす。`"ended"`（収まって終わった）/ `"stage"`（段が動いた）/ `"held"`（動かなかった）を返す。
+
+    `steps` が負なら収まる側へ。1段目からさらに戻すと、主人公が収めたものとして終わる。
+    正なら悪くなる側へ。最後の段より先へは進めず、その段の起点を今日に置き直す（自然に収まるのが延びる）。
+    段が動いたときも起点は今日に置く（動かした段は、また丸ごと間隔ぶん続く）。
+    """
+    steps = _int(steps, 0)
+    if steps == 0 or event.get("status") != ACTIVE:
+        return "held"
+    stage = _int(event.get("stage"), 1)
+    target = stage + steps
+    if target < 1:
+        end(bucket, event, day, END_PLAYER, rest_days)
+        return "ended"
+    target = min(target, last_stage(event))
+    if day is not None:
+        event["stage_day"] = day
+    if target == stage:
+        return "held"
+    event["stage"] = target
+    mark_stage(event)
+    return "stage"
+
+
 def trim(bucket, limit=HISTORY_LIMIT):
     """終わった出来事は直近の `limit` 件だけ残す（`339_` が「前回から」を読むため。VERIFICATION.md §3.97「保存データの形」）。"""
     events = events_of(bucket)

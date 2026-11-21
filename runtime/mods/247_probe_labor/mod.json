@@ -1,0 +1,16 @@
+{
+  "entry": "probe_labor.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Probe: labour at the office and the underworld",
+    "ja": "計測: 労働と闇労働"
+  },
+  "description": {
+    "en": "Records where the labour pay comes from, when the completion bonus is paid, what quitting leaves, how the calendar and gold move in each step, whether the labour generators are called, and whether the game saves while working. Read-only",
+    "ja": "労働の賃金の出どころ・満了の割増が入る時点・途中でやめたときの扱い・各段階の暦と所持金の動き・労働の生成関数が呼ばれるか・労働中にセーブするかを録る。読み取りだけでゲームは変えない"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "debug": true
+}

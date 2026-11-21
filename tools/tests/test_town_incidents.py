@@ -33,7 +33,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
-from instantale_modloader import hudicons, llm, modnpc, prices, ui  # noqa: E402
+from instantale_modloader import hudicons, llm, modnpc, prices, town_events, ui  # noqa: E402
 
 
 def find_mod(suffix):
@@ -244,6 +244,33 @@ event = rules.start(bucket, 0, "0", "町", rules.KIND_BY_KEY["outlaws"], FixedRn
 event["status"] = rules.ACTIVE
 rules.advance(bucket, 999, stage_days=60, settle_days=90, steps_per_elapse=3, rest_days=0)
 check("上限を3にすれば1回で収まるまで進む", event["status"] == rules.ENDED, event)
+
+print("[規則] 街での行動で段を動かす")
+bucket = rules.new_bucket()
+event = rules.start(bucket, 100, "0", "始まりの町", rules.KIND_BY_KEY["outlaws"], FixedRng(0.0))
+check("答え待ちの出来事は動かさない", rules.nudge(bucket, event, 110, -1) == "held" and event["stage"] == 1)
+event["status"] = rules.ACTIVE
+event["stage"] = 2
+check("収まる側へ1段", rules.nudge(bucket, event, 120, -1, 180) == "stage" and event["stage"] == 1
+      and event["stage_day"] == 120 and event["stage_name"] == "兆し", event)
+check("1段目からさらに戻すと、主人公が収めたものとして終わる", rules.nudge(bucket, event, 130, -1, 180) == "ended"
+      and event["status"] == rules.ENDED and event["end_by"] == rules.END_PLAYER
+      and bucket["cooldown"]["0"] == 310, (event, bucket["cooldown"]))
+check("終わった出来事は動かさない", rules.nudge(bucket, event, 140, 1) == "held")
+event = rules.start(bucket, 200, "1", "灰の都", rules.KIND_BY_KEY["outlaws"], FixedRng(0.0))
+event["status"] = rules.ACTIVE
+check("悪くなる側へ1段", rules.nudge(bucket, event, 210, 1) == "stage" and event["stage"] == 2)
+check("最後の段より先へは進めない", rules.nudge(bucket, event, 220, 5) == "stage" and event["stage"] == 3)
+check("最後の段では起点だけ今日に置き直す", rules.nudge(bucket, event, 300, 1) == "held"
+      and event["stage"] == 3 and event["stage_day"] == 300, event)
+check("0 段は何もしない", rules.nudge(bucket, event, 400, 0) == "held" and event["stage_day"] == 300)
+check("段の調子（困り事は bad）", rules.stage_tone(event) == "bad")
+boom_event = {"kind": "boom", "stage": 3}
+check("段の調子（にわか景気の崩壊は bad、収束は calm）", rules.stage_tone(boom_event) == "bad"
+      and rules.stage_tone({"kind": "boom", "stage": 4}) == "calm"
+      and rules.stage_tone({"kind": "boom", "stage": 1}) == "good")
+check("表に無い出来事の調子は良し悪しから", rules.stage_tone({"kind": "?", "good": True}) == "good"
+      and rules.stage_tone({"kind": "?"}) == "bad")
 
 print("[規則] 値段と宿代の率")
 active = {"kind": "epidemic", "stage": 2, "status": rules.ACTIVE}
@@ -1026,6 +1053,34 @@ check("進行中は自然に収まった扱いで終える", events[gone["id"]][
 check("文を書かせる前のものは捨てる", waiting["id"] not in events, sorted(events))
 check("エラーなし", not ctx.errors, ctx.errors)
 ui.current_quest_id = ui_current
+
+print("[流れ] ほかの MOD から読む・動かす（窓口 town_events）")
+module, ctx, app = fresh()
+bucket_store = module._store()["worlds"]
+key = bucket_store.playthrough(app)
+bucket = bucket_store.load(key)
+check("出来事が無ければ None", town_events.current(app, "0") is None)
+check("出来事が無ければ頼みも受けない", town_events.nudge(app, "0", -1, "test") is None)
+ev = rules.start(bucket, 100, "0", "始まりの町", rules.KIND_BY_KEY["epidemic"], FixedRng(0.0))
+ev["status"] = rules.ACTIVE
+ev["stage"] = 2
+bucket_store.save(key)
+found = town_events.current(app, "0")
+check("いま効いている出来事を答える", found is not None and found["kind"] == "epidemic" and found["good"] is False
+      and found["stage"] == 2 and found["last_stage"] == 3 and found["tone"] == "bad"
+      and found["by"] == module.OWNER and found["name"], found)
+check("よその街は None", town_events.current(app, "1") is None)
+result = town_events.nudge(app, "0", -1, "test")
+check("収まる側へ1段動かす", result is not None and result["stage"] == 1 and result["ended"] is False
+      and bucket_of(module, app)["events"][0]["stage"] == 1, result)
+texts = len(app.texts)
+result = town_events.nudge(app, "0", -1, "test")
+ended = bucket_of(module, app)["events"][0]
+check("さらに戻すと収まる", result is not None and result["ended"] is True and ended["status"] == rules.ENDED
+      and ended["end_by"] == rules.END_PLAYER, (result, ended))
+check("収まったと知らせる", any("収まるだろう" in t for t in app.texts[texts:]), app.texts[texts:])
+check("収まった後は答えない", town_events.current(app, "0") is None)
+check("エラーなし", not ctx.errors, ctx.errors)
 
 # ================================================================ 設定画面（窓は開かない）
 print("[設定画面] 見本の行と様子の文")

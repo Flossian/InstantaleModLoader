@@ -1,0 +1,16 @@
+{
+  "entry": "probe_medical.py",
+  "api": 1,
+  "kind": "probe",
+  "name": {
+    "en": "Probe: treatment at the medical facility",
+    "ja": "計測: 医療施設の治療"
+  },
+  "description": {
+    "en": "Records what the treatment at a medical facility does: how much each injured body part recovers, whether stamina, its cap, the exhausted flag and battle HP come back, how the calendar and gold move, when the fee is decided, what is added to the life log, and whether the game saves meanwhile. Read-only",
+    "ja": "医療施設の治療で何が起きるかを録る。怪我が部位ごとにいくつ戻るか、体力・その上限・疲労の印・戦闘の HP が戻るか、暦と所持金の動き、料金が決まる時点、人生の記録に足される文、治療中にセーブするかが対象。読み取りだけでゲームは変えない"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "debug": true
+}

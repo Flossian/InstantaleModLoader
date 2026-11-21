@@ -163,6 +163,7 @@ runtime/instantale_modloader/
     abilities.py  能力値の補正の連携 API。補正を置く MOD が答えか期限つきの補正を出し、ゲームが能力値を読む場面の間だけ足して見せる。ステータス画面に (+n) を出す（§3.3.27）
     battle_effects.py  戦闘の効果（会心・軽減・不屈など）の連携 API。効果を持つ MOD が人物ごとに答え、ローダが戦闘の一撃に効かせる（§3.3.28）
     expressions.py  会話の立ち絵の表情差分の連携 API。表情を見せる MOD が宣言し、画像を描く MOD が差分を描いて置く。見せる側は元の絵と印の合う差分だけ引く（§3.3.29）
+    town_events.py  街で起きている出来事の連携 API。出来事を持つ MOD が答え、その街での行動で関わる MOD が読み・段を動かす（§3.3.32）
     sounds.py     曲の置き場所の探し方・戦闘曲の見分け方・重みの読み方（§5.10）
     imagegen.py   画像生成の方式（sdcpp の cuda / vulkan / cpu と diffusers_openvino）を隠して、人物の画像を描く関数をフックする（§5.11）
     stalls.py     作業スレッドが死んだときに本文の欄へ出して待機を終える。LLM の 4xx の送り直しを早めに打ち切る（§5.12）
@@ -1080,7 +1081,7 @@ MOD 同梱の設定画面（`tool.py`。§3.12）はゲームの中では走ら�
 | 施設の選択肢の画面かの判定・いま居る施設の引き当て | `ui.is_facility_screen` / `current_facility` | 6本 / 10本。施設 id を str だけ引き当てる版と int も引き当てる版、見つからないときに None を返す版と id を返す版に分かれていた |
 | 好感度の読み書き（実行時の人物とセーブの素データ） | `npcs.affinity_value` / `affinity_of` / `set_affinity`（GAME.md §2.25） | 9か所 / 2本。float を通す版・int だけの版・int に切り捨てる版、実行時の名簿だけを見る版と素データまで見る版に分かれていた |
 | 窓口が持つ登録の ctx が用済みでないかの確かめ | `instantale_modloader.alive`（`gates.alive` は同じ関数） | 17本（窓口の14モジュールと `gates`・`holdings`・`hudicons`）。新しい窓口を作るたびに写されていた。`llm` の見張りの登録だけは、`superseded` が例外を送出した ctx を用済みとみなしていた |
-| 小さな窓口の登録簿の出し入れ（同じ持ち主の差し替え・生きている登録の並び・`fn` の呼び出しと `errors` の末尾20件） | `instantale_modloader.window_put` / `window_entries` / `window_call` | 7本（`quest_bands` / `quest_claims` / `quest_clients` / `shop_lineup` / `talk_affinity` / `value_limits` / `wanted`）。差し替えた登録を後ろへ回す窓口と元の位置に残す窓口に分かれていたので、後ろへ回すほうに揃えた（注入し直した後の並びが今の世代の登録の順になる） |
+| 小さな窓口の登録簿の出し入れ（同じ持ち主の差し替え・生きている登録の並び・`fn` の呼び出しと `errors` の末尾20件） | `instantale_modloader.window_put` / `window_entries` / `window_call` | 8本（`quest_bands` / `quest_claims` / `quest_clients` / `shop_lineup` / `talk_affinity` / `town_events` / `value_limits` / `wanted`）。差し替えた登録を後ろへ回す窓口と元の位置に残す窓口に分かれていたので、後ろへ回すほうに揃えた（注入し直した後の並びが今の世代の登録の順になる） |
 | 宣言の設定の画面の組み立てと、設定の出し入れ・下の欄・控えの頁 | `modtool.SettingsWindow` / `SettingsFooter` / `RecordsPage`（§3.12） | 6本（`331_` / `336_` / `338_` / `342_` / `343_` / `911_` の `tool.py`）。画面に置いていない項目の扱いと、未保存の判定の比べ先が3通りに分かれ、`343_` には閉じるときの未保存の確認が無かった |
 | ゲームの表示言語 | `ui.language` | 5本（`134_` / `346_` / `409_` / `410_` / `411_`）とローダの `battle_effects`。一字一句同じ写しだった（各モジュールの `language` は名前を残して `ui.language` を指す） |
 | エリアのギルドの引き当て | `ui.guild_of` | 2本（`320_` / `336_`） |
@@ -2504,6 +2505,46 @@ fn(text, app) -> None                # そのまま（次の MOD へ）
 `336_` は機能ごとの書き換え（盗みの購入の文を止める・裏の仕事の報酬の額）を自分の中の一覧に持ち、窓口には1つの関数で渡している。
 置き場は `sys` の属性（`_instantale_text_filters`）。検査は `test_text_filters.py`。
 
+#### 3.3.32 街で起きている出来事も連携 API で（`town_events`）
+
+街の出来事を持つ MOD（`338_town_incidents`）と、その街での行動で出来事に関わる MOD がある。
+関わる側は出来事の MOD の保存データの形を知らずに読み、出来事の MOD は相手の名前を知らずに頼みを受ける。
+置き場は `instantale_modloader/town_events.py`。
+
+```python
+# 出来事を持つ側（apply() の中）
+town_events.declare_current(owner, ctx, fn)   # fn(app, area_id) -> 出来事の辞書 / None
+town_events.on_nudge(owner, ctx, fn)          # fn(app, area_id, steps, by) -> 結果の辞書 / None
+
+# 関わる側
+event = town_events.current(app, area_id)     # 誰も答えなければ None
+result = town_events.nudge(app, area_id, steps, by)   # 誰も受けなければ None
+```
+
+| 出来事の辞書のキー | 中身 |
+|---|---|
+| `name` | 呼び名（画面に出せる文） |
+| `kind` | 種類の英名。出来事の MOD の取り決めで、読む側は見分けに使わない |
+| `good` | 良い出来事か（解決の依頼が無い） |
+| `stage` / `last_stage` | いまの段（1 から）と最後の段 |
+| `tone` | いまの段の調子。`good` / `bad` / `calm` |
+| `by` | 答えた持ち主（窓口が入れる） |
+
+`nudge` の `steps` は、負なら収まる側へ・正なら悪くなる側へ動かす段の数。
+結果の辞書は `{"name", "stage", "ended", "by"}` で、`ended` は出来事が収まって終わったかを表す。
+
+| 決まり | 理由 |
+|---|---|
+| 読む側は `kind` で分岐しない。`good` と `tone` で決める | 出来事は表に足せる（`kinds\`）。種類の名前で決めると、足した出来事に効かない |
+| `current` は形を揃えて返す（`stage` は 1 以上、`tone` は3つのどれか） | 出来事の MOD の答えが欠けていても、読む側が既定を持たずに済む |
+| 段をどう動かすかは出来事の MOD が決める | 起点の日・休みの日数・残った依頼の片付けは、出来事の MOD の保存データの中の話 |
+| `steps` が 0・数でないときは誰にも頼まない | 動かない頼みで保存と再描画を起こさない |
+| 登録は持ち主ごとに1つ。登録した ctx が用済みなら数えない。`fn` が例外を送出したら答えなかったものとみなす（`errors` に残す） | `wanted`（§3.3.9）と同じ |
+
+`338_` は、1段目からさらに戻されると主人公が収めたものとして終え、最後の段で悪くなる側へ頼まれると段の起点だけを今日に置き直す。
+読んで動かしているのは労働の MOD（開発中）で、困り事の人手の仕事を務め終えると収まる側へ、裏の仕事を務め終えると悪くなる側へ1段を頼む。
+置き場は `sys` の属性（`_instantale_town_events`）。検査は `test_town_incidents.py`（`338_` の答えと段の動かし方）と `test_wip_labor_overhaul.py`（読む側）。
+
 ### 3.4 まだ現れていない対象を狙う（保留と再適用）
 
 ゲームは `llama_cpp_runtime_completion` と `scripts.llm.llm_manager` を
@@ -2909,7 +2950,7 @@ GUI の1行に収めると「JSON を手で書く欄」になり、コードを�
 | `apply(ctx)` に渡る `ctx` | §3.1 / §3.6 / §3.8 / §3.11 |
 | `mod.json` のキー | §3.1 / §3.2 / §3.8 / §3.9 / §3.12 |
 | §5 の共通部品（`ui` / `frames` / `llm` / `state` / `jobs` / `modnpc` / `modfacility` / `prices` / `sounds` / `imagegen`） | §5 |
-| 使い方を書いた連携 API（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `loads` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons` / `quest_claims` / `quest_clients` / `holdings` / `save_lookup` / `shop_lineup` / `quest_bands` / `value_limits` / `abilities` / `battle_effects` / `expressions`） | §3.2.3 / §3.3 |
+| 使い方を書いた連携 API（`durations` / `prices` / `combat` / `equipment` / `arrivals` / `loads` / `talk_affinity` / `talk_summary` / `ids` / `npcs` / `saves` / `wanted` / `guards` / `defeat` / `board` / `confinement` / `choices` / `hudicons` / `quest_claims` / `quest_clients` / `holdings` / `save_lookup` / `shop_lineup` / `quest_bands` / `value_limits` / `abilities` / `battle_effects` / `expressions` / `town_events`） | §3.2.3 / §3.3 |
 
 これ以外は内部で、予告なく変わる。
 `patch.py` の `_defer_if_*` や `__init__.py` の `_order()` のような

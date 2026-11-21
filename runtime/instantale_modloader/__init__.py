@@ -510,7 +510,7 @@ def alive(ctx) -> bool:
         return True
 
 
-# 小さな窓口（quest_bands / quest_claims / quest_clients / shop_lineup / talk_affinity /
+# 小さな窓口（quest_bands / quest_claims / quest_clients / shop_lineup / talk_affinity / town_events /
 # value_limits / wanted）は「sys の属性に {持ち主: (ctx, fn, ...)} → alive で絞る → fn →
 # 例外は errors の末尾 20 件」を同じ形で持つ。写すと刈り方や差し替えの並びがずれていったので、
 # その3つの手だけをここに置く。何を返すか・どう束ねるかは各窓口が決める。

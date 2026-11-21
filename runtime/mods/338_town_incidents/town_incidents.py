@@ -28,7 +28,8 @@ import sys
 import threading
 
 from instantale_modloader import (arrivals, choices, durations, hudicons, jobs, llm, loads, modnpc,
-                                  prices, quest_claims, quest_ends, quest_generation, state as loader_state, ui)
+                                  prices, quest_claims, quest_ends, quest_generation, state as loader_state,
+                                  town_events, ui)
 
 from . import incidents, window
 
@@ -814,6 +815,50 @@ def apply(ctx):
             ctx.log_exc("town incidents: tick after elapse_days failed")
 
     durations.on_days(OWNER, ctx, after=after_days, write=write)
+
+    # ------------------------------------------------------------ ほかの MOD から読む・動かす
+    def current_for(app, area_id):
+        """その街でいま効いている出来事（ローダの窓口 `town_events`。TECH.md §3.3.32）。"""
+        with worlds.lock:
+            _key, bucket = ledger(app)
+            event = incidents.live_in(bucket, area_id)
+            if event is None:
+                return None
+            return {"name": name_of(event), "kind": event.get("kind"),
+                    "good": incidents.is_good(event), "stage": event.get("stage"),
+                    "last_stage": incidents.last_stage(event), "tone": incidents.stage_tone(event)}
+
+    def nudged(app, area_id, steps, by):
+        """街での行動（人手を出した・裏の仕事をした）で、その街の出来事の段を動かす（窓口 `town_events`）。"""
+        lines = []
+        with worlds.lock:
+            key, bucket = ledger(app)
+            event = incidents.live_in(bucket, area_id)
+            if event is None:
+                return None
+            day = ui.game_day(app)
+            before = event.get("stage")
+            what = incidents.nudge(bucket, event, day, steps, REST_DAYS)
+            write("nudge: #{} {} at {} by {!r} steps={} -> {} (stage {} -> {}) day {}".format(
+                event.get("id"), name_of(event), event.get("area_name"), by, steps, what,
+                before, event.get("stage"), day))
+            if what == "ended":
+                event.setdefault("told", {})["settled"] = True
+                lines.append(SOLVED_TEXT.format(town=event.get("area_name"), name=name_of(event)))
+                if event.get("quest") and quest_status(app, event["quest"]) != COMPLETED:
+                    bucket.setdefault("cleanup", []).append(str(event["quest"]))
+                clean_up(app, bucket)
+            if what != "held":
+                hudicons.notify(ICON_KEY, playthrough=key)
+            save(key, bucket)
+            result = {"name": name_of(event), "stage": event.get("stage"), "ended": what == "ended"}
+        if what != "held":
+            prices.refresh("town incidents nudged")
+        say_when_idle(app, lines, "nudge")
+        return result
+
+    town_events.declare_current(OWNER, ctx, current_for)
+    town_events.on_nudge(OWNER, ctx, nudged)
 
     # ------------------------------------------------------------ 着いた・店に入った
     def area_arrival(call):
