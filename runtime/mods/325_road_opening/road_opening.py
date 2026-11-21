@@ -1041,18 +1041,8 @@ def apply(ctx):
         return opened
 
     def refresh_status(app):
-        """所持金の表示を今の値に合わせる（`309_` と同じ。無ければ次にゲームが塗る）。"""
-        update = getattr(app, "update_ui", None)
-        if not callable(update):
-            return
-
-        def run():
-            try:
-                update()
-            except Exception:
-                ctx.log_exc("road opening: update_ui failed")
-
-        screen.schedule(run, 0)
+        """所持金の表示を今の値に合わせる（ローダの `ui.refresh_status`。次のフレームで塗る）。"""
+        ui.refresh_status(app, later=True)
 
     # ------------------------------------------------------------ ダンジョン踏破
     def stamina_refusal(app):

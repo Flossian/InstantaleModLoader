@@ -206,6 +206,7 @@ class FakeUI(object):
         self.game_day = real.game_day
         self.gold_of = real.gold_of
         self.add_gold = real.add_gold
+        self.refresh_status = real.refresh_status
         self.money = real.money
         self.rewrite_coins = real.rewrite_coins
 

@@ -755,7 +755,7 @@ def apply(ctx):
             write("price: nothing was charged (gold {}); the training did not "
                   "start".format(before))
         elif moved == game:
-            ui.set_gold(app, before - want,
+            ui.set_gold(app, before - want, refresh=True,
                         on_error=lambda msg: write("WARN price: " + msg))
             write("WARN price: the game charged its own {} instead of {}; "
                   "gold {} -> {} (corrected)".format(

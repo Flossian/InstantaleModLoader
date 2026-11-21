@@ -436,7 +436,7 @@ def apply(ctx):
             return
         corrected = max(after + gap * sign, 0.0)
         # 型を保って書く（float の所持金は float のまま）。
-        gold = ui.set_gold(app, corrected, on_error=lambda msg: ctx.log(
+        gold = ui.set_gold(app, corrected, refresh=True, on_error=lambda msg: ctx.log(
             "item price: could not correct gold: " + msg, level="WARN"))
         if gold is None:
             return

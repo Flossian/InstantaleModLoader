@@ -64,6 +64,7 @@ from __future__ import annotations
 
 import re
 import sys
+import threading
 import time
 
 from . import frames
@@ -710,7 +711,44 @@ def gold_of(app):
     return None if value is None else int(value)
 
 
-def set_gold(app, value, on_error=None):
+def refresh_status(app, later=False):
+    """画面左の情報（所持金・年齢・日付など）を、ゲーム自身の `update_ui` で塗り直す。塗り直しを頼めたら真。
+
+    所持金や年齢を書き換えただけでは、表示は次にゲームが塗るまで古いまま残る
+    （ゲームは自分で動かした値の後でしか塗らない。日数送りの中でほかの MOD が引いた家賃も、表示に出ない）。
+    同じ処理を6本の MOD が写して持っていて、メインスレッドに回すものと回さないものが混ざっていたので、ここへ寄せた。
+
+    塗るのはメインスレッドで行う。ゲームの段（`execute`）はワーカーのスレッドで走るので、
+    そこから呼ばれたら次のフレームへ回す。メインスレッドからはその場で塗る（`later` が真なら次のフレーム）。
+    Kivy の無いところ（ゲームの外の検査）ではその場で塗る。`update_ui` の失敗はローダのログへ残し、呼ぶ側へは投げない。
+    """
+    updater = frames.attr(app, "update_ui", None)
+    if not callable(updater):
+        return False
+
+    def run(_dt=None):
+        try:
+            updater()
+        except Exception:
+            from . import log_exc       # ui はローダ本体より先に読まれるので、使うときに取り込む
+            log_exc("ui: update_ui failed")
+
+    if not later and threading.current_thread() is threading.main_thread():
+        run()
+        return True
+    try:
+        from kivy.clock import Clock
+    except Exception:
+        run()
+        return True
+    try:
+        Clock.schedule_once(run, 0)
+    except Exception:
+        run()
+    return True
+
+
+def set_gold(app, value, on_error=None, refresh=False):
     """所持金を `value` にする。書けたら新しい額、書けなければ `None`。
 
     **今の型を保つ。**
@@ -720,6 +758,11 @@ def set_gold(app, value, on_error=None):
 
     読めない所持金には書き込まない（`gold_of` が `None` を返す相手）。
     ゲーム自身の支払い経路を通さずに直接触るので、**呼ぶ側が理由を記録する** こと。
+
+    `refresh` が真なら、書けた後に画面の所持金を塗り直す（`refresh_status`）。
+    支払い・受け取り・ゲームの後の差額の直しは真にする。
+    ゲームがこの後に自分で引く前の差額（前払い調整）は偽のままにする（途中の額を一瞬出さない）。
+    既定は偽（v1.22.0 までと同じ）。
     """
     current = _raw_gold(app)
     if current is None:
@@ -727,18 +770,21 @@ def set_gold(app, value, on_error=None):
     try:
         player = frames.attr(app, "player", None)
         player.gold = float(value) if isinstance(current, float) else int(round(value))
-        return player.gold
+        written = player.gold
     except Exception:
         if on_error is not None:
             on_error("cannot change the player's gold")
         return None
+    if refresh:
+        refresh_status(app)
+    return written
 
 
-def add_gold(app, amount, on_error=None):
+def add_gold(app, amount, on_error=None, refresh=False):
     """所持金を増減する。書けたら新しい額、書けなければ `None`。
 
     足すのは**素の値**に対して（`gold_of` の切り捨てを通さない）。
-    書き方は `set_gold` と同じで、今の型を保つ。
+    書き方と `refresh` は `set_gold` と同じで、今の型を保つ。
     """
     current = _raw_gold(app)
     if current is None:
@@ -749,7 +795,7 @@ def add_gold(app, amount, on_error=None):
         if on_error is not None:
             on_error("cannot change the player's gold")
         return None
-    return set_gold(app, target, on_error=on_error)
+    return set_gold(app, target, on_error=on_error, refresh=refresh)
 
 
 # --------------------------------------------------------------------------

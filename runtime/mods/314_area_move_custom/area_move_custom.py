@@ -642,7 +642,7 @@ def apply(ctx):
             write("fare: charged {} in one deduction; gold {} -> {} (arrived={})"
                   .format(int(fare), before, after, arrived))
         elif after == prepaid:
-            ui.set_gold(app, before,
+            ui.set_gold(app, before, refresh=True,
                         on_error=lambda msg: write("WARN fare: " + msg))
             write("fare: the game did not charge; gold back to {} (arrived={})"
                   .format(before, arrived))

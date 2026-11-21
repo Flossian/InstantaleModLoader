@@ -898,7 +898,7 @@ def apply(ctx):
         diff = want - moved
         if diff == 0:
             return
-        ui.add_gold(app, diff, on_error=lambda msg:
+        ui.add_gold(app, diff, refresh=True, on_error=lambda msg:
                     write("WARN reward: cannot correct: {}".format(msg)))
         write("reward: the game paid {}, we promised {}; corrected {:+d}".format(
             moved, want, diff))

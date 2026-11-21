@@ -960,7 +960,8 @@ def apply(ctx):
                   .format(keeper_id))
         # 代金を先に引き、引けたときだけ帳簿に載せる。帳簿は即座にファイルになるので、
         # 逆の順では引けなかった回にも建物が残る。
-        if ui.add_gold(app, -price, on_error=lambda msg: write("WARN build: " + msg)) is None:
+        if ui.add_gold(app, -price, refresh=True,
+                       on_error=lambda msg: write("WARN build: " + msg)) is None:
             undo()
             write("WARN build: cannot charge {}; {!r} was not built".format(price, name))
             screen.say(app, NO_CHARGE_TEXT)
@@ -1000,7 +1001,8 @@ def apply(ctx):
             screen.say(app, _fmt(NOTHING_TEXT, keeper=who))
             return 0
         # 渡せたときだけ受け取った日を進める（逆の順では、渡せなかった売上が消える）。
-        if ui.add_gold(app, gold, on_error=lambda msg: write("WARN collect: " + msg)) is None:
+        if ui.add_gold(app, gold, refresh=True,
+                       on_error=lambda msg: write("WARN collect: " + msg)) is None:
             write("WARN collect: cannot pay {}G at {!r}; the books stay as they are".format(
                 gold, record.get("name")))
             screen.say(app, NO_CHARGE_TEXT)
@@ -1449,7 +1451,7 @@ def apply(ctx):
             return 0
         if prepaid > 0:
             off = max(off, -prepaid)
-        ui.add_gold(app, off, on_error=lambda msg:
+        ui.add_gold(app, off, refresh=True, on_error=lambda msg:
                     write("WARN {}: cannot correct: {}".format(why, msg)))
         write("WARN {}: the room cost {} but we prepaid {}; corrected {}".format(
             why, prepaid + off, prepaid, off))

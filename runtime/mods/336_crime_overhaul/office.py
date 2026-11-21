@@ -370,7 +370,7 @@ def install(env):
             isinstance(before_gold, int) else None
         want = pending.get("want") if pending else None
         if want is not None and moved is not None and moved > 0 and want != moved:
-            ui.add_gold(app, want - moved)
+            ui.add_gold(app, want - moved, refresh=True)
         write("underworld: job {} ({}) done; reward {} -> {} (x{}), the game paid {}".format(
             quest_id, kind["name"], pending.get("base") if pending else None, want,
             job.get("mult"), moved))

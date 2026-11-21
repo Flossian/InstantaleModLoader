@@ -1145,7 +1145,8 @@ def apply(ctx):
         keeper = make_keeper(app, record)
         # 代金を先に引き、引けたときだけ契約を控えに載せる。控えは即座にファイルになるので、
         # 逆の順では引けなかった回にも家が残る。
-        if ui.add_gold(app, -price, on_error=lambda msg: write("WARN sign: " + msg)) is None:
+        if ui.add_gold(app, -price, refresh=True,
+                       on_error=lambda msg: write("WARN sign: " + msg)) is None:
             modfacility.unregister(OWNER, facility_id, app=app, write=write)
             write("WARN sign: cannot charge {}; the contract in area {!r} was not made".format(
                 price, area_id))
@@ -1329,7 +1330,7 @@ def apply(ctx):
                     due = None
                     break
                 # 引けたときだけ期限を進める（逆の順では、引けなかった回にも期限だけ延びる）。
-                if ui.add_gold(app, -rent,
+                if ui.add_gold(app, -rent, refresh=True,
                                on_error=lambda msg: write("WARN rent: " + msg)) is None:
                     write("WARN rent: cannot charge {} for {!r}; the due day stays {}".format(
                         rent, record.get("name"), due))
@@ -1476,7 +1477,8 @@ def apply(ctx):
             screen.say(app, "預かり品を受け取れなかった。")
             back(app, "nothing reclaimed")
             return
-        if ui.add_gold(app, -fee, on_error=lambda msg: write("WARN reclaim: " + msg)) is None:
+        if ui.add_gold(app, -fee, refresh=True,
+                       on_error=lambda msg: write("WARN reclaim: " + msg)) is None:
             # 料金を引けなかった。戻した品を引き上げ、預かりはそのまま残す（品だけ戻さない）。
             for target in landed:
                 inv.pop(target, None)
@@ -2418,7 +2420,7 @@ def apply(ctx):
             return 0
         if prepaid > 0:
             off = max(off, -prepaid)
-        ui.add_gold(app, off, on_error=lambda msg: write("WARN {}: {}".format(why, msg)))
+        ui.add_gold(app, off, refresh=True, on_error=lambda msg: write("WARN {}: {}".format(why, msg)))
         write("WARN {}: the room cost {} but we prepaid {}; corrected {}".format(
             why, prepaid + off, prepaid, off))
         return off

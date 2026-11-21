@@ -277,9 +277,7 @@ class Env(object):
         return name if isinstance(name, str) and name else area_id
 
     def refresh_gold(self, app):
-        updater = getattr(app, "update_ui", None)
-        if callable(updater):
-            updater()
+        ui.refresh_status(app)
 
     def current_facility(self, app):
         return ui.current_facility(app)

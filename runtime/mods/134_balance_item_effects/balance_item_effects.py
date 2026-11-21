@@ -200,7 +200,6 @@ def apply(ctx):
             store.setdefault(name, blank)
 
     write = ctx.logger(LOG_BASENAME, stamp=False)
-    schedule = ui.scheduler(ctx, "item effects")
 
     def note(text):
         store["logged"] += 1
@@ -309,15 +308,8 @@ def apply(ctx):
 
     # ---- 使う ------------------------------------------------------------
     def refresh(app):
-        """HUD の数字を塗り直す。本体は自分の変更ぶんしか塗っていない。"""
-        updater = frames.attr(app, "update_ui", None)
-        if callable(updater):
-            def run():
-                try:
-                    updater()
-                except Exception:
-                    ctx.log_exc("item effects: update_ui failed")
-            schedule(run)
+        """HUD の数字を塗り直す。本体は自分の変更ぶんしか塗っていない（ローダの `ui.refresh_status`。次のフレームで塗る）。"""
+        ui.refresh_status(app, later=True)
 
     @ctx.wrap("__main__:ItemConsumeManager.consume_item", safe=True)
     def consume_item(orig, self, item_instance=None, usable=None, *args, **kwargs):

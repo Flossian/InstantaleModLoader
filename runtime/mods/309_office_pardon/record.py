@@ -21,7 +21,7 @@
 
 手配度の**読み方**はローダ（`instantale_modloader.ui`）に移した。
 同じ読み方を要る MOD が3本になったため（TECH.md §3.2.3）。
-所持金の読み書きもローダ（`ui.gold_of` / `set_gold`）。
+所持金の読み書きと表示の塗り直しもローダ（`ui.gold_of` / `set_gold(refresh=True)`）。
 ここに残っているのは手配度を書き戻す側。
 """
 
@@ -39,18 +39,3 @@ lawfulness_of = ui.lawfulness_of
 set_lawfulness = ui.set_lawfulness
 
 
-
-def refresh_status(app):
-    """所持金の表示を今の値に合わせる。効かなくても処理は続ける。
-
-    `InstantaleApp.update_ui(self, *args)` はゲーム自身が画面上部の情報を塗り直すのに使っている入口。
-    無ければ何もしない（次にゲームが塗ったときに合う）。
-    """
-    updater = getattr(app, "update_ui", None)
-    if not callable(updater):
-        return False
-    try:
-        updater()
-        return True
-    except Exception:
-        return False

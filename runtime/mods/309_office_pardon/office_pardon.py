@@ -309,7 +309,7 @@ def apply(ctx):
             screen.say(app, FAILED_TEXT)
             restore(app, "cannot write lawfulness")
             return
-        if price > 0 and ui.set_gold(app, gold - price) is None:
+        if price > 0 and ui.set_gold(app, gold - price, refresh=True) is None:
             # 金を取れなかったので手配度も戻す。
             # 片方だけ通さない。
             record.set_lawfulness(entry, before)
@@ -318,7 +318,6 @@ def apply(ctx):
             restore(app, "cannot write gold")
             return
 
-        record.refresh_status(app)
         state["announced"] = None
         write("paid: {!r} price={} gold {} -> {} lawfulness {} -> {} (wanted {})"
               .format(area_name, price, gold, gold - price, before, after, wanted))

@@ -702,9 +702,7 @@ def apply(ctx):
             difficulty, reward, BOUNTY_PURSE_PCT, amount, before, after))
 
         def show():
-            updater = getattr(app, "update_ui", None)
-            if callable(updater):
-                updater()
+            ui.refresh_status(app)
             screen.say(app, ui.rewrite_coins(BOUNTY_TEXT.format(amount=ui.money(amount))))
         schedule(show)
 

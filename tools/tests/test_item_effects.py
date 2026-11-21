@@ -130,6 +130,11 @@ class FakeUI(object):
             fn()
         return schedule
 
+    def refresh_status(self, app, later=False):
+        """本物（ローダの `ui.refresh_status`）と同じく `update_ui` を呼ぶ。ゲームの外ではその場で。"""
+        app.update_ui()
+        return True
+
 
 class FakeCtx(object):
     _seq = 0

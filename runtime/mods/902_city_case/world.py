@@ -436,7 +436,7 @@ def add_gold(app, amount):
     事件の報酬は一度きりの支払いなので、そこへは噛み合わない。
     `309_` が実証した経路で直接渡す。
     """
-    return ui.add_gold(app, amount)
+    return ui.add_gold(app, amount, refresh=True)
 
 
 # --------------------------------------------------------------------------

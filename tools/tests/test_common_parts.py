@@ -26,6 +26,7 @@
 | 寸法・見分け・テンプレート・クエスト・世界観の小さな部品 | 2〜3本ずつ写されていた（HANDOFF の §2） |
 | `state.SysWorldStore` が上書き鍵を優先する | `modnpc` / `modfacility` の建て直しの間の鍵 |
 | `ui.set_gold` / `add_gold` が所持金の型を保つ | `314_` / `315_` / `332_` の写しが避けていた int への変換を、`add_gold` が行っていた |
+| `ui.refresh_status` がメインスレッドで塗り、ほかのスレッドからは次のフレームへ回す | 6本が写して持ち、回すものと回さないものが混ざっていた。塗らない MOD も多く、家賃の後の所持金が古いまま出た |
 | `ui.scheduler` / `window_watcher` が Clock の中の例外を握る | MOD は素の関数を渡している。漏れるとゲームごと落ちる |
 | `Screen.busy_on` を重ねても戻す値と interval が増えない | 取り直すと自分の `False` を覚えて、選択肢が押せないまま残る |
 | `llm.watch_aliases` が注入し直しで降りるときも1行残す | 黙って降りると、当たらなかった理由を追えない |
@@ -811,6 +812,56 @@ def with_fake_kivy(body):
                 sys.modules[name] = module
 
 
+def test_refresh_status():
+    print("ui.refresh_status / set_gold(refresh=True)")
+    import threading
+
+    class App(object):
+        def __init__(self, gold=100):
+            self.player = types.SimpleNamespace(gold=gold)
+            self.painted = []
+
+        def update_ui(self, *args):
+            self.painted.append(threading.current_thread() is threading.main_thread())
+
+    app = App()
+    check("update_ui の無い相手は何もしない", ui.refresh_status(types.SimpleNamespace()) is False)
+    check("Kivy の無いところではその場で塗る", ui.refresh_status(app) is True and app.painted == [True], app.painted)
+    app = App()
+    check("既定では塗らない（v1.22.0 までと同じ）", ui.add_gold(app, 5) == 105 and app.painted == [], app.painted)
+    check("refresh=True なら書いた後に塗る", ui.add_gold(app, 5, refresh=True) == 110 and app.painted == [True]
+          and ui.set_gold(app, 1, refresh=True) == 1 and len(app.painted) == 2, app.painted)
+    check("書けなければ塗らない", ui.set_gold(App(None), 5, refresh=True) is None)
+
+    def body(clock, _window):
+        app = App()
+        ui.refresh_status(app)
+        check("メインスレッドからはその場で塗る", app.painted == [True] and not clock.once, app.painted)
+        ui.refresh_status(app, later=True)
+        check("later なら次のフレームへ回す", len(clock.once) == 1 and app.painted == [True])
+        clock.once.pop()(0)
+        check("回した分はメインスレッドで塗る", app.painted == [True, True], app.painted)
+        worker = threading.Thread(target=lambda: ui.add_gold(app, 1, refresh=True))
+        worker.start()
+        worker.join()
+        check("ほかのスレッドからは塗らずに次のフレームへ回す", len(clock.once) == 1 and len(app.painted) == 2,
+              (clock.once, app.painted))
+        clock.once.pop()(0)
+        check("回した分を塗る", app.painted == [True, True, True], app.painted)
+
+        class Broken(App):
+            def update_ui(self, *args):
+                raise RuntimeError("ゲームの塗りの失敗")
+        raised = None
+        try:
+            ui.refresh_status(Broken())
+        except Exception as exc:
+            raised = exc
+        check("update_ui の失敗は呼ぶ側へ投げない", raised is None, raised)
+
+    with_fake_kivy(body)
+
+
 def test_clock_guard(root):
     print("ui.scheduler / window_watcher / Screen.busy_on（Clock の中の例外と重なり）")
     ctx = FakeCtx(root)
@@ -1230,6 +1281,7 @@ def main():
         test_sys_world_store(root)
         test_gold()
         test_clock_guard(root)
+        test_refresh_status()
         test_when_idle_rechecks(root)
         test_watch_aliases_superseded()
         test_window_parts()
