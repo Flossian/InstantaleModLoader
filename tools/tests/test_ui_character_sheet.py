@@ -837,6 +837,27 @@ def run():
     entries = sheet.wanted_entries(many, {}, history, max_lines=mod.MAX_WANTED_LINES)
     check("上限まで", len(entries) == mod.MAX_WANTED_LINES, len(entries))
 
+    print("\n[出自と手配度の説明] 箱に収まらないときの全文")
+    check("出自: 見出しと本文を分け、本文は全文",
+          sheet.background_details("出自:\n一行目。\n二行目。")
+          == [{"name": "出自", "effects": [], "text": "一行目。\n二行目。"}])
+    check("出自: 見出しが無ければ全文を本文に、空なら出さない",
+          sheet.background_details("ただの文")[0]["text"] == "ただの文"
+          and sheet.background_details("ただの文")[0]["name"] == ""
+          and sheet.background_details("") == [] and sheet.background_details(None) == []
+          and sheet.background_details("出自:") == [{"name": "", "effects": [], "text": "出自:"}])
+    check("出自: 名前の無い件は本文から書き始める",
+          sheet.detail_pieces(sheet.background_details("本文だけ")) == [("本文だけ", "text")])
+    every = sheet.wanted_entries(many, {}, history, max_lines=None)
+    check("手配度: 上限なしで全件", len(every) == 60, len(every))
+    rows = sheet.wanted_details([("灰の街", 10), ("砦", -3)])
+    pieces = sheet.detail_pieces(rows, {"always"})
+    check("手配度: 土地ごとに1行、0 未満は赤の鍵",
+          pieces == [(sheet.WANTED_HEADING, "name"), ("\n灰の街：10", "plain"), ("\n砦：-3", "alert")],
+          pieces)
+    check("手配度: 土地が無ければ出さない", sheet.wanted_details([]) == [])
+    check("収まらないときだけ出す欄", set(sheet.DETAIL_WHEN_CLIPPED) == {"background", "wanted"})
+
     print("\n[入れ物] スキル・特性の形を決めつけない")
     check("辞書", sheet.names_of({"A": {"name": "A"}, "B": {}}) == ["A", "B"])
     check("配列（辞書の要素）",

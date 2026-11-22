@@ -7,10 +7,10 @@
     "ja": "人物欄に手配度・スキル・特性を足す"
   },
   "description": {
-    "en": "Grows the player's character sheet to the left, up and down and adds wanted level (per non-dungeon area), skills and traits. Injuries are listed per body part, and hovering the health box shows which abilities they lower. The portrait does not move",
-    "ja": "プレイヤーの人物欄を左・上・下へ広げ、手配度（ダンジョン以外の土地ごと）・スキル・特性を足す。健康状態は怪我を部位ごとに並べ、欄にマウスを乗せると下がっている能力値が出る。立ち絵の位置は変わらない"
+    "en": "Grows the player's character sheet to the left, up and down and adds wanted level (per non-dungeon area), skills and traits. Injuries are listed per body part, and hovering the health box shows which abilities they lower. When the background or the wanted list does not fit its box, hovering it shows the full text. The portrait does not move",
+    "ja": "プレイヤーの人物欄を左・上・下へ広げ、手配度（ダンジョン以外の土地ごと）・スキル・特性を足す。健康状態は怪我を部位ごとに並べ、欄にマウスを乗せると下がっている能力値が出る。出自と手配度は箱に収まらないとき、マウスを乗せると全文が出る。立ち絵の位置は変わらない"
   },
-  "version": "8",
+  "version": "9",
   "author": "R01/Flossian",
   "shares": ["reputation", "trait_effects"],
   "settings": {
@@ -80,8 +80,8 @@
         "en": "Most areas listed under the wanted level"
       },
       "note": {
-        "ja": "箱に入り切らない行は描かれない。土地の多いワールドで溢れるなら減らす",
-        "en": "Lines past the box are not drawn; lower this on worlds with many areas"
+        "ja": "箱に入り切らない行は描かれない（マウスを乗せたウィンドウには全部出る）。土地の多いワールドで溢れるなら減らす",
+        "en": "Lines past the box are not drawn (hovering shows them all); lower this on worlds with many areas"
       }
     }
   }

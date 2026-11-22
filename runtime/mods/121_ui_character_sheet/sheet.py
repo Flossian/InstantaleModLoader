@@ -349,6 +349,16 @@ DETAIL_GAP = 16.0
 DETAIL_SHRINK = 0.9
 DETAIL_SHRINKS = 6
 
+#: 文が箱に収まらないときだけ説明の窓を出す欄。出自はゲームの文、手配度は土地の数で長さが決まる。
+#: 収まっているときに出すと、箱と同じ文を重ねて見せるだけになる。
+DETAIL_WHEN_CLIPPED = ("background", "wanted")
+
+#: 説明の窓の幅を中身に合わせて詰める欄（`DETAIL_WIDTH` は上限）。手配度の行は短く、そのままでは右が空く。
+DETAIL_SNUG = ("wanted",)
+
+#: 出自の箱（ゲーム自身のウィジェット）。
+BACKGROUND_BOX = "character_sheet_background"
+
 
 def _text_of(item, name):
     value = item.get(name) if isinstance(item, dict) else getattr(item, name, None)
@@ -404,23 +414,57 @@ def skill_details(value):
     return found
 
 
+def background_details(text):
+    """出自の説明の行。箱の文（ゲームが書いた `出自:\\n本文`）をそのまま全文で出す。
+
+    1行目が `:` で終わればそれを見出しにし、本文と分ける（ゲームの言語の見出しのまま）。
+    見出しが無ければ全文を本文にする。本文が無ければ空。
+    """
+    text = text.strip() if isinstance(text, str) else ""
+    head, _sep, body = text.partition("\n")
+    if body and head.rstrip().endswith((":", "：")):
+        name, text = head.rstrip().rstrip(":：").rstrip(), body.strip()
+    else:
+        name = ""
+    return [{"name": name, "effects": [], "text": text}] if text else []
+
+
+def wanted_details(entries):
+    """手配度の説明の行。`entries` は `wanted_entries` の全件（上限で切らない）。
+
+    土地ごとに1行。0 未満（手配されている土地）は `alert` の色にする。
+    """
+    if not entries:
+        return []
+    effects = [{"text": "{}：{}".format(name, value), "condition": "always", "bullet": False,
+                "tone": "alert" if value < 0 else "plain"} for name, value in entries]
+    return [{"name": WANTED_HEADING, "effects": effects, "text": ""}]
+
+
 def detail_pieces(entries, active=None):
-    """説明の窓の文 `[(文, 色の鍵)]`。鍵は name / effect / inactive / text。1件ごとに空行で区切る。
+    """説明の窓の文 `[(文, 色の鍵)]`。鍵は name / effect / inactive / text と、効果の `tone`。1件ごとに空行で区切る。
 
     効果は1行ずつ。`active`（いまの場面の名前の集まり）を渡すと、条件が当てはまらない効果を
     `inactive`（灰色）にする。渡さなければ全部 `effect`。
+    効果に `tone` があれば、当てはまるときの色はその鍵にする（手配度の `plain` / `alert`）。
+    名前が空の件は名前の行を作らず、次の行から書き始める。
     """
     pieces = []
     for index, entry in enumerate(entries):
         if index:
             pieces.append(("\n\n", None))
-        pieces.append((entry["name"], "name"))
+        lead = ""
+        if entry.get("name"):
+            pieces.append((entry["name"], "name"))
+            lead = "\n"
         for effect in entry.get("effects") or ():
             on = active is None or effect.get("condition", "always") in active
             head = "" if effect.get("bullet") is False else "・"
-            pieces.append(("\n" + head + effect["text"], "effect" if on else "inactive"))
+            pieces.append((lead + head + effect["text"],
+                           (effect.get("tone") or "effect") if on else "inactive"))
+            lead = "\n"
         if entry.get("text"):
-            pieces.append(("\n" + entry["text"], "text"))
+            pieces.append((lead + entry["text"], "text"))
     return pieces
 
 
@@ -610,6 +654,7 @@ def wanted_entries(areas, sizes, history, max_lines=MAX_WANTED_LINES):
     規模がダンジョンでないこと、記録が在ること（＝一度も関わっていないエリアは出さない）、
     手配度が数として読めること。
     並びはエリア id 順で、id が数として読めるならその順に均す。
+    `max_lines=None` で全件（説明の窓に出す分）。
     """
     rows = []
     for area_id, area in (areas or {}).items():

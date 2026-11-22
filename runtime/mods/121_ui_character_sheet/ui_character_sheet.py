@@ -5,7 +5,7 @@
 左半分は出自と健康状態だけ。
 キャラクタが持っている手配度・スキル・特性はどこにも出ていない。
 
-やっていることは2つ。
+やっていることは4つ。
 
 1. 枠を広げる。
    `hud.character_sheet_layout` の四辺を窓に対する割合で置き直す（`PANEL_LEFT` ほか）。
@@ -19,6 +19,8 @@
 3. 健康状態の欄を書き直す。
    ゲームが英語のまま並べた部位と段階を日本語の行にし、
    下がっている能力値は欄にマウスを乗せたときの説明の窓に出す（GAME.md §2.19.1）。
+4. 出自と手配度は、文が箱に収まらないときだけ、マウスを乗せると全文を説明の窓に出す
+   （手配度は `MAX_WANTED_LINES` で並べなかった土地も含める）。
 
 ### なぜ開くたびに書くのか
 
@@ -101,6 +103,8 @@ DETAIL_MARK = MARK + "_detail"
 DETAIL_EFFECT = (0.93, 0.80, 0.52, 1)
 #: いまの場面で効いていない効果の色。説明の灰色と並ぶと見分けにくかった（実機）ので、効果の色を暗くする。
 DETAIL_INACTIVE = (0.45, 0.39, 0.27, 1)
+#: 説明の窓で、手配されている土地（手配度 0 未満）の行の色。`317_` の評判の画面の悪名と同じ赤。
+DETAIL_ALERT = (0.886, 0.329, 0.282, 1)
 
 HUD_MODULE = "scripts.hud.new_hud"
 
@@ -313,22 +317,23 @@ def apply(ctx):
                     return character
         return None
 
-    def wanted_text(app, character):
+    def wanted_rows(app, character):
+        """手配度の `(箱の文, 全件)`。箱は `MAX_WANTED_LINES` で切り、全件は説明の窓に出す。"""
         areas = ui.world_areas(app)
         world = frames.attr(app, "world")
         holders = [app] if world in (frames.MISSING, None) else [app, world]
         raw = sheet.raw_areas(holders)
         sizes = sheet.area_sizes(areas, raw)
-        entries = sheet.wanted_entries(
-            areas, sizes, frames.attr(character, "area_history"),
-            max_lines=MAX_WANTED_LINES)
+        every = sheet.wanted_entries(
+            areas, sizes, frames.attr(character, "area_history"), max_lines=None)
+        entries = every[:MAX_WANTED_LINES]
         if not state["reported"]:
             # どこから規模を読めたのかは、後で食い違ったときに最初に見る所。
             state["reported"] = True
             ctx.log("character sheet: {} area(s), size from {} ({} shown)".format(
                 len(areas or {}), "the save's area table" if raw else "the bgm path",
                 len(entries)))
-        return sheet.wanted_text(entries)
+        return sheet.wanted_text(entries), every
 
     def epithet_text(app, character):
         """世界の二つ名。評判 MOD の控えがあれば出す。無ければ空。
@@ -455,7 +460,8 @@ def apply(ctx):
         if character is None:
             return
         write_health(hud, character)
-        boxes["wanted"].text = wanted_text(app, character)
+        wanted, every_wanted = wanted_rows(app, character)
+        boxes["wanted"].text = wanted
         epithet = epithet_text(app, character)
         write_epithet(hud, epithet)
         if reroll is not None:
@@ -481,7 +487,12 @@ def apply(ctx):
             "traits": sheet.trait_details(traits, trait_effects(app, character)),
             "skills": sheet.skill_details(skills),
             "health": health_details(character),
+            "background": sheet.background_details(
+                frames.text_of(frames.attr(hud, sheet.BACKGROUND_BOX, None), "text")),
+            "wanted": sheet.wanted_details(every_wanted),
         }
+        # 上限で切った手配度は、箱に収まって見えても窓を出す（切った土地はどこにも出ていない）。
+        state["truncated"] = {"wanted": len(every_wanted) > MAX_WANTED_LINES}
 
     # ------------------------------------------------------------ マウスオーバーの説明
     def detail_widget(hud):
@@ -551,9 +562,15 @@ def apply(ctx):
             active = abilities.situations(ui.find_app(), state.get("character"))
             label.text = panels.markup(sheet.detail_pieces(entries, active),
                                        {"name": panels.TEXT, "effect": DETAIL_EFFECT,
-                                        "inactive": DETAIL_INACTIVE, "text": panels.DIM})
+                                        "inactive": DETAIL_INACTIVE, "text": panels.DIM,
+                                        "plain": panels.TEXT, "alert": DETAIL_ALERT})
             pad = ui.upx(12)
             width = float(Window.width) * sheet.DETAIL_WIDTH
+            if key in sheet.DETAIL_SNUG:
+                # 折り返さずに測った幅が上限より狭ければ、そこまで詰める。
+                label.text_size = (None, None)
+                label.texture_update()
+                width = min(width, label.texture_size[0] + 2 * pad)
             label.text_size = (width - 2 * pad, None)
             label.texture_update()
             # 行が多くて画面の高さを超えるときは、収まるまで文字を小さくする
@@ -580,8 +597,46 @@ def apply(ctx):
         except Exception:
             return False
 
+    def clipped(box):
+        """箱の文が箱の下で切れているか。
+
+        箱と同じ幅・書体・余白で折り返した高さを測り、箱の高さと比べる
+        （Kivy の `text_size` と測った高さはどちらも余白込み）。
+        マウスが動くたびに呼ばれるので、文と寸法が同じ間は測り直さない。
+        測れなければ切れていない扱い（窓を出さないだけで、箱の表示は変わらない）。
+        """
+        text = frames.text_of(box, "text")
+        if not text:
+            return False
+        try:
+            width, height = float(box.width), float(box.height)
+            padding = tuple(box.padding)
+            key = (text, width, height, box.font_name, float(box.font_size),
+                   float(box.line_height), padding, bool(box.markup))
+        except Exception:
+            return False
+        cache = state.setdefault("clipped", {})
+        if key not in cache:
+            if len(cache) > 32:
+                cache.clear()
+            cache[key] = False      # 測れなかったときも同じ文で測り直さない
+            try:
+                from kivy.uix.label import Label
+
+                probe = Label(text=text, font_name=box.font_name, font_size=box.font_size,
+                              line_height=box.line_height, padding=list(padding),
+                              markup=bool(box.markup), text_size=(width, None))
+                probe.texture_update()
+                cache[key] = float(probe.texture_size[1]) > height + 1
+            except Exception:
+                ctx.log_exc("character sheet: could not measure a box")
+        return cache[key]
+
     def on_mouse(_window, pos):
-        """マウスが特性・スキル・健康状態の箱の上に在れば説明を出し、外れたら消す。"""
+        """マウスが特性・スキル・健康状態の箱の上に在れば説明を出し、外れたら消す。
+
+        出自と手配度は、文が箱に収まらないときだけ全文を出す（`sheet.DETAIL_WHEN_CLIPPED`）。
+        """
         try:
             hud = state.get("hud")
             layout = frames.attr(hud, "character_sheet_layout", None) if hud is not None else None
@@ -590,12 +645,19 @@ def apply(ctx):
                     hide_detail()
                 return
             boxes = state.get("boxes") or {}
+            truncated = state.get("truncated") or {}
             for key, box in (("traits", frames.attr(hud, sheet.TRAITS_BOX, None)),
                              ("skills", boxes.get("skills")),
-                             ("health", frames.attr(hud, sheet.HEALTH_BOX, None))):
-                if over(box, pos):
-                    show_detail(hud, key, pos)
-                    return
+                             ("health", frames.attr(hud, sheet.HEALTH_BOX, None)),
+                             ("background", frames.attr(hud, sheet.BACKGROUND_BOX, None)),
+                             ("wanted", boxes.get("wanted"))):
+                if not over(box, pos):
+                    continue
+                if (key in sheet.DETAIL_WHEN_CLIPPED and not truncated.get(key)
+                        and not clipped(box)):
+                    break
+                show_detail(hud, key, pos)
+                return
             if state.get("hovering"):
                 hide_detail()
         except Exception:
