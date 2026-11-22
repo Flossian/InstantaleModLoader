@@ -667,7 +667,8 @@ def run():
     check("二つ名の頼み文には各地の評判文が載る",
           "灰の街" in epi_prompt and "盗賊団を退けた者として" in epi_prompt,
           epi_prompt)
-    check("頼み文に説明の指示が載る", "description" in epi_prompt, epi_prompt)
+    check("頼み文に説明の指示が載る（名の元になった出来事を書かせる）",
+          "description には、その名の元になった出来事を" in epi_prompt, epi_prompt)
     check("説明が控えに載る",
           read_cache(module)["epithet"]["description"].startswith("盗賊団から"),
           read_cache(module)["epithet"])
@@ -709,6 +710,17 @@ def run():
     trigger(module, ctx, app_k)
     check("消費した後は同じ問いを繰り返さない",
           len(module.llm.asked) == asks, managers(module))
+
+    # 据え置きの回は、名が付いたときの説明を残す（画面に出ている文を「既存の名を継承する」で上書きしない）。
+    keep = json.dumps({"epithet": "灰の街の盾", "description": "既存の名を継承する。"}, ensure_ascii=False)
+    for law in (-5, 10):                                  # 手配の反転で2回編み直させ、印を元へ戻す
+        app_k.player.area_history["7"]["lawfulness"] = law
+        module.llm.replies = [keep]
+        trigger(module, ctx, app_k)
+    record = read_cache(module)["epithet"]
+    check("据え置きの回は説明を書き換えない",
+          record["epithet"] == "灰の街の盾" and record["description"].startswith("盗賊団から")
+          and record["mark"]["wanted"] == [], record)
 
     app_k.player.area_history["3"]["achievements"] += [
         "手柄{}".format(i) for i in range(4)]          # 合計 4 → 8（倍）
@@ -1088,7 +1100,7 @@ def run():
     bucket = {"areas": {"3": {"name": "灰の街", "reputation": "盗賊団を退けた者として知られている。",
                               "nickname": "峠の守り手"},
                         "7": {"name": "遠い港", "reputation": "噂がある。", "nickname": "港の影"}},
-              "epithet": {"epithet": "灰の街の盾"},
+              "epithet": {"epithet": "灰の街の盾", "description": "盗賊団を退け、街の門を守り抜いた。"},
               "fame": {"total": 150, "notoriety": 30, "threshold": 100, "lands": 2, "min_lands": 2,
                        "eligible": True, "land_threshold": 100,
                        "areas": {"3": {"fame": 140, "notoriety": 0, "standing": True},
@@ -1115,9 +1127,13 @@ def run():
           model["rows"][1]["lawfulness"] == -5 and model["epithet"] == "灰の街の盾"
           and model["fame"] == 150 and model["notoriety"] == 30 and model["here"] == "灰の街",
           model)
+    check("二つ名の元になった出来事を画面に渡す",
+          model["epithet_description"] == "盗賊団を退け、街の門を守り抜いた。"
+          and "epithet_description" in module.view_model({}, {}, {}), model.get("epithet_description"))
     bucket["fame"]["eligible"] = False
     check("線に届く前は控えに名があっても画面に出さない",
-          module.view_model(bucket, {}, {})["epithet"] == "")
+          module.view_model(bucket, {}, {})["epithet"] == ""
+          and module.view_model(bucket, {}, {})["epithet_description"] == "")
     check("控えが空でも画面は組める",
           module.view_model({}, {}, {})["rows"] == [])
 

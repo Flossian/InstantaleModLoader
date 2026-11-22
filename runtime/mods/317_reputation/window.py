@@ -3,7 +3,7 @@
 
 入口は画面左下の MOD 用のボタンの一覧（`hudicons`。TECH.md §3.3.15）。
 部品はローダの `panels`（TECH.md §3.3.17）で、`338_` / `339_` の画面と同じ作り。
-上の枠に二つ名・名声と悪名の目盛り・評判の立つ土地の数、下の「各地の評判」の枠に土地ごとの札（スクロールする）。
+上の枠に二つ名とその元になった出来事・名声と悪名の目盛り・評判の立つ土地の数、下の「各地の評判」の枠に土地ごとの札（スクロールする）。
 二つ名と各地の呼び名の右に再生成のボタンを置く。絵は `121_` の人物欄の引き直しと同じさいころ（`ui.icon_strokes`）。
 """
 from instantale_modloader import panels, ui
@@ -79,6 +79,9 @@ def open_window(app, model, *, on_dismiss=None, write=None, on_reroll=None, on_l
                     kit.head("「{}」".format(model["epithet"]),
                              sub="土地を問わずこの二つ名で知られている", sub_scale=panels.META),
                     model.get("rerolling"), on_reroll))
+                if model.get("epithet_description"):
+                    # その名の元になった出来事（各地の評判の文と同じ引用の形）
+                    box.add_widget(kit.barred(kit.label(model["epithet_description"]), panels.QUOTE))
             elif model["eligible"]:
                 # 名が付かなかった回も、ここから頼み直せる
                 box.add_widget(with_reroll(

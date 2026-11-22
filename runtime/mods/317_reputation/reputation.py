@@ -184,8 +184,8 @@ EPITHET_DOUBLE = 2
 RECORD_KEYS = ("area", "name", "day", "updated", "reputation", "nickname", "fingerprint")
 
 #: 二つ名の控え（世界に1つ）の鍵と並び。
-#: `description` はその名が何を指すかの説明。**ゲームには出さない**内部データで、
-#: 後から控えを読んだときに名の由来が分かるように編纂と一緒に書かせる。
+#: `description` はその名の元になった出来事。評判の画面で二つ名の下に出す。
+#: 編纂と一緒に書かせ、名が据え置きの間は書き換えない。
 #: `mark` は編纂したときの質的状態（`epithet_mark`）。次の契機の比較相手。
 EPITHET_RECORD_KEYS = ("epithet", "description", "day", "updated", "mark")
 
@@ -242,8 +242,8 @@ KEY_REPUTATION = "reputation"
 KEY_EPITHET = "epithet"
 KEY_DESCRIPTION = "description"
 
-#: 二つ名の説明の上限。ゲームには出さない内部の覚え書き（控えを読むときの文脈）
-#: なので緩く、超えたら（名と違って）捨てずに切り詰める。欠けても害が無い。
+#: 二つ名の説明の上限。評判の画面に出すだけで会話には載せないので緩く、
+#: 超えたら（名と違って）捨てずに切り詰める。欠けても害が無い。
 EPITHET_DESC_CHARS = 120
 
 #: ワーカーとキャッシュの置き場所。
@@ -853,8 +853,11 @@ def build_epithet_messages(player, entries, current, exclude="", length=None):
             length, EPITHET_CHARS))
     else:
         lines.append("- 全角{}字以内".format(EPITHET_CHARS))
-    lines.append("- description には、その名がどの評判から来て何を指すかを"
-                 "1〜2文で書く")
+    # 評判の画面に出す文。「名の由来の解説」を頼むと、据え置きの回に「既存の名を継承する」のような
+    # 判断の報告が返り、「噂として語る調子で」と頼むと決まった締めに寄った（VERIFICATION.md §3.36）。
+    lines.append("- description には、その名の元になった出来事を1〜2文で書く。"
+                 "この人物が何をしたかを、土地の者が語るように具体的に書き、"
+                 "名の解説や伝聞の締めくくりは付けない")
     current = clean_epithet(current)
     exclude = clean_epithet(exclude)
     if exclude:
@@ -919,9 +922,12 @@ def view_model(bucket, area_names, laws, here=""):
     records = bucket.get("areas") if isinstance(bucket.get("areas"), dict) else {}
     scores = fame.get("areas") if isinstance(fame.get("areas"), dict) else {}
     eligible = bool(fame.get("eligible"))
-    epithet = ""
+    epithet, epithet_description = "", ""
     if USE_EPITHET and eligible:
-        epithet = clean_epithet((bucket.get("epithet") or {}).get(KEY_EPITHET, ""))
+        saved = bucket.get("epithet") if isinstance(bucket.get("epithet"), dict) else {}
+        epithet = clean_epithet(saved.get(KEY_EPITHET, ""))
+        if epithet:
+            epithet_description = clean_epithet_description(saved.get(KEY_DESCRIPTION, ""))
     rows = []
     for area_id in set(scores) | set(records):
         score = scores.get(area_id) if isinstance(scores.get(area_id), dict) else {}
@@ -942,7 +948,7 @@ def view_model(bucket, area_names, laws, here=""):
     rows.sort(key=lambda row: (-(row["fame"] + row["notoriety"]), ui.id_sort_key(row["id"])))
     return {
         "use_epithet": USE_EPITHET, "use_land_names": USE_LAND_NAMES,
-        "epithet": epithet, "eligible": eligible,
+        "epithet": epithet, "epithet_description": epithet_description, "eligible": eligible,
         "fame": int(fame.get("total") or 0), "notoriety": int(fame.get("notoriety") or 0),
         "threshold": int(fame.get("threshold") or EPITHET_FAME),
         "lands": int(fame.get("lands") or 0),
@@ -1398,12 +1404,13 @@ def apply(ctx):
         if not epithet:
             # 「ふさわしい名が無い」。前の名を残しつつ、質的状態は消費と数える
             # （印を控えないと、同じ問いを照合のたびに繰り返す）。
-            # 説明は名と対の内部データなので、名を残すなら説明も残す。
+            # 説明は名と対なので、名を残すなら説明も残す。
             epithet = before
             description = before_desc
             note = "据え置き（新しい名は無し）" if epithet else "名は付かなかった"
         else:
-            if epithet == before and not description:
+            if epithet == before and (before_desc or not description):
+                # 据え置き。説明は名が付いたときのものを残す（画面に出ている文を編纂のたびに替えない）
                 description = before_desc
             note = "据え置き" if epithet == before else "改名"
         if save_epithet(world, {
