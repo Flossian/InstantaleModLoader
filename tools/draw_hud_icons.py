@@ -182,12 +182,68 @@ def laurel():
     return g
 
 
+def augment():
+    """`926_body_augmentation` の行の絵（胸像。向かって左が生身、右が機械で目が青く光る。右下に銀の歯車）。"""
+    g = Grid()
+    skin = (221, 168, 129)
+    metal = (164, 168, 191)
+    glow = (96, 224, 246)
+    cx = 14                                                # 胸像の中心
+    seam = 13                                              # これより右が機械
+
+    def put(x, y, light):
+        if x >= seam:
+            g.put(x, y, metal, light + 0.06)
+        else:
+            g.put(x, y, skin, light)
+
+    for y in range(N):                                     # 頭
+        for x in range(N):
+            if ((x + 0.5 - (cx - 0.5)) / 5.6) ** 2 + ((y + 0.5 - 8.5) / 6.6) ** 2 <= 1.0:
+                put(x, y, 1.14 - 0.016 * (x + y - 8))
+    for y in range(15, 19):                                # 首
+        for x in range(cx - 3, cx + 3):
+            put(x, y, 0.91)
+    for y in range(18, 31):                                # 肩と胴（肩は丸める）
+        half = 5.0 + 6.5 * min(1.0, math.sqrt((y - 17) / 5.0))
+        for x in range(N):
+            if abs(x + 0.5 - cx) <= half:
+                put(x, y, 1.12 - 0.014 * (x - 2) - 0.008 * (y - 18))
+    for y in range(3, 31):                                 # 生身と機械の継ぎ目
+        if (seam, y) in g.cells:
+            g.put(seam, y, (90, 92, 120), 1.0)
+    g.put(10, 8, (70, 44, 36), 1.0)                        # 生身の目
+    g.put(11, 8, (70, 44, 36), 1.0)
+    for x, y in ((16, 7), (17, 7), (16, 8), (17, 8)):      # 機械の目
+        g.put(x, y, glow, 1.25)
+    badge_gear(g, 24.0, 24.0, 7.6, 5.7, 1.9)
+    return g
+
+
+def badge_gear(g, cx, cy, outer, inner, hole):
+    """右下に添える小さな銀の歯車（歯は8枚）。重なる所は周りを1ドット空ける（MOD のボタンのプラスと同じ）。"""
+    teeth = {}
+    for y in range(N):
+        for x in range(N):
+            dx, dy = x + 0.5 - cx, y + 0.5 - cy
+            r = math.hypot(dx, dy)
+            off = abs(((math.atan2(dy, dx) + math.pi / 8) % (math.pi / 4)) - math.pi / 8)
+            if hole < r <= (outer if off < 0.3 else inner):
+                teeth[(x, y)] = 1.18 - 0.03 * (dx + dy)
+    for x, y in list(g.cells):
+        if (x, y) not in teeth and any(abs(x - px) <= 1 and abs(y - py) <= 1 for px, py in teeth):
+            g.drop(x, y)
+    for (x, y), light in teeth.items():
+        g.put(x, y, SILVER, light)
+
+
 #: (書き出す先の頭（拡張子と _hover / _click の前まで）, 絵, 乱数の種)
 ICONS = (
     (os.path.join(ROOT, "runtime", "instantale_modloader", "assets", "hud_mods"), gear, 11),
     (os.path.join(ROOT, "runtime", "mods", "339_town_factions", "icon_flag"), flag, 7),
     (os.path.join(ROOT, "runtime", "instantale_modloader", "assets", "holdings"), house, 13),
     (os.path.join(ROOT, "runtime", "mods", "317_reputation", "icon_laurel"), laurel, 17),
+    (os.path.join(ROOT, "runtime", "mods", "926_body_augmentation", "icon_augment"), augment, 19),
 )
 
 

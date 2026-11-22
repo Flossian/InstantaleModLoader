@@ -102,6 +102,7 @@ LIST_PAY = "{period} {pay}G"
 LIST_RANK = "勤続 {rank}"
 LIST_SEP = "／"
 LIST_EMPTY = "いま応じられる募集は無い。"
+OTHER_CONTRACT_TEXT = "{name}の契約がまだ残っている。終えるまで、ほかの仕事は請けられない。"
 GROWTH_TEXT = "この街での労働の実績は +{growth}（務め終えた契約 {done} 回）"
 GROWTH_UP_TEXT = "{area}での働きぶりが知られ、この街の賃金の水準が上がった（実績 +{growth}）。"
 JOB_LABEL = "{name}({pay}G)"
@@ -129,8 +130,6 @@ FINISH_BONUS = "満了の割増として{bonus}Gが上乗せされた。"
 RANK_UP_TEXT = "{name}での勤続が「{rank}」になった。"
 QUIT_TEXT = "{name}の仕事を途中でやめた。ここまでの稼ぎは{total}G。"
 QUIT_BARRED = "{owner}は当分、仕事を回してくれないだろう。"
-RELIEF_DONE = "人手が入ったことで、{event}は収まる方へ向かった。"
-RELIEF_ENDED = "人手が入ったことで、{event}は収まった。"
 OWNER_FALLBACK = "雇い主"
 PLACE_FALLBACK = "持ち場"
 AREA_FALLBACK = "この土地"
@@ -149,7 +148,6 @@ BETRAYAL_TEXT = "組んでいた者に売られた。ここまでの稼ぎ{loss}
 #: 失う稼ぎが無かったとき（この契約で、まだ稼ぎが残っていない）。
 BETRAYAL_TEXT_EMPTY = "組んでいた者に売られた。役人に名前が伝わり、仕事は打ち切りになった。"
 ILLEGAL_FINISH_TEXT = "{name}を務め終えた。稼ぎは合わせて{total}G。"
-ILLEGAL_WORSE = "裏の仕事が回ったことで、{event}は悪い方へ進んだ。"
 
 #: 人生の記録（`life_log`）に書く1行。頭の印と言い方は、ゲームが労働の後に書く記録に合わせる（GAME.md の労働の節）。
 RECORD_MARK = "〈労働の記録〉"
@@ -468,6 +466,13 @@ def apply(ctx):
             return None
         return contract if contract.get("kind") == kind else None
 
+    def other_contract(app, bucket, kind):
+        """この場所に残っている、種類の違う契約（役場と裏の事務所）。上書きすると罰なしで消えるので、始めさせない。"""
+        contract = bucket.get("contract")
+        if not isinstance(contract, dict) or contract.get("kind") == kind:
+            return None
+        return contract if contract.get("area") == area_id_here(app) else None
+
     def offer(app, view):
         """ゲームの労働のボタンを、同じ場所で差し替える（窓口 `choices` の `offer`）。"""
         buttons = view.buttons
@@ -507,13 +512,20 @@ def apply(ctx):
                 write("list: dropped a contract left in area {!r} ({})".format(
                     stale.get("area"), stale.get("name")))
                 bucket["contract"] = None
-            if kind == rules.OFFICE:
-                offers, locked = office_offers(app, bucket), False
-            else:
-                offers, locked = illegal_offers(app, bucket)
-            growth = growth_here(app, bucket)
-            done = rules.town_done(bucket, area_id_here(app))
-            worlds.save(key)
+            other = other_contract(app, bucket, kind)
+            if other is None:
+                if kind == rules.OFFICE:
+                    offers, locked = office_offers(app, bucket), False
+                else:
+                    offers, locked = illegal_offers(app, bucket)
+                growth = growth_here(app, bucket)
+                done = rules.town_done(bucket, area_id_here(app))
+                worlds.save(key)
+        if other is not None:
+            write("list: {} refused, a {} contract is going ({})".format(kind, other.get("kind"), other.get("name")))
+            screen.say(app, OTHER_CONTRACT_TEXT.format(name=other.get("name") or ""))
+            choices.repaint(app)
+            return
         area_id = area_id_here(app)
         event = town_event(app, area_id)
         if kind == rules.OFFICE:
@@ -638,8 +650,14 @@ def apply(ctx):
             "danger": row.get("danger"), "pending": None}
         with worlds.lock:
             key, bucket = ledger(app)
-            bucket["contract"] = contract
-            worlds.save(key)
+            other = other_contract(app, bucket, contract["kind"])
+            if other is None:
+                bucket["contract"] = contract
+                worlds.save(key)
+        if other is not None:
+            screen.say(app, OTHER_CONTRACT_TEXT.format(name=other.get("name") or ""))
+            close(app, "a {} contract is going".format(other.get("kind")))
+            return
         write("start: {} [{}] {} x {} day(s), {} per term".format(
             contract["name"], contract["kind"], contract["terms"], contract["term_days"], contract["pay"]))
         screen.say(app, (ILLEGAL_START_TEXT if contract["kind"] == rules.ILLEGAL
@@ -942,7 +960,7 @@ def apply(ctx):
                 lines.append(coins(FINISH_BONUS.format(bonus=money(bonus))))
             if not illegal:
                 change_affinity(app, contract, rules.FINISH_AFFINITY[1 if contract.get("long") else 0])
-            lines.extend(nudge_town(app, contract))
+            nudge_town(app, contract)
         elif why == "fired":
             if not illegal:
                 lines.append(FIRED_TEXT.format(name=contract["name"]))
@@ -1007,26 +1025,22 @@ def apply(ctx):
             ctx.log_exc("labor: cannot write the life log")
 
     def nudge_town(app, contract):
-        """務め終えた仕事で街の出来事を動かす（人手は収まる側へ、裏の仕事は悪くなる側へ1段）。出す文の並びを返す。"""
+        """務め終えた仕事で街の出来事を動かす（人手は収まる側へ、裏の仕事は悪くなる側へ1段）。
+
+        動いたことの知らせは出来事を持つ MOD が出す（窓口 `town_events` の決まり）。ここでは文を出さない。
+        """
         if not INCIDENT_LINK:
-            return []
+            return
         area_id = contract.get("area")
         event = town_events.current(app, area_id)
         if not rules.is_trouble(event):
-            return []
+            return
         illegal = contract["kind"] == rules.ILLEGAL
         if not illegal and contract["job"] != rules.RELIEF:
-            return []
+            return
         steps = int(ILLEGAL_STEPS) if illegal else -int(RELIEF_STEPS)
         result = town_events.nudge(app, area_id, steps, OWNER)
-        if result is None:
-            return []
-        name = result.get("name") or event.get("name") or "困り事"
-        if illegal:
-            return [ILLEGAL_WORSE.format(event=name)] if result.get("stage", 1) > event.get("stage", 1) else []
-        if result.get("ended"):
-            return [RELIEF_ENDED.format(event=name)]
-        return [RELIEF_DONE.format(event=name)]
+        write("nudge: {} step(s) at {} -> {}".format(steps, area_id, result))
 
     def quit_work(app, _payload):
         contract = contract_of(app)

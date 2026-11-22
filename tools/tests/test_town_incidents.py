@@ -1070,9 +1070,16 @@ check("いま効いている出来事を答える", found is not None and found[
       and found["stage"] == 2 and found["last_stage"] == 3 and found["tone"] == "bad"
       and found["by"] == module.OWNER and found["name"], found)
 check("よその街は None", town_events.current(app, "1") is None)
+texts = len(app.texts)
 result = town_events.nudge(app, "0", -1, "test")
 check("収まる側へ1段動かす", result is not None and result["stage"] == 1 and result["ended"] is False
       and bucket_of(module, app)["events"][0]["stage"] == 1, result)
+check("収まる方へ向かったと知らせる", any("収まる方へ" in t for t in app.texts[texts:]), app.texts[texts:])
+texts = len(app.texts)
+result = town_events.nudge(app, "0", 1, "test")
+check("悪くなる側へ1段動かすと知らせる", result is not None and result["stage"] == 2
+      and any("悪い方へ" in t for t in app.texts[texts:]), (result, app.texts[texts:]))
+town_events.nudge(app, "0", -1, "test")
 texts = len(app.texts)
 result = town_events.nudge(app, "0", -1, "test")
 ended = bucket_of(module, app)["events"][0]
@@ -1080,6 +1087,13 @@ check("さらに戻すと収まる", result is not None and result["ended"] is T
       and ended["end_by"] == rules.END_PLAYER, (result, ended))
 check("収まったと知らせる", any("収まるだろう" in t for t in app.texts[texts:]), app.texts[texts:])
 check("収まった後は答えない", town_events.current(app, "0") is None)
+fine = rules.start(bucket_of(module, app), 300, "1", "灰の都", rules.KIND_BY_KEY["harvest"], FixedRng(0.0))
+fine["status"] = rules.ACTIVE
+bucket_store.save(key)
+texts = len(app.texts)
+result = town_events.nudge(app, "1", 1, "test")
+check("良い出来事の段は動かすが、困り事の向きの文は出さない", result is not None and result["stage"] == 2
+      and not any("方へ" in t for t in app.texts[texts:]), (result, app.texts[texts:]))
 check("エラーなし", not ctx.errors, ctx.errors)
 
 # ================================================================ 設定画面（窓は開かない）

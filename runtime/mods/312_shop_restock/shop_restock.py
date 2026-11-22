@@ -647,12 +647,12 @@ def apply(ctx):
             "items": (typing.List[item], ...)}, label="shop restock")
 
     def lineup_of(facility):
-        """その店の品揃えの傾向の一文。窓口に誰も居なければ既定の文。"""
+        """その店の品揃えの傾向の一文。窓口に誰も居なければ既定の文。どちらにも足す文を後ろに繋ぐ。"""
         text, by = shop_lineup.lineup_of(facility)
         if text:
             write("new stock: lineup of {} from {}".format(
                 frames.attr(facility, "facility_type", ""), by))
-        return text or DEFAULT_LINEUP
+        return (text or DEFAULT_LINEUP) + shop_lineup.notes_of(facility)
 
     def stock_messages(pending, values):
         """入れ替え1回ぶんの頼み文。場所は施設と土地、価値は雛形の値をそのまま。"""

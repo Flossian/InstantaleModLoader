@@ -30,6 +30,7 @@
 | `ui.scheduler` / `window_watcher` が Clock の中の例外を握る | MOD は素の関数を渡している。漏れるとゲームごと落ちる |
 | `Screen.busy_on` を重ねても戻す値と interval が増えない | 取り直すと自分の `False` を覚えて、選択肢が押せないまま残る |
 | `llm.watch_aliases` が注入し直しで降りるときも1行残す | 黙って降りると、当たらなかった理由を追えない |
+| `ui.paint_choices` が HUD の `button_texts` に入れて塗る | 直に塗るだけだと、所持品やクラフトの画面を閉じたときのゲームの塗り直しで前の文字に戻った（`926_` で実機） |
 
 ゲームは要らない（偽の `ctx` を渡す）。
 """
@@ -1263,6 +1264,71 @@ def test_rebuild_hook():
         llm._WATCHES[:] = []
 
 
+class WatchedHUD(object):
+    """Kivy の ListProperty `button_texts` を見張る HUD の代わり（同じ値を入れても見張りは呼ばれない）。"""
+
+    def __init__(self, observed=True):
+        self.calls = []
+        self.observed = observed
+        self.__dict__["_texts"] = []
+
+    # `property` メソッドより前に置く（後ろだと組み込みの property が隠れる）。
+    @property
+    def button_texts(self):
+        return self.__dict__["_texts"]
+
+    @button_texts.setter
+    def button_texts(self, value):
+        old, self.__dict__["_texts"] = self.__dict__["_texts"], list(value)
+        if self.observed and self.observed != "foreign" and old != list(value):
+            self.update_button_texts(self, list(value))
+
+    def property(self, name, quiet=False):
+        return object() if name == "button_texts" else None
+
+    def get_property_observers(self, name):
+        if not self.observed or name != "button_texts":
+            return []
+        return [self.foreign_watch] if self.observed == "foreign" else [self.update_button_texts]
+
+    def foreign_watch(self, instance, value):
+        """ゲームの塗る関数ではない見張り（ほかの MOD や kv の bind）。"""
+
+    def update_button_texts(self, instance, value):
+        self.calls.append(("hud" if instance is self else "other", list(value)))
+
+
+def test_paint_choices():
+    print("ui.paint_choices")
+    real_find_hud = ui.find_hud
+    hud = WatchedHUD()
+    app = types.SimpleNamespace(is_button_enabled=True, to_display_buttons=["新", "出る"])
+    ui.find_hud = lambda app: hud
+    try:
+        done = ui.paint_choices(app, ["新", "出る"])
+        check("button_texts に入れ、見張りが HUD から塗る",
+              hud.button_texts == ["新", "出る"] and hud.calls == [("hud", ["新", "出る"])], hud.calls)
+        check("効いた手段の名前は変えない", done == ["hud.update_button_texts"], done)
+        check("塗った後は choices_painted が揃う", ui.choices_painted(app))
+        ui.paint_choices(app, ["新", "出る"])
+        check("同じ値なら直に呼ぶ（見張りは呼ばれないため）",
+              hud.calls[-1] == ("other", ["新", "出る"]) and len(hud.calls) == 2, hud.calls)
+        hud = WatchedHUD(observed=False)
+        ui.paint_choices(app, ["a"])
+        check("見張りが無ければ直に呼ぶ", hud.calls == [("other", ["a"])], hud.calls)
+        hud = WatchedHUD(observed="foreign")
+        done = ui.paint_choices(app, ["b"])
+        check("別の見張りしか無ければ、入れた上で直にも呼ぶ",
+              hud.button_texts == ["b"] and hud.calls == [("other", ["b"])] and done == ["hud.update_button_texts"],
+              (hud.button_texts, hud.calls, done))
+        hud = FakeHUD()
+        ui.paint_choices(app, ["x", "y"])
+        check("プロパティの無い HUD は直に呼ぶ",
+              [w.text for w in hud.buttons] == ["x", "y"] and not hasattr(hud, "button_texts"))
+    finally:
+        ui.find_hud = real_find_hud
+
+
 def main():
     root = tempfile.mkdtemp(prefix="instantale_common_")
     try:
@@ -1287,6 +1353,7 @@ def main():
         test_window_parts()
         test_rebuild_hook()
         test_npc_fields()
+        test_paint_choices()
     finally:
         shutil.rmtree(root, ignore_errors=True)
     if FAILURES:

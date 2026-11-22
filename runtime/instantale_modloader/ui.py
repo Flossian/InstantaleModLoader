@@ -16,7 +16,9 @@
     InstanTaleHUD.update_button_texts(self, instance, value)
         実際に塗っているのはこれ。Kivy のプロパティ監視で、監視対象は **HUD 側**に
         あり `app.to_display_buttons` は監視されていない（空にして入れ直しても
-        dispatch が1本も出なかった）。だから **直接呼ぶのが正解**
+        dispatch が1本も出なかった）。監視しているのは HUD の `button_texts`
+        （ListProperty）で、ゲームはここへ入れて塗る。所持品やクラフトの画面を閉じたときも
+        ゲームはこの値で塗り直すので、MOD が塗るときもここへ入れる（`paint_choices`）
 
 `PhaseSpec(cls_name, args)` はマネージャのインスタンスではなく**その作り方**。
 押されると `getattr(__main__, cls_name)(app, *args)` が組み立てられ
@@ -2003,12 +2005,45 @@ def fold_right_panel(app):
     return True
 
 
+#: `_watched_button_texts` の答え。`PAINTER` は入れればゲームの `update_button_texts` が塗る、
+#: `OTHER` は見張りは居るがゲームの塗る関数だと確かめられない（入れた上で直にも呼ぶ）。
+WATCH_PAINTER, WATCH_OTHER = "painter", "other"
+
+
+def _watched_button_texts(hud, wanted):
+    """HUD の `button_texts` に入れたら何が起きるか。`WATCH_PAINTER` / `WATCH_OTHER` / None。
+
+    Kivy のプロパティで見張りが付いていて、値が今と違うときだけ見張りが呼ばれる
+    （同じ値を入れても呼ばれない）。見張りの中にゲームの `update_button_texts` があれば
+    `WATCH_PAINTER`、別の見張りしか見つからなければ `WATCH_OTHER`。
+    見張りが無い・値が同じ・読めない HUD（ゲーム抜きの検査）は None（直に呼ぶ）。
+    """
+    try:
+        if hud.property("button_texts", quiet=True) is None:
+            return None
+        observers = hud.get_property_observers("button_texts")
+        if not observers or list(hud.button_texts) == wanted:
+            return None
+    except Exception:
+        return None
+    for observer in observers:
+        try:
+            name = getattr(observer, "__name__", None) or getattr(observer, "method_name", None)
+        except Exception:
+            name = None
+        if name == "update_button_texts":
+            return WATCH_PAINTER
+    return WATCH_OTHER
+
+
 def paint_choices(app, texts, oops=None):
     """選択肢の文字列を実際に画面へ塗る。効いた手段の一覧を返す（`Screen.paint` の中身）。
 
     `refresh_choice_buttons()` が組み直すのは `to_display_buttons` までで、画面の文字は
     HUD 側の `update_button_texts` を呼ばないと変わらない（冒頭の事実）。`app.buttons` だけ
     直して塗らないと、見えている文字と押される処理が食い違う（ロード後の組み直しで実機）。
+    塗るときは HUD の `button_texts` に入れる（値が今と同じとき・読めない HUD では直に呼ぶ。
+    見張りがゲームの `update_button_texts` だと確かめられないときは、入れた上で直にも呼ぶ）。
     `oops(what)` は例外の記録先。無ければ黙って続ける。
     """
     done = []
@@ -2035,7 +2070,15 @@ def paint_choices(app, texts, oops=None):
     updater = getattr(hud, "update_button_texts", None) if hud is not None else None
     if callable(updater):
         try:
-            updater(app, list(texts))
+            wanted = list(texts)
+            watched = _watched_button_texts(hud, wanted)
+            if watched:
+                # ゲームと同じく HUD の `button_texts` に入れ、見張りの `update_button_texts` に塗らせる。
+                # 直に呼ぶだけだと `button_texts` が古いまま残り、所持品やクラフトの画面を閉じたときの
+                # ゲームの塗り直しで前の題に戻り、`choices_painted` も揃わない（VERIFICATION.md §3.134）。
+                hud.button_texts = wanted
+            if watched != WATCH_PAINTER:
+                updater(app, wanted)
             done.append("hud.update_button_texts")
         except Exception:
             failed("hud.update_button_texts failed")
@@ -2693,7 +2736,9 @@ class Screen(object):
         **監視されているプロパティは HUD 側にあり、
         `app.to_display_buttons` は監視対象ではない**ので、
         そこをどう触っても画面は変わらない。
-        この関数を直接呼ぶのが正解（GAME.md §2.3）。
+        塗るときは HUD の `button_texts` に入れて、見張りの `update_button_texts` に塗らせる
+        （`paint_choices`。直に呼ぶのは、値が今と同じとき・見張りを確かめられないときだけ。
+        直に呼ぶだけだと `button_texts` が古いまま残る。GAME.md §2.3、VERIFICATION.md §3.134）。
 
         ついでに `display_button_load(self, dt)`（ゲーム自身のボタン読み込み。
         Clock コールバックの形なので `dt` を渡せば直接呼べる）も通す。

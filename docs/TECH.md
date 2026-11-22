@@ -2174,11 +2174,14 @@ fn(call)    # gates.Call: call.app / call.obj（フックした関数の self）
 shop_lineup.provide(owner, ctx, fn, exclude=fn2)   # 傾向を決める側。apply() の中。fn(facility) -> 傾向の一文 / None、fn2(facility) -> 並べない品の種類 / None
 text, by = shop_lineup.lineup_of(facility)         # 品を作る側。リクエストを組むとき。どの MOD も返さなければ (None, None)
 kinds = shop_lineup.excluded_of(facility)          # 並べない品の種類（小文字の item_type の tuple）。どの MOD も返さなければ空
+shop_lineup.add_note(owner, ctx, fn)               # 傾向に一文を足す側。fn(facility) -> 足す一文（句点で終える）/ None
+notes = shop_lineup.notes_of(facility)             # 足す文を繋いだもの。品を作る側が、傾向か既定の文の後ろに1回だけ繋ぐ
 ```
 
 | 決まり | 理由 |
 |---|---|
 | 登録の新しいものから聞き、最初に文を返した登録を使う（`by` はその持ち主） | 傾向は1つの文で、混ぜると矛盾したプロンプトになる。後から適用した MOD が上書きできるようにする |
+| 足す文は全部を登録の古いものから繋ぐ（句点で終わらない文には「。」を足す）。`lineup_of` の返り値には入れず、品を作る側が `notes_of` を読んで傾向か既定の文の後ろに1回だけ繋ぐ。世界の一括生成では足さない（足す側は読み込んでいる世界の設定で答えるが、一括生成の間に読み込まれているのは作っている世界ではない） | 傾向を決める MOD とは別の MOD が「この店にはこの品も置いてほしい」と頼む口（`926_` が診療所に体に組み込む素材を置かせる）。傾向を決める MOD が1つしか答えられないので、別の口にした |
 | どの登録も文を返さなければ、作る側は自分の既定の文を使う（312 はゲームと同じく武器と防具を含めさせる） | 340 が無くても入れ替えは動く |
 | 並べない種類は、作る側がプロンプトの語彙・返ってきた品・テンプレートからの作り直しの全部で外す | プロンプトで止めても LLM は返すことがある。テンプレートに残った品を作り直すと、入れ替えのたびに戻ってくる |
 | 登録は持ち主ごとに1つ。登録した ctx が用済みなら聞かない。`fn` が例外を送出したら何も返さなかったものとみなす（`errors` に残す） | `talk_affinity`（§3.3.8）と同じ |
@@ -2538,6 +2541,7 @@ result = town_events.nudge(app, area_id, steps, by)   # 誰も受けなければ
 | 読む側は `kind` で分岐しない。`good` と `tone` で決める | 出来事は表に足せる（`kinds\`）。種類の名前で決めると、足した出来事に効かない |
 | `current` は形を揃えて返す（`stage` は 1 以上、`tone` は3つのどれか） | 出来事の MOD の答えが欠けていても、読む側が既定を持たずに済む |
 | 段をどう動かすかは出来事の MOD が決める | 起点の日・休みの日数・残った依頼の片付けは、出来事の MOD の保存データの中の話 |
+| 段が動いた・収まったことの知らせは出来事の MOD が出す。頼んだ側は結果を文にしない | 両方が出すと同じ知らせが2本出る。出来事の知らせは1か所で揃える |
 | `steps` が 0・数でないときは誰にも頼まない | 動かない頼みで保存と再描画を起こさない |
 | 登録は持ち主ごとに1つ。登録した ctx が用済みなら数えない。`fn` が例外を送出したら答えなかったものとみなす（`errors` に残す） | `wanted`（§3.3.9）と同じ |
 
@@ -3463,7 +3467,7 @@ screen.paint(app) / screen.paint_party(app) / screen.refresh(app) / screen.say(a
 | 関数 | 何をするか |
 |---|---|
 | `apply_buttons` | `Clock.schedule_once(..., 0)` 経由で `app.buttons` を差し替え、`refresh` と `paint` まで行う |
-| `paint` | `display_button_load(0)` と `hud.update_button_texts` の2つを呼ぶ。`hud not found` は HUD の構成が変わった合図。待機中（`is_button_enabled` が False）は `display_button_load` を呼ばない（呼ぶたびにゲームの点送りが1本増える。GAME.md §2.4） |
+| `paint` | `display_button_load(0)` と `hud.update_button_texts` の2つを呼ぶ。後者は、ゲームと同じく HUD の `button_texts`（ListProperty）に入れて見張りに塗らせる（値が今と同じとき・読めない HUD では直に呼ぶ）。直に呼ぶだけだと `button_texts` が古いまま残り、所持品やクラフトの画面を閉じたときのゲームの塗り直しで前の文字に戻り、`choices_painted` も揃わない（VERIFICATION.md §3.134）。`hud not found` は HUD の構成が変わった合図。待機中（`is_button_enabled` が False）は `display_button_load` を呼ばない（呼ぶたびにゲームの点送りが1本増える。GAME.md §2.4） |
 | `paint_party` | 仲間欄を描画し直す。パーティを増減させたら最後に呼ぶ |
 | `start_phase` | 自前フェーズを `PhaseSpec` に載せずに開始する。待機中なら回っている点送りを外してから（`process_choice` が自分で1本始めるので、残すと2本になる。GAME.md §2.4） |
 | `end_conversation` | 画面のボタンの args をコピーし `end_text` だけ差し替えて閉じ、閉じ終わってから続きを実行 |

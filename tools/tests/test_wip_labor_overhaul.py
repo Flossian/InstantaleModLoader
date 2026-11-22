@@ -878,6 +878,22 @@ rules.add_tenure(bucket_of(module, app), "0/9", 480)
 app.press(ILLEGAL_TEXT)
 check("勤続があれば危険度3 が並ぶ（4 倍）", app.find("押し込みの手引き(400G)") is not None, app.labels())
 
+print("\n[闇労働] 役場の契約の途中")
+module, ctx, app = setup(no_events)
+app.press(LABOR_TEXT)
+app.press("鉄の工房の手伝い")
+app.press("24ヵ月")
+app.press("働く")
+going = dict(bucket_of(module, app)["contract"])
+app.player.location = app.world.areas["0"].nodes["0"].facilities["9"]
+app.facility_screen()
+CLOCK.settle()
+app.press(ILLEGAL_TEXT)
+check("同じ街の役場の契約が残っていれば裏の仕事は請けられない",
+      any("契約がまだ残っている" in t for t in app.texts[-2:]) and app.labels()[0] == ILLEGAL_TEXT,
+      (app.texts[-2:], app.labels()))
+check("役場の契約は消えない", bucket_of(module, app)["contract"] == going, bucket_of(module, app)["contract"])
+
 # ================================================================== 連動
 print("\n[連動] 街の出来事")
 good = {"name": "収穫の祭り", "kind": "festival", "good": True, "stage": 2, "last_stage": 3, "tone": "good"}
@@ -901,7 +917,7 @@ for _ in range(3):
     app.press("働く")
 check("90 日で務め終える", app.world.days_elapsed == day + 90 and bucket_of(module, app)["contract"] is None)
 check("収まる側へ1段の頼みが出る", NUDGES == [("0", -1, module.OWNER)], NUDGES)
-check("向かったと知らせる", any("収まる方へ" in t for t in app.texts), app.texts[-4:])
+check("段の動きは知らせない（出来事を持つ MOD が出す）", not any("収まる方へ" in t for t in app.texts), app.texts[-4:])
 
 module, ctx, app = setup(no_events, event=bad)
 app.press(LABOR_TEXT)

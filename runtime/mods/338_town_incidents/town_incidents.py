@@ -61,6 +61,10 @@ QUEST_MARK = "（街の出来事）"
 #: 掲示板の依頼のボタンが呼ぶクラス（`QuestChoiceManager(app, quest_type, quest_id)`。GAME.md §2.9）。
 QUEST_CHOICE_CLS = "QuestChoiceManager"
 SOLVED_TEXT = "{town}の{name}は、これで収まるだろう。"
+#: 街での行動（窓口 `town_events` の nudge）で困り事の段が動いたとき。知らせは頼んだ MOD でなくここが出す。
+#: 良い出来事の段の動きには文を出さない。
+EASED_TEXT = "{town}の{name}は、収まる方へ向かった。"
+WORSENED_TEXT = "{town}の{name}は、悪い方へ進んだ。"
 RIVAL_SOLVED_TEXT = "{town}の{name}は、冒険者の{rival}が片付けたらしい。"
 OUTBREAK_TEXT = "{line}"
 GUIDE_TEXT = "{guild}に行けば、この件で人手を求める依頼が出ているかもしれない。"
@@ -848,6 +852,10 @@ def apply(ctx):
                 if event.get("quest") and quest_status(app, event["quest"]) != COMPLETED:
                     bucket.setdefault("cleanup", []).append(str(event["quest"]))
                 clean_up(app, bucket)
+            elif what == "stage" and not incidents.is_good(event):
+                # 文は困り事の向き（収まる・悪くなる）で書いてある。良い出来事の段の動きは知らせない
+                lines.append((EASED_TEXT if steps < 0 else WORSENED_TEXT).format(
+                    town=event.get("area_name"), name=name_of(event)))
             if what != "held":
                 hudicons.notify(ICON_KEY, playthrough=key)
             save(key, bucket)

@@ -231,22 +231,25 @@ def tendency_of(facility_type, mixed=None):
     return lineup["tendency"] + (NO_GEAR if gear_dropped(facility_type, mixed) else "")
 
 
-def replacements(facility_type, mixed=None):
-    """その店の種類で差し替える `(ゲームの文, 新しい文)` の組。傾向の無い種類は空。"""
+def replacements(facility_type, mixed=None, notes=""):
+    """その店の種類で差し替える `(ゲームの文, 新しい文)` の組。傾向の無い種類は空。
+
+    `notes` はほかの MOD が窓口 `shop_lineup` に頼んだ足す文（傾向の後ろに繋ぐ）。
+    """
     lineup = LINEUPS.get(facility_type)
     if lineup is None:
         return ()
-    tendency = tendency_of(facility_type, mixed)
+    tendency = tendency_of(facility_type, mixed) + (notes or "")
     pairs = [(GAME_FIRST, tendency + lineup["first"])]
     if lineup.get("more"):
         pairs.append((GAME_MORE, tendency + lineup["more"]))
     return tuple(pairs)
 
 
-def rewrite_text(text, facility_type, mixed=None):
+def rewrite_text(text, facility_type, mixed=None, notes=""):
     """差し替えの1文を全部当てる。`(新しい文, 当てた数)`。"""
     hits = 0
-    for old, new in replacements(facility_type, mixed):
+    for old, new in replacements(facility_type, mixed, notes):
         if old in text:
             text = text.replace(old, new)
             hits += 1
@@ -586,7 +589,7 @@ def apply(ctx):
             ctx.log_exc("shop lineup: cannot read the current facility")
         if facility is None or not has_lineup(facility):
             return orig(self, *args, **kwargs)
-        batch = {"since": time.time(), "facility": facility_id(facility),
+        batch = {"since": time.time(), "facility": facility_id(facility), "obj": facility,
                  "type": ui.facility_type_of(facility), "owner": str(_get(facility, "owner")),
                  "name": ui.facility_name(app, facility), "rewrites": 0, "dropped": []}
         store["batch"] = batch
@@ -607,8 +610,14 @@ def apply(ctx):
         if batch is None:
             return None
         out, hits, named = [], 0, False
+        notes = None
         for text in texts:
-            new, count = rewrite_text(text, batch["type"])
+            if notes is None and (GAME_FIRST in text or GAME_MORE in text):
+                # 足す文は差し替える文があるときに1回だけ聞く（売買の間のほかの送信では聞かない）。
+                # 一括生成では足さない。足す側は読み込んでいる世界の設定で答えるが、
+                # 一括生成の間に読み込まれているのは作っている世界ではない
+                notes = "" if batch.get("bulk") else shop_lineup.notes_of(batch.get("obj"))
+            new, count = rewrite_text(text, batch["type"], notes=notes or "")
             out.append(new)
             hits += count
             if count and batch["name"] and batch["name"] in text:
@@ -677,7 +686,7 @@ def apply(ctx):
             "- rarity: {rarities} のいずれか。value が低いほど common。\n"
             "- 棚にある品（同じ名前を作らない）: {present}\n"
         ).format(
-            n=len(values), tendency=tendency_of(facility_type) or "",
+            n=len(values), tendency=(tendency_of(facility_type) or "") + shop_lineup.notes_of(facility),
             world=frames.short(frames.attr(getattr(app, "world", None), "name", ""), 60),
             area=frames.short(frames.attr(area, "name", ""), 60),
             area_desc=frames.short(frames.attr(area, "description", "") or "", None),
@@ -846,8 +855,8 @@ def apply(ctx):
         if kind not in LINEUPS or owner is None or str(owner).startswith(MOD_PREFIX) \
                 or modfacility.is_mod_facility(str(fid)):
             return orig(self, *args, **kwargs)
-        batch = {"since": time.time(), "facility": str(fid), "type": kind, "owner": str(owner),
-                 "name": str(_get(found, "name", "") or ""), "rewrites": 0, "dropped": []}
+        batch = {"since": time.time(), "facility": str(fid), "obj": found, "type": kind, "owner": str(owner),
+                 "name": str(_get(found, "name", "") or ""), "rewrites": 0, "dropped": [], "bulk": True}
         store["batch"] = batch
         label = str(_get(task, "label", "") or "")
         try:

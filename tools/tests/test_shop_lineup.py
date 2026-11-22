@@ -488,6 +488,35 @@ check("ほかの文はそのまま", texts[2] == "関係の無い頼み", texts[
 check("終わりの記録（種類の内訳）", "done at inn 30: rewrites=2 dropped=0 goods=2" in log_text(), log_text())
 check("店の名前がプロンプトに載っていたかの記録", "shop name in prompt: yes" in log_text(), log_text())
 check("終わったら目印を下ろす", rewrite([prompt], "chat") is None)
+
+# 足す文は、差し替える文のある送信でだけ聞く。売買では繋ぎ、一括生成では繋がない。
+from instantale_modloader import shop_lineup  # noqa: E402
+note_calls = []
+
+
+def counted_note(facility):
+    note_calls.append(facility)
+    return "部品も並べる。"
+
+
+shop_lineup.add_note("926_test", ctx, counted_note)
+result, texts = shop_at("medical_facility", facility_id="35")
+check("売買: 足す文を傾向の後ろに繋ぐ", "部品も並べる。" in texts[0] and "部品も並べる。" in texts[1], texts)
+check("売買: 足す文を聞くのは1回", len(note_calls) == 1, len(note_calls))
+facility35 = make_facility(ctx, "35", "medical_facility", "8", hooked=False)
+facility35.config = {"goods": []}
+
+
+def plain_orig(self, choice_text):
+    seen["texts"] = rewrite(["関係の無い頼み", "別の頼み"], "chat")
+    return "shopping"
+
+
+del note_calls[:]
+ctx.hooks[SHOP_TARGET](plain_orig, Manager(types.SimpleNamespace(
+    world=world4, player=types.SimpleNamespace(location=facility35, current_area="5"))), "売買する")
+check("売買: 差し替える文の無い送信では足す文を聞かない", not note_calls and seen.get("texts") is None,
+      (len(note_calls), seen.get("texts")))
 _r, texts = shop_at("blacksmith")
 check("鍛冶屋: 武器と防具が中心", "武器と防具が中心" in texts[0] and GAME_SENTENCE_1 not in texts[0], texts[0])
 check("鍛冶屋: 混入は可と頼む", "混じってもよい" in texts[0], texts[0])
@@ -520,10 +549,14 @@ def bulk_orig(kind):
 
 
 seen.clear()
+del note_calls[:]
 task = types.SimpleNamespace(kind="shop", ids=("0", "0", "5", 1), label="テスト診療所 (1/3)")
 result = ctx.hooks[BULK_TARGET](bulk_orig("診療所"), object(), task, bulk_world)
 check("一括生成: orig の戻り値をそのまま返す", result == "made", result)
 check("一括生成: 診療所の傾向へ差し替える", "回復薬・ポーション・薬" in (seen.get("texts") or [""])[0], seen)
+check("一括生成: 足す文は繋がず、聞きもしない",
+      "部品も並べる。" not in "".join(seen.get("texts") or []) and not note_calls, (seen, len(note_calls)))
+shop_lineup.withdraw_note("926_test")
 check("一括生成: 終わりの記録", "bulk done at medical_facility 5 'テスト診療所 (1/3)': rewrites=2 dropped=0 goods=1" in log_text(),
       log_text())
 check("一括生成: 終わったら目印を下ろす", rewrite([prompt], "chat") is None)
@@ -692,6 +725,30 @@ inn5 = make_facility(ctx, "31", "inn", "8", hooked=False)
 text, by = shop_lineup.lineup_of(inn5)
 check("宿屋の傾向を出す", text == module.LINEUPS["inn"]["tendency"] and by == "340_shop_lineup", (text, by))
 check("店でない施設には口を出さない", shop_lineup.lineup_of(make_facility(ctx, "32", "guild", "8", hooked=False)) == (None, None))
+
+print("窓口 shop_lineup の足す文")
+from instantale_modloader import ui  # noqa: E402
+medic = make_facility(ctx, "33", "medical_facility", "8", hooked=False)
+shop_lineup.add_note("926_test", ctx, lambda f: "部品も並べる。" if ui.facility_type_of(f) == "medical_facility" else None)
+shop_lineup.add_note("927_test", ctx, lambda f: (_ for _ in ()).throw(RuntimeError("boom")))
+check("足す文: 診療所だけ", shop_lineup.notes_of(medic) == "部品も並べる。" and shop_lineup.notes_of(inn5) == "",
+      (shop_lineup.notes_of(medic), shop_lineup.notes_of(inn5)))
+text, by = shop_lineup.lineup_of(medic)
+check("足す文: lineup_of の返り値には入れない（読む側が notes_of で繋ぐ）",
+      text == module.LINEUPS["medical_facility"]["tendency"], text)
+shop_lineup.add_note("928_test", ctx, lambda f: "義肢も並べる" if ui.facility_type_of(f) == "medical_facility" else None)
+check("足す文: 句点で終わらない文には「。」を足す", shop_lineup.notes_of(medic) == "部品も並べる。義肢も並べる。",
+      shop_lineup.notes_of(medic))
+shop_lineup.withdraw_note("928_test")
+check("足す文: 傾向の無い店は (None, None) のまま",
+      shop_lineup.lineup_of(make_facility(ctx, "34", "guild", "8", hooked=False)) == (None, None))
+pairs = module.replacements("medical_facility", notes=shop_lineup.notes_of(medic))
+check("足す文: 340 の差し替えの文にも繋ぐ", pairs and all("部品も並べる。" in new for _old, new in pairs), pairs)
+check("足す文: 投げた登録は数えない", shop_lineup.note_owners() == ["926_test", "927_test"]
+      and shop_lineup.notes_of(medic) == "部品も並べる。")
+shop_lineup.withdraw_note("927_test")
+shop_lineup.withdraw_note("926_test")
+check("足す文: 下げたら足さない", shop_lineup.notes_of(medic) == "")
 check("例外を出していない（最後）", not ctx.errors, ctx.errors)
 shop_lineup.reset()
 

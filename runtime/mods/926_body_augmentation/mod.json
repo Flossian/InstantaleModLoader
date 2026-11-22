@@ -1,0 +1,239 @@
+{
+  "entry": "body_augmentation.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Body augmentation: build materials into your body",
+    "ja": "素材を体に組み込む人体改造"
+  },
+  "description": {
+    "en": "At a medical facility, build items from your inventory that suit the body into it (the doctor's appraisal decides which suit; one LLM call per ten items). Augmentations change abilities and battle, and carry costs. One per body part (the same six parts as injuries). Illegal augmentations at the underworld office are stronger, but cost more and fail more often. Having one found at a medical facility lowers your standing there. The MOD button at the bottom left opens a screen with every part and the total effect",
+    "ja": "治療院で、持ち物のうち体に適合するアイテムを体に組み込む（適合は医師の鑑定で決まる。10個ごとに LLM へ1回）。改造は能力値と戦闘に効き、代償が付く。枠は怪我と同じ6部位に1つずつ。裏の事務所の違法の施術は効果が大きいが、代償が重く失敗しやすい。違法の改造が治療院で見つかると手配度が下がる。画面左下の MOD 用ボタンから、部位ごとの改造と合計の効果を見られる"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "state": [
+    "body_augmentation",
+    "body_augmentation_play",
+    "body_augmentation_world"
+  ],
+  "settings": {
+    "THEME": {
+      "type": "choice",
+      "default": "自動",
+      "values": [
+        "自動",
+        "機械",
+        "魔術",
+        "中立"
+      ],
+      "label": {
+        "ja": "見た目の種類",
+        "en": "Look"
+      },
+      "note": {
+        "ja": "自動は、世界ごとに1回、画面を初めて開いたときに LLM が世界の概要から選ぶ。画面の「世界観を判定し直す」でやり直せる",
+        "en": "Automatic lets the LLM choose from the world overview once per world, the first time the screen opens. The screen's re-judge button asks again"
+      }
+    },
+    "TITLE": {
+      "type": "str",
+      "default": "",
+      "label": {
+        "ja": "画面の題",
+        "en": "Screen title"
+      },
+      "note": {
+        "ja": "空なら見た目の種類の既定の語か、LLM の判定の語。治療院のボタンもこの語になる",
+        "en": "Empty uses the look's default word or the LLM's word. The medical facility's button uses it too"
+      }
+    },
+    "ILLEGAL_WORD": {
+      "type": "str",
+      "default": "",
+      "label": {
+        "ja": "違法の呼び方",
+        "en": "Word for illegal"
+      },
+      "note": {
+        "ja": "空なら見た目の種類の既定の語（違法・禁術）か、LLM の判定の語",
+        "en": "Empty uses the look's default word or the LLM's word"
+      }
+    },
+    "RETURN_ITEM": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "取り外したアイテムを持ち物へ戻す",
+        "en": "Return the item on removal"
+      }
+    },
+    "FEE_BASE": {
+      "type": "int",
+      "default": 200,
+      "min": 0,
+      "max": 1000000,
+      "label": {
+        "ja": "料金の基準",
+        "en": "Base fee"
+      },
+      "note": {
+        "ja": "料金はこの額 × レア度の倍率（common 1・rare 2・magical 3・epic 5・legendary 8・mythic 12）＋ アイテムの値段 × 下の額。素のゲームの治療費と同じ 200 が既定",
+        "en": "Fee = this x rarity factor (1/2/3/5/8/12) + item value x the amount below. 200 is the game's own treatment fee"
+      }
+    },
+    "FEE_PER_VALUE": {
+      "type": "int",
+      "default": 20,
+      "min": 0,
+      "max": 100000,
+      "label": {
+        "ja": "アイテムの値段 1 につき足す料金",
+        "en": "Fee per item value"
+      }
+    },
+    "ILLEGAL_FEE_PERCENT": {
+      "type": "int",
+      "default": 150,
+      "min": 0,
+      "max": 1000,
+      "label": {
+        "ja": "違法の施術の料金（%）",
+        "en": "Illegal fee (%)"
+      }
+    },
+    "REMOVE_FEE_PERCENT": {
+      "type": "int",
+      "default": 50,
+      "min": 0,
+      "max": 1000,
+      "label": {
+        "ja": "取り外しの料金（施術に対する %）",
+        "en": "Removal fee (% of install)"
+      }
+    },
+    "DAYS_PERCENT": {
+      "type": "int",
+      "default": 100,
+      "min": 1,
+      "max": 1000,
+      "label": {
+        "ja": "入院の日数（%）",
+        "en": "Days in hospital (%)"
+      },
+      "note": {
+        "ja": "合法は common 7日〜mythic 45日、違法は 2〜6日に掛ける",
+        "en": "Scales 7 to 45 days (legal) and 2 to 6 days (illegal)"
+      }
+    },
+    "REMOVE_DAYS_PERCENT": {
+      "type": "int",
+      "default": 50,
+      "min": 1,
+      "max": 1000,
+      "label": {
+        "ja": "取り外しの日数（施術に対する %）",
+        "en": "Removal days (% of install)"
+      }
+    },
+    "FAIL_PERCENT": {
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 1000,
+      "label": {
+        "ja": "合法の施術の失敗の見込み（%）",
+        "en": "Legal failure chance (%)"
+      },
+      "note": {
+        "ja": "表（施術用の部品 3%・加工品 8%・生の素材 15% にレア度で 0〜6% を足す）に掛ける。耐久と判断が 11 より高いと1つにつき 0.5% 下がり、1% より下がらない",
+        "en": "Scales the table (3% part, 8% processed, 15% raw, plus 0 to 6% by rarity). Each point of CON and WIS above 11 takes 0.5% off, down to 1%"
+      }
+    },
+    "ILLEGAL_FAIL": {
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "max": 90,
+      "label": {
+        "ja": "違法の施術の失敗の見込み（%）",
+        "en": "Illegal failure chance (%)"
+      },
+      "note": {
+        "ja": "耐久と判断で下がるが、10% より下がらない。失敗すると部位が使えなくなり、アイテムを失う",
+        "en": "CON and WIS lower it, but not below 10%. A failure disables the part and loses the item"
+      }
+    },
+    "OVERLOAD_FAIL": {
+      "type": "int",
+      "default": 15,
+      "min": 0,
+      "max": 90,
+      "label": {
+        "ja": "2つめの枠に重ねるときに足す失敗の見込み（%）",
+        "en": "Extra failure chance for a second augmentation (%)"
+      },
+      "note": {
+        "ja": "失敗すると先に入れていた改造も壊れる",
+        "en": "A failure also destroys the first augmentation in that part"
+      }
+    },
+    "DISCOVERY_LAW": {
+      "type": "int",
+      "default": 15,
+      "min": 0,
+      "max": 200,
+      "label": {
+        "ja": "違法の改造が治療院で見つかったときに下がる手配度",
+        "en": "Standing lost when an illegal augmentation is found"
+      },
+      "note": {
+        "ja": "治療・施術・取り外しのたびに下がる。手配度の平常値は 10、0 未満で手配される。0 で下がらない",
+        "en": "Each treatment, augmentation or removal at a medical facility. Normal standing is 10; below 0 you are wanted. 0 turns it off"
+      }
+    },
+    "SHOP_NOTE": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "治療院の棚に体に組み込めるアイテムも並べさせる",
+        "en": "Stock augmentation materials at medical facilities"
+      },
+      "note": {
+        "ja": "店の品揃えの MOD（340 か 312）が入っているときだけ効く",
+        "en": "Only works with a shop lineup MOD (340 or 312)"
+      }
+    },
+    "SPECIAL_MIN_RARITY": {
+      "type": "choice",
+      "default": "epic",
+      "values": [
+        "common",
+        "rare",
+        "magical",
+        "epic",
+        "legendary",
+        "mythic"
+      ],
+      "label": {
+        "ja": "特殊効果が付くレア度",
+        "en": "Rarity that grants a special effect"
+      },
+      "note": {
+        "ja": "合法の施術だけ。違法の施術はレア度によらず付く",
+        "en": "Legal augmentations only. Illegal ones always get one"
+      }
+    }
+  },
+  "tool": {
+    "entry": "tool.py",
+    "label": {
+      "ja": "世界ごとの設定",
+      "en": "Per-world settings"
+    },
+    "note": {
+      "ja": "見た目の種類・題・違法の呼び方を世界ごとに決める",
+      "en": "Sets the look, title and illegal word per world"
+    }
+  }
+}

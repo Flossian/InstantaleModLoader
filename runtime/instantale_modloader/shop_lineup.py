@@ -9,12 +9,21 @@ MOD どうしは import しない（TECH.md §3.2.3）。
     傾向を決める側（apply() の中）   shop_lineup.provide(owner, ctx, fn, exclude=None)
                                      fn(facility) -> その店に並べる品の傾向の一文 / None（口を出さない）
                                      exclude(facility) -> その店に並べない品の種類（`item_type` の並び）/ None
+    傾向に一文を足す側（apply() の中） shop_lineup.add_note(owner, ctx, fn)
+                                     fn(facility) -> 傾向の後ろに足す一文（句点で終える）/ None（その店では足さない）
     品を作る側（頼みを組むとき）     text, by = shop_lineup.lineup_of(facility)
                                      kinds = shop_lineup.excluded_of(facility)   並べない種類（作っても棚に入れない）
+                                     notes = shop_lineup.notes_of(facility)      足す文（傾向か既定の文の後ろに繋ぐ）
 
 `lineup_of` は登録の新しいものから聞き、最初に文を返した登録を使う（`by` はその持ち主）。
 `excluded_of` は同じ順で聞き、最初に並びを返した登録の種類（小文字）を返す。誰も返さなければ空。
 誰も口を出さなければ `(None, None)` で、作る側は自分の既定の文を使う。
+
+足す文（`add_note`）は、傾向を決める MOD とは別の MOD が「この店にはこういう品も置いてほしい」と
+頼むための口（`926_` が診療所に体に組み込む素材を置かせる）。傾向は1つの文を選ぶが、足す文は全部を
+登録の古いものから順に繋ぐ（句点で終わっていない文には「。」を足す）。
+`lineup_of` の返り値に足す文は入らない。品を作る側（`340_`・`312_`）が `notes_of` を読んで、
+傾向の文（無ければ自分の既定の文）の後ろに1回だけ繋ぐ。
 
 登録は持ち主ごとに1つ（同じ持ち主の登録は差し替える）。
 登録した ctx が用済み（`ctx.superseded()`）になった登録は聞かない。
@@ -27,13 +36,16 @@ import sys
 from . import window_call, window_entries, window_put
 
 STORE_ATTR = "_instantale_shop_lineup"
+#: 足す文の終わりとみなす字。これで終わっていない文には「。」を足す。
+SENTENCE_ENDS = ("。", "．", ".", "！", "？", "!", "?")
 
 
 def _store():
     store = getattr(sys, STORE_ATTR, None)
     if not isinstance(store, dict):
-        store = {"providers": {}, "errors": []}
+        store = {"providers": {}, "notes": {}, "errors": []}
         setattr(sys, STORE_ATTR, store)
+    store.setdefault("notes", {})       # 足す文の口の無い前の版の置き場を引き継いだとき
     return store
 
 
@@ -47,8 +59,34 @@ def withdraw(owner):
     _store()["providers"].pop(str(owner), None)
 
 
+def add_note(owner, ctx, fn):
+    """`owner` の足す文を答える関数を登録する。同じ持ち主の登録は差し替える。"""
+    window_put(_store()["notes"], owner, (ctx, fn))
+
+
+def withdraw_note(owner):
+    """足す文の登録を下げる。"""
+    _store()["notes"].pop(str(owner), None)
+
+
+def notes_of(facility):
+    """その店に足す文（登録の古いものから繋いだもの）。誰も足さなければ空文字。
+
+    句点などで終わっていない文には「。」を足す（次の指示と繋がって読まれないように）。
+    """
+    store = _store()
+    found = []
+    for owner, entry in window_entries(store["notes"]):
+        _ctx, fn = (tuple(entry) + (None, None))[:2]
+        got = _ask(store, owner, fn, facility)
+        if isinstance(got, str) and got.strip():
+            text = got.strip()
+            found.append(text if text.endswith(SENTENCE_ENDS) else text + "。")
+    return "".join(found)
+
+
 def lineup_of(facility):
-    """`(傾向の一文, 決めた持ち主)`。誰も口を出さなければ `(None, None)`。"""
+    """`(傾向の一文, 決めた持ち主)`。誰も傾向を返さなければ `(None, None)`。足す文は `notes_of` で読む。"""
     store = _store()
     for owner, entry in window_entries(store["providers"], newest_first=True):
         _ctx, fn, _exclude = _parts(entry)
@@ -89,6 +127,11 @@ def owners():
     return [owner for owner, _entry in window_entries(_store()["providers"])]
 
 
+def note_owners():
+    """足す文を登録している持ち主。ログ用。"""
+    return [owner for owner, _entry in window_entries(_store()["notes"])]
+
+
 def reset():
     """全部忘れる（検査用）。"""
-    setattr(sys, STORE_ATTR, {"providers": {}, "errors": []})
+    setattr(sys, STORE_ATTR, {"providers": {}, "notes": {}, "errors": []})
