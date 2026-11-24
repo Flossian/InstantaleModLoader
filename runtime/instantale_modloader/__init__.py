@@ -1184,6 +1184,19 @@ MERGED_MODS = {
         "YIELD_TO_GUARDS": "HUNTER_YIELD_TO_GUARDS",
         "ANNOUNCE": "HUNTER_ANNOUNCE",
     }),                                                     # v1.22.0
+    # 3本を1本へ。同じ新しい名前へ2本が移すものは先に移した値が残るので、並びは 304 → 303 → 302。
+    # 「近くに残す」は 303 を切っていれば切、そうでなければ 302 の「雇った場所に戻す」の値になる。
+    "304_quest_end_keep_party": ("348_party_departure", "KEEP_PARTY", {
+        "KEEP_TEXT": "KEEP_TEXT",
+        "ALSO_ON_QUEST_RETIRE": "ALSO_ON_QUEST_RETIRE",
+    }),                                                     # v1.22.0
+    "303_quest_end_party_to_guild": ("348_party_departure", "STAY_NEARBY", {
+        "ANNOUNCE_DESTINATION": "ANNOUNCE_DESTINATION",
+        "ALSO_ON_QUEST_RETIRE": "ALSO_ON_QUEST_RETIRE",
+    }),                                                     # v1.22.0
+    "302_leave_party_in_conversation": ("348_party_departure", "FAREWELL_ENABLED", {
+        "RETURN_TO_INITIAL_LOCATION": "STAY_NEARBY",
+    }),                                                     # v1.22.0
 }
 
 #: `settings/loader.json` の、設定を移し終えた古いフォルダ名の一覧のキー。

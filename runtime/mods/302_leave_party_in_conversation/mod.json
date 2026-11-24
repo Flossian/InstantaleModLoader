@@ -21,5 +21,7 @@
         "en": "Send the ex-member back to where they were hired"
       }
     }
-  }
+  },
+  "superseded": "348_party_departure",
+  "shares": ["mod_party_action"]
 }

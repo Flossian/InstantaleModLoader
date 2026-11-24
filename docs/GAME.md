@@ -396,7 +396,7 @@ MOD のボタンを押しても、ゲームは保存しない（押下の処理�
 描画するのは `InstantaleApp.update_party_member(dt)` と `InstanTaleHUD.update_party_display(*args)` の
 2つ（`ui.Screen.paint_party`）。
 パーティを増減させた MOD は最後にこれを呼ぶ
-（`302_` は別れの文が流れ終わってから呼ぶ。文より先に消えると、まだ別れていないうちに居なくなったように見える）。
+（`348_` は会話で別れたとき、別れの文が流れ終わってから呼ぶ。文より先に消えると、まだ別れていないうちに居なくなったように見える）。
 
 #### 画面に実際に出ているもの
 
@@ -684,7 +684,7 @@ app.world.characters     -> {id: Character}    Facility.owner はこの id（str
 実行時に `app.party` から同じものが読めるとは限らず、`list` とも限らない
 （`{id: Character}` の辞書のこともある）。
 
-`302_` の `ui.party_stores` / `pick_store` が採っている手順:
+`ui.party_stores` / `pick_store`（`302_` が作り、`348_` が使う）が採っている手順:
 
 1. 候補を全部集める（`app.party` / `game_variables['party']` / `world_dict[...]` /
    `world.party` / `player.party`、加えて名前に `party` が入る属性のスキャン）
@@ -751,7 +751,7 @@ InstantaleApp.move_npc_to_facility(character_id, character_instance,
 > NPC を動かす MOD は、戻すところまで行う。
 > 動かす前の `location` と `current_node` を保存し、役目が終わったら帰す。
 > 保存せずに動かすと、その移動は取り消せなくなる（MOD を消しても NPC はそこに残る）。
-> パーティ由来の移送（`302_` / `303_` / `304_`）が問題にならないのは、
+> パーティ由来の移送（`348_`）が問題にならないのは、
 > 動かす主体がゲームで、MOD は置き先を差し替えているだけだから。
 
 #### クエストクリアの解散

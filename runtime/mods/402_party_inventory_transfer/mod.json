@@ -14,6 +14,6 @@
   "author": "MoririnJP",
   "after": [
     "301_quest_from_conversation",
-    "302_leave_party_in_conversation"
+    "348_party_departure"
   ]
 }

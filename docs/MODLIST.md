@@ -8,7 +8,7 @@
 手で書き換えても次の生成で消える。
 直す先は各 MOD の `mod.json` か MODS.md の見出し。
 
-同梱 157 本（基盤 2 / 修正 51 / 追加 55 / 計測 49）。
+同梱 158 本（基盤 2 / 修正 51 / 追加 56 / 計測 49）。
 うち 16 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
 ほかに 4 本は自作だが、外部からの提案を取り込んでいる（下の「提案を取り込んだ MOD」）。
 
@@ -97,7 +97,7 @@
 
 ---
 
-## 追加（55本）
+## 追加（56本）
 
 ゲームに無かった遊びを足す。
 
@@ -105,9 +105,9 @@
 |---|---|---|---|---|
 | [`300_event_facility_arrival`](MODS.md#300_event_facility_arrival-施設でnpcから話しかけてくる) | 施設でNPCが話しかける | 施設でNPCから話しかけてくる | 13 |  |
 | [`301_quest_from_conversation`](MODS.md#301_quest_from_conversation-会話から依頼を受けられる) | 会話から依頼を受ける | 会話から依頼を受けられる | 11 |  |
-| [`302_leave_party_in_conversation`](MODS.md#302_leave_party_in_conversation-会話から仲間と別れられる) | 会話で仲間と別れる | 会話から仲間と別れられる | 1 |  |
-| [`303_quest_end_party_to_guild`](MODS.md#303_quest_end_party_to_guild-解散した仲間を町のギルドに残す) | 解散した仲間をいまの町に残す | 解散した仲間を町のギルドに残す | 2 |  |
-| [`304_quest_end_keep_party`](MODS.md#304_quest_end_keep_party-クエストをクリアしても解散しない) | クエスト後も解散しない | クエストをクリアしても解散しない | 2 |  |
+| [`302_leave_party_in_conversation`](MODS.md#302_leave_party_in_conversation-会話から仲間と別れられる) | 会話で仲間と別れる | 会話から仲間と別れられる | 1 | 取込済 348_party_departure |
+| [`303_quest_end_party_to_guild`](MODS.md#303_quest_end_party_to_guild-解散した仲間を町のギルドに残す) | 解散した仲間をいまの町に残す | 解散した仲間を町のギルドに残す | 2 | 取込済 348_party_departure |
+| [`304_quest_end_keep_party`](MODS.md#304_quest_end_keep_party-クエストをクリアしても解散しない) | クエスト後も解散しない | クエストをクリアしても解散しない | 2 | 取込済 348_party_departure |
 | [`306_party_train_exp`](MODS.md#306_party_train_exp-宿屋の訓練で仲間も育つ) | 仲間も訓練で育つ | 宿屋の訓練で仲間も育つ | 6 |  |
 | [`307_area_move_dungeon`](MODS.md#307_area_move_dungeon-第3の移動手段危険な道を行くを足す) | ダンジョン経由のエリア移動 | 第3の移動手段「危険な道を行く」を足す | 8 |  |
 | [`308_battle_damage_display`](MODS.md#308_battle_damage_display-戦闘のダメージ表示) | 戦闘のダメージ表示 | 戦闘のダメージ表示 | 8 |  |
@@ -149,6 +149,7 @@
 | [`345_date_display`](MODS.md#345_date_display-現在地の下に日付を表示する) | 現在地の下に日付を表示する | 現在地の下に日付を表示する | 3 |  |
 | [`346_player_trait_effects`](MODS.md#346_player_trait_effects-主人公の特質を能力値戦闘店の値段に効かせる) | 主人公の特質を能力値・戦闘・店の値段に効かせる | 主人公の特質を能力値・戦闘・店の値段に効かせる | 8 |  |
 | [`347_conversation_expressions`](MODS.md#347_conversation_expressions-会話の相手の表情が台詞に合わせて変わる) | 会話の相手の表情が、台詞に合わせて変わる | 会話の相手の表情が、台詞に合わせて変わる | - |  |
+| [`348_party_departure`](MODS.md#348_party_departure-依頼後も仲間が残り会話で別れられる) | 依頼後も仲間が残り、会話で別れられる | 依頼後も仲間が残り、会話で別れられる | 6 |  |
 | [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘の審判への仲間の情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |
 | [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | 仲間とのアイテム受け渡し | 仲間とアイテムを受け渡しできる | - |  |
 | [`403_npc_social_memory`](MODS.md#403_npc_social_memory-npc同士がお互いを認知し関係を覚える) | NPC同士の認知と関係記憶 | NPC同士がお互いを認知し、関係を覚える | 5 |  |

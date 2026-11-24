@@ -40,5 +40,6 @@
         "en": "Abandoning a quest also keeps the party together. That path is not verified"
       }
     }
-  }
+  },
+  "superseded": "348_party_departure"
 }

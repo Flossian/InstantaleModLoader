@@ -15,14 +15,13 @@
   "after": [
     "142_balance_quest_stamina",
     "301_quest_from_conversation",
-    "303_quest_end_party_to_guild",
-    "304_quest_end_keep_party",
     "307_area_move_dungeon",
     "318_area_difficulty_growth",
     "321_area_chronicle",
     "325_road_opening",
     "336_crime_overhaul",
-    "338_town_incidents"
+    "338_town_incidents",
+    "348_party_departure"
   ],
   "settings": {
     "ENABLED": {

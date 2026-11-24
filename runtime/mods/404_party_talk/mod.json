@@ -13,7 +13,7 @@
   },
   "author": "MoririnJP, R01/Flossian",
   "after": [
-    "302_leave_party_in_conversation",
+    "348_party_departure",
     "402_party_inventory_transfer",
     "311_npc_profile_memory",
     "403_npc_social_memory"

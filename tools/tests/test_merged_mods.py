@@ -168,6 +168,45 @@ def main():
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
+    print("[3本を1本へ（348）]")
+    party = ("304_quest_end_keep_party", "303_quest_end_party_to_guild", "302_leave_party_in_conversation")
+    party_into = "348_party_departure"
+
+    def party_root(store, disabled=()):
+        root = tempfile.mkdtemp(prefix="iml_merged_party_")
+        mods = os.path.join(root, "runtime", "mods")
+        for name in party + (party_into,):
+            os.makedirs(os.path.join(mods, name))
+            manifest = {"entry": "x.py"}
+            if name != party_into:
+                manifest["superseded"] = party_into
+            ml.write_json(os.path.join(mods, name, "mod.json"), manifest)
+        ml.write_json(os.path.join(mods, ml.ORDER_NAME), {"order": list(party), "disabled": list(disabled)})
+        os.makedirs(os.path.join(root, "settings"))
+        ml.write_json(os.path.join(root, "settings", "mod_settings.json"), store)
+        return root, mods
+
+    root, mods = party_root({party[2]: {"RETURN_TO_INITIAL_LOCATION": True},
+                             party[1]: {"ALSO_ON_QUEST_RETIRE": True},
+                             party[0]: {"ALSO_ON_QUEST_RETIRE": False}}, disabled=[party[1]])
+    try:
+        check("3本とも移す", sorted(ml.merge_settings(mods)) == sorted(party))
+        into = read(root, "mod_settings.json").get(party_into, {})
+        check("303 を切っていたら、302 の値によらず「近くに残す」は切", into.get("STAY_NEARBY") is False, into)
+        check("放棄の扱いは先に移す 304 の値が残る", into.get("ALSO_ON_QUEST_RETIRE") is False, into)
+        check("切っていなかった 304・302 の入切は書かない",
+              "KEEP_PARTY" not in into and "FAREWELL_ENABLED" not in into, into)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+    root, mods = party_root({party[2]: {"RETURN_TO_INITIAL_LOCATION": False}})
+    try:
+        ml.merge_settings(mods)
+        into = read(root, "mod_settings.json").get(party_into, {})
+        check("303 が入っていれば、302 の「雇った場所に戻す」の値が「近くに残す」になる",
+              into.get("STAY_NEARBY") is False, into)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
     print("[表]")
     for old, (into, switch, renames) in ml.MERGED_MODS.items():
         with io.open(os.path.join(MODS_DIR, into, "mod.json"), encoding="utf-8") as fh:

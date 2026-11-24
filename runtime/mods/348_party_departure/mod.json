@@ -1,0 +1,85 @@
+{
+  "entry": "party_departure.py",
+  "api": 1,
+  "kind": "feature",
+  "name": {
+    "en": "Party stays after quests; part ways in conversation",
+    "ja": "依頼後も仲間が残り、会話で別れられる"
+  },
+  "description": {
+    "en": "Completing a quest no longer disbands the party, and you can part ways with a member from conversation. Former members stay where you can find them again",
+    "ja": "依頼をクリアしても仲間は解散せず、別れたいときは会話から別れられる。別れた仲間は後から会いに行ける場所に残る"
+  },
+  "version": "1",
+  "author": "R01/Flossian",
+  "settings": {
+    "KEEP_PARTY": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "依頼が終わっても解散しない",
+        "en": "Keep the party after a quest"
+      },
+      "note": {
+        "ja": "解散を前提にしたゲームバランスは変わる（雇い直しが要らなくなる）",
+        "en": "Changes the balance built around disbanding (no need to rehire)"
+      }
+    },
+    "FAREWELL_ENABLED": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "会話から仲間と別れられる",
+        "en": "Part ways in conversation"
+      },
+      "note": {
+        "ja": "仲間との会話に「ここで別れる」が出る",
+        "en": "Talking to a party member shows \"Part ways here\""
+      }
+    },
+    "STAY_NEARBY": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "別れた仲間を会いに行ける場所に残す",
+        "en": "Leave former members where you can find them"
+      },
+      "note": {
+        "ja": "雇った土地なら雇った場所、別の土地ならいまの町のギルドに残る。切ると雇った場所へ帰る（ゲームのまま）",
+        "en": "In the area where they were hired they go back there; elsewhere they stay at the local guild. Off: they go back to where they were hired (as in the game)"
+      }
+    },
+    "ALSO_ON_QUEST_RETIRE": {
+      "type": "bool",
+      "default": false,
+      "label": {
+        "ja": "依頼の放棄でも同じ扱いにする",
+        "en": "Also on quest retire"
+      },
+      "note": {
+        "ja": "依頼を放棄して解散するときも、上の2つ（解散しない・会いに行ける場所に残す）を効かせる",
+        "en": "Abandoning a quest also follows the two settings above (keep the party / leave them nearby)"
+      }
+    },
+    "ANNOUNCE_DESTINATION": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "依頼の解散で行き先を本文に出す",
+        "en": "Announce where they stay after a quest"
+      }
+    },
+    "KEEP_TEXT": {
+      "type": "str",
+      "default": "{name}はパーティに残り、引き続き行動を共にすることになった。",
+      "label": {
+        "ja": "解散を止めたときに出す文",
+        "en": "Text shown when disband is blocked"
+      },
+      "note": {
+        "ja": "{name} が仲間の名前に置き換わる",
+        "en": "{name} becomes the member name"
+      }
+    }
+  }
+}

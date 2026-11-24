@@ -33,5 +33,6 @@
         "en": "Abandoning a quest also leaves the members at the guild of the town you are in. That path is not verified"
       }
     }
-  }
+  },
+  "superseded": "348_party_departure"
 }

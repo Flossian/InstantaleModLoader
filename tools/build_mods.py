@@ -158,6 +158,7 @@ BANDS = (
         "302_leave_party_in_conversation",
         "303_quest_end_party_to_guild",
         "304_quest_end_keep_party",
+        "348_party_departure",
         "306_party_train_exp",
         "307_area_move_dungeon",
         "308_battle_damage_display",

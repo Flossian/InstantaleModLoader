@@ -70,6 +70,7 @@
     "300_event_facility_arrival",
     "301_quest_from_conversation",
     "302_leave_party_in_conversation",
+    "348_party_departure",
     "402_party_inventory_transfer",
     "303_quest_end_party_to_guild",
     "304_quest_end_keep_party",
