@@ -19,7 +19,7 @@ THEME_MANAGER = "mod_body_augmentation_theme"
 #: 返してもらう型（`llm.create_structure` に渡す）。真偽も番号も文字列で受ける。
 #: 品ごとの型を `APPRAISE_LIST` の配列に入れて返してもらう。
 APPRAISE_FIELDS = ("index", "usable", "part", "name", "description", "boost", "cost", "drawback", "special",
-                   "finish", "reason")
+                   "finish", "restricted", "reason")
 APPRAISE_LIST = "items"
 THEME_FIELDS = ("theme", "title", "illegal")
 
@@ -58,10 +58,12 @@ def _item_line(number, info):
 
 
 def appraise_message(infos, overview, illegal):
-    """見立ての頼み（`[{"role", "content"}]`）。品は `rules.BATCH_SIZE` 件まで、番号は 1 起点。"""
-    who = "闇医者" if illegal else "医師"
+    """見立ての頼み（`[{"role", "content"}]`）。品は `rules.BATCH_SIZE` 件まで、番号は 1 起点。
+
+    見立ては品ごとに控え、どの施設で開いても使い回すので、頼む文は施設で変えない（`illegal` は使わない）。
+    """
     lines = [
-        "あなたはこの世界の{}として、持ち込まれた品のうち、人の体に適合する品を見分けて見立てる。".format(who),
+        "あなたはこの世界の医師として、持ち込まれた品のうち、人の体に適合する品を見分けて見立てる。",
         "世界観に合う形で答える（機械の世界なら義肢や埋め込み、魔術の世界なら刻印や移植など）。",
         "",
         "【世界の概要】",
@@ -89,7 +91,8 @@ def appraise_message(infos, overview, illegal):
     ] + _part_hint_lines() + [
         "name: 組み込んだ後の改造の名前（12字以内の日本語。品の名前をそのまま使わない）。",
         "description: どう組み込むかを1文（40字以内の日本語）。",
-        "boost: 伸びる能力値を1つか2つ、カンマ区切りの英語の鍵で。{}".format(_ability_lines()),
+        "boost: 伸びる能力値を2つ、主・副の順にカンマ区切りの英語の鍵で（同じものを2回選ばない）。{}".format(
+            _ability_lines()),
         "  部位から決めつけず、品の名前と説明から読み取る。同じ部位でも、軍用品・市販品・闇の改造品・"
         "一点ものなど作りが違えば伸びる能力値も違ってよい。どの能力値も選べる。",
         "cost: その作りの弱みとして下がる能力値を1つ、英語の鍵で（boost と別のもの）。"
@@ -98,6 +101,9 @@ def appraise_message(infos, overview, illegal):
         + "、".join("{}={}".format(kind, rules.DRAWBACK_HINTS[kind]) for kind in rules.DRAWBACKS),
         "special: 選んだ部位の候補から、品の性質に合う特殊な働きを1つ、英語の鍵で。",
     ] + _special_lines() + [
+        "restricted: 表の医師が扱うことを禁じられている品なら true、そうでなければ false。"
+        "禁じられるのは、軍用の兵器や戦闘用の部品・禁じられた術の産物・呪い・寄生・強い毒や汚染・暴走の危険のように、"
+        "品そのものが人や社会に危険なもの。強力・高価・珍しいというだけでは禁じられない。",
         "finish: 品の仕立ての具合。raw=手を入れていない素材、processed=加工した品、"
         "part=体に組み込むために作られた部品。",
         "数値は答えない（量は別に決まる）。",
@@ -105,17 +111,13 @@ def appraise_message(infos, overview, illegal):
     return [{"role": "user", "content": "\n".join(lines)}]
 
 
-def theme_message(overview, area_text):
-    """世界観の判定の頼み。"""
+def theme_message(overview):
+    """世界観の判定の頼み。世界に1回なので、世界の概要だけを渡す（いまいる土地は渡さない。開いた場所で結果が変わるため）。"""
     lines = [
         "次の世界で、人の体に手を加える技術がどう呼ばれるかを決める。",
         "",
         "【世界の概要】",
         (overview or "（不明）")[:OVERVIEW_LIMIT],
-    ]
-    if area_text:
-        lines += ["", "【いまいる土地】", area_text[:400]]
-    lines += [
         "",
         "【答え方】",
         "theme: machine（機械・科学で体を作り替える世界）、magic（魔術・呪術・錬金で体を作り替える世界）、"

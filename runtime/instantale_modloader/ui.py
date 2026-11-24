@@ -1714,6 +1714,92 @@ def facilities_of(node):
     return facilities if isinstance(facilities, dict) else {}
 
 
+#: ゲームのアイテム欄の絵の地の色（`InventoryItem.define_image_color`）と、
+#: アイテムの詳細の箱の名前の色（`ItemDetailBox.define_text_color`）。2026-11-23 に実機で読んだ値。
+#: ゲームの関数を呼べないとき（ゲーム抜きの検査・撮影）だけ使う。
+RARITY_FILLS = {"common": (0.25, 0.25, 0.25), "rare": (0.08, 0.24, 0.08), "magical": (0.08, 0.16, 0.32),
+                "epic": (0.2, 0.08, 0.28), "legendary": (0.32, 0.2, 0.08), "mythic": (0.24, 0.04, 0.04)}
+RARITY_TEXTS = {"common": (1, 1, 1, 1), "rare": (0.2, 0.6, 0.2, 1), "magical": (0.3, 0.4, 1, 1),
+                "epic": (0.6, 0.3, 0.9, 1), "legendary": (0.8, 0.5, 0.2, 1), "mythic": (0.6, 0.1, 0.1, 1)}
+
+
+def _game_rarity_color(cls_name, fn_name, rarity):
+    hud = sys.modules.get("scripts.hud.new_hud")
+    fn = getattr(getattr(hud, cls_name, None), fn_name, None)
+    if not callable(fn):
+        return None
+    try:
+        got = fn(None, rarity)      # どちらの関数も self を使わない（実機）
+    except Exception:
+        return None
+    return tuple(got) if isinstance(got, (list, tuple)) and len(got) >= 3 else None
+
+
+def rarity_fill(rarity):
+    """アイテムの絵の地の色（ゲームのアイテム欄と同じ）。`(r, g, b, 1)`。知らないレア度は common の色。"""
+    got = _game_rarity_color("InventoryItem", "define_image_color", rarity) or RARITY_FILLS.get(
+        rarity, RARITY_FILLS["common"])
+    return tuple(got[:3]) + (1,)
+
+
+#: ゲームのアイテム欄のレア度の見せ方（`InventoryItem` のキャンバス。2026-11-23 に実機で読んだ）。
+#: 下端からレア度の色の帯を積んでにじませ（1マス 64px に対して帯 10px、濃さは下から順に）、同じ色で 2px の枠を引く。
+RARITY_FADE_ALPHAS = (0.9, 0.72, 0.54, 0.36, 0.18, 0.0)
+RARITY_FADE_BAND = 10.0 / 64.0
+RARITY_EDGE_ALPHA = 0.9
+RARITY_EDGE = 2
+
+
+def paint_rarity(widget, rarity, mark=None):
+    """`widget` の下地に、ゲームのアイテム欄と同じレア度の見せ方を描く（下からのにじみと 2px の枠）。
+
+    帯の高さはウィジェットの幅に合わせて縮める（ゲームは1マス 64px で帯 10px）。
+    `mark` に色を渡すと、枠の上にその色の 2px の枠を重ねる（ゲームが装備中の品に金の枠を重ねるのと同じ位置）。
+    Kivy はこの関数の中でだけ読む。
+    """
+    from kivy.graphics import Color, Rectangle
+    fill = rarity_fill(rarity)[:3]
+    with widget.canvas.before:
+        bands = []
+        for alpha in RARITY_FADE_ALPHAS:
+            Color(*(fill + (alpha,)))
+            bands.append(Rectangle())
+        Color(*(fill + (RARITY_EDGE_ALPHA,)))
+        edges = [Rectangle() for _side in range(4)]
+    marks = []
+    if mark is not None:
+        with widget.canvas.after:
+            Color(*mark)
+            marks = [Rectangle() for _side in range(4)]
+
+    def frame(rects, x, y, w, h):
+        rects[0].pos, rects[0].size = (x, y + h - RARITY_EDGE), (w, RARITY_EDGE)
+        rects[1].pos, rects[1].size = (x, y), (w, RARITY_EDGE)
+        rects[2].pos, rects[2].size = (x, y), (RARITY_EDGE, h)
+        rects[3].pos, rects[3].size = (x + w - RARITY_EDGE, y), (RARITY_EDGE, h)
+
+    def place(*_args):
+        x, y = widget.pos
+        w, h = widget.size
+        band = w * RARITY_FADE_BAND
+        for index, rect in enumerate(bands):
+            rect.pos, rect.size = (x, y + band * index), (w, band)
+        frame(edges, x, y, w, h)
+        if marks:
+            frame(marks, x, y, w, h)
+
+    widget.bind(pos=place, size=place)
+    place()
+    return widget
+
+
+def rarity_text_color(rarity):
+    """アイテムの名前の色（ゲームのアイテムの詳細の箱と同じ）。`(r, g, b, a)`。知らないレア度は白。"""
+    got = _game_rarity_color("ItemDetailBox", "define_text_color", rarity) or RARITY_TEXTS.get(
+        rarity, RARITY_TEXTS["common"])
+    return tuple(got) if len(got) == 4 else tuple(got[:3]) + (1,)
+
+
 def facility_type_of(facility):
     """`facility_type`。属性でも辞書でも読む。取れなければ空文字。"""
     value = getattr(facility, "facility_type", None)

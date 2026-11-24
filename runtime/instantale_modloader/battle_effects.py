@@ -43,7 +43,7 @@
 
 回復と戦闘の終わりに効く効果。
 
-    治りやすさ・治りにくさ   受ける回復を増やす・減らす（差し引きで1つの割合）。
+    回復促進・回復阻害   受ける回復を増やす・減らす（差し引きで1つの割合）。
                              ゲームの回復は `resolve_battle_effect` の前後の体力の増えから、窓口の吸収・再生は戻す量で直す
     反動   `check_battle_end` が戦闘の終わりを返したとき、最大体力の割合を失う（体力 1 で止まる。戦闘に1回）
 
@@ -97,8 +97,8 @@ LABELS = {
            "curse": "呪い", "growth": "成長", "execute": "処刑", "teamwork": "連携",
            "endure": "不屈", "thorns": "棘", "regen": "再生", "heavy": "重装", "guardian": "守護",
            "resist": "耐性", "evade": "軽業", "desperate": "火事場", "binding": "呪縛", "presence": "威光",
-           "reduce": "軽減", "mend": "治りやすさ",
-           "fragile": "脆さ", "falter": "隙", "unmend": "治りにくさ", "backlash": "反動"},
+           "reduce": "軽減", "mend": "回復促進",
+           "fragile": "脆さ", "falter": "隙", "unmend": "回復阻害", "backlash": "反動"},
     "en": {"slayer": "Slayer", "critical": "Critical", "lifesteal": "Lifesteal",
            "pierce": "Pierce", "venom": "Venom", "daunt": "Daunt",
            "curse": "Cursed", "growth": "Growth", "execute": "Execute", "teamwork": "Teamwork",
@@ -118,7 +118,7 @@ TARGET_LABELS = {
 ON_HIT = {"ja": "命中時 ", "en": "on hit "}
 
 #: 足した後の上限（%）。確率と割合は 100 を超えても意味が無い。軽減は 90 で止める（全部を消さない）。
-#: 代償は、隙と反動を 50 で止める（毎手空振り・1戦で体力が尽きる形にしない）。治りにくさは 90（回復を全部は消さない）。
+#: 代償は、隙と反動を 50 で止める（毎手空振り・1戦で体力が尽きる形にしない）。回復阻害は 90（回復を全部は消さない）。
 CAPS = {"critical": 100, "lifesteal": 100, "pierce": 100, "venom": 100, "daunt": 100,
         "execute": 100, "endure": 100, "thorns": 100, "regen": 100, "heavy": 100, "guardian": 100,
         "resist": 100, "evade": 100, "desperate": 100, "binding": 100, "presence": 100, "reduce": 90,
@@ -329,7 +329,7 @@ def should_execute(hp, dealt, max_hp, percent):
 
 
 def heal_rate(found):
-    """受ける回復の増減（%）。治りやすさから治りにくさを引いたもの。"""
+    """受ける回復の増減（%）。回復促進から回復阻害を引いたもの。"""
     found = found or {}
     return (_num(found.get("mend")) or 0) - (_num(found.get("unmend")) or 0)
 
@@ -553,7 +553,7 @@ def _lose_hp(holder, amount, kind):
 def _gain_hp(holder, amount, kind, app=None):
     """`kind` の出どころで体力を戻す（最大まで。倒れている者は戻さない）。戻した量を返す。
 
-    `app` を渡すと、`holder` の治りやすさ・治りにくさで量を直す。
+    `app` を渡すと、`holder` の回復促進・回復阻害で量を直す。
     ゲームの回復の直し（`_resolve_battle_effect`）が窓口の分を数えないように、戻した量を控える。
     """
     hp, top = _hp_of(holder)
@@ -970,7 +970,7 @@ def _statuses_of(holder):
 
 
 def _adjust_heals(action, healers, own):
-    """ゲームの回復を、治りやすさ・治りにくさで直す。
+    """ゲームの回復を、回復促進・回復阻害で直す。
 
     増えた体力から窓口の吸収など（`own`）を引いた分をゲームの回復とみる。
     同じ手で減ってもいれば増えは小さく見え、その分は直さない。
@@ -992,10 +992,10 @@ def _adjust_heals(action, healers, own):
             continue
         ally.current_hp = new_hp
         if new_hp > after:
-            note = ("（{}は治りやすく、回復が {} 増えた）" if lang == "ja"
+            note = ("（{}への回復が促進され、{} 増えた）" if lang == "ja"
                     else "({} heals quickly: +{})").format(_name_of(ally), new_hp - after)
         else:
-            note = ("（{}は治りにくく、回復が {} 減った）" if lang == "ja"
+            note = ("（{}への回復が阻害され、{} 減った）" if lang == "ja"
                     else "({} heals poorly: -{})").format(_name_of(ally), after - new_hp)
         action["notes"].append(note)
         _write("heal: {} +{} -> +{} ({:+}%)".format(_name_of(ally), gained, gained + new_hp - after, rate))
@@ -1006,7 +1006,7 @@ def _resolve_battle_effect(orig, self, *args, **kwargs):
     if action is None or _dry_run():
         return orig(self, *args, **kwargs)
     watched = []   # 耐性（敵の手だけ）
-    healers = []   # 治りやすさ・治りにくさ（どちらの手でも。味方の回復の手で効く）
+    healers = []   # 回復促進・回復阻害（どちらの手でも。味方の回復の手で効く）
     try:
         for ally in _allies_of(action["app"]):
             worn = effects_for(action["app"], ally)

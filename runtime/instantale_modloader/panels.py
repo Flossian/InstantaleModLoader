@@ -367,3 +367,141 @@ def open_window(app, title, build, *, subtitle="", on_dismiss=None, size_hint=SI
                 if log_exc is not None:
                     log_exc("panels: cannot play the open sound")
     return view
+
+
+# ------------------------------------------------------------ マウスを乗せたときの説明の窓
+#: 説明の窓の幅の上限（画面の幅の割合）と、マウスからの間（upx）。`121_` の人物欄の説明の窓と同じ値。
+TIP_WIDTH = 0.32
+TIP_GAP = 16.0
+TIP_PAD = 12.0
+#: 見張りと説明の窓の置き場（`Window` の属性）。注入し直しても1つだけ残るように、前の世代の見張りを外して結び直す。
+TIP_ATTR = "_instantale_panels_tip"
+
+
+def tip_pos(mouse, size, window, gap):
+    """説明の窓の左下の位置。マウスの右下に出し、はみ出すなら左・上へ回す（画面からははみ出さない）。"""
+    x = mouse[0] + gap
+    if x + size[0] > window[0]:
+        x = mouse[0] - gap - size[0]
+    y = mouse[1] - gap - size[1]
+    if y < 0:
+        y = mouse[1] + gap
+    return max(0.0, min(x, window[0] - size[0])), max(0.0, min(y, window[1] - size[1]))
+
+
+def _tip_state():
+    from kivy.core.window import Window
+    state = getattr(Window, TIP_ATTR, None)
+    if not isinstance(state, dict):
+        state = {"targets": [], "tip": None, "watch": None, "current": None}
+        setattr(Window, TIP_ATTR, state)
+    if state.get("watch") is not _on_mouse:
+        if state.get("watch") is not None:
+            try:
+                Window.unbind(mouse_pos=state["watch"])
+            except Exception:
+                pass
+        Window.bind(mouse_pos=_on_mouse)
+        state["watch"] = _on_mouse
+    return state
+
+
+def hover_tip(kit, widget, text_fn):
+    """`widget` にマウスが乗っている間、`text_fn()` の返す markup の文を説明の窓に出す。
+
+    説明の窓はゲームの画面と同じ黒地と枠で、`kit` の字（ゲームの本文の字）で書く。
+    画面に付いていない間（組んでいる途中・窓を閉じた後）は出さない。`widget` が無くなれば登録も消える。
+    `text_fn` が空を返したら出さない。例外は握って出さない。
+    """
+    import weakref
+    state = _tip_state()
+    # 登録した時点ではまだ画面に付いていないことが多いので、消すのはウィジェットが無くなったものだけ
+    state["targets"] = [entry for entry in state["targets"] if entry[0]() is not None]
+    state["targets"].append((weakref.ref(widget), text_fn, kit.font_name, kit.base))
+
+
+def hide_tip():
+    """説明の窓を消す（窓を閉じるときに呼ぶ。マウスが動かなくても消えるように）。"""
+    try:
+        from kivy.core.window import Window
+    except Exception:
+        return
+    state = getattr(Window, TIP_ATTR, None)
+    if not isinstance(state, dict):
+        return
+    state["current"] = None
+    tip = state.get("tip")
+    if tip is not None and tip.parent is not None:
+        tip.parent.remove_widget(tip)
+
+
+def _alive(widget):
+    return widget is not None and widget.get_root_window() is not None
+
+
+def _on_mouse(_window, pos):
+    try:
+        from kivy.core.window import Window
+        state = getattr(Window, TIP_ATTR, None)
+        if not isinstance(state, dict):
+            return
+        alive = []
+        hit = None
+        for entry in state["targets"]:
+            widget = entry[0]()
+            if widget is None:
+                continue
+            alive.append(entry)
+            if hit is None and _alive(widget) and widget.collide_point(*widget.to_widget(*pos)):
+                hit = entry
+        state["targets"] = alive
+        if hit is None:
+            if state.get("current") is not None:
+                hide_tip()
+            return
+        _show_tip(state, hit, pos)
+    except Exception:
+        hide_tip()
+
+
+def _show_tip(state, entry, pos):
+    from kivy.core.window import Window
+    from kivy.graphics import Color, Rectangle
+    from kivy.uix.floatlayout import FloatLayout
+    from kivy.uix.label import Label
+    tip = state.get("tip")
+    if tip is None:
+        tip = FloatLayout(size_hint=(None, None))
+        with tip.canvas.before:
+            Color(*BG)
+            shade = Rectangle()
+        tip.bind(pos=lambda w, v: setattr(shade, "pos", v), size=lambda w, v: setattr(shade, "size", v))
+        border(tip)
+        tip.label = Label(markup=True, halign="left", valign="top", size_hint=(None, None), color=TEXT)
+        tip.add_widget(tip.label)
+        state["tip"] = tip
+    label = tip.label
+    pad = ui.upx(TIP_PAD)
+    if state.get("current") is not entry[0]:
+        text = entry[1]()
+        if not text:
+            hide_tip()
+            return
+        if entry[2]:
+            label.font_name = entry[2]
+        label.font_size = entry[3] * META
+        width = float(Window.width) * TIP_WIDTH
+        label.text = text
+        label.text_size = (None, None)
+        label.texture_update()
+        width = min(width, label.texture_size[0] + 2 * pad)       # 短い文は幅を詰める
+        label.text_size = (width - 2 * pad, None)
+        label.texture_update()
+        height = label.texture_size[1] + 2 * pad
+        tip.size = (width, height)
+        label.size = (width - 2 * pad, height - 2 * pad)
+        state["current"] = entry[0]
+    if tip.parent is None:
+        Window.add_widget(tip)          # 開いている窓（ModalView）より上に描く
+    tip.pos = tip_pos(pos, tip.size, (Window.width, Window.height), ui.upx(TIP_GAP))
+    label.pos = (tip.x + pad, tip.y + pad)

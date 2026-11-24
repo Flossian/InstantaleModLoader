@@ -416,7 +416,7 @@ check("検算: 代償も正の percent で持ち、上限で止める",
       rules.clean_effect({"kind": "battle", "effect": "fragile", "percent": 40})
       == {"kind": "battle", "effect": "fragile", "percent": 15}
       and rules.clean_effect({"kind": "battle", "effect": "falter", "percent": -5}) is None)
-check("重さ: 代償は負に数える（脆さ 10% = -2、治りにくさ 30% = -2、治りやすさ 20% = +2）",
+check("重さ: 代償は負に数える（脆さ 10% = -2、回復阻害 30% = -2、回復促進 20% = +2）",
       rules.weight([{"kind": "battle", "effect": "fragile", "percent": 10}]) == -2.0
       and rules.weight([{"kind": "battle", "effect": "unmend", "percent": 30}]) == -2.0
       and rules.weight([{"kind": "battle", "effect": "mend", "percent": 20}]) == 2.0)

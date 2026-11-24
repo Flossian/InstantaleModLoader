@@ -14,10 +14,13 @@
 - 押下はゲームと同じ経路（`process_choice`）で、自前のフェーズとして動かす
 - 暦はゲームの `elapse_days` で進める。怪我はゲームの `body_parts` に足して `check_body_damage` を呼ぶ
 - 能力値と戦闘の効果はローダの窓口（`abilities` / `battle_effects`）に答える。人物にもセーブにも書かない
+- 侵食・傷が開く・自己修復のサイクルは、日数（窓口 `durations.on_days`）と依頼の終わり（窓口 `quest_ends`。
+  放棄は窓口が無いので `QuestRetireManager.execute` を包む）で進める
 - 入っている改造は `state\\body_augmentation_play\\<世界>×<主人公>.json`、
   見立てと世界観の判定は `state\\body_augmentation_world\\<世界>.json`、
   世界ごとの設定は `state\\body_augmentation\\<世界>.json`（同梱の `tool.py` が書く）
-- 違法の改造を持ったまま治療院で治療か施術を受けると、その土地の手配度が下がる
+- 違法の改造を持ったまま治療院で治療・施術・取り外しを受けると、その土地の手配度が下がる
+- 施術・失敗・取り外しのたびに、主人公の `life_log` へ1行足す（改造そのものはセーブに書かない）
 """
 
 import os
@@ -27,7 +30,7 @@ import threading
 import typing
 
 from instantale_modloader import (abilities, battle_effects, choices, durations, equipment, hudicons, ids, items,
-                                  llm, loads, shop_lineup, state as loader_state, ui)
+                                  llm, loads, quest_ends, shop_lineup, state as loader_state, ui)
 
 from . import prompts, rules, window
 
@@ -59,7 +62,7 @@ INSTALL_TEXT = "{place}で{days}の入院をして施術を受けた。{part}に
 INSTALL_ILLEGAL_TEXT = "{place}の奥の部屋で{days}を過ごし、{part}に「{name}」を組み込ませた。"
 TRY_TEXT = "{place}で{days}の入院をして施術を受けた。"
 TRY_ILLEGAL_TEXT = "{place}の奥の部屋で{days}を過ごした。"
-FAIL_TEXT = "施術はうまくいかなかった。{part}を傷め、{item}は使い物にならなくなった。"
+FAIL_TEXT = "施術はうまくいかなかった。{part}に怪我を負い（怪我 +{amount}）、{item}は使い物にならなくなった。"
 FAIL_OVERLOAD_TEXT = "先に入れていた「{name}」も巻き込まれて壊れた。"
 REMOVE_TEXT = "{place}で{days}の入院をして、{part}の「{name}」を取り外した。"
 RESTORE_TEXT = "失っていた{part}の働きを、「{name}」が取り戻した。"
@@ -71,6 +74,7 @@ DISCOVERED_TEXT = "医師は{illegal}に気付き、役人へ届け出た。こ�
 NO_GOLD_TEXT = "代金が足りない。"
 NO_ROOM_TEXT = "所持品に空きが無い。"
 GONE_TEXT = "選んだアイテムが持ち物に見当たらない。"
+EQUIPPED_TEXT = "身に着けているアイテムは組み込めない。"
 RECORD_MARK = "〈施術の記録〉"
 RECORD_INSTALL = "{player}は{area}で{part}に{name}を組み込んだ。"
 RECORD_FAIL = "{player}は{area}で{part}への施術に失敗し、傷を負った。"
@@ -96,6 +100,7 @@ MEDICAL_TYPE = "medical_facility"
 UNDERWORLD_TYPE = "underworld_office"
 EXIT_CLS = "MovePhaseManager"
 TREATMENT_TARGET = "__main__:MedicalTreatmentManager.medical_treatment"
+QUEST_RETIRE_TARGET = "__main__:QuestRetireManager.execute"
 LLM_TIMEOUT = 60
 HISTORY_LIMIT = 50
 
@@ -260,6 +265,18 @@ def apply(ctx):
             gear = None
         return [item for _region, item in gear or []]
 
+    def is_equipped(app, key, item):
+        """身に着けている品か（候補に出さない・施術しない）。
+
+        装備欄の MOD の品と、素のゲームの `equipments` の品（実行時は品の実体、セーブの形は id の文字列。
+        GAME.md §2.13.3）。素のゲームの装備中の品は所持品の欄にも居るので、欄の空きの計算（`worn_items`）とは分ける。
+        """
+        found = list(worn_items(app))
+        gear = getattr(player_of(app), "equipments", None)
+        if isinstance(gear, dict):
+            found += [value for value in gear.values() if value is not None]
+        return any(value is item or (isinstance(value, str) and value == str(key)) for value in found)
+
     def return_spot(app, record):
         """取り外した品を戻す所持品の欄のマス。戻さない設定・戻す品が無いときは `True`、空きが無ければ None。"""
         data = record.get("item") if isinstance(record, dict) else None
@@ -274,13 +291,13 @@ def apply(ctx):
         return rules.free_spot(placed, rules.item_size(data))
 
     def candidates(app):
-        """見立てに回す持ち物の品 `[(鍵, 辞書, 品の情報, 絵)]`。持ち物の並び。"""
+        """見立てに回す持ち物の品 `[(鍵, 辞書, 品の情報, 絵)]`。持ち物の並び。身に着けている品は外す。"""
         inv = items.inventory_of(player_of(app))
         found = []
         if not isinstance(inv, dict):
             return found
         for key, item in list(inv.items()):
-            if getattr(item, "item_type", None) not in rules.ITEM_TYPES:
+            if getattr(item, "item_type", None) not in rules.ITEM_TYPES or is_equipped(app, key, item):
                 continue
             data = items.to_dict(item)
             info = rules.item_info(data)
@@ -311,13 +328,12 @@ def apply(ctx):
         _key, cache = world_cache(app)
         return not isinstance(cache.get("theme"), dict)
 
-    def detect_theme(app, force=False):
-        """世界観の判定を別スレッドで頼む。済んだら画面を描き直す。"""
+    def detect_theme(app):
+        """世界観の判定を別スレッドで頼む。済んだら画面を描き直す。答えが無ければ保存せず、次に開いたときに頼み直す。"""
         key = loader_state.world_key(app)
-        if key in store["theme_pending"] or (not force and not needs_theme(app)):
+        if key in store["theme_pending"] or not needs_theme(app):
             return
         overview = ui.world_overview(app)
-        area_text = "{} {}".format(area_name(app), getattr(ui.current_area(app), "description", "") or "")
         structure = llm.create_structure(ctx, "BodyAugmentTheme",
                                          {name: (str, ...) for name in prompts.THEME_FIELDS}, label="augment")
         # 印はスレッドを起こす直前に立てる（準備で送出すると、下ろす finally に届かず頼み直せなくなる）
@@ -326,7 +342,7 @@ def apply(ctx):
         def run():
             result = None
             try:
-                raw = llm.ask(ctx, prompts.THEME_MANAGER, prompts.theme_message(overview, area_text),
+                raw = llm.ask(ctx, prompts.THEME_MANAGER, prompts.theme_message(overview),
                               timeout=LLM_TIMEOUT, structure=structure, label="augment", write=write)
                 result = rules.normalize_theme(llm.as_dict(raw) if raw is not None else None)
             except Exception:
@@ -433,7 +449,7 @@ def apply(ctx):
             appraise_all(app)
         model = build_model(app)
         store["window"] = window.AugmentWindow(app, model, on_select=select, on_action=act,
-                                               on_redetect=redetect, on_dismiss=lambda: store.update(window=None),
+                                               on_dismiss=lambda: store.update(window=None),
                                                write=write)
         write("open: mode={} augments={}".format(mode, len(model["records"])))
 
@@ -460,12 +476,6 @@ def apply(ctx):
         view["select"] = (kind, payload)
         refresh_window()
 
-    def redetect():
-        app = ui.find_app()
-        if app is not None:
-            detect_theme(app, force=True)
-            refresh_window()
-
     def build_model(app):
         """画面に渡す形（`window.py` が描く）。"""
         theme, words = theme_of(app)
@@ -489,6 +499,8 @@ def apply(ctx):
             if found is not None:
                 detail, target = item_detail(app, found, bucket, words, mode, cfg)
         parts = {}
+        # 侵食・自己修復のある部位は、見出しに次の刻みまでの日数を出す
+        wear = rules.wear_marks([r for _p, _s, r in records])
         for part in rules.PARTS:
             slots = []
             for slot in range(rules.SLOTS):
@@ -496,15 +508,27 @@ def apply(ctx):
                 if record is None:
                     slots.append(None)
                     continue
+                info = record.get("item_info") or {}
                 slots.append({"name": record.get("name") or "", "illegal": bool(record.get("illegal")),
-                              "image": (record.get("item") or {}).get("image_src"),
+                              "image": (record.get("item") or {}).get("image_src"), "rarity": info.get("rarity"),
+                              "forbidden": bool(record.get("forbidden")),
                               "pieces": rules.effect_pieces(record, compact=True),
-                              "selected": selected == ("slot", [part, slot]) or selected == ("slot", (part, slot))})
+                              "selected": selected == ("slot", [part, slot]) or selected == ("slot", (part, slot)),
+                              # マウスを乗せたときの説明の窓（効果と、改造と元のアイテムの説明）
+                              "tip": {"tag": (rules.FORBIDDEN_WORD if record.get("forbidden") else
+                                              words["illegal"] if record.get("illegal") else ""),
+                                      "item": "元のアイテム {}（{}）".format(info.get("name") or "",
+                                                                         info.get("rarity") or ""),
+                                      "effects": rules.effect_pieces(record, costs=False),
+                                      "costs": rules.effect_pieces(record, costs=True),
+                                      "description": record.get("description") or "",
+                                      "item_description": info.get("description") or ""}})
             injury, _stage = hurt.get(part, (0, ""))
             # 段階（stage）は `check_body_damage` が走るまで古いまま残る（怪我 9 で hurt の主人公がいる）ので、
             # ゲームと同じしきい値（10。GAME.md §2.19.1）で怪我の値から見る
             state_text = ("負傷 {}".format(int(injury)), "hurt") if injury >= rules.HURT_FROM else ("正常", None)
             parts[part] = {"name": rules.PART_NAMES[part], "slots": slots, "state": state_text,
+                           "wear": wear.get(part, []),
                            "target": bool(target) and target[0] == part,
                            "target_slot": target[1] if target and target[0] == part else None,
                            "hurt": state_text[1] == "hurt",
@@ -513,6 +537,8 @@ def apply(ctx):
         # 候補は見立てで適合した品だけ。見立て中・適合しない・見立てに失敗した品は数だけ見せる
         cands = []
         tally = {"pending": 0, "refused": 0, "failed": 0, "unknown": 0}
+        gold = ui.gold_of(app)
+        player_scores = scores(app)
         for key, _data, info, image in rows:
             appraisal = appraisal_of(app, info)
             print_key = rules.fingerprint(info)
@@ -523,35 +549,50 @@ def apply(ctx):
             if not appraisal.get("usable"):
                 tally["refused"] += 1
                 continue
-            cands.append({"key": key, "image": image, "name": info["name"],
-                          "label": rules.PART_NAMES[appraisal["part"]], "kind": "ok",
-                          "selected": selected == ("item", key)})
+            forbidden = bool(appraisal.get("restricted"))
+            cands.append({"key": key, "image": image, "name": appraisal["name"], "rarity": info.get("rarity"),
+                          "label": rules.PART_NAMES[appraisal["part"]] + (
+                              "・" + rules.FORBIDDEN_WORD if forbidden else ""),
+                          "kind": "forbidden" if forbidden else "ok", "forbidden": forbidden,
+                          "selected": selected == ("item", key),
+                          "tip": candidate_tip(appraisal, info, bucket, words, mode, cfg, player_scores, gold)})
         count_illegal = sum(1 for _p, _s, r in records if r.get("illegal"))
         counts = [("{} {}".format(words["augment"], len(records)), None)]
         if count_illegal:
             counts.append(("うち{} {}".format(words["illegal"], count_illegal), "illegal"))
-        if mode == "legal":
-            note = "現在地 {}　施術と取り外しができる".format(place_name(app))
-        elif mode == "illegal":
-            note = "現在地 {}　{}の施術と取り外しができる".format(place_name(app), words["illegal"])
+        # 画面が HUD の所持金の欄を覆うので、施術の料金と見比べられるよう見出しに所持金を出す（現在地の行の左）
+        gold_text = coins("所持金 {}G".format(money(gold))) if gold is not None else ""
+        if mode is not None:
+            note = "現在地 {}".format(place_name(app))
         else:
             note = "付け外しは治療院（{}の施術は裏の事務所）で行える".format(words["illegal"])
         stats, battle = rules.total_pieces([r for _p, _s, r in records], losses(app))
+        hints = rules.total_hints([r for _p, _s, r in records])
         return {"theme": theme, "words": words, "player": getattr(player_of(app), "name", "") or "",
-                "counts": counts, "note": note, "mode": mode, "parts": parts, "candidates": cands,
+                "counts": counts, "gold": gold_text, "note": note, "mode": mode, "parts": parts, "candidates": cands,
                 "candidate_note": rules.candidate_note(tally, mode is not None, hint=bool(cands)),
                 "candidate_empty": rules.candidate_empty(tally, mode is not None),
-                "detail": detail, "totals": {"stats": stats, "battle": battle}, "records": records,
-                "theme_pending": loader_state.world_key(app) in store["theme_pending"],
-                "theme_auto": setting(app, "THEME") not in rules.THEME_CHOICES}
+                "detail": detail, "totals": {"stats": stats, "battle": battle, "hints": hints}, "records": records}
+
+    def candidate_tip(appraisal, info, bucket, words, mode, cfg, player_scores, gold):
+        """候補にマウスを乗せたときの説明の窓（部位の札と同じ形）。方法が2つなら方法ごとの行。"""
+        plans = [rules.install_plan(appraisal, info, bucket, mode, method, cfg, player_scores, gold)
+                 for method in rules.methods_for(appraisal, mode)]
+        if len(plans) > 1:
+            rows = [(rules.METHOD_NAMES[p["method"]], p["effects"] + p["costs"]) for p in plans]
+        else:
+            rows = [("効果", plans[0]["effects"]), ("代償", plans[0]["costs"])]
+        return {"tag": rules.FORBIDDEN_WORD if appraisal.get("restricted") else "",
+                "item": "元のアイテム {}（{}）　{}・{}".format(
+                    info.get("name") or "", info.get("rarity") or "", rules.PART_NAMES[appraisal["part"]],
+                    rules.FINISH_NAMES.get(appraisal.get("finish"), "")),
+                "rows": rows, "description": appraisal.get("description") or "",
+                "item_description": info.get("description") or ""}
 
     def record_detail(app, record, bucket, words, mode, cfg):
         part = record["part"]
-        info = record.get("item_info") or {}
-        sub = ["{}・{}".format(rules.PART_NAMES[part], "2つめ" if record.get("slot") else "1つめ"),
-               "元のアイテム {}（{}）".format(info.get("name") or "", info.get("rarity") or "")]
-        if record.get("place"):
-            sub.append("{}で施術".format(record["place"]))
+        # 題の横は部位と仕上げだけ（元のアイテムは札にマウスを乗せたときの説明に出る）
+        sub = [rules.PART_NAMES[part], rules.FINISH_NAMES.get(record.get("finish"), "")]
         rows = [("効果", rules.effect_pieces(record, costs=False)),
                 ("代償", rules.effect_pieces(record, costs=True))]
         button = None
@@ -560,8 +601,6 @@ def apply(ctx):
             underworld = mode == "illegal"
             fee = rules.remove_fee(record, cfg, at_underworld=underworld)
             days = rules.remove_days(record, cfg, at_underworld=underworld)
-            rows.append(("料金と期間", [(coins("{}G・入院 {}".format(money(fee), rules.days_words(days))),
-                                         rules.PLAIN)]))
             # 取り外す改造が合法でも、別の部位に違法の改造があれば見つかる（remove の had_illegal と同じ条件）
             if bucket and rules.has_illegal(bucket) and not underworld:
                 notes.append(("取り外すと咎められ、この土地の手配度が {} 下がる".format(setting(app, "DISCOVERY_LAW")),
@@ -571,14 +610,18 @@ def apply(ctx):
             enough = gold is None or gold >= fee
             room = return_spot(app, record) is not None
             button = {"text": "取り外す", "enabled": enough and room, "action": "remove",
-                      "payload": [part, record["slot"]]}
+                      "payload": [part, record["slot"]],
+                      "lines": [coins("{}G・{}".format(money(fee), rules.days_words(days)))]}
             if not room:
                 notes.insert(0, (NO_ROOM_TEXT, rules.MINUS))
             if not enough:
                 notes.insert(0, (NO_GOLD_TEXT, rules.MINUS))
         return {"image": (record.get("item") or {}).get("image_src"), "name": record.get("name") or "",
+                "rarity": (record.get("item_info") or {}).get("rarity"), "forbidden": bool(record.get("forbidden")),
+                "tag": rules.FORBIDDEN_WORD if record.get("forbidden") else "",
                 "illegal": bool(record.get("illegal")), "sub": sub,
-                "description": record.get("description") or "", "rows": rows, "button": button, "notes": notes}
+                "description": record.get("description") or "", "rows": rows, "buttons": [button] if button else [],
+                "notes": notes}
 
     def item_detail(app, row, bucket, words, mode, cfg):
         """持ち物の品の詳細と、光らせる部位。"""
@@ -586,56 +629,75 @@ def apply(ctx):
         appraisal = appraisal_of(app, info)
         sub = ["{}（{}）".format(rules.FINISH_NAMES.get(appraisal.get("finish"), "")
                                 if appraisal and appraisal.get("usable") else info["item_type"], info["rarity"])]
-        base = {"image": image, "name": info["name"], "illegal": False, "sub": sub,
+        base = {"image": image, "name": info["name"], "rarity": info.get("rarity"), "illegal": False, "sub": sub,
                 "description": info.get("description") or "", "rows": [], "button": None, "notes": []}
         if appraisal is None or not appraisal.get("usable"):       # 候補には適合したアイテムしか並ばない
             return base, None
-        illegal = mode == "illegal"
         part = appraisal["part"]
-        preview = rules.make_record(appraisal, info, None, illegal, 0, None, None, cfg.special_min)
-        lost = not illegal and injuries(app).get(part, (0, ""))[0] >= rules.LOST_FROM
-        base.update({"name": appraisal["name"], "illegal": illegal,
+        forbidden = bool(appraisal.get("restricted"))
+        # 禁制のアイテムは、名前の横の札を「禁制」にして示す（副題に足すと折り返して題が枠からはみ出す）
+        base.update({"name": appraisal["name"], "illegal": forbidden, "forbidden": forbidden,
+                     "tag": rules.FORBIDDEN_WORD if forbidden else "",
                      "description": appraisal.get("description") or info.get("description") or ""})
-        base["sub"] = [rules.PART_NAMES[part], "使うアイテム {}（{}）".format(info["name"], info["rarity"]),
-                       rules.FINISH_NAMES.get(appraisal.get("finish"), "")]
-        # 代償の量は施術のときに決まるので、見積もりでは幅で見せる
-        estimate = [piece for piece in rules.effect_pieces(preview, costs=True)
-                    if not piece[0].startswith(rules.ABILITY_NAMES.get(appraisal.get("cost"), "\0") + " ")]
-        piece = rules.cost_piece(appraisal, info["rarity"], illegal)
-        base["rows"] = [("効果", rules.effect_pieces(preview, costs=False)),
-                        ("代償", ([piece] if piece else []) + estimate)]
-        slot = rules.free_slot(bucket, part, illegal)
-        if lost:
-            base["notes"].append(("失った{}の働きを取り戻す".format(rules.PART_NAMES[part]), rules.PLUS))
-        if mode is None:
-            return base, (part, slot)
-        fee = rules.install_fee(info, illegal, cfg)
-        days = rules.install_days(info, illegal, cfg)
-        fail = rules.fail_percent(info, appraisal.get("finish"), illegal, slot == 1, scores(app), cfg)
-        base["rows"].append(("料金と期間", [(coins("{}G・入院 {}".format(money(fee), rules.days_words(days))),
-                                             rules.PLAIN)]))
-        loss = "部位が使えなくなる" if illegal else "部位を傷める"
-        extra = "。先に入れた改造も壊れる" if slot == 1 else ""
-        base["rows"].append(("失敗の見込み", [(rules.percent_words(fail), rules.PLAIN),
-                                              ("{}、アイテムを失う{}".format(loss, extra), rules.PLAIN)]))
+        base["sub"] = [rules.PART_NAMES[part], rules.FINISH_NAMES.get(appraisal.get("finish"), "")]
         gold = ui.gold_of(app)
-        enough = gold is None or gold >= fee
-        enabled = slot is not None and enough
-        if slot is None:
-            base["notes"].append(("{}の枠が埋まっている。先に取り外す".format(rules.PART_NAMES[part])
-                                  if not illegal else "{}の枠は2つとも埋まっている".format(rules.PART_NAMES[part]),
-                                  rules.MINUS))
-        elif not enough:
+        player_scores = scores(app)
+        # 裏の事務所の正規のアイテムは、通常施術と限界施術の2つを並べる。ほかは1つ
+        plans = [rules.install_plan(appraisal, info, bucket, mode, method, cfg, player_scores, gold)
+                 for method in rules.methods_for(appraisal, mode)]
+        two = len(plans) > 1
+        first = plans[0]
+        current = injuries(app).get(part, (0, ""))[0]
+
+        def button_lines(p):
+            """施術のボタンの小さい行（`成功率70%・2,700G・4日`、`失敗時 怪我 +60`）。"""
+            return [coins("成功率{}・{}G・{}".format(rules.percent_words(rules.success_percent(p["fail"])),
+                                                   money(p["fee"]), rules.days_words(p["days"]))),
+                    "失敗時 " + rules.fail_injury_words(rules.fail_injury(p["illegal"]), current)]
+
+        if not two:
+            base["rows"] = [("効果", first["effects"]), ("代償", first["costs"])]
+        else:
+            # 方法ごとに1行（効果と代償。料金・期間・成功率・失敗の怪我はボタンの中）
+            for p in plans:
+                base["rows"].append((rules.METHOD_NAMES[p["method"]], p["effects"] + p["costs"]))
+        if not first["illegal"] and injuries(app).get(part, (0, ""))[0] >= rules.LOST_FROM:
+            base["notes"].append(("{}で、失った{}の働きを取り戻す".format(rules.METHOD_NAMES[rules.NORMAL], rules.PART_NAMES[part])
+                                  if two else "失った{}の働きを取り戻す".format(rules.PART_NAMES[part]), rules.PLUS))
+        if mode is None:
+            return base, (part, first["slot"])
+        if not first["proc"]["allowed"]:
+            base["notes"].append(("{}のアイテムは治療院では扱えない（裏の事務所で受けられる）".format(
+                rules.FORBIDDEN_WORD), rules.MINUS))
+            base["buttons"] = [{"text": words["install"], "enabled": False, "action": "install",
+                                "payload": [key, rules.NORMAL]}]
+            return base, (part, first["slot"])
+        # 失敗したときのこと（怪我の量はボタンの中に出すので、ここは1行）
+        stacked = [p for p in plans if p["slot"] == 1]
+        base["notes"].append((rules.fail_note(part) + ("（{}は先に入れた改造も壊れる）".format(
+            rules.METHOD_NAMES[stacked[0]["method"]]) if stacked and two else
+            "（先に入れた改造も壊れる）" if stacked else ""), rules.PLAIN))
+        last = plans[-1]
+        if last["slot"] is None:
+            base["notes"].append((("{}の枠は2つとも埋まっている" if last["illegal"]
+                                   else "{}の枠が埋まっている。先に取り外す").format(rules.PART_NAMES[part]), rules.MINUS))
+        elif first["slot"] is None:
+            base["notes"].append(("{}の枠が埋まっている。{}は先に取り外す".format(
+                rules.PART_NAMES[part], rules.METHOD_NAMES[rules.NORMAL]), rules.MINUS))
+        if plans[-1]["illegal"] and plans[-1]["slot"] == 1:
+            base["notes"].append(("{}は2つめの枠に重ねて入れる".format(rules.METHOD_NAMES[rules.OVERLIMIT])
+                                  if two else "2つめの枠に重ねて入れる", rules.MINUS))
+        if not all(p["enough"] for p in plans):
             base["notes"].append((NO_GOLD_TEXT, rules.MINUS))
-        elif slot == 1:
-            base["notes"].append(("2つめの枠に重ねて入れる", rules.MINUS))
-        if bucket and rules.has_illegal(bucket) and not illegal:
+        if bucket and rules.has_illegal(bucket) and mode == "legal":
             base["notes"].append(("施術を受けると、{}が見つかる".format(
                 rules.underworld_label(words)), rules.MINUS))
-        if gold is not None:
-            base["notes"].append((coins("所持金 {}G".format(money(gold))), rules.PLAIN))
-        base["button"] = {"text": words["install"], "enabled": enabled, "action": "install", "payload": key}
-        return base, (part, slot)
+        base["buttons"] = [{"text": rules.METHOD_NAMES[p["method"]] if two else words["install"],
+                            "enabled": p["slot"] is not None and p["enough"], "action": "install",
+                            "payload": [key, p["method"]], "danger": p["illegal"], "lines": button_lines(p)}
+                           for p in plans]
+        base["danger_rows"] = [rules.METHOD_NAMES[p["method"]] for p in plans if two and p["illegal"]]
+        return base, (part, first["slot"])
 
     # ------------------------------------------------------------ 施術と取り外し
     def act(action, payload):
@@ -712,8 +774,13 @@ def apply(ctx):
         history.append(entry)
         del history[:-HISTORY_LIMIT]
 
-    def install(app, key, mode):
-        illegal = mode == "illegal"
+    def install(app, payload, mode):
+        # 押したボタンの `[アイテムの鍵, 方法]`。方法が読めなければ通常施術（違法にはしない）
+        if isinstance(payload, (list, tuple)):
+            key, method = (list(payload) + [rules.NORMAL])[:2]
+        else:
+            key, method = payload, rules.NORMAL
+        underworld = mode == "illegal"
         inv = items.inventory_of(player_of(app))
         item = inv.get(key) if isinstance(inv, dict) else None
         data = items.to_dict(item) if item is not None else None
@@ -721,10 +788,20 @@ def apply(ctx):
         if info is None:
             screen.say(app, GONE_TEXT)
             return
+        if is_equipped(app, key, item):
+            # 装備欄に参照を残したまま持ち物から消さない
+            screen.say(app, EQUIPPED_TEXT)
+            write("install: {!r} is equipped".format(info["name"]))
+            return
         appraisal = appraisal_of(app, info)
         if not appraisal or not appraisal.get("usable"):
             write("install: no usable appraisal for {!r}".format(info["name"]))
             return
+        proc = rules.procedure(appraisal, mode, method)
+        if not proc["allowed"]:
+            write("install: {!r} is forbidden here ({})".format(info["name"], mode))
+            return
+        illegal, forbidden = proc["illegal"], proc["forbidden"]
         cfg = config(app)
         part = appraisal["part"]
         with play.lock:
@@ -762,25 +839,25 @@ def apply(ctx):
                     broken = bucket["augments"][part][0]
                     bucket["augments"][part][0] = None
                 remember(bucket, {"day": day, "event": "failed", "part": part, "item": info["name"],
-                                  "illegal": illegal, "percent": fail})
+                                  "illegal": illegal, "forbidden": forbidden, "percent": fail})
             else:
                 record = rules.make_record(appraisal, info, data, illegal, slot, day, place, cfg.special_min,
-                                           rng=store["rng"])
+                                           rng=store["rng"], forbidden=forbidden)
                 bucket["augments"][part][slot] = record
                 remember(bucket, {"day": day, "event": "installed", "part": part, "name": record["name"],
-                                  "illegal": illegal})
+                                  "illegal": illegal, "forbidden": forbidden})
             play.save(pkey)
         part_name = rules.PART_NAMES[part]
         if failed:
-            hurt_part(app, part, rules.ILLEGAL_FAIL_INJURY if illegal else rules.FAIL_INJURY)
-            lines.append((TRY_ILLEGAL_TEXT if illegal else TRY_TEXT).format(
+            hurt_part(app, part, rules.fail_injury(illegal))
+            lines.append((TRY_ILLEGAL_TEXT if underworld else TRY_TEXT).format(
                 place=place, days=rules.days_words(days)))
-            lines.append(FAIL_TEXT.format(part=part_name, item=info["name"]))
+            lines.append(FAIL_TEXT.format(part=part_name, amount=rules.fail_injury(illegal), item=info["name"]))
             if slot == 1 and broken:
                 lines.append(FAIL_OVERLOAD_TEXT.format(name=broken.get("name") or ""))
             record_life(app, RECORD_FAIL, part, appraisal["name"])
         else:
-            lines.append((INSTALL_ILLEGAL_TEXT if illegal else INSTALL_TEXT).format(
+            lines.append((INSTALL_ILLEGAL_TEXT if underworld else INSTALL_TEXT).format(
                 place=place, days=rules.days_words(days), part=part_name, name=appraisal["name"]))
             if not illegal and injuries(app).get(part, (0, ""))[0] >= rules.LOST_FROM:
                 # 治療で治らない部位は、合法の施術が通ると取り戻す
@@ -788,11 +865,12 @@ def apply(ctx):
                 lines.append(RESTORE_TEXT.format(part=part_name, name=appraisal["name"]))
                 write("install: restored the lost {}".format(part))
             record_life(app, RECORD_INSTALL, part, appraisal["name"])
-        write("install: {} {} slot {} {!r} fee {} days {} fail {}% -> {}".format(
-            mode, part, slot, info["name"], fee, days, fail, "failed" if failed else "ok"))
+        write("install: {} {} {} slot {} {!r} fee {} days {} fail {}% -> {}".format(
+            mode, "forbidden" if forbidden else method if underworld else rules.NORMAL, part, slot, info["name"],
+            fee, days, fail, "failed" if failed else "ok"))
         for line in lines:
             screen.say(app, line)
-        if had_illegal and not illegal:
+        if had_illegal and not underworld:
             discovered(app, "install")
         finish(app, "install")
         return True
@@ -961,37 +1039,92 @@ def apply(ctx):
         if not changes:
             return []
         set_injuries(app, changes, check=False)
-        store["dirty"] = True
+        # 決め直しの印は周回の控えに置く（日が進む前にゲームを閉じても、次に読み込んだときに決め直す）
+        with play.lock:
+            pkey, bucket = ledger(app)
+            if not bucket.get("recheck"):
+                bucket["recheck"] = True
+                play.save(pkey)
         write("rampage: {}".format(changes))
         return [RAMPAGE_TEXT.format(part="・".join(rules.PART_NAMES[part] for part in changes))]
 
     abilities.declare(OWNER, ability_answer, write=write)
     battle_effects.declare(OWNER, battle_answer, on_kill=on_kill, write=write)
 
-    # ------------------------------------------------------------ 日数で進む効果（侵食・自己修復）
-    def after_days(call):
-        app = call.app
+    # ------------------------------------------------------------ サイクルで進む効果（侵食・傷が開く・自己修復）
+    def take_recheck(app):
+        """暴走の決め直しの印を下ろす。立っていたら True。"""
+        with play.lock:
+            pkey, bucket = ledger(app)
+            if not bucket.get("recheck"):
+                return False
+            bucket["recheck"] = False
+            play.save(pkey)
+        return True
+
+    def advance_cycles(app, label, days=0, cycles=0, save=False):
+        """サイクルを進めて怪我を動かす。暴走の決め直しもここで呼ぶ（どちらも戦闘の外）。
+
+        日数は改造ごとに組み込んだ日から `WEAR_CYCLE_DAYS` 日ごと、`cycles` は日数によらず進める数（依頼の終わり）。
+        `save` は、怪我を書いたらゲームを保存し直す（依頼の終わりは帰還の保存が済んだ後に来る）。
+        """
         if player_of(app) is None:
             return
         with play.lock:
             pkey, bucket = ledger(app)
             records = [record for _p, _s, record in rules.records_of(bucket)]
-            if not records:
-                return
-            steps, carry = rules.wear_steps(bucket.get("wear_days"), call.moved)
-            if carry != bucket.get("wear_days") or steps:
-                bucket["wear_days"] = carry
+            events, carries = rules.wear_events(records, days, cycles)
+            moved = False
+            for record, carry in zip(records, carries):
+                if record.get("wear_days") != carry:
+                    record["wear_days"] = carry
+                    moved = True
+            if moved:
                 play.save(pkey)
+        recheck = take_recheck(app)
         now = {part: value for part, (value, _stage) in injuries(app).items()}
-        changes = rules.apply_wear(now, records, steps) if steps else {}
-        if changes or store.get("dirty"):
-            force = bool(store.get("dirty"))
-            store["dirty"] = False
-            set_injuries(app, changes, force=force)
+        changes = rules.apply_wear(now, records, events) if events else {}
+        if changes or recheck:
+            set_injuries(app, changes, force=recheck)
             if changes:
-                write("wear: {} step(s) {} -> {}".format(steps, {p: now.get(p) for p in changes}, changes))
+                write("wear ({}): {} event(s) {} -> {}".format(
+                    label, len(events), {p: now.get(p) for p in changes}, changes))
+            if save and callable(getattr(app, "save_game", None)):
+                app.save_game()
+
+    def after_days(call):
+        advance_cycles(call.app, "{} day(s)".format(call.moved), days=call.moved)
 
     durations.on_days(OWNER, ctx, after=after_days, write=write)
+
+    def quest_end_before(call):
+        """片付けると移動する依頼か（ローダの窓口 `quest_ends`。依頼のデータは元の処理の中で片付くので先に読む）。"""
+        return durations.quest_travels(call.app, call.quest_id, write=write)
+
+    def quest_end_after(call):
+        """依頼から帰った。移動する依頼は移動の日数でサイクルが進むので重ねない（344 と同じ扱い）。"""
+        if call.memo:
+            write("quest {!r} moves on to another area; the journey's days advance the cycles".format(call.quest_id))
+            return
+        advance_cycles(call.app, "quest {!r} cleared".format(call.quest_id), cycles=rules.QUEST_CYCLES, save=True)
+
+    quest_ends.on(OWNER, ctx, before=quest_end_before, after=quest_end_after, write=write)
+
+    @ctx.wrap(QUEST_RETIRE_TARGET, required=False, safe=True)
+    def quest_retire(orig, self, *args, **kwargs):
+        """依頼の放棄（窓口が無いので自分で包む。307・325・336・344 と同じ）。放棄は移動しない。"""
+        app = getattr(self, "app", None) or ui.find_app()
+        quest_id = None
+        try:
+            quest_id = ui.current_quest_id(app)
+        except Exception:
+            ctx.log_exc("augment: cannot read the abandoned quest")
+        result = orig(self, *args, **kwargs)
+        try:
+            advance_cycles(app, "quest {!r} abandoned".format(quest_id), cycles=rules.QUEST_CYCLES, save=True)
+        except Exception:
+            ctx.log_exc("augment: cycles after an abandoned quest failed")
+        return result
 
     # ------------------------------------------------------------ 治療院の棚
     def shop_note(facility):
@@ -1023,9 +1156,17 @@ def apply(ctx):
         return result
 
     # ------------------------------------------------------------ ロード
-    def on_load(_call):
+    def on_load(call):
         play.forget()
         close_view()
+        # 暴走で書いた怪我の決め直しが前のプロセスで済んでいなければ、読み込んだ後に呼ぶ
+        app = getattr(call, "app", None) or ui.find_app()
+        try:
+            if player_of(app) is not None and take_recheck(app):
+                set_injuries(app, {}, force=True)
+                write("load: rechecked the injuries left by rampage")
+        except Exception:
+            ctx.log_exc("augment: recheck after load failed")
 
     loads.on(OWNER, ctx, (loads.LOAD, loads.NEW_GAME), after=on_load, write=write)
 

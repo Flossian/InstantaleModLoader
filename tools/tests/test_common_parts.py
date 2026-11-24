@@ -1060,6 +1060,35 @@ def test_watch_aliases_superseded():
         llm.ALIAS_POLL_SECONDS = old_poll
 
 
+def test_rarity_colors():
+    print("ui.rarity_fill / rarity_text_color")
+    check("ゲーム抜きでは実機で読んだ値", ui.rarity_fill("epic") == (0.2, 0.08, 0.28, 1)
+          and ui.rarity_text_color("mythic") == (0.6, 0.1, 0.1, 1))
+    check("知らないレア度は common の色", ui.rarity_fill("unknown") == (0.25, 0.25, 0.25, 1)
+          and ui.rarity_text_color(None) == (1, 1, 1, 1))
+    hud = types.ModuleType("scripts.hud.new_hud")
+
+    class InventoryItem(object):
+        def define_image_color(self, rarity):
+            return (0.5, 0.5, 0.5)
+
+    hud.InventoryItem = InventoryItem
+    sys.modules["scripts.hud.new_hud"] = hud
+    try:
+        check("ゲームの関数があればそれを呼ぶ", ui.rarity_fill("rare") == (0.5, 0.5, 0.5, 1))
+    finally:
+        del sys.modules["scripts.hud.new_hud"]
+
+
+def test_tip_pos():
+    print("panels.tip_pos")
+    from instantale_modloader import panels
+    check("マウスの右下に出す", panels.tip_pos((100, 500), (200, 100), (1920, 1080), 16) == (116, 384))
+    check("右にはみ出すなら左へ回す", panels.tip_pos((1800, 500), (200, 100), (1920, 1080), 16) == (1584, 384))
+    check("下にはみ出すなら上へ回す", panels.tip_pos((100, 50), (200, 100), (1920, 1080), 16) == (116, 66))
+    check("画面より大きくても画面の中に置く", panels.tip_pos((10, 10), (2000, 1200), (1920, 1080), 16) == (0.0, 0.0))
+
+
 def test_window_parts():
     print("窓口の共通の手（window_put / window_entries / window_call）と llm の生死の判定")
     live = types.SimpleNamespace(superseded=lambda: False)
@@ -1350,6 +1379,8 @@ def main():
         test_refresh_status()
         test_when_idle_rechecks(root)
         test_watch_aliases_superseded()
+        test_rarity_colors()
+        test_tip_pos()
         test_window_parts()
         test_rebuild_hook()
         test_npc_fields()

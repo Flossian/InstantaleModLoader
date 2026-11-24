@@ -6,7 +6,7 @@
 品の効果（会心・棘など）の戦闘の1手は test_equipment_bonuses.py、特質の答え方は test_player_trait_effects.py。
 ここは答える MOD を偽物にして、特質だけに開く種類を確かめる。
 
-  表記・上限   … 名前と値の表記。隙・反動・治りにくさの上限
+  表記・上限   … 名前と値の表記。隙・反動・回復阻害の上限
   脆さ         … 軽減の後に上乗せする
   隙           … 手の最初の一撃で1回だけ引き、その手の敵への一撃をすべて 0 にする。行が出る
   回復         … ゲームの回復（resolve_battle_effect の前後の増え）と、窓口の吸収・再生を直す。窓口の分を二重に直さない
@@ -114,15 +114,15 @@ def strike(hits=1, raw=400, defense=100):
 
 print("表記・上限")
 check("名前", battle_effects.LABELS["ja"]["fragile"] == "脆さ" and battle_effects.LABELS["ja"]["falter"] == "隙"
-      and battle_effects.LABELS["ja"]["unmend"] == "治りにくさ" and battle_effects.LABELS["ja"]["backlash"] == "反動"
-      and battle_effects.LABELS["ja"]["mend"] == "治りやすさ")
+      and battle_effects.LABELS["ja"]["unmend"] == "回復阻害" and battle_effects.LABELS["ja"]["backlash"] == "反動"
+      and battle_effects.LABELS["ja"]["mend"] == "回復促進")
 check("値の表記", battle_effects.text_of("fragile", 10, None, "ja") == "受けるダメージ +10%"
       and battle_effects.text_of("falter", 5, None, "ja") == "攻撃が空を切る 5%"
       and battle_effects.text_of("unmend", 30, None, "ja") == "受ける回復 -30%"
       and battle_effects.text_of("backlash", 10, None, "ja") == "戦闘の後 最大体力の 10% を失う")
 check("代償の種類", set(battle_effects.COST_KINDS) == {"fragile", "falter", "unmend", "backlash"}
       and all(kind in battle_effects.KINDS for kind in battle_effects.COST_KINDS))
-check("隙・反動は 50、治りにくさは 90 で止まる",
+check("隙・反動は 50、回復阻害は 90 で止まる",
       battle_effects.merge([{"falter": 40, "backlash": 30, "unmend": 60}, {"falter": 40, "backlash": 30, "unmend": 60}])
       == {"falter": 50, "backlash": 50, "unmend": 90})
 check("回復の増減", battle_effects.heal_rate({"mend": 30, "unmend": 50}) == -20
@@ -175,15 +175,15 @@ player.current_hp, player.max_hp = 100, 300
 give(unmend=50)
 said.clear()
 handle(lambda s, k, side, a: resolve(heal_by(100), s), manager, "試験太郎", "味方陣営", {})
-check("治りにくさ: ゲームの回復 100 → 50", player.current_hp == 150, player.current_hp)
-check("治りにくさ: 行が出る", any("治りにくく" in text and "50" in text for text in said), said)
+check("回復阻害: ゲームの回復 100 → 50", player.current_hp == 150, player.current_hp)
+check("回復阻害: 行が出る", any("阻害され" in text and "50" in text for text in said), said)
 give(mend=30)
 player.current_hp = 100
 handle(lambda s, k, side, a: resolve(heal_by(100), s), manager, "試験太郎", "味方陣営", {})
-check("治りやすさ: 100 → 130", player.current_hp == 230, player.current_hp)
+check("回復促進: 100 → 130", player.current_hp == 230, player.current_hp)
 player.current_hp = 250
 handle(lambda s, k, side, a: resolve(heal_by(40), s), manager, "試験太郎", "味方陣営", {})
-check("治りやすさ: 最大体力で止まる", player.current_hp == 300, player.current_hp)
+check("回復促進: 最大体力で止まる", player.current_hp == 300, player.current_hp)
 give(unmend=50)
 player.current_hp = 100
 handle(lambda s, k, side, a: resolve(heal_by(-30), s), manager, "ゴブリン1", "敵側", {})

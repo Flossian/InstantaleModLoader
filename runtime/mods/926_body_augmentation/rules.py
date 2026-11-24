@@ -8,6 +8,8 @@
 
 import hashlib
 
+from instantale_modloader import battle_effects
+
 # ---------------------------------------------------------------- 部位
 #: 部位はゲームの怪我（`body_parts`）と同じ6つ。並びは画面の左の列・右の列。
 PARTS = ("head", "arms", "legs", "sanity", "body", "organs")
@@ -34,23 +36,32 @@ RARITIES = ("common", "rare", "magical", "epic", "legendary", "mythic")
 #: 体に使えるかは種類ではなく見立てで決める。
 ITEM_TYPES = ("material", "utility", "weapon", "wearable", "healing_item", "consumable")
 #: 見立ての決まりの版。控えの見立てがこれと違えば見立て直す
-#: （2 = 適合する品だけを候補に出す形、3 = 戦闘の代償も選ぶ形）。
-APPRAISAL_RULE = 3
+#: （2 = 適合する品だけを候補に出す形、3 = 戦闘の代償も選ぶ形、4 = 禁制かどうかと、伸びる能力値を必ず2つ）。
+APPRAISAL_RULE = 4
 #: 1回の問い合わせで見立てる品の数。
 BATCH_SIZE = 10
 #: 所持品の欄のマス（GAME.md §2.13。位置 `grid_pos` は品の左下のマスで、y は下から）。
 GRID_COLS, GRID_ROWS = 4, 6
 
-#: 品の仕立ての具合（見立てが決める）。生の素材は量が1段下がり、失敗しやすい。
+#: 品の仕立ての具合（見立てが決める）。未加工の素材は量が1段下がり、失敗しやすい。
 RAW, PROCESSED, PART = "raw", "processed", "part"
 FINISHES = (RAW, PROCESSED, PART)
-FINISH_NAMES = {RAW: "生の素材", PROCESSED: "加工品", PART: "施術用の部品"}
+FINISH_NAMES = {RAW: "未加工", PROCESSED: "加工品", PART: "施術用の部品"}
 
 # ---------------------------------------------------------------- 効果の量
-#: 能力値の量。段はレア度の並び（0〜5）に、生の素材は -1、違法は +2 を足したもの。
-#: 合法の量は `411_` の装備の目安（epic +1〜2・legendary +2〜3・mythic +3〜4）の上の側に揃える。
-AMOUNT_BY_TIER = (1, 1, 2, 2, 3, 4, 5, 6)
-ILLEGAL_TIER_STEP = 2
+#: 能力値の量 `(主, 副)`。段はレア度の並び（0〜5）に、未加工は -1（合法だけ）、限界施術は +2、
+#: 禁制のアイテムは +3 を足したもの。段が1つ上がるごとに主と副の合計が1つ増える
+#: （量が整数で小さいので、common〜magical の差は副で付ける）。上は +4 で止める。
+BOOST_BY_TIER = ((1, 0), (1, 1), (2, 1), (2, 2), (3, 2), (3, 3), (4, 3), (4, 4), (4, 4))
+OVERLIMIT_TIER_STEP = 2
+FORBIDDEN_TIER_STEP = 3
+
+#: 施術の方法。裏の事務所では、正規のアイテムに通常施術か限界施術（安全の上限を外した施術）を選べる
+#: （画面ではボタンが2つ並ぶ）。禁制のアイテムは方法を選べず、裏の事務所でだけ受けられる。
+#: 違法の改造になるのは限界施術と禁制のアイテム。
+NORMAL, OVERLIMIT = "normal", "overlimit"
+METHOD_NAMES = {NORMAL: "通常施術", OVERLIMIT: "限界施術"}
+FORBIDDEN_WORD = "禁制"
 
 #: 戦闘の効果（ローダの `battle_effects` の種類）。値は強さの3段（`411_` の表と同じ値）。
 BATTLE_STRENGTH = {
@@ -72,25 +83,31 @@ BATTLE_NAMES = {"critical": "会心", "lifesteal": "吸収", "pierce": "貫通",
                 "desperate": "火事場", "reduce": "軽減"}
 
 #: この MOD だけの特殊効果。値は強さの3段。
-#:   painblock  … 痛覚遮断。怪我で下がった能力値を、この割合（%）だけ戻す（怪我は残る）
+#:   painblock  … 痛覚遮断。怪我で下がった能力値を、この割合（%）だけ戻す（怪我は残る）。
+#:                痛みを感じないので、1サイクルごとに負傷の部位の怪我が `PAINBLOCK_WORSEN` 増える（傷が開く）
 #:   sync       … 同調。改造の入っている部位1つにつき、受けるダメージをこの割合（%）減らす。6部位そろうと全能力値 +1
-#:   selfrepair … 自己修復。30日ごとに、治療で治る怪我（100 未満）をこの量だけ戻す
+#:   selfrepair … 自己修復。1サイクルごとに、治療で治る怪我（100 未満）をこの量だけ戻す
 PAINBLOCK, SYNC, SELFREPAIR = "painblock", "sync", "selfrepair"
-OWN_STRENGTH = {PAINBLOCK: (50, 75, 100), SYNC: (1, 2, 3), SELFREPAIR: (2, 4, 6)}
+OWN_STRENGTH = {PAINBLOCK: (50, 75, 100), SYNC: (1, 2, 3), SELFREPAIR: (1, 1, 2)}
 SYNC_FULL_BONUS = 1
+PAINBLOCK_WORSEN = 1
 #: 違法の施術に必ず付く効果（腕と脚は暴走、ほかは侵食）。効果と負担を両方持つ。
 #:   rampage … 暴走。会心がこの割合（%）付く。敵を倒すたびに、その部位の怪我 +1
-#:   erosion … 侵食。1つめの伸びる能力値にこの量を足す。30日ごとに、その部位の怪我がこの量だけ増える
+#:   erosion … 侵食。1つめの伸びる能力値にこの量を足す。1サイクルごとに、その部位の怪我がこの量だけ増える
 RAMPAGE, EROSION = "rampage", "erosion"
 RAMPAGE_PARTS = ("arms", "legs")
 RAMPAGE_CRITICAL = (25, 35, 50)
 RAMPAGE_INJURY = 1
 EROSION_BOOST = (1, 1, 2)
-EROSION_INJURY = (3, 4, 6)
-#: 暴走と侵食で溜まる怪我の上限。100（治療で治らない段階）の手前で止める。
+EROSION_INJURY = (1, 1, 2)
+#: 暴走・侵食・傷が開くで溜まる怪我の上限。100（治療で治らない段階）の手前で止める。
 WEAR_CAP = 99
-#: 自己修復と侵食の刻み（日）。
-WEAR_DAYS = 30
+#: 侵食・傷が開く・自己修復の1サイクル（日）。改造ごとに組み込んだ日から数える。
+WEAR_CYCLE_DAYS = 10
+#: 依頼が終わる（成否を問わない）と進むサイクルの数。依頼の間は暦が進まない（GAME.md §2.18）。
+QUEST_CYCLES = 5
+#: 刻みが30日ごとだった頃の控えの量 → 1サイクルの量（`normalize_bucket` が控えを直す）。
+OLD_WEAR_AMOUNTS = {EROSION: {3: 1, 4: 1, 6: 2}, SELFREPAIR: {2: 1, 4: 1, 6: 2}}
 #: 治療で治らない怪我（`lost`。GAME.md §2.19.1）。合法の施術が通ると、その部位の怪我を 0 に戻す。
 LOST_FROM = 100
 
@@ -127,22 +144,37 @@ COST_HIGH_FROM = 3      # epic
 #: 戦闘の代償（ローダの `battle_effects` の `COST_KINDS`）。見立てが品に合うものを1つ選ぶ。
 #: 合法の施術は能力値の代償か戦闘の代償の片方（見立てごとに決まる。`cost_side`）、違法の施術は両方が付く。
 DRAWBACKS = ("fragile", "falter", "unmend", "backlash")
-DRAWBACK_NAMES = {"fragile": "脆さ", "falter": "隙", "unmend": "治りにくさ", "backlash": "反動"}
+DRAWBACK_NAMES = {"fragile": "脆さ", "falter": "隙", "unmend": "回復阻害", "backlash": "反動"}
 #: 見立てに渡す戦闘の代償の説明。
 DRAWBACK_HINTS = {"fragile": "受ける傷が深くなる", "falter": "体が思うように動かず、攻撃が空を切ることがある",
                   "unmend": "傷を癒やす力が効きにくくなる", "backlash": "戦いの後に体が消耗する"}
 #: 見立てが答えなかったときの、部位ごとの戦闘の代償。
-PART_DRAWBACK = {"head": "falter", "arms": "backlash", "legs": "falter", "body": "fragile", "organs": "unmend",
+#: 隙は手ごと空振りになって重いので、既定にするのは頭だけ（脚は脆さ）。
+PART_DRAWBACK = {"head": "falter", "arms": "backlash", "legs": "fragile", "body": "fragile", "organs": "unmend",
                  "sanity": "backlash"}
 #: 戦闘の代償の量（%）。合法・違法の common〜magical・違法の epic 以上の順。
-#: `346_` の特質の代償（5% きざみで上限 15%、治りにくさは 15% きざみで上限 45%）に揃える。
-DRAWBACK_STRENGTH = {"fragile": (5, 10, 15), "falter": (5, 10, 15), "unmend": (15, 30, 45), "backlash": (5, 10, 15)}
+#: `346_` の特質の代償（5% きざみで上限 15%、回復阻害は 15% きざみで上限 45%）に揃える。
+#: 隙だけは引いた手の攻撃がまるごと空振りになり、同じ割合でもほかより重いので、3分の1ほどにする。
+DRAWBACK_STRENGTH = {"fragile": (5, 10, 15), "falter": (2, 3, 5), "unmend": (15, 30, 45), "backlash": (5, 10, 15)}
+#: この MOD の改造が足す代償の合計の上限（%）。ローダの窓口の上限（隙 50%）より手前で止める。
+#: 窓口の上限を変えるとほかの MOD の隙まで変わるので、この MOD の分だけをここで止める。
+DRAWBACK_CAPS = {"falter": 20}
+#: 戦闘の代償と、それに相対する特殊効果。1つの改造の中では両方を付けない（`drawback_for`）。
+#: 同調は軽減を足すので脆さと相対する。再生と吸収はローダの経路で回復阻害を受ける。
+OPPOSED = {"fragile": ("reduce", "desperate", SYNC), "unmend": ("regen", "lifesteal")}
+#: 代償が特殊効果と相対するときに差し替える順。隙は重いので最後。
+DRAWBACK_FALLBACK = ("backlash", "fragile", "unmend", "falter")
 #: 合法の施術で付く代償の側（`cost_side` の戻り）。
 COST_ABILITY, COST_BATTLE = "ability", "battle"
 
 # ---------------------------------------------------------------- 失敗
 #: 失敗で部位に足す怪我（`injury`）。30 で `damaged`、60 で `disabled`（GAME.md §2.19.1）。
 FAIL_INJURY = 30
+#: 怪我で下がる能力値（ゲームの `check_body_damage` の部位ごとの倍率。GAME.md の体の部位の節）。
+#: 失敗したときのことを画面に書くのに使う。
+INJURY_ABILITIES = {"arms": ("strength", "dexterity"), "legs": ("constitution", "dexterity"),
+                    "body": ("strength", "constitution"), "head": ("intelligence", "charisma"),
+                    "organs": ("constitution",), "sanity": ("intelligence", "wisdom")}
 #: 怪我が段階 `hurt` になる値（GAME.md §2.19.1）。画面の「負傷」の表示に使う。
 HURT_FROM = 10
 ILLEGAL_FAIL_INJURY = 60
@@ -277,8 +309,9 @@ def _truthy(value):
 def normalize_appraisal(raw):
     """LLM の見立てを検算して均す。読めなければ None。
 
-    返す形 `{"usable", "part", "name", "description", "boost", "cost", "drawback", "special", "finish", "reason",
-    "rule"}`。
+    返す形 `{"usable", "part", "name", "description", "boost", "cost", "drawback", "special", "finish",
+    "restricted", "reason", "rule"}`。
+    伸ばす能力値は主と副の2つ。答えが1つなら、部位の既定（重なれば表の並びの先頭）を副にする。
     体に適合しない品は `usable` が False で、`reason` に短い理由。
     部位・能力値・特殊効果は表に無い値を表の既定へ落とす（LLM には論理を任せない）。
     """
@@ -298,6 +331,8 @@ def normalize_appraisal(raw):
     if not name:
         return None
     boost = _ability_list(raw.get("boost"))[:2] or [PART_BOOST[part]]
+    if len(boost) < 2:
+        boost.append(next(key for key in (PART_BOOST[part],) + ABILITIES if key not in boost))
     wanted = _ability_list(raw.get("cost"))
     special = str(raw.get("special") or "").strip().lower()
     finish = str(raw.get("finish") or "").strip().lower()
@@ -309,7 +344,8 @@ def normalize_appraisal(raw):
             "description": _short(raw.get("description"), DESCRIPTION_LIMIT),
             "boost": boost, "cost": cost_for(part, boost, wanted[0] if wanted else None), "drawback": drawback,
             "special": special if special in PART_SPECIALS[part] else PART_SPECIALS[part][0],
-            "finish": finish if finish in FINISHES else PROCESSED, "reason": "", "rule": APPRAISAL_RULE}
+            "finish": finish if finish in FINISHES else PROCESSED, "restricted": _truthy(raw.get("restricted")),
+            "reason": "", "rule": APPRAISAL_RULE}
 
 
 def current_appraisal(found):
@@ -461,6 +497,69 @@ def drawback_amount(kind, rarity, illegal):
     return table[2 if rarity_index(rarity) >= COST_HIGH_FROM else 1]
 
 
+def procedure(appraisal, mode, method):
+    """施術の扱い `{"illegal", "forbidden", "allowed"}`。
+
+    `mode` は施設（`"legal"` 治療院 / `"illegal"` 裏の事務所 / None 見るだけ）、`method` は裏の事務所で押したボタンの方法。
+    違法かどうかはアイテム（禁制か）と方法だけで決まり、場所では決まらない。
+    治療院は禁制のアイテムを扱えない（`allowed` が False）。見るだけのときは方法を `method` のとおりに見せる。
+    """
+    forbidden = bool((appraisal or {}).get("restricted"))
+    if forbidden:
+        return {"illegal": True, "forbidden": True, "allowed": mode != "legal"}
+    overlimit = mode == "illegal" and method == OVERLIMIT
+    return {"illegal": overlimit, "forbidden": False, "allowed": True}
+
+
+def methods_for(appraisal, mode):
+    """画面に並べる施術の方法。裏の事務所の正規のアイテムは通常施術と限界施術の2つ、ほかは1つ。"""
+    if mode == "illegal" and not (appraisal or {}).get("restricted"):
+        return [NORMAL, OVERLIMIT]
+    return [NORMAL]
+
+
+def install_plan(appraisal, info, bucket, mode, method, config, scores=None, gold=None):
+    """1つの方法の見積もり（施術の前の画面に出すもの）。
+
+    `{"method", "proc", "illegal", "slot", "fee", "days", "fail", "effects", "costs", "enough"}`。
+    `slot` が None なら入らない。`enough` は所持金が足りるか（読めなければ足りる扱い）。
+    代償の能力値の量は施術のときに決まるので、`costs` では幅で見せる。
+    """
+    proc = procedure(appraisal, mode, method)
+    illegal = proc["illegal"]
+    preview = make_record(appraisal, info, None, illegal, 0, None, None, config.special_min,
+                          forbidden=proc["forbidden"])
+    named_cost = ABILITY_NAMES.get(appraisal.get("cost"), "\0") + " "
+    estimate = [piece for piece in effect_pieces(preview, costs=True) if not piece[0].startswith(named_cost)]
+    piece = cost_piece(appraisal, info.get("rarity"), illegal)
+    slot = free_slot(bucket, appraisal["part"], illegal)
+    fee = install_fee(info, illegal, config)
+    return {"method": method, "proc": proc, "illegal": illegal, "slot": slot, "fee": fee,
+            "days": install_days(info, illegal, config),
+            "fail": fail_percent(info, appraisal.get("finish"), illegal, slot == 1, scores, config),
+            "effects": effect_pieces(preview, costs=False),
+            "costs": ([piece] if piece else []) + estimate,
+            "enough": gold is None or gold >= fee}
+
+
+def fail_injury(illegal):
+    """施術に失敗したときに部位に足す怪我。"""
+    return ILLEGAL_FAIL_INJURY if illegal else FAIL_INJURY
+
+
+def fail_injury_words(amount, current=0):
+    """失敗したときの怪我（`怪我 +30`）。今の怪我と合わせて治療で治らない重さに届くなら `・治療不可` を足す。"""
+    if (current or 0) + amount >= LOST_FROM:
+        return "怪我 +{}・治療不可".format(amount)
+    return "怪我 +{}".format(amount)
+
+
+def fail_note(part):
+    """失敗したときのことの1行（`失敗すると腕の怪我で筋力と器用が下がり、アイテムを失う`）。"""
+    names = "と".join(ABILITY_NAMES[key] for key in INJURY_ABILITIES.get(part, ()))
+    return "失敗すると{}の怪我で{}が下がり、アイテムを失う".format(PART_NAMES.get(part, part), names)
+
+
 def cost_kinds(appraisal, illegal):
     """付く代償の側の組。違法は両方、合法は `cost_side` の片方。"""
     if illegal:
@@ -502,14 +601,16 @@ def words_for(theme, detected=None, title="", illegal=""):
 
 
 # ---------------------------------------------------------------- 量・料金・日数・失敗
-def tier_of(rarity, finish, illegal):
-    """量の段。レア度の段に、生の素材は -1（違法は下げない）、違法は +2。"""
+def tier_of(rarity, finish, illegal, forbidden=False):
+    """量の段。レア度の段に、未加工は -1（違法は下げない）、限界施術は +2、禁制のアイテムは +3。"""
     tier = rarity_index(rarity)
-    if illegal:
-        tier += ILLEGAL_TIER_STEP
+    if forbidden:
+        tier += FORBIDDEN_TIER_STEP
+    elif illegal:
+        tier += OVERLIMIT_TIER_STEP
     elif finish == RAW:
         tier -= 1
-    return clamp(tier, 0, len(AMOUNT_BY_TIER) - 1)
+    return clamp(tier, 0, len(BOOST_BY_TIER) - 1)
 
 
 def special_step(rarity, illegal, special_min=3):
@@ -520,23 +621,33 @@ def special_step(rarity, illegal, special_min=3):
     return LEGAL_STEP[index] if index >= int(special_min) else None
 
 
-def build_effects(appraisal, rarity, illegal, special_min=3, loss=None):
+def drawback_for(kind, special):
+    """代償の種類。特殊効果 `special` と相対するなら、`DRAWBACK_FALLBACK` の順で相対しない種類に替える。"""
+    if special not in OPPOSED.get(kind, ()):
+        return kind
+    return next(other for other in DRAWBACK_FALLBACK if special not in OPPOSED.get(other, ()))
+
+
+def build_effects(appraisal, rarity, illegal, special_min=3, loss=None, forbidden=False):
     """見立てとレア度から効果を決める。
     `{"abilities": {鍵: 量}, "battle": {種類: %}, "drawback": {種類: %}, "special": {種類: 値}}`。
 
-    伸ばす能力値が2つなら、2つめは半分（切り捨て。0 なら付かない）。
+    伸ばす能力値は主と副の2つで、量は段の表（`BOOST_BY_TIER`。副が 0 の段では副は付かない）。
+    禁制のアイテムは違法の改造で、量の段だけが限界施術より1つ上。
     能力値の代償の量は `loss`（施術のときに `roll_cost` で決めたもの）。None なら幅の上限（見積もりの重い側）。
     代償は、合法なら能力値か戦闘の片方、違法なら両方（`cost_kinds`）。違法は暴走か侵食も付く。
+    戦闘の代償は、特殊効果と相対しない種類にする（`drawback_for`）。
     """
     part = appraisal.get("part")
     step = special_step(rarity, illegal, special_min)
     extra = None
+    illegal = illegal or forbidden
     if illegal:
         extra = RAMPAGE if part in RAMPAGE_PARTS else EROSION
-    amount = AMOUNT_BY_TIER[tier_of(rarity, appraisal.get("finish"), illegal)]
+    amounts = BOOST_BY_TIER[tier_of(rarity, appraisal.get("finish"), illegal, forbidden)]
     abilities = {}
-    for index, key in enumerate(appraisal.get("boost") or []):
-        value = amount if index == 0 else amount // 2
+    for index, key in enumerate((appraisal.get("boost") or [])[:2]):
+        value = amounts[index]
         if index == 0 and extra == EROSION:
             value += EROSION_BOOST[step]
         if value > 0:
@@ -547,23 +658,25 @@ def build_effects(appraisal, rarity, illegal, special_min=3, loss=None):
         loss = cost_range(rarity, illegal)[1]
     if COST_ABILITY in sides and cost in ABILITIES and cost not in abilities and loss > 0:
         abilities[cost] = -int(loss)
+    chosen = None
+    if step is not None:
+        chosen = appraisal.get("special")
+        if chosen not in PART_SPECIALS.get(part, ()):
+            chosen = PART_SPECIALS[part][0] if part in PART_SPECIALS else None
     drawback = {}
     if COST_BATTLE in sides:
         kind = appraisal.get("drawback")
         if kind not in DRAWBACKS:
             kind = PART_DRAWBACK.get(part)
+        kind = drawback_for(kind, chosen)
         amount = drawback_amount(kind, rarity, illegal)
         if amount > 0:
             drawback[kind] = amount
     battle, special = {}, {}
-    if step is not None:
-        kind = appraisal.get("special")
-        if kind not in PART_SPECIALS.get(part, ()):
-            kind = PART_SPECIALS[part][0] if part in PART_SPECIALS else None
-        if kind in BATTLE_STRENGTH:
-            battle[kind] = BATTLE_STRENGTH[kind][step]
-        elif kind in OWN_STRENGTH:
-            special[kind] = OWN_STRENGTH[kind][step]
+    if chosen in BATTLE_STRENGTH:
+        battle[chosen] = BATTLE_STRENGTH[chosen][step]
+    elif chosen in OWN_STRENGTH:
+        special[chosen] = OWN_STRENGTH[chosen][step]
     if extra == RAMPAGE:
         battle["critical"] = battle.get("critical", 0) + RAMPAGE_CRITICAL[step]
         special[RAMPAGE] = RAMPAGE_INJURY
@@ -617,12 +730,21 @@ def fail_percent(info, finish, illegal, overload, scores, config):
 
 # ---------------------------------------------------------------- 控え
 def new_bucket():
-    """周回ごとの控え。`augments` は `{部位: [枠0, 枠1]}`（空の枠は None）。"""
-    return {"augments": {part: [None] * SLOTS for part in PARTS}, "history": [], "wear_days": 0}
+    """周回ごとの控え。`augments` は `{部位: [枠0, 枠1]}`（空の枠は None）。
+
+    `recheck` は、暴走で怪我の値だけを書き、ゲームの段階の決め直しをまだ呼んでいない印
+    （戦闘の外で呼ぶ。プロセスをまたいで残すため控えに置く）。
+    侵食と自己修復の刻みの経過は改造ごと（控えの `wear_days`）。
+    """
+    return {"augments": {part: [None] * SLOTS for part in PARTS}, "history": [], "recheck": False}
 
 
 def normalize_bucket(bucket):
-    """読んだ控えを均す。`(控え, 直したか)`。"""
+    """読んだ控えを均す。`(控え, 直したか)`。
+
+    刻みの経過が周回に1つだった頃の控え（`wear_days` が周回にある。刻みは30日ごと）は、
+    その値を各改造へ移し、侵食と自己修復の量を1サイクルの量に直す（`OLD_WEAR_AMOUNTS`）。
+    """
     fixed = False
     if not isinstance(bucket, dict):
         return new_bucket(), True
@@ -641,12 +763,25 @@ def normalize_bucket(bucket):
     bucket["augments"] = augments
     if not isinstance(bucket.get("history"), list):
         bucket["history"], fixed = [], True
+    if "wear_days" in bucket:
+        carry = bucket.pop("wear_days")
+        carry = int(carry) if _number(carry) else 0
+        for _part, _slot, record in records_of(bucket):
+            if not _number(record.get("wear_days")):
+                record["wear_days"] = max(0, carry) % WEAR_CYCLE_DAYS
+            special = record.get("special")
+            for kind, table in OLD_WEAR_AMOUNTS.items():
+                if isinstance(special, dict) and _number(special.get(kind)) and special[kind] in table:
+                    special[kind] = table[special[kind]]
+        fixed = True
+    if not isinstance(bucket.get("recheck"), bool):
+        bucket["recheck"], fixed = bool(bucket.get("recheck")), True
     return bucket, fixed
 
 
 def order_bucket(bucket):
     return {"augments": {part: bucket["augments"][part] for part in PARTS},
-            "history": bucket.get("history") or [], "wear_days": int(bucket.get("wear_days") or 0)}
+            "history": bucket.get("history") or [], "recheck": bool(bucket.get("recheck"))}
 
 
 def records_of(bucket):
@@ -679,17 +814,22 @@ def has_illegal(bucket):
     return any(record.get("illegal") for _part, _slot, record in records_of(bucket))
 
 
-def make_record(appraisal, info, item_data, illegal, slot, day, place, special_min=3, rng=None):
-    """入った改造の控え。`rng` を渡すと代償の量を幅の中から決める（渡さなければ上限。見積もり用）。"""
+def make_record(appraisal, info, item_data, illegal, slot, day, place, special_min=3, rng=None, forbidden=False):
+    """入った改造の控え。`rng` を渡すと代償の量を幅の中から決める（渡さなければ上限。見積もり用）。
+
+    禁制のアイテムの改造は `illegal` と `forbidden` の両方が真。
+    """
+    illegal = illegal or forbidden
     loss = roll_cost(info.get("rarity"), illegal, rng) if rng is not None else None
-    effects = build_effects(appraisal, info.get("rarity"), illegal, special_min, loss)
+    effects = build_effects(appraisal, info.get("rarity"), illegal, special_min, loss, forbidden)
     return {"part": appraisal["part"], "slot": int(slot), "name": appraisal["name"],
             "description": appraisal.get("description") or "", "illegal": bool(illegal),
+            "forbidden": bool(forbidden),
             "finish": appraisal.get("finish") or PROCESSED,
             "abilities": effects["abilities"], "battle": effects["battle"], "drawback": effects["drawback"],
             "special": effects["special"],
             "item_info": dict(info), "item": item_data if isinstance(item_data, dict) else None,
-            "day": day, "place": place or ""}
+            "day": day, "place": place or "", "wear_days": 0}
 
 
 def special_sum(records, kind):
@@ -724,7 +864,8 @@ def ability_totals(records, losses=None):
 def battle_totals(records):
     """戦闘の効果と代償の合計（ローダの種類）。同調は、改造のある部位の数だけ軽減に足す。
 
-    代償の上限はローダの窓口が掛ける（隙と反動は 50%）。
+    代償の上限はローダの窓口が掛ける（隙と反動は 50%）。隙は、この MOD の分だけ `DRAWBACK_CAPS` で先に止める。
+    別の部位から付いた軽減と脆さは打ち消し合い、差だけが多い側に残る。
     """
     totals = {}
     for record in records:
@@ -735,34 +876,127 @@ def battle_totals(records):
     sync = special_sum(records, SYNC) * augmented_parts(records)
     if sync:
         totals["reduce"] = totals.get("reduce", 0) + sync
+    if totals.get("reduce") and totals.get("fragile"):
+        left = totals.pop("reduce") - totals.pop("fragile")
+        if left:
+            totals["reduce" if left > 0 else "fragile"] = abs(left)
+    for kind, cap in DRAWBACK_CAPS.items():
+        if totals.get(kind, 0) > cap:
+            totals[kind] = cap
     return totals
 
 
-def wear_steps(carry, moved):
-    """日数の進みから、刻み（30日）の数と残りの日数を出す。`(刻みの数, 残り)`。"""
-    total = max(0, int(carry or 0)) + max(0, int(moved or 0))
-    return total // WEAR_DAYS, total % WEAR_DAYS
+#: サイクルごとに怪我を動かす効果。同じサイクルの中では、侵食 → 傷が開く（痛覚遮断）→ 自己修復の順に当てる。
+WEAR_KINDS = (EROSION, PAINBLOCK, SELFREPAIR)
 
 
-def apply_wear(injuries, records, steps):
-    """刻みの数だけ、侵食と自己修復を怪我に当てる。`{部位: 新しい怪我}`（変わった部位だけ）。
+def wear_amount(record, kind):
+    """改造の1サイクル（暴走は1回倒すごと）に怪我を動かす量（無ければ 0）。
 
-    侵食はその部位の怪我を増やす（`WEAR_CAP` で止める。もう超えている部位は触らない）。
+    痛覚遮断の値は能力値を戻す割合なので、傷が開く量は `PAINBLOCK_WORSEN`。
+    """
+    value = (record.get("special") or {}).get(kind)
+    if not _number(value) or value <= 0:
+        return 0
+    return PAINBLOCK_WORSEN if kind == PAINBLOCK else value
+
+
+def wear_carry(record):
+    """改造のサイクルの中で進んだ日数（組み込んだ日から数える。0〜9）。"""
+    value = record.get("wear_days")
+    return max(0, int(value)) % WEAR_CYCLE_DAYS if _number(value) else 0
+
+
+def wear_events(records, moved=0, cycles=0):
+    """来るサイクル `[(時, 改造の番号, 種類)]`（時の順）と、進めた後の各改造の経過の日数。
+
+    `moved` は進んだ日数で、改造ごとに組み込んだ日から `WEAR_CYCLE_DAYS` 日ごとに1サイクル（時はその日）。
+    `cycles` は日数によらず進めるサイクルの数（依頼の終わり。時は `moved` の後に1つずつ）で、経過の日数は変えない。
+    サイクルで動く効果の無い改造の経過は進めない。
+    """
+    moved = max(0, int(moved or 0))
+    cycles = max(0, int(cycles or 0))
+    events, carries = [], []
+    for index, record in enumerate(records):
+        carry = wear_carry(record)
+        kinds = [kind for kind in WEAR_KINDS if wear_amount(record, kind)]
+        if not kinds:
+            carries.append(carry)
+            continue
+        times = list(range(WEAR_CYCLE_DAYS - carry, moved + 1, WEAR_CYCLE_DAYS))
+        times += [moved + step for step in range(1, cycles + 1)]
+        for time in times:
+            events.extend((time, index, kind) for kind in kinds)
+        carries.append((carry + moved) % WEAR_CYCLE_DAYS)
+    events.sort(key=lambda event: (event[0], WEAR_KINDS.index(event[2]), event[1]))
+    return events, carries
+
+
+def apply_wear(injuries, records, events):
+    """サイクル（`wear_events` の並び）を時の順に怪我に当てる。`{部位: 新しい怪我}`（変わった部位だけ）。
+
+    侵食はその部位の怪我を増やす。傷が開くは、負傷（`HURT_FROM` 以上）の部位の怪我を全部位で増やす。
+    どちらも `WEAR_CAP` で止め、もう超えている部位は触らない。
     自己修復は、治療で治る怪我（`LOST_FROM` 未満）を全部位で戻す。
     """
     after = {part: injuries.get(part, 0) for part in PARTS}
-    repair = special_sum(records, SELFREPAIR)
-    for _ in range(max(0, int(steps))):
-        for record in records:
-            grow = (record.get("special") or {}).get(EROSION)
+    for _time, index, kind in events:
+        record = records[index]
+        amount = wear_amount(record, kind)
+        if kind == EROSION:
             part = record.get("part")
-            if _number(grow) and part in after and after[part] < WEAR_CAP:
-                after[part] = min(WEAR_CAP, after[part] + grow)
-        if repair:
+            if part in after and after[part] < WEAR_CAP:
+                after[part] = min(WEAR_CAP, after[part] + amount)
+        elif kind == PAINBLOCK:
+            for part in PARTS:
+                if HURT_FROM <= after[part] < WEAR_CAP:
+                    after[part] = min(WEAR_CAP, after[part] + amount)
+        else:
             for part in PARTS:
                 if 0 < after[part] < LOST_FROM:
-                    after[part] = max(0, after[part] - repair)
+                    after[part] = max(0, after[part] - amount)
     return {part: value for part, value in after.items() if value != injuries.get(part, 0)}
+
+
+#: 部位の札の見出しの文（{left} は次のサイクルまでの日数、{amount} は1サイクルの量、{quest} は依頼1回の量）。
+#: 自己修復だけが効果の色で、ほかは代償の色。
+WEAR_MARK_TEXTS = {
+    EROSION: "次の侵食まで {left}日（怪我 +{amount}。依頼で +{quest}）",
+    PAINBLOCK: "次の悪化まで {left}日（負傷の部位 +{amount}。依頼で +{quest}）",
+    SELFREPAIR: "次の自己修復まで {left}日（全部位の怪我 −{amount}。依頼で −{quest}）",
+}
+
+
+def wear_marks(records):
+    """部位の札の見出しに出す、怪我が動く時と量。`{部位: [(文, "minus" か "plus")]}`。
+
+    侵食はその部位、傷が開くは負傷の部位、自己修復は全部位の怪我が動く（改造の入っている部位に出す）。
+    次のサイクルまでの日数は改造ごと。同じ部位で日数も同じものは量を足し合わせる。暴走は倒すたびに増える。
+    合計の効果の欄には出さない（`_total_lines`）。
+    """
+    rampage, timed = {}, {}
+    for record in records:
+        part = record.get("part")
+        if part not in PARTS:
+            continue
+        if wear_amount(record, RAMPAGE):
+            rampage[part] = rampage.get(part, 0) + wear_amount(record, RAMPAGE)
+        left = WEAR_CYCLE_DAYS - wear_carry(record)
+        for kind in WEAR_KINDS:
+            if wear_amount(record, kind):
+                key = (part, kind, left)
+                timed[key] = timed.get(key, 0) + wear_amount(record, kind)
+    marks = {}
+    for part in PARTS:
+        if part in rampage:
+            marks.setdefault(part, []).append(("敵を倒すたびに怪我 +{}".format(int(rampage[part])), MINUS))
+        for kind in WEAR_KINDS:
+            text, side = WEAR_MARK_TEXTS[kind], PLUS if kind == SELFREPAIR else MINUS
+            for (where, which, left), amount in sorted(timed.items(), key=lambda item: item[0][2]):
+                if where == part and which == kind:
+                    marks.setdefault(part, []).append(
+                        (text.format(left=left, amount=int(amount), quest=int(amount) * QUEST_CYCLES), side))
+    return marks
 
 
 def rampage_parts(records):
@@ -779,43 +1013,80 @@ def signed(value):
     return "+{}".format(value) if value > 0 else "−{}".format(abs(value))
 
 
+#: 戦闘の効果の中身の文（長い形の括弧の中）。ローダの `battle_effects.text_of` は値の表記だけ（`15%`・`75% 戦闘に1回`）
+#: なので、何が起きるかをここで書く。中身はローダの窓口の決まりのとおり（TECH.md の `battle_effects` の節）。
+#: 括弧の中にさらに括弧を入れない。
+OWN_BATTLE_TEXTS = {
+    "critical": "{}%で一撃の強さが1段上がる",
+    "lifesteal": "与えたダメージの{}%を回復",
+    "pierce": "敵の防御を{}%減らす",
+    "venom": "{}%で当てた敵を毒にする。毒は毎ターン最大体力の" + str(battle_effects.VENOM_RATE) + "%を削る",
+    "endure": "{}%で倒れる一撃を体力1で耐える。戦闘に1回",
+    "thorns": "受けたダメージの{}%を相手に返す",
+    "regen": "毎ターン最大体力の{}%を回復",
+    "evade": "{}%で敵の一撃をかわす",
+    "resist": "{}%で状態異常を防ぐ",
+    "desperate": "体力" + str(battle_effects.DESPERATE_AT) + "%以下のとき、受けるダメージ −{}%",
+    "reduce": "受けるダメージ −{}%",
+}
+
+
 def battle_text(kind, value, compact=False):
-    """戦闘の効果と代償の文。`compact` は札と合計に出す短い形（`反動 5%`）。"""
+    """戦闘の効果と代償の文。`compact` は札と合計に出す短い形（`反動 5%`）。
+
+    長い形は名前の後ろに中身を括弧で添える（`隙（15%で攻撃が空を切る）`）。
+    """
     name = BATTLE_NAMES.get(kind) or DRAWBACK_NAMES.get(kind, kind)
     if compact:
         return "{} {}%".format(name, value)
-    if kind == "regen":
-        return "{} 毎ターン {}%".format(name, value)
     if kind == "fragile":
-        return "{} 受けるダメージ +{}%".format(name, value)
+        return "{}（受けるダメージ +{}%）".format(name, value)
     if kind == "falter":
-        return "{} {}%で攻撃が空を切る".format(name, value)
+        return "{}（{}%で攻撃が空を切る）".format(name, value)
     if kind == "unmend":
-        return "{} 受ける回復 −{}%".format(name, value)
+        return "{}（受ける回復 −{}%）".format(name, value)
     if kind == "backlash":
-        return "{} 戦闘の後に最大体力の{}%を失う".format(name, value)
-    return "{} {}%".format(name, value)
+        return "{}（戦闘の後に最大体力の{}%を失う）".format(name, value)
+    if kind in OWN_BATTLE_TEXTS:
+        return "{}（{}）".format(name, OWN_BATTLE_TEXTS[kind].format(value))
+    # 表に無い種類はローダの窓口の値の表記。負の符号はこの MOD の表記（−）に揃える
+    text = battle_effects.text_of(kind, value, None, "ja").replace(" -", " −")
+    return "{}（{}）".format(name, text)
 
 
 def special_text(kind, value, part=None, compact=False):
-    """この MOD だけの特殊効果の文と、効果か負担か。`(文, PLUS / MINUS)`。"""
+    """この MOD だけの特殊効果の文と、効果か負担か。`(文, PLUS / MINUS)`。長い形は中身を括弧で添える。"""
     name = SPECIAL_NAMES.get(kind, kind)
     where = PART_NAMES.get(part, "その部位")
     if kind == PAINBLOCK:
         return ("{} {}%".format(name, value) if compact
-                else "{} 怪我で下がった能力値を{}%戻す".format(name, value)), PLUS
+                else "{}（怪我で下がった能力値を{}%戻す）".format(name, value)), PLUS
     if kind == SYNC:
         return ("{} {}%".format(name, value) if compact
-                else "{} 改造のある部位1つにつき軽減 {}%（6部位で全能力 +{}）".format(name, value, SYNC_FULL_BONUS)), PLUS
+                else "{}（改造のある部位1つにつき軽減 {}%。6部位で全能力 +{}）".format(name, value, SYNC_FULL_BONUS)), PLUS
     if kind == SELFREPAIR:
         return ("{} {}".format(name, value) if compact
-                else "{} {}日ごとに怪我 −{}".format(name, WEAR_DAYS, value)), PLUS
+                else "{}（{}日ごとに全部位の怪我 −{}。依頼で −{}）".format(
+                    name, WEAR_CYCLE_DAYS, value, value * QUEST_CYCLES)), PLUS
     if kind == RAMPAGE:
-        return (name if compact else "{} 敵を倒すたびに{}の怪我 +{}".format(name, where, value)), MINUS
+        return (name if compact else "{}（敵を倒すたびに{}の怪我 +{}）".format(name, where, value)), MINUS
     if kind == EROSION:
         return ("{} {}".format(name, value) if compact
-                else "{} {}日ごとに{}の怪我 +{}".format(name, WEAR_DAYS, where, value)), MINUS
+                else "{}（{}日ごとに{}の怪我 +{}。依頼で +{}）".format(
+                    name, WEAR_CYCLE_DAYS, where, value, value * QUEST_CYCLES)), MINUS
     return "{} {}".format(name, value), PLUS
+
+
+#: 痛覚遮断に付く負担の名前（痛みを感じないので傷が開く）。
+WORSEN_NAME = "傷が開く"
+
+
+def worsen_text(compact=False):
+    """痛覚遮断に付く負担の文。`(文, MINUS)`。"""
+    if compact:
+        return WORSEN_NAME, MINUS
+    return "{}（{}日ごとに負傷の部位の怪我 +{}。依頼で +{}）".format(
+        WORSEN_NAME, WEAR_CYCLE_DAYS, PAINBLOCK_WORSEN, PAINBLOCK_WORSEN * QUEST_CYCLES), MINUS
 
 
 def cost_piece(appraisal, rarity, illegal):
@@ -849,11 +1120,32 @@ def effect_pieces(record, costs=None, compact=False):
         if costs is None or costs:
             out.append((battle_text(kind, value, compact), MINUS))
     for kind, value in (record.get("special") or {}).items():
-        text, side = special_text(kind, value, record.get("part"), compact)
-        if costs is None or costs == (side == MINUS):
-            out.append((text, side))
+        pieces = [special_text(kind, value, record.get("part"), compact)]
+        if kind == PAINBLOCK and wear_amount(record, PAINBLOCK):
+            pieces.append(worsen_text(compact))
+        for text, side in pieces:
+            if costs is None or costs == (side == MINUS):
+                out.append((text, side))
     # 伸びるほうを先に、代償を後に（並べ替えても同じ側の中の順は保つ）
     return sorted(out, key=lambda piece: piece[1] == MINUS)
+
+
+def _total_lines(records):
+    """合計の効果のほかの行 `[(短い文, 色, 長い文)]`。長い文はマウスを乗せたときの説明に出す。
+
+    暴走・侵食・傷が開くは部位ごとの負担なので、ここには出さず部位の札の見出しに出す（`wear_marks`）。
+    """
+    battle = battle_totals(records)
+    lines = [(battle_text(kind, value, True), PLUS, battle_text(kind, value)) for kind, value in sorted(battle.items())
+             if kind not in DRAWBACKS]
+    lines += [(battle_text(kind, battle[kind], True), MINUS, battle_text(kind, battle[kind]))
+              for kind in DRAWBACKS if battle.get(kind)]
+    for kind in (PAINBLOCK, SELFREPAIR):
+        value = special_sum(records, kind)
+        if value:
+            value = min(100, value) if kind == PAINBLOCK else value
+            lines.append((special_text(kind, value, compact=True)[0], PLUS, special_text(kind, value)[0]))
+    return lines
 
 
 def total_pieces(records, losses=None):
@@ -861,21 +1153,12 @@ def total_pieces(records, losses=None):
     totals = ability_totals(records, losses)
     stats = [(ABILITY_NAMES[key], signed(value), PLUS if value > 0 else MINUS)
              for key, value in totals.items()]
-    battle = battle_totals(records)
-    lines = [(battle_text(kind, value, True), PLUS) for kind, value in sorted(battle.items())
-             if kind not in DRAWBACKS]
-    lines += [(battle_text(kind, battle[kind], True), MINUS) for kind in DRAWBACKS if battle.get(kind)]
-    for kind in (PAINBLOCK, SELFREPAIR):
-        value = special_sum(records, kind)
-        if value:
-            lines.append((special_text(kind, min(100, value) if kind == PAINBLOCK else value, compact=True)[0], PLUS))
-    for record in records:
-        for kind in (RAMPAGE, EROSION):
-            value = (record.get("special") or {}).get(kind)
-            if value:
-                lines.append(("{}（{}）".format(special_text(kind, value, compact=True)[0],
-                                              PART_NAMES.get(record.get("part"), "")), MINUS))
-    return stats, lines
+    return stats, [(text, kind) for text, kind, _long in _total_lines(records)]
+
+
+def total_hints(records):
+    """合計の効果のほかの行の長い文（`total_pieces` の行と同じ並び）。マウスを乗せたときの説明に出す。"""
+    return [long for _text, _kind, long in _total_lines(records)]
 
 
 def days_words(days):
@@ -884,6 +1167,11 @@ def days_words(days):
     if days >= 30 and days % 30 == 0:
         return "{}ヵ月".format(days // 30)
     return "{}日".format(days)
+
+
+def success_percent(fail):
+    """失敗の見込み（%）から成功率（%）。小数の第1位まで。"""
+    return round(100.0 - float(fail), 1)
 
 
 def percent_words(value):

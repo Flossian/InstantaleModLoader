@@ -7,8 +7,8 @@
     "ja": "素材を体に組み込む人体改造"
   },
   "description": {
-    "en": "At a medical facility, build items from your inventory that suit the body into it (the doctor's appraisal decides which suit; one LLM call per ten items). Augmentations change abilities and battle, and carry costs. One per body part (the same six parts as injuries). Illegal augmentations at the underworld office are stronger, but cost more and fail more often. Having one found at a medical facility lowers your standing there. The MOD button at the bottom left opens a screen with every part and the total effect",
-    "ja": "治療院で、持ち物のうち体に適合するアイテムを体に組み込む（適合は医師の鑑定で決まる。10個ごとに LLM へ1回）。改造は能力値と戦闘に効き、代償が付く。枠は怪我と同じ6部位に1つずつ。裏の事務所の違法の施術は効果が大きいが、代償が重く失敗しやすい。違法の改造が治療院で見つかると手配度が下がる。画面左下の MOD 用ボタンから、部位ごとの改造と合計の効果を見られる"
+    "en": "At a medical facility, build items from your inventory that suit the body into it (the doctor's appraisal decides which suit; one LLM call per ten items). Augmentations change abilities and battle, and carry costs. One per body part (the same six parts as injuries). The underworld office also performs augmentations past the safe limit, and takes restricted items a medical facility refuses (military parts, products of forbidden arts and the like). Both are illegal: stronger, but they cost more and fail more often. Having one found at a medical facility lowers your standing there. The MOD button at the bottom left opens a screen with every part and the total effect",
+    "ja": "治療院で、持ち物のうち体に適合するアイテムを体に組み込む（適合は医師の鑑定で決まる。10個ごとに LLM へ1回）。改造は能力値と戦闘に効き、代償が付く。枠は怪我と同じ6部位に1つずつ。裏の事務所では、安全の上限を外した限界施術と、治療院が扱えない禁制のアイテム（軍用の部品・禁じられた術の産物など）の施術も受けられる。どちらも違法の改造で、効果が大きいが、代償が重く失敗しやすい。違法の改造が治療院で見つかると手配度が下がる。画面左下の MOD 用ボタンから、部位ごとの改造と合計の効果を見られる"
   },
   "version": "1",
   "author": "R01/Flossian",
@@ -32,8 +32,8 @@
         "en": "Look"
       },
       "note": {
-        "ja": "自動は、世界ごとに1回、画面を初めて開いたときに LLM が世界の概要から選ぶ。画面の「世界観を判定し直す」でやり直せる",
-        "en": "Automatic lets the LLM choose from the world overview once per world, the first time the screen opens. The screen's re-judge button asks again"
+        "ja": "自動は、世界ごとに1回、画面を初めて開いたときに LLM が世界の概要から選ぶ",
+        "en": "Automatic lets the LLM choose from the world overview once per world, the first time the screen opens"
       }
     },
     "TITLE": {
@@ -146,7 +146,7 @@
         "en": "Legal failure chance (%)"
       },
       "note": {
-        "ja": "表（施術用の部品 3%・加工品 8%・生の素材 15% にレア度で 0〜6% を足す）に掛ける。耐久と判断が 11 より高いと1つにつき 0.5% 下がり、1% より下がらない",
+        "ja": "表（施術用の部品 3%・加工品 8%・未加工 15% にレア度で 0〜6% を足す）に掛ける。耐久と判断が 11 より高いと1つにつき 0.5% 下がり、1% より下がらない",
         "en": "Scales the table (3% part, 8% processed, 15% raw, plus 0 to 6% by rarity). Each point of CON and WIS above 11 takes 0.5% off, down to 1%"
       }
     },
@@ -160,8 +160,8 @@
         "en": "Illegal failure chance (%)"
       },
       "note": {
-        "ja": "耐久と判断で下がるが、10% より下がらない。失敗すると部位が使えなくなり、アイテムを失う",
-        "en": "CON and WIS lower it, but not below 10%. A failure disables the part and loses the item"
+        "ja": "耐久と判断で下がるが、10% より下がらない。失敗するとその部位に怪我 +60 を負い、アイテムを失う",
+        "en": "CON and WIS lower it, but not below 10%. A failure adds 60 injury to the part and loses the item"
       }
     },
     "OVERLOAD_FAIL": {

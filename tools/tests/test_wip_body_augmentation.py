@@ -10,7 +10,7 @@
   失敗   … 仕立てとレア度で上がり、耐久と判断で下がる。下限と上限
   枠     … 合法は1つめだけ、違法は2つめに重ねられる
   合計   … 能力値と戦闘の効果の足し方。同調・痛覚遮断
-  日数   … 侵食と自己修復の刻み、上限
+  サイクル … 侵食・傷が開く・自己修復のサイクル（日数と依頼の終わり）、上限
   世界観 … 判定の検算と、設定の語の優先
   設定   … mod.json の既定値と入口の定数が一致する
 """
@@ -23,6 +23,9 @@ import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODS_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime", "mods"))
+RUNTIME_DIR = os.path.dirname(MODS_DIR)
+if RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, RUNTIME_DIR)     # rules.py はローダの `battle_effects` の値（毒の割合など）を読む
 
 
 def find_mod(suffix):
@@ -84,9 +87,13 @@ def test_appraisal():
     check(got["rule"] == rules.APPRAISAL_RULE, "rule version on usable")
     check(rules.normalize_appraisal("text") is None, "not a dict")
     got = rules.normalize_appraisal({"usable": "true", "part": "head", "name": "x", "special": "painblock"})
-    check(got["special"] == "painblock" and got["boost"] == ["intelligence"] and got["cost"] == "wisdom",
-          "head defaults {}".format(got))
+    check(got["special"] == "painblock" and got["boost"] == ["intelligence", "strength"] and got["cost"] == "wisdom",
+          "head defaults (one boost -> the part's, then the first left) {}".format(got))
+    check(got["restricted"] is False, "not restricted unless told")
     check(got["drawback"] == "falter", "head drawback default {}".format(got))
+    got = rules.normalize_appraisal({"usable": "true", "part": "arms", "name": "x", "restricted": "true",
+                                     "boost": "strength, dexterity"})
+    check(got["restricted"] is True and got["boost"] == ["strength", "dexterity"], "restricted and two boosts")
     got = rules.normalize_appraisal({"usable": "true", "part": "body", "name": "x", "drawback": "FRAGILE"})
     check(got["drawback"] == "fragile", "drawback from the answer")
     got = rules.normalize_appraisal({"usable": "true", "part": "body", "name": "x", "drawback": "反動"})
@@ -95,7 +102,8 @@ def test_appraisal():
     check(got["drawback"] == "unmend", "unknown drawback -> part default")
     got = rules.normalize_appraisal({"usable": "true", "part": "arms", "name": "x", "boost": "charisma",
                                      "cost": "charisma"})
-    check(got["boost"] == ["charisma"] and got["cost"] == "dexterity", "cost equal to boost -> part default")
+    check(got["boost"] == ["charisma", "strength"] and got["cost"] == "dexterity",
+          "cost equal to boost -> part default {}".format(got))
     check(rules.normalize_appraisal({"usable": "true", "part": "legs", "name": "x", "special": "painblock"})
           ["special"] == "evade", "special of another part is dropped")
 
@@ -150,7 +158,13 @@ def test_drawbacks():
     check(rules.build_effects(dict(battle, drawback="unmend"), "common", False)["drawback"] == {"unmend": 15},
           "legal unmend 15")
     low = rules.build_effects(dict(ability, drawback="falter"), "magical", True)
-    check(low["drawback"] == {"falter": 10} and low["abilities"]["strength"] == -3, "illegal low both {}".format(low))
+    check(low["drawback"] == {"falter": 3} and low["abilities"]["strength"] == -3, "illegal low both {}".format(low))
+    falter = [rules.drawback_amount("falter", r, i) for r, i in (("common", False), ("magical", True), ("epic", True))]
+    check(falter == [2, 3, 5], "falter is light (whole turns miss) {}".format(falter))
+    heavy = rules.make_record(dict(ability, drawback="falter"), dict(INFO, rarity="epic"), None, True, 0, 1, "")
+    check(rules.battle_totals([heavy] * 6).get("falter") == 20, "this MOD's falter stops at 20%")
+    check(rules.PART_DRAWBACK["legs"] == "fragile" and rules.PART_DRAWBACK["head"] == "falter",
+          "only the head defaults to falter")
     high = rules.build_effects(dict(battle, drawback="unmend"), "epic", True)
     check(high["drawback"] == {"unmend": 45} and high["abilities"]["strength"] == -4, "illegal high both {}".format(high))
     check(rules.build_effects(ability, "rare", True)["drawback"] == {"backlash": 10}, "missing drawback -> part default")
@@ -159,14 +173,45 @@ def test_drawbacks():
     check(rules.battle_totals([record, record]) == {"pierce": 40, "critical": 50, "fragile": 20},
           "drawbacks add up {}".format(rules.battle_totals([record, record])))
     costs = [text for text, _kind in rules.effect_pieces(record, costs=True)]
-    check("脆さ 受けるダメージ +10%" in costs, "drawback in the costs {}".format(costs))
+    check("脆さ（受けるダメージ +10%）" in costs, "drawback in the costs {}".format(costs))
     check(("脆さ 10%", rules.MINUS) in rules.effect_pieces(record, compact=True), "compact drawback")
-    check(all(text != "脆さ 受けるダメージ +10%" for text, _k in rules.effect_pieces(record, costs=False)),
+    check(all(text != "脆さ（受けるダメージ +10%）" for text, _k in rules.effect_pieces(record, costs=False)),
           "drawback not among the effects")
     _stats, lines = rules.total_pieces([record])
     check(("脆さ 10%", rules.MINUS) in lines, "drawback in the totals {}".format(lines))
     for kind in rules.DRAWBACKS:
         check(kind in rules.DRAWBACK_HINTS and kind in rules.DRAWBACK_NAMES, "named drawback " + kind)
+
+
+def test_opposed():
+    check(rules.drawback_for("fragile", "reduce") == "backlash", "fragile vs reduce -> backlash")
+    check(rules.drawback_for("unmend", "regen") == "backlash", "unmend vs regen -> backlash")
+    check(rules.drawback_for("fragile", "thorns") == "fragile", "no clash keeps the drawback")
+    check(rules.drawback_for("fragile", None) == "fragile", "no special keeps the drawback")
+    for part, specials in rules.PART_SPECIALS.items():
+        for special in specials:
+            for kind in rules.DRAWBACKS:
+                got = rules.drawback_for(kind, special)
+                check(got in rules.DRAWBACKS and special not in rules.OPPOSED.get(got, ()),
+                      "{} {} {} -> {}".format(part, special, kind, got))
+    check(set(rules.OPPOSED) <= set(rules.DRAWBACKS) and set(rules.DRAWBACK_FALLBACK) == set(rules.DRAWBACKS),
+          "opposed table keys")
+    for part, special, kind in (("body", "reduce", "fragile"), ("organs", "regen", "unmend"),
+                                ("legs", "desperate", "fragile"), ("arms", "lifesteal", "unmend")):
+        found = appraisal(part, special=special, boost=(rules.PART_BOOST[part],))
+        effects = rules.build_effects(dict(found, drawback=kind), "epic", True)
+        check(special in effects["battle"] and effects["drawback"] == {"backlash": 15},
+              "{} {} drops {} {}".format(part, special, kind, effects))
+    sync = rules.build_effects(dict(appraisal("head", special="sync"), drawback="fragile"), "epic", True)
+    check("fragile" not in sync["drawback"] and rules.SYNC in sync["special"], "sync drops fragile {}".format(sync))
+    body = {"part": "body", "battle": {"reduce": 8}}
+    legs = {"part": "legs", "drawback": {"fragile": 10}}
+    check(rules.battle_totals([body, legs]) == {"fragile": 2}, "fragile 10 - reduce 8 {}".format(
+        rules.battle_totals([body, legs])))
+    check(rules.battle_totals([body, dict(legs, drawback={"fragile": 5})]) == {"reduce": 3}, "reduce 8 - fragile 5")
+    check(rules.battle_totals([body, dict(legs, drawback={"fragile": 8})]) == {}, "even -> neither")
+    _stats, lines = rules.total_pieces([body, legs])
+    check([text for text, _kind in lines] == ["脆さ 2%"], "one line in the totals {}".format(lines))
 
 
 def appraisal(part="arms", finish=rules.PROCESSED, special="pierce", boost=("dexterity",), cost="strength"):
@@ -176,22 +221,108 @@ def appraisal(part="arms", finish=rules.PROCESSED, special="pierce", boost=("dex
 
 
 def test_amounts():
-    legal = [rules.build_effects(appraisal(), r, False)["abilities"]["dexterity"] for r in rules.RARITIES]
-    check(legal == [1, 1, 2, 2, 3, 4], "legal amounts {}".format(legal))
-    illegal = [rules.build_effects(appraisal(), r, True)["abilities"]["dexterity"] for r in rules.RARITIES]
-    check(illegal == [2, 2, 3, 4, 5, 6], "illegal amounts {}".format(illegal))
-    raw = rules.build_effects(appraisal(finish=rules.RAW), "epic", False)["abilities"]["dexterity"]
-    check(raw == 2, "raw drops one tier (epic 3 -> 2): {}".format(raw))
-    check(rules.build_effects(appraisal(finish=rules.RAW), "epic", True)["abilities"]["dexterity"] == 4,
+    two = appraisal(boost=("dexterity", "constitution"))
+
+    def pairs(**kw):
+        found = []
+        for rarity in rules.RARITIES:
+            got = rules.build_effects(two, rarity, **kw)["abilities"]
+            found.append((got.get("dexterity", 0), got.get("constitution", 0)))
+        return found
+
+    legal = pairs(illegal=False)
+    check(legal == [(1, 0), (1, 1), (2, 1), (2, 2), (3, 2), (3, 3)], "legal amounts {}".format(legal))
+    overlimit = pairs(illegal=True)
+    check(overlimit == [(2, 1), (2, 2), (3, 2), (3, 3), (4, 3), (4, 4)], "overlimit amounts {}".format(overlimit))
+    forbidden = pairs(illegal=True, forbidden=True)
+    check(forbidden == [(2, 2), (3, 2), (3, 3), (4, 3), (4, 4), (4, 4)], "forbidden amounts {}".format(forbidden))
+    check(len(set(legal[:3])) == 3 and len(set(overlimit[:3])) == 3, "common to magical all differ")
+    raw = rules.build_effects(appraisal(finish=rules.RAW, boost=("dexterity", "constitution")), "epic", False)
+    check(raw["abilities"] == {"dexterity": 2, "constitution": 1, "strength": -2},
+          "raw drops one tier (epic -> magical): {}".format(raw["abilities"]))
+    check(rules.build_effects(appraisal(finish=rules.RAW), "epic", True)["abilities"]["dexterity"] == 3,
           "illegal raw does not drop")
+    check(rules.build_effects(appraisal(), "epic", False, forbidden=True)["special"] != {}
+          or rules.build_effects(appraisal(), "epic", False, forbidden=True)["battle"] != {},
+          "forbidden is illegal (special always)")
     check(rules.build_effects(appraisal(), "rare", False)["abilities"]["strength"] == -1, "estimate: legal low -1")
     check(rules.build_effects(appraisal(), "epic", False)["abilities"]["strength"] == -2, "estimate: legal high -2")
     check(rules.build_effects(appraisal(), "mythic", True)["abilities"]["strength"] == -4, "estimate: illegal high -4")
     check("strength" not in rules.build_effects(appraisal(), "rare", False, loss=0)["abilities"], "loss 0")
-    two = appraisal(boost=("dexterity", "constitution"))
     effects = rules.build_effects(two, "legendary", False)["abilities"]
-    check(effects["dexterity"] == 3 and effects["constitution"] == 1, "second boost halves: {}".format(effects))
-    check("constitution" not in rules.build_effects(two, "common", False)["abilities"], "half of 1 drops")
+    check(effects["dexterity"] == 3 and effects["constitution"] == 2, "second boost from the table: {}".format(effects))
+    check("constitution" not in rules.build_effects(two, "common", False)["abilities"], "no second at common")
+
+
+def test_procedure():
+    plain, banned = {"restricted": False}, {"restricted": True}
+    check(rules.procedure(plain, "legal", rules.OVERLIMIT) == {"illegal": False, "forbidden": False, "allowed": True},
+          "medical: normal whatever the method")
+    check(rules.procedure(plain, "illegal", rules.NORMAL) == {"illegal": False, "forbidden": False, "allowed": True},
+          "underworld normal is legal")
+    check(rules.procedure(plain, "illegal", rules.OVERLIMIT)["illegal"] is True, "underworld overlimit is illegal")
+    check(rules.procedure(banned, "legal", rules.NORMAL) == {"illegal": True, "forbidden": True, "allowed": False},
+          "medical refuses forbidden items")
+    check(rules.procedure(banned, "illegal", rules.NORMAL) == {"illegal": True, "forbidden": True, "allowed": True},
+          "underworld takes forbidden items whatever the method")
+    check(rules.procedure(banned, None, rules.NORMAL)["allowed"] is True, "view only shows the underworld's terms")
+    record = rules.make_record(appraisal(), INFO, None, False, 0, 1, "", forbidden=True)
+    check(record["illegal"] is True and record["forbidden"] is True, "forbidden record is illegal")
+    check(rules.make_record(appraisal(), INFO, None, True, 0, 1, "")["forbidden"] is False, "overlimit record")
+    check(rules.methods_for(plain, "illegal") == [rules.NORMAL, rules.OVERLIMIT]
+          and rules.methods_for(banned, "illegal") == [rules.NORMAL]
+          and rules.methods_for(plain, "legal") == [rules.NORMAL], "two buttons only for plain items at the underworld")
+
+
+def test_battle_texts():
+    for kind in rules.BATTLE_STRENGTH:
+        text = rules.battle_text(kind, 10)
+        check(kind in rules.OWN_BATTLE_TEXTS and text.count("（") == 1 and text.count("）") == 1,
+              "every battle effect says what it does, without nested brackets: {}".format(text))
+    check(rules.battle_text("reduce", 8) == "軽減（受けるダメージ −8%）", rules.battle_text("reduce", 8))
+    record = rules.make_record(dict(appraisal(), drawback="fragile"), dict(INFO, rarity="epic"), None, True, 0, 1, "")
+    _stats, lines = rules.total_pieces([record])
+    hints = rules.total_hints([record])
+    check(len(hints) == len(lines) and hints[0].startswith(lines[0][0].split(" ")[0] + "（"),
+          "a hint for each total line {} / {}".format(lines, hints))
+
+
+def test_injury_words():
+    check(rules.fail_injury_words(30) == "怪我 +30", rules.fail_injury_words(30))
+    check(rules.fail_injury_words(60, 45) == "怪我 +60・治療不可", "reaching the lost line is said")
+    check(rules.fail_note("arms") == "失敗すると腕の怪我で筋力と器用が下がり、アイテムを失う", rules.fail_note("arms"))
+    check(rules.fail_note("organs") == "失敗すると内臓の怪我で耐久が下がり、アイテムを失う", rules.fail_note("organs"))
+    check(rules.fail_injury(False) == 30 and rules.fail_injury(True) == 60, "fail injury")
+    check(set(rules.INJURY_ABILITIES) == set(rules.PARTS), "every part has the abilities an injury lowers")
+    check(rules.DRAWBACK_NAMES["unmend"] == "回復阻害", "unmend is named 回復阻害")
+
+
+def test_install_plan():
+    config = rules.Config()
+    item = dict(appraisal(boost=("dexterity", "constitution")), restricted=False)
+    bucket = rules.new_bucket()
+    normal = rules.install_plan(item, INFO, bucket, "illegal", rules.NORMAL, config, {}, 10 ** 6)
+    over = rules.install_plan(item, INFO, bucket, "illegal", rules.OVERLIMIT, config, {}, 10 ** 6)
+    check(normal["illegal"] is False and over["illegal"] is True, "underworld normal / overlimit")
+    check(normal["fee"] == rules.install_fee(INFO, False, config) and normal["days"] == 10
+          and normal["fail"] == 8.0, "underworld normal costs the same as the medical facility")
+    check(("器用 +1", rules.PLUS) in normal["effects"] and ("器用 +2", rules.PLUS) in over["effects"],
+          "effects by method {} / {}".format(normal["effects"], over["effects"]))
+    check(normal["slot"] == 0 and over["slot"] == 0, "empty part")
+    bucket["augments"]["arms"][0] = rules.make_record(item, INFO, None, False, 0, 1, "")
+    normal = rules.install_plan(item, INFO, bucket, "illegal", rules.NORMAL, config, {}, 10 ** 6)
+    over = rules.install_plan(item, INFO, bucket, "illegal", rules.OVERLIMIT, config, {}, 10 ** 6)
+    check(normal["slot"] is None and over["slot"] == 1, "a filled part: only the overlimit stacks")
+    check(over["fail"] == 45.0, "stacking adds to the failure chance {}".format(over["fail"]))
+    poor = rules.install_plan(item, INFO, rules.new_bucket(), "legal", rules.NORMAL, config, {}, 10)
+    check(poor["enough"] is False and rules.install_plan(item, INFO, rules.new_bucket(), "legal", rules.NORMAL,
+                                                         config, {}, None)["enough"] is True, "gold")
+    banned = dict(item, restricted=True)
+    at_medical = rules.install_plan(banned, INFO, rules.new_bucket(), "legal", rules.NORMAL, config)
+    check(at_medical["proc"]["allowed"] is False, "medical refuses")
+    at_under = rules.install_plan(banned, INFO, rules.new_bucket(), "illegal", rules.NORMAL, config)
+    check(at_under["illegal"] and ("器用 +3", rules.PLUS) in at_under["effects"],
+          "forbidden at the underworld {}".format(at_under["effects"]))
 
 
 def test_specials():
@@ -210,7 +341,7 @@ def test_specials():
           "illegal arms: special + rampage {}".format(arms))
     organs = rules.build_effects(appraisal("organs", special="selfrepair", boost=("constitution",), cost="wisdom"),
                                  "epic", True)
-    check(organs["special"] == {"selfrepair": 4, "erosion": 4} and organs["abilities"]["constitution"] == 4 + 1,
+    check(organs["special"] == {"selfrepair": 1, "erosion": 1} and organs["abilities"]["constitution"] == 3 + 1,
           "illegal organs: special + erosion {}".format(organs))
     for part, pool in rules.PART_SPECIALS.items():
         for kind in pool:
@@ -258,16 +389,31 @@ def test_slots_and_totals():
     check(rules.has_illegal(bucket), "has illegal")
     records = [r for _p, _s, r in rules.records_of(bucket)]
     totals = rules.ability_totals(records)
-    check(totals == {"strength": -1 - 4, "dexterity": 1 + 4}, "ability totals {}".format(totals))
+    check(totals == {"strength": -1 - 4, "dexterity": 1 + 3}, "ability totals {}".format(totals))
     battle = rules.battle_totals(records)
     check(battle == {"pierce": 35, "critical": 35, "backlash": 15}, "battle totals {}".format(battle))
     stats, lines = rules.total_pieces(records)
-    check(("器用", "+5", rules.PLUS) in stats, "total pieces {}".format(stats))
-    check(lines[-1] == ("暴走（腕）", rules.MINUS), "wear last {}".format(lines))
+    check(("器用", "+4", rules.PLUS) in stats, "total pieces {}".format(stats))
+    check(not any(text.startswith(("暴走", "侵食")) for text, _kind in lines), "no wear in totals {}".format(lines))
+    check(lines[-1] == ("反動 15%", rules.MINUS), "drawback last {}".format(lines))
     fixed, changed = rules.normalize_bucket({"augments": {"arms": [None]}, "history": None})
     check(changed and fixed["augments"]["arms"] == [None, None] and fixed["history"] == [], "normalize")
     ordered = rules.order_bucket(fixed)
-    check(list(ordered["augments"]) == list(rules.PARTS) and ordered["wear_days"] == 0, "order")
+    check(list(ordered["augments"]) == list(rules.PARTS) and ordered["recheck"] is False
+          and "wear_days" not in ordered, "order")
+    # 刻みの経過が周回に1つだった頃の控え（30日ごと）は、その値を各改造へ移し、量を1サイクルの量に直す
+    worn = dict(bucket["augments"]["arms"][0], part="organs", wear_days=None, special={"selfrepair": 6, "erosion": 4})
+    old = {"augments": {"arms": [dict(bucket["augments"]["arms"][0], wear_days=None), None], "organs": [worn, None]},
+           "history": [], "wear_days": 47}
+    moved, changed = rules.normalize_bucket(old)
+    check(changed and "wear_days" not in moved and moved["augments"]["arms"][0]["wear_days"] == 7,
+          "old carry moves to each augmentation")
+    check(moved["augments"]["organs"][0]["special"] == {"selfrepair": 2, "erosion": 1}, "old amounts per cycle")
+    kept, _changed = rules.normalize_bucket({"augments": {"organs": [dict(worn, special={"selfrepair": 2}), None]},
+                                             "history": []})
+    check(kept["augments"]["organs"][0]["special"] == {"selfrepair": 2}, "a new bucket keeps its amounts")
+    flagged, _changed = rules.normalize_bucket({"augments": {}, "history": [], "recheck": True})
+    check(rules.order_bucket(flagged)["recheck"] is True, "recheck survives a save")
 
 
 def test_sync_and_painblock():
@@ -294,19 +440,67 @@ def test_sync_and_painblock():
 
 
 def test_wear():
-    check(rules.wear_steps(10, 25) == (1, 5) and rules.wear_steps(0, 90) == (3, 0), "wear steps")
     erosion = rules.make_record(appraisal("organs", special="regen", boost=("constitution",)), INFO, None, True, 0, 1, "")
     repair = rules.make_record(appraisal("body", special="selfrepair", boost=("strength",)),
                                dict(INFO, rarity="epic"), None, False, 0, 1, "")
+    check(erosion["wear_days"] == 0, "a new augmentation starts its own cycle")
+
+    pain = rules.make_record(appraisal("head", special="painblock", boost=("intelligence",)),
+                             dict(INFO, rarity="legendary"), None, False, 0, 1, "")
+
+    def wear(start, records, moved, cycles=0):
+        events, _carries = rules.wear_events(records, moved, cycles)
+        return rules.apply_wear(start, records, events)
+
     start = {"head": 20, "organs": 0, "arms": 100, "legs": 0}
-    check(rules.apply_wear(start, [erosion], 2) == {"organs": 6}, "erosion +3 per step")
-    check(rules.apply_wear({"organs": 98}, [erosion], 3) == {"organs": 99}, "erosion stops at 99")
-    check(rules.apply_wear({"organs": 120}, [erosion], 3) == {}, "erosion leaves a lost part alone")
-    check(rules.apply_wear(start, [repair], 3) == {"head": 14}, "selfrepair -2 per step, not the lost arm")
-    check(rules.apply_wear({"organs": 10}, [erosion, repair], 1) == {"organs": 11}, "selfrepair -2 against erosion +3")
-    check(rules.apply_wear(start, [], 5) == {}, "nothing without records")
+    check(wear(start, [erosion], 20) == {"organs": 2}, "erosion +1 per 10-day cycle")
+    check(wear(start, [erosion], 9) == {}, "no cycle before 10 days")
+    check(wear({"organs": 98}, [erosion], 90) == {"organs": 99}, "erosion stops at 99")
+    check(wear({"organs": 120}, [erosion], 90) == {}, "erosion leaves a lost part alone")
+    check(wear(start, [repair], 30) == {"head": 17}, "selfrepair -1 per cycle, not the lost arm")
+    check(wear({"organs": 0}, [repair, erosion], 10) == {}, "erosion before selfrepair in the same cycle")
+    check(wear(start, [], 150) == {}, "nothing without records")
+    # 痛覚遮断は負傷（10 以上）の部位の傷が開く。99 で止まり、失った部位は触らない
+    check(wear({"head": 10, "arms": 9, "legs": 99, "body": 120, "organs": 50}, [pain], 10) == {"head": 11, "organs": 51},
+          "painblock worsens hurt parts only")
+    check(wear({"organs": 9}, [repair, pain, erosion], 10) == {"organs": 10},
+          "erosion, then painblock, then selfrepair in the same cycle")
+    # 依頼の終わりは日数によらず5サイクル。経過の日数は変えない
+    check(wear(start, [erosion], 0, rules.QUEST_CYCLES) == {"organs": 5}, "a quest is 5 cycles")
+    check(rules.wear_events([dict(erosion, wear_days=7)], 0, 5)[1] == [7], "a quest keeps the days of the cycle")
+    events, carries = rules.wear_events([dict(erosion, wear_days=8)], 3, 5)
+    check([time for time, _index, _kind in events] == [2, 4, 5, 6, 7, 8] and carries == [1], "days, then quest cycles")
+    # サイクルは改造ごと。後から入れた改造は、先の改造のサイクルに引きずられない
+    late = dict(erosion, wear_days=0)
+    early = dict(repair, wear_days=5)
+    events, carries = rules.wear_events([early, late], 5)
+    check(events == [(5, 0, rules.SELFREPAIR)] and carries == [0, 5], "each augmentation has its own cycle")
+    plain = rules.make_record(appraisal(), INFO, None, False, 0, 1, "")
+    check(rules.wear_events([dict(plain, wear_days=7)], 100, 5) == ([], [7]), "no cycle without cycle effects")
+    marks = rules.wear_marks([dict(erosion, wear_days=8), dict(repair, wear_days=8)])
+    check(marks == {"organs": [("次の侵食まで 2日（怪我 +1。依頼で +5）", rules.MINUS)],
+                    "body": [("次の自己修復まで 2日（全部位の怪我 −1。依頼で −5）", rules.PLUS)]},
+          "wear marks: days left and amounts {}".format(marks))
+    check(rules.wear_marks([pain]) == {"head": [("次の悪化まで 10日（負傷の部位 +1。依頼で +5）", rules.MINUS)]},
+          "wear marks: painblock")
+    check(rules.wear_marks([erosion])["organs"][0][0].startswith("次の侵食まで 10日"), "wear marks: fresh cycle")
+    check(rules.wear_marks([erosion, erosion])["organs"][0][0].endswith("（怪我 +2。依頼で +10）"),
+          "wear marks: same day adds up")
+    check(len(rules.wear_marks([erosion, dict(erosion, wear_days=5)])["organs"]) == 2,
+          "wear marks: different days stay apart")
+    # 痛覚遮断の代償に「傷が開く」が出る。合計の欄には出さない
+    check(("傷が開く（10日ごとに負傷の部位の怪我 +1。依頼で +5）", rules.MINUS) in rules.effect_pieces(pain, costs=True),
+          "painblock shows its wound as a cost")
+    check(("傷が開く", rules.MINUS) in rules.effect_pieces(pain, compact=True)
+          and not any(text.startswith("傷が開く") for text, _kind in rules.effect_pieces(pain, costs=False)),
+          "the short form on the card, not among the effects")
+    _stats, lines = rules.total_pieces([pain])
+    check(("痛覚遮断 75%", rules.PLUS) in lines and not any(text.startswith("傷が開く") for text, _kind in lines),
+          "no wound in totals {}".format(lines))
+    check(rules.wear_marks([]) == {}, "wear marks: nothing without records")
     rampage = rules.make_record(appraisal(), INFO, None, True, 0, 1, "")
     check(rules.rampage_parts([rampage, erosion]) == ["arms"], "rampage parts")
+    check(rules.wear_marks([rampage]) == {"arms": [("敵を倒すたびに怪我 +1", rules.MINUS)]}, "wear marks: rampage")
 
 
 def test_theme():
@@ -332,7 +526,7 @@ def test_labels():
     kinds = [kind for _text, kind in rules.effect_pieces(record)]
     check(kinds == [rules.PLUS] * 4 + [rules.MINUS] * 2, "plus first: {}".format(kinds))
     costs = [text for text, _kind in rules.effect_pieces(record, costs=True)]
-    check(costs == ["器用 −1", "暴走 敵を倒すたびに腕の怪我 +1"], "costs {}".format(costs))
+    check(costs == ["器用 −1", "暴走（敵を倒すたびに腕の怪我 +1）"], "costs {}".format(costs))
 
 
 def test_batch():
@@ -397,10 +591,12 @@ def test_prompts():
     check("arms（腕）" in text and "【体に適合する品】" in text and "index:" in text, "fit rule and index")
     check("cost:" in text and "painblock=" in text and "一点もの" in text, "cost asked, own specials listed")
     check(set(prompts.APPRAISE_FIELDS) == {"index", "usable", "part", "name", "description", "boost", "cost",
-                                           "drawback", "special", "finish", "reason"}, "fields")
+                                           "drawback", "special", "finish", "restricted", "reason"}, "fields")
     check("drawback:" in text and "fragile=" in text and "charisma にしない" in text, "drawback asked, charisma bias")
-    check("闇医者" in prompts.appraise_message([INFO], "", True)[0]["content"], "illegal doctor")
-    check("machine" in prompts.theme_message("", "")[0]["content"], "theme message")
+    check("restricted:" in text and "軍用" in text and "boost: 伸びる能力値を2つ" in text, "restricted and two boosts asked")
+    check(prompts.appraise_message([INFO], "", True) == prompts.appraise_message([INFO], "", False),
+          "the appraisal does not depend on the facility")
+    check("machine" in prompts.theme_message("")[0]["content"], "theme message")
 
 
 def test_settings_match():
