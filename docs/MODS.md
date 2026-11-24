@@ -96,7 +96,7 @@ MOD 無しで起きた不具合を作者へ報告したいときは、
 
 ## 修正（1xx）
 
-この節の `130_currency_unit` は自作で、MoririnJP 様の提案（PR）を取り込んでいる。 この節の `117_message_text_integrity`・`118_batch_message_render`・`119_fix_crime_attribution` は yoshinari/tomotomo-y 様の提供。うち `118_batch_message_render` はこちらとの共同。
+この節の `130_currency_unit`・`136_cloud_model_override` は自作で、MoririnJP 様の提案（PR）を取り込んでいる。 この節の `117_message_text_integrity`・`118_batch_message_render`・`119_fix_crime_attribution` は yoshinari/tomotomo-y 様の提供。うち `118_batch_message_render` はこちらとの共同。
 
 ### `100_fix_kivy_shutdown`: 終了時に落ちるのを防ぐ
 
@@ -228,8 +228,8 @@ Gemini は `send_request` の中で足すので境界の外、OpenAI / Claude �
 1回あたり 2 分ほど待たされ、続けて起きると 4 分、多いときは 25 分かかっていた。
 この MOD は LLM へ渡す型の配列に件数の上限を付けて、生成が書き終わるようにする。
 
-ローカル LLM（llama.cpp）で遊んでいるときだけ効く。
-クラウド（APIキー）は型の制約（grammar）を使わないので、この MOD は何もしない。
+ゲーム内蔵のローカル LLM（llama.cpp）と、「任意の OpenAI 互換サーバー」（LM Studio など）、OpenAI で効く。
+Claude と Gemini では何もしない。
 
 #### 何が起きていたか
 
@@ -272,6 +272,7 @@ llama.cpp の grammar は「上限を超える要素を書き始めること」�
 上限を付けるのは依頼の型（`title` が `QuestStructure`）だけ。
 ゲームが持っている型の辞書は書き換えず、コピーを渡す。
 上限を付けた回は `out\quest_generation_runaway.log` に1行出る。
+行の括弧の中は経路で、内蔵の llama.cpp は `llama.cpp`、OpenAI 互換サーバーと OpenAI は `openai`。
 
 | 設定 | 既定 | 意味 |
 |---|---|---|
@@ -281,7 +282,7 @@ llama.cpp の grammar は「上限を超える要素を書き始めること」�
 
 | 症状 | やること |
 |---|---|
-| まだ依頼の生成に 2 分かかる回がある | `out\quest_generation_runaway.log` に `limited QuestStructure` の行が出ているか。出ていなければこの MOD が効いていない（クラウドで遊んでいる、または型の名前が変わった。`WARN a quest-like schema` の行を見る）。出ているのに遅いなら、敵のほかの欄で書き続けている。`216_probe_llm_overlap` の `SLOW` の行を添えて報告してほしい |
+| まだ依頼の生成に 2 分かかる回がある | `out\quest_generation_runaway.log` に `limited QuestStructure` の行が出ているか。出ていなければこの MOD が効いていない（Claude か Gemini で遊んでいる、または型の名前が変わった。`WARN a quest-like schema` の行を見る）。出ているのに遅いなら、敵のほかの欄で書き続けている。`216_probe_llm_overlap` の `SLOW` の行を添えて報告してほしい |
 | 依頼の敵の種類が少なくなった気がする | 上限で打ち切られている。設定の上限を上げる |
 
 ### `106_fix_battle_bgm_restore`: 戦闘後にBGMが戻らないのを直す
@@ -1747,6 +1748,7 @@ Claude Sonnet 5.5・Opus 5.5・Fable 5.1 と GPT-6 系・GPT-5.6 系、Gemini 3.
 ゲームには一覧のモデルを選ばせたまま、送る直前にモデル名を差し替える。
 差し替え先が受け付けない引数も、送る前に直す。
 プロンプトキャッシュのマークの置き方も、ここで選べる。
+差し替えていなくても、Gemini・Claude で起きるゲームの不具合のいくつかを直す（「仕組み」の節）。
 
 #### ゲーム側で選ぶもの
 
@@ -1800,6 +1802,7 @@ Claude の送信が1度も走らないため。
 
 | 設定 | 既定 | 意味 |
 | --- | --- | --- |
+| Gemini・Claude で返事の無いリクエストを直す | オン | 店の品揃え・エピローグ・自由施設の要約へ user role を1件足す。「Gemini・Claude で店の品揃えやエピローグの返事が無いのを直す」の節 |
 | 差し替えをログに出す回数 | 3 | `out\modloader.log`。効いているかの確認用。応答の入力・キャッシュの書き込み・読み出しの数も同じ回数だけ出す（Claude はキャッシュを使うときだけ） |
 | タイトル画面に使うモデルを出す | オン | タイトル画面の右上に「LLM: Claude Haiku 5.5 / effort: medium」のように、実際に送っているモデルと推論量（Gemini は思考の段階）を1行出す。推論量の設定が `keep` のときは、ゲームが組む値を差し替え先が受ける値に寄せて出す（OpenAI の gpt-5.5 などなら none、Claude の Sonnet 5.5・Opus 5.5・Fable 5.1・Fable 5 なら low、Gemini を Gemini 4 へ差し替えるなら low）。ゲームが推論量を付けない Claude のモデル（Sonnet 5 など）では、API の既定を「high（既定）」のように出す。推論量を送らないモデル（Claude Haiku 4.5 など）では付かない。ゲームが API キーでクラウドを使っていて、そのプロバイダをこの MOD で差し替えているときだけ出る（ローカルの LLM や、差し替え先が `off` のときは出ない）。ローダの版の行の下に並ぶ |
 | 差し替えていないときも出す | オフ | 上の欄がオンのときだけ効く。ゲームが API キーで OpenAI / Claude / Gemini を使っていれば、差し替えていなくても、ゲームで選んだモデル（モデル ID）とゲームが送る推論量を同じ形で出す。推論量の設定は差し替えるときだけ効くので、ここではゲームの値を出す |
@@ -1904,6 +1907,32 @@ Claude は場所の種類に `facility` のような別の値を書けてしま�
 差し替え先を `off` にしていても効く。
 ログには `const->enum` と `clamped to the type's range` の行が出る。
 
+##### Gemini・Claude で店の品揃えやエピローグの返事が無いのを直す
+
+MOD なしのゲームには、system role だけで組んで送るリクエストが4件ある。
+クラウド API で Gemini を使うと、この4件に返答が無く、裏で落ちる。
+Claude を使うと、API が system を別の欄へ移すので送る会話（messages）が空になり、`400 messages: at least one message is required` で拒否される。
+店では品揃えが作られず、売買の画面が開かないまま止まる。
+
+この MOD はその4件へ最小限の user role を1件足す。
+足すのは、user role が1件も無いときだけで、場所は最初の system の直後。
+system role の本文には触れない。
+GPT 系は system role だけでも返答できるので何も足さず、ローカル（llama.cpp）でも何も足さない。
+差し替え先を `off` にしていても効く。
+設定の「Gemini・Claude で返事の無いリクエストを直す」をオフにすると足さない。
+ログには `cloud model override: inserted user role for <リクエスト>` の行が出る。
+
+| リクエスト（manager） | 足す user の本文 |
+| --- | --- |
+| `shop_item_generator_ordinary` | `＜売買する＞` |
+| `epilogue_pre_evaluator` | `＜エピローグを評価する＞` |
+| `epilogue_generator` | `＜エピローグを生成する＞` |
+| `free_facility_summary` | `＜行動記録を要約する＞` |
+
+この直しは、元は `406_user_role_fix`（MoririnJP 様の提供を共同で仕上げた MOD）だった。
+406 は取り込み済みとして無効にしてあり、デバッグモードのときだけ読み込まれる。
+両方が動いても、user role がもうあるリクエストには足さないので二重には足さない。
+
 #### プロンプトキャッシュ
 
 前のプロンプトと同じ部分をキャッシュしておき、次のプロンプトでその分の入力を安く読ませる仕組み。
@@ -1972,6 +2001,8 @@ Gemini 4 は Google が同じ部分を自動でキャッシュする（暗黙の
 | 差し替わっていない | ログに `cloud model override: [...]` の行が出ているか。出ていなければ、ゲーム側のプロバイダとこの MOD で設定した側が合っていない（「ゲーム側で選ぶもの」）か、ゲームがローカル LLM で動いている |
 | API がモデル名を知らないと返す | 一覧に無いモデルの欄の綴り。API キーの側でそのモデルが使えるかも見る |
 | Claude で「リクエストを再実行」が出たまま依頼が作られない | ログに `grammar too large; sent with` の行が出ているか。`grammar still too large` が出ていれば、置き換えても文法が大きすぎた。そのプロンプトの種類（ログの `random_quest_generator` など）を添えて報告する |
+| Gemini・Claude で店の品揃え・エピローグ・自由施設の要約が返ってこない | ログに `inserted user role` の行が出ているか。出ていなければ、設定の「Gemini・Claude で返事の無いリクエストを直す」がオフか、送信モジュール名に `gemini` も `claude` も含まれていない。上の4件以外のリクエストは対象外（ゲームの `output_data` の記録で user role が無いのはこの4件だけだった。85 種を確認） |
+| 前の版で `406_user_role_fix` を使っていた | この MOD に取り込んだ。406 は取り込み済みとして無効になり、何もしなくてよい。406 を切っていて、この直しも要らないなら、上の設定をオフにする |
 | 400 で引数を断られる | ログの `fixed:` に何が載っているか。ゲームが新しい引数を送り始めた可能性がある。エラー文にある引数名を添えて報告する |
 | 応答が遅い | 推論量を下げる（OpenAI は `none`、Claude は `low`、Gemini は `low` か `minimal`）。GPT-6 Astra と GPT-6.1 Sol は `none` にできないので、速さが要るならゲームの設定画面で GPT-6 Luna / GPT-6 Sol を選ぶか、GPT-6.1 Terra へ差し替える。Gemini 4 は `minimal` にできないので、速さが要るなら Gemini 3.6 Flash / 3.5 Flash-Lite へ差し替える |
 | 版6 に上げたら差し替わらなくなった | 一覧から外したモデル（ゲームの一覧に入ったもの）を選んでいた。ゲームの設定画面でそのモデルを選ぶ。ログの `settings:` の行に、使えなくなった値が出ている |
@@ -7925,6 +7956,10 @@ scoreは1～5で、1・2が供給過多、3が等倍、4・5が不足・需要�
 `summary saved`、`regional overlay`、`specialty generated`が主な確認箇所。
 
 ### `406_user_role_fix`: クラウド API の Gemini・Claude で、user role の無い依頼が返らない・断られるのを防ぐ
+
+> `136_cloud_model_override` が取り込んだため無効化。
+> デバッグモードのときだけ読み込まれます（README「デバッグモード」）。
+> 136 が、同じ4件へ同じ user role を足します（136 の DOC.md）。
 
 MOD なしのゲームには、system role だけで組んで送るリクエストが4件ある。
 クラウド API で Gemini を使うと、この4件に返答が無く、裏で落ちる。

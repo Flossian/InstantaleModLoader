@@ -36,7 +36,7 @@
 | `103_fix_eventlog_trim` | EVENTLOG | 実経路で検証済〔main_024〕 | [§2.3](verification/2.3.md) |
 | `104_balance_area_bgm` | エリア BGM の偏り | 決着（差し替え3件）。既存3世界の是正は未実行 | [§2.4](verification/2.4.md) / [§3.4](verification/3.4.md) |
 | `105_fix_schema_compact` | COMPACT | 決着（2,803 件で 73.3% 減）。版2 で一覧を骨組みに変え、雇用の返事が崩れるのを直した（ゲーム抜きのローカル LLM で 19/50 → 41/50、ゲームの中でも成立）。数の範囲・件数・説明も残すようにした（送り比べで差は出ず）。説得の場面は書き方の違いだけで答えが寄るので、2,000 字未満のスキーマ（会話進行を含む）は触らない。`127_` に取り込んで取込済にした | [§2.3](verification/2.3.md) |
-| `139_fix_quest_generation_runaway` | 依頼の生成で敵の一覧がコンテキスト長を使い切る | オフラインで成立（上限なし 12 回中 8 回失敗、上限あり 40 回とも型どおり）。ゲームの中でも1回成立 | [§3.81](verification/3.81.md) |
+| `139_fix_quest_generation_runaway` | 依頼の生成で敵の一覧がコンテキスト長を使い切る | オフラインで成立（上限なし 12 回中 8 回失敗、上限あり 40 回とも型どおり）。ゲームの中でも1回成立。版2 で OpenAI 互換サーバー（LM Studio など）の経路にも広げた。オフラインで上限なし 8 回中 5 回失敗・上限あり 8 回とも型どおり、ゲームの中でも1回成立。LM Studio そのものと OpenAI 本家は未（[§3.135](verification/3.135.md)） | [§3.81](verification/3.81.md) |
 | `106_fix_battle_bgm_restore` | 戦闘後に BGM が戻らない | 決着（3つの起点が発火）〔main_024〕。版3 で組み直しのラッパーを連携 API の `after` に移した。戦闘の最中のセーブを読むと戦闘曲を止めていたのを直し、実機で成立（[§3.109](verification/3.109.md)） | [§2.5](verification/2.5.md) / [§3.1](verification/3.1.md) |
 | `107_fix_battle_flag_stuck` | 戦闘・闘技場・売買のフラグが残る | 決着（版4まで成立、撤退の後の依頼の戦闘も）。版6 の `in_shopping` は3か所とも成立。版7 のロードの見分けも成立。前後の処理をローダの連携 API へ移した。実機は未（[§3.113](verification/3.113.md)） | [§3.73](verification/3.73.md) / [§3.86](verification/3.86.md) / [§3.91](verification/3.91.md) |
 | `108_fix_shop_inventory_overflow` | 売買画面の `IndexError` | 修正済だが救済経路が一度も発火せず、起こせない。main_024 で直り `superseded` | [§2.16](verification/2.16.md) / [§3.8](verification/3.8.md) |
@@ -67,7 +67,7 @@
 | `133_ui_area_difficulty` | 移動先に難易度帯を添える | 決着。本文の1行をローダへ移した。帯の1行を足す側は実機で成立、町の名前の差し替えは狙って起こせず未（[§3.133](verification/3.133.md)） | [§3.49](verification/3.49.md) |
 | `134_balance_item_effects` | 回復アイテムが一律でスタミナを払う | 成立。残るは3点。本文の1行・保存・表示言語をローダへ移した。回復の文の差し替え・使う途中の保存で回復の値を戻すこと・表示言語は実機で成立（[§3.133](verification/3.133.md)） | [§3.51](verification/3.51.md) |
 | `135_fix_inn_button_order` | 宿屋だけ `出る` が先頭（GAME.md §2.2） | 成立（6回とも並べ直し、OFF にすると戻る）。店・部屋選び・活動の並びが変わらないことはオフラインのみ | - |
-| `136_cloud_model_override` | 一覧に無いクラウドのモデルを選べない | Luna・Sonnet 5.5・キャッシュは成立、Haiku 5.5 は検証で常用、Opus 5.5 / Haiku 4.5 は疎通。版5 で町の生成の検証エラーが 0。Astra は未。版6 でゲームの一覧（main_026）に入ったモデルを一覧から外した。ゲームで Sonnet 5.5 を選び差し替え off で会話と依頼の生成が通った。版7 で差し替えていないときもタイトル画面に出せるようにした（実機で成立。[§3.126](verification/3.126.md)） | [§3.71](verification/3.71.md) |
+| `136_cloud_model_override` | 一覧に無いクラウドのモデルを選べない | Luna・Sonnet 5.5・キャッシュは成立、Haiku 5.5 は検証で常用、Opus 5.5 / Haiku 4.5 は疎通。版5 で町の生成の検証エラーが 0。Astra は未。版6 でゲームの一覧（main_026）に入ったモデルを一覧から外した。ゲームで Sonnet 5.5 を選び差し替え off で会話と依頼の生成が通った。版7 で差し替えていないときもタイトル画面に出せるようにした（実機で成立。[§3.126](verification/3.126.md)）。版9 で `406_user_role_fix` を取り込んだ（設定 `USER_ROLE_FIX`。406 は取込済）。元の 406 の版3 で Claude の店は成立（[§3.94](verification/3.94.md)）、Gemini は実機の記録が無い。取り込んだ後はオフラインの検査まで（`inserted user role for <manager>` を見る） | [§3.71](verification/3.71.md) |
 | `137_fix_npc_skill_uses` | 使い切ったスキルを使い続ける | 使い切りを隠すのは成立。重ねがけ止めは未。保存をローダへ移した。窓口が保存のたびに呼ぶところまで実機、審判の途中の保存は起きず未（[§3.133](verification/3.133.md)） | [§3.77](verification/3.77.md) / [§3.88](verification/3.88.md) |
 | `138_fix_character_image_refresh` | 再生成した立ち絵と顔が画面に出ない | 成立（立ち絵と顔の2枚） | [§2.94](verification/2.94.md) |
 | `140_fix_busy_dots_speed` | 待機中の「…」が速く流れる | 成立（1本・約3.4コマ/秒。直す前は2〜7本） | [§3.88](verification/3.88.md) |
@@ -146,7 +146,7 @@
 | `403_npc_social_memory` | オフラインのみ（33件）。実機は `404_` の回の `changed: false` と、`323_` が書いた関係の読み返しまで（[§2.78](verification/2.78.md) / [§3.44](verification/3.44.md)）。前後の処理をローダの連携 API へ移した。実機は未（[§3.113](verification/3.113.md)）。版10 で LLM に渡す材料の字数切りを外した。オフラインまで（[§3.128](verification/3.128.md)） |
 | `404_party_talk` | 実機6回で決着（[§2.78](verification/2.78.md)）。レビューで直した9点は未（[§3.41](verification/3.41.md)）。版10 のロードの戻りは成立（[§3.88](verification/3.88.md)）。版11 の宣言型の API への乗せ替えは実機で成立（パーティー会話・閉じた後の戻り・保存と読み直し）（[§3.109](verification/3.109.md)）。版12 で LLM に渡す材料の字数切りを外した。オフラインまで（[§3.128](verification/3.128.md)）。版13 の話し手ごとの表情は実機で成立（仲間2人・3ラウンド）（[§3.132](verification/3.132.md)） |
 | `405_regional_economy` | 成立（19 / 19。[§3.19](verification/3.19.md)）。前後の処理をローダの連携 API へ移した。実機は未（[§3.113](verification/3.113.md)）。初めて開く店の検品を品を並べ終えた直後へ移し、元のメニューのちらつきと2度目の待機表示を無くした。実機で成立（[§3.114](verification/3.114.md)）。版7 で LLM に渡す材料の字数切りを外した。オフラインまで（[§3.128](verification/3.128.md)） |
-| `406_user_role_fix` | 版3 の Claude の店は成立（[§3.94](verification/3.94.md)）。Gemini は実機の記録が無い（`inserted user role for <manager>` を見る） |
+| `406_user_role_fix` | 版3 の Claude の店は成立（[§3.94](verification/3.94.md)）。Gemini は実機の記録が無い（`inserted user role for <manager>` を見る）。`136_` に取り込んで取込済にした |
 | `407_npc_starting_equipment` | 成立（仲間3人、連携 API `equipment.equip`、起動し直しても残る）。ロード後の戦闘の数は `333_` で直して成立（[§3.77](verification/3.77.md) / [§3.88](verification/3.88.md)）。前後の処理をローダの連携 API へ移した。実機は未（[§3.113](verification/3.113.md)）。版6 で LLM に渡す材料の字数切りを外した。オフラインまで（[§3.128](verification/3.128.md)）。保存をローダへ移した。仲間に加えた冒険者に初期装備を渡し、保存の後に印を書くのは実機で成立（[§3.133](verification/3.133.md)） |
 | `408_visual_changes_based_on_equipment` | 一通り成立（仲間と `335_` の描き直しに装備の語）。取り込みと切り出しの経緯は [§2.94](verification/2.94.md) |
 | `409_fix_crafted_item_type` | 店の `consumable` の品に「消費」が出て使えた。キーを足した品を `134_` 抜きで使うのとクラフトの経路は未（[§3.104](verification/3.104.md)）。表示言語をローダへ移した。実機で `ui.language` を指して ja を返すのを確かめた（[§3.133](verification/3.133.md)） |
@@ -374,6 +374,7 @@ crash_log.txt の 114 件のうち、35件が `llama-server` 起動失敗、40�
 - [3.132 会話の相手の表情を台詞に合わせて変える（`347_conversation_expressions`・`343_stable_diffusion` 版30 の表情差分・`404_party_talk` 版13・ローダの `expressions`）: 会話・パーティー会話・一括生成（差分だけ描くを含む）とも実機で成立](verification/3.132.md)
 - [3.133 何本もの MOD が自分でラップしていた依頼の生成・依頼の終わり・本文の1行・保存と、写されていた小さな部品を、ローダへ移す（`quest_generation` / `quest_ends` / `text_filters` / `saving`・`ui.language` / `ui.guild_of` / `npcs` の項目を均す部品）: 29 本を乗せ替え、オフラインの検査は通過・4つの窓口の経路は実機で成立（道・危険な道・会話・出来事・裏の仕事の生成と終わり、各場面の文、保存の戻しと印）・保存の間の条件が起きなかった3本と、起こせない場面（133 の差し替え・334・336 の脱出と同房者・339 の追手）は未](verification/3.133.md)
 - [3.134 素材を体に組み込む人体改造（`926_body_augmentation`・連携 API `shop_lineup` の足す文）と、医療施設の治療の実測（`248_probe_medical`）: 見立て・施術・取り外し・違法の施術（本物の裏の事務所でも）・発覚・効果・読み直し・クラフトした部品は実機で成立・治療の中身を3回測った・棚の一文は未](verification/3.134.md)
+- [3.135 任意の OpenAI 互換サーバー（LM Studio など）での依頼の生成の暴走と、`139_` の OpenAI の経路への広げ: ゲーム抜きで上限なし 8 回中 5 回失敗・上限あり 8 回とも型どおり、ゲームの中でも1回成立](verification/3.135.md)
 <!-- verification-index: end -->
 
 ---

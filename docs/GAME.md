@@ -1761,7 +1761,7 @@ scripts.llm.request_llm_inference_llama_cpp_completion:send_request*         ロ
 scripts.llm.request_llm_inference_gemini_test_streaming:send_request*        Gemini（実測）
 scripts.llm.request_llm_inference_openai:send_request*                       OpenAI（実測）
 scripts.llm.request_llm_inference_claude:send_request*                       Claude（実測）
-scripts.llm.request_llm_inference_any_server:send_request*                   任意互換（推定）
+scripts.llm.request_llm_inference_any_server:send_request*                   任意互換
 scripts.llm.llm_manager:*                                                    マネージャ群
 ```
 
@@ -1821,6 +1821,10 @@ main_026 からは、部品ごとに `scripts.llm.output_language.localized_requ
 | 既定モデル | `gemini-3.5-flash` | `gpt-5.4-nano` / `claude-sonnet-5` |
 | 特徴 | ストリーミング収集（`_stream_and_collect`）、pydantic 検証に失敗した部分木だけを修復するループ（最大3周）、`SCHEMA_IN_PROMPT = True` でスキーマ文を `send_request` の中で足す | 修復ループもスキーマ埋め込みも無い（構造化出力を API に任せる） |
 
+- 任意の OpenAI 互換サーバー（`llm_inference` が `any_server`。宛先は `cloud_model_setting.any_server` の `base_url` と `models`、既定の宛先は `http://localhost:1234/v1`）は、`openai.OpenAI` の `beta.chat.completions.parse` に pydantic の型を `response_format` で渡す（exe の定数）。
+  SDK が型を `response_format.json_schema.schema` に直して `SyncAPIClient.post` で送るので、互換サーバー（LM Studio など）はその型から grammar を作る。
+  型に件数の上限が無いと、内蔵の llama.cpp と同じく敵の一覧を書き足し続ける（`139_`。VERIFICATION.md §3.135）。
+  プロンプトに型の文は埋め込まない
 - Claude では依頼の生成（`random_quest_generator`）が通らない（2026-10-08 の実機。anthropic 0.105.2）。
   型（`QuestStructure`）は `output_config.format` に約 9000 字の JSON Schema として載り、
   API が `400 The compiled grammar is too large` で拒否する。

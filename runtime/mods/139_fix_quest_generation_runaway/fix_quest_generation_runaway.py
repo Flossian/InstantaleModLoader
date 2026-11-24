@@ -16,10 +16,15 @@ LLM へ渡す型の写しの並びに件数の上限（`maxItems`）を付ける
 
 ## どこに仕掛けるか
 
-`LlamaCppClient.chat(model, messages, format=...)` の1点（`105_` と同じ）。
-`format` が依頼の型（`title` が `QuestStructure`）のときだけ、写しに上限を付けて渡す。
-ゲームが持っている型の辞書は書き換えない（同じ辞書を次の頼みでも使いうる）。
-クラウド（APIキー）は grammar を使わないので、この経路を通らない。
+- 内蔵の llama.cpp: `LlamaCppClient.chat(model, messages, format=...)` の1点（`105_` と同じ）
+- OpenAI 互換の経路（任意の互換サーバー＝LM Studio など、OpenAI）: openai の SDK の送信の1点
+  `SyncAPIClient.post`（`136_` と同じ）。ゲームは `beta.chat.completions.parse` に pydantic の型を渡し、
+  SDK がそれを `response_format.json_schema.schema` に直して送る（GAME.md §2.12）。互換サーバーは
+  その型から grammar を作るので、内蔵の llama.cpp と同じ暴走が起きる
+
+どちらも、型が依頼の型（`title` が `QuestStructure`）のときだけ、写しに上限を付けて渡す。
+ゲームが持っている型の辞書と、SDK が組んだ送信の中身は書き換えない（同じ辞書を次のリクエストでも使いうる）。
+Claude と Gemini は別の SDK で送るので、どちらの経路も通らない（Claude の構造化出力は `maxItems` を受け付けない）。
 """
 
 import json
@@ -28,6 +33,9 @@ import json
 LOG_BASENAME = "quest_generation_runaway.log"
 
 CHAT_TARGET = "llama_cpp_runtime_completion:LlamaCppClient.chat"
+
+#: openai の SDK で、全リクエストが最後に通る1点（`136_` と同じ）。
+POST_TARGET = "openai._base_client:SyncAPIClient.post"
 
 #: 上限を付ける型（`random_quest_generator` の返却型）。
 ROOT_TITLE = "QuestStructure"
@@ -87,9 +95,54 @@ def with_max_items(schema, table):
     return (copied, applied) if applied else (schema, [])
 
 
+def response_format_schema(body):
+    """openai の SDK の送信の中身から、構造化出力の型を取り出す。無ければ None。"""
+    if not isinstance(body, dict):
+        return None
+    fmt = body.get("response_format")
+    if not isinstance(fmt, dict) or fmt.get("type") != "json_schema":
+        return None
+    spec = fmt.get("json_schema")
+    schema = spec.get("schema") if isinstance(spec, dict) else None
+    return schema if isinstance(schema, dict) else None
+
+
+def with_limited_response_format(body, table):
+    """送信の中身の写しの型に件数の上限を付ける。`(写し, 付けた欄の一覧)`。付けるものが無ければ `(body, [])`。
+
+    写すのは型までの道筋（body・`response_format`・`json_schema`）だけで、messages などは同じものを渡す。
+    """
+    schema = response_format_schema(body)
+    if schema is None:
+        return body, []
+    limited, applied = with_max_items(schema, table)
+    if not applied:
+        return body, []
+    fmt = dict(body["response_format"])
+    fmt["json_schema"] = dict(fmt["json_schema"], schema=limited)
+    return dict(body, response_format=fmt), applied
+
+
+def looks_like_quest(schema):
+    """依頼の型らしいか（敵とボスの欄を持つ）。名前が変わったことに気づくためだけに使う。"""
+    props = schema.get("properties") if isinstance(schema, dict) else None
+    return isinstance(props, dict) and "enemies" in props and "boss" in props
+
+
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     seen = {"count": 0, "unknown": False}
+
+    def note(applied, schema, route):
+        """付けた回は1行、依頼らしいのに名前が違う型は WARN を1度だけ残す。"""
+        if applied:
+            seen["count"] += 1
+            write("limited {} #{} ({}): {}".format(ROOT_TITLE, seen["count"], route, ", ".join(applied)))
+        elif (isinstance(schema, dict) and schema.get("title") != ROOT_TITLE
+              and not seen["unknown"] and looks_like_quest(schema)):
+            # 依頼の型らしいのに名前が違う。ゲームの更新で型の名前が変わった合図。
+            seen["unknown"] = True
+            write("WARN a quest-like schema titled {!r}; left untouched".format(schema.get("title")))
 
     @ctx.wrap(CHAT_TARGET, required=False)
     def chat(orig, self, model, messages, format=None, *args, **kwargs):
@@ -98,18 +151,24 @@ def apply(ctx):
                 limited, applied = with_max_items(format, limits())
                 if applied:
                     format = limited
-                    seen["count"] += 1
-                    write("limited {} #{}: {}".format(ROOT_TITLE, seen["count"], ", ".join(applied)))
-                elif format.get("title") != ROOT_TITLE and not seen["unknown"]:
-                    props = format.get("properties")
-                    if isinstance(props, dict) and "enemies" in props and "boss" in props:
-                        # 依頼の型らしいのに名前が違う。ゲームの更新で型の名前が変わった合図。
-                        seen["unknown"] = True
-                        write("WARN a quest-like schema titled {!r}; left untouched".format(
-                            format.get("title")))
+                note(applied, format, "llama.cpp")
         except Exception:
             ctx.log_exc("quest generation runaway: cannot limit the schema; sending it as is")
         return orig(self, model, messages, format, *args, **kwargs)
+
+    # required=False: 使っていないプロバイダの SDK は読み込まれない。現れた時点でローダが当て直す。
+    # alias_scan=False: クラスの属性だけを替える（`136_` と同じ。SDK の資源が掴んだ手はローダが掴み直す）。
+    # 受けた引数はそのまま orig へ渡し、型を替えるときだけ body の写しを差し込む。
+    @ctx.wrap(POST_TARGET, required=False, safe=True, alias_scan=False)
+    def openai_post(orig, self, *args, **kwargs):
+        body = kwargs.get("body")
+        schema = response_format_schema(body)
+        if schema is not None:
+            limited, applied = with_limited_response_format(body, limits())
+            if applied:
+                kwargs = dict(kwargs, body=limited)
+            note(applied, schema, "openai")
+        return orig(self, *args, **kwargs)
 
     # 注入した時点で、表と写しの作り方を確かめておく（実経路は依頼を作るまで通らない）。
     sample = {"title": ROOT_TITLE, "type": "object",
@@ -120,6 +179,13 @@ def apply(ctx):
           and limited["properties"]["enemies"]["maxItems"] == max(1, int(ENEMY_LIMIT))
           and limited["$defs"]["EnemyData"]["properties"]["drops"]["maxItems"] == 4
           and with_max_items({"title": "Other", "properties": {}}, limits())[1] == [])
+    body = {"messages": [], "response_format": {"type": "json_schema",
+                                                "json_schema": {"name": ROOT_TITLE, "schema": sample}}}
+    sent, sent_applied = with_limited_response_format(body, limits())
+    ok = (ok and sent is not body and sent["messages"] is body["messages"]
+          and body["response_format"]["json_schema"]["schema"] is sample
+          and response_format_schema(sent)["properties"]["enemies"]["maxItems"] == max(1, int(ENEMY_LIMIT))
+          and sent_applied == applied)
     if ok:
         ctx.log("quest generation runaway: enemies <= {} and {} other list(s) on {} (log {})".format(
             max(1, int(ENEMY_LIMIT)), len(OTHER_LIMITS), ROOT_TITLE, LOG_BASENAME))

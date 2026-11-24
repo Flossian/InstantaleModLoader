@@ -53,6 +53,8 @@ MIT で配っているが、著作権表示（LICENSE の Copyright 行）は提
 
   * MoririnJP 様
         130_currency_unit       （ワールド別の設定。PR #11）
+        136_cloud_model_override（user role の補い。提供を受けて共同で仕上げた
+                                 406_user_role_fix を取り込んだ）
         314_area_move_custom    （ワールド別の設定。PR #11）
 
 いずれも取り込みにあたってこちらで調整を加えている。経緯は docs/MODS.md の
@@ -196,6 +198,8 @@ AUTHORS OF THE BUNDLED MODS
   work; the copyright in the contributed code stays with its author.
 
     MoririnJP                130_currency_unit (per-world settings, PR #11),
+                             136_cloud_model_override (user role fix, taken
+                               in from 406_user_role_fix, finished jointly),
                              314_area_move_custom (per-world settings, PR #11)
 
   Each was adjusted on intake; see docs/MODS.md. The author of record for

@@ -1,5 +1,9 @@
 # `406_user_role_fix`: クラウド API の Gemini・Claude で、user role の無い依頼が返らない・断られるのを防ぐ
 
+> `136_cloud_model_override` が取り込んだため無効化。
+> デバッグモードのときだけ読み込まれます（README「デバッグモード」）。
+> 136 が、同じ4件へ同じ user role を足します（136 の DOC.md）。
+
 MOD なしのゲームには、system role だけで組んで送るリクエストが4件ある。
 クラウド API で Gemini を使うと、この4件に返答が無く、裏で落ちる。
 Claude を使うと、API が system を別の欄へ移すので送る会話（messages）が空になり、`400 messages: at least one message is required` で拒否される。

@@ -10,7 +10,7 @@
 
 同梱 157 本（基盤 2 / 修正 51 / 追加 55 / 計測 49）。
 うち 16 本は外部の MOD 作者からの提供（下の「提供を受けた MOD」）。
-ほかに 3 本は自作だが、外部からの提案を取り込んでいる（下の「提案を取り込んだ MOD」）。
+ほかに 4 本は自作だが、外部からの提案を取り込んでいる（下の「提案を取り込んだ MOD」）。
 
 並びはフォルダ名順。
 適用順はこれとは別で、GUI の `順` 列（`load_order.json`）が持つ。
@@ -78,7 +78,7 @@
 | [`133_ui_area_difficulty`](MODS.md#133_ui_area_difficulty-移動先に適正レベル帯を出す) | 移動先の適正レベル帯の表示 | 移動先に適正レベル帯を出す | 9 |  |
 | [`134_balance_item_effects`](MODS.md#134_balance_item_effects-アイテムの効果を分類ごとに作り直す) | アイテム効果の調整 | アイテムの効果を分類ごとに作り直す | 18 |  |
 | [`135_fix_inn_button_order`](MODS.md#135_fix_inn_button_order-宿屋の選択肢を他の施設と同じ順にする) | 宿屋の選択肢を他の施設と同じ順にする | 宿屋の選択肢を他の施設と同じ順にする | - |  |
-| [`136_cloud_model_override`](MODS.md#136_cloud_model_override-クラウドのモデルを差し替える) | クラウドモデルの差し替え | クラウドのモデルを差し替える | 14 |  |
+| [`136_cloud_model_override`](MODS.md#136_cloud_model_override-クラウドのモデルを差し替える) | クラウドモデルの差し替え | クラウドのモデルを差し替える | 15 |  |
 | [`137_fix_npc_skill_uses`](MODS.md#137_fix_npc_skill_uses-仲間と敵は使い切ったスキルと効果中の強化弱体を使わず宿で休むと回数が戻る) | 仲間と敵は使い切ったスキルと効果中の強化・弱体を使わず、宿で休むと回数が戻る | 仲間と敵は使い切ったスキルと効果中の強化・弱体を使わず、宿で休むと回数が戻る | - |  |
 | [`138_fix_character_image_refresh`](MODS.md#138_fix_character_image_refresh-再生成した立ち絵と顔がその場で表示に反映される) | 再生成した立ち絵と顔がその場で表示に反映される | 再生成した立ち絵と顔がその場で表示に反映される | - |  |
 | [`139_fix_quest_generation_runaway`](MODS.md#139_fix_quest_generation_runaway-依頼の生成が終わらずに失敗するのを直す) | 依頼の生成で敵が増え続ける件の修正 | 依頼の生成が終わらずに失敗するのを直す | 1 |  |
@@ -92,7 +92,7 @@
 | [`147_fix_party_flee`](MODS.md#147_fix_party_flee-主人公が逃げると仲間も一緒に戦闘から逃げる) | 主人公が逃げると仲間も一緒に戦闘から逃げる | 主人公が逃げると仲間も一緒に戦闘から逃げる | - |  |
 | [`148_fix_enemy_panel_crash`](MODS.md#148_fix_enemy_panel_crash-戦闘中に持ち物を開いてもゲームが落ちない) | 戦闘中に持ち物を開いてもゲームが落ちない | 戦闘中に持ち物を開いてもゲームが落ちない | - |  |
 | [`149_fix_injury_after_load`](MODS.md#149_fix_injury_after_load-セーブを読み込んだ後も怪我が能力値に効き続ける) | セーブを読み込んだ後も怪我が能力値に効き続ける | セーブを読み込んだ後も怪我が能力値に効き続ける | - |  |
-| [`406_user_role_fix`](MODS.md#406_user_role_fix-クラウド-api-の-geminiclaude-でuser-role-の無い依頼が返らない断られるのを防ぐ) | Gemini・Claudeの無応答の防止 | クラウド API の Gemini・Claude で、user role の無い依頼が返らない・断られるのを防ぐ | - |  |
+| [`406_user_role_fix`](MODS.md#406_user_role_fix-クラウド-api-の-geminiclaude-でuser-role-の無い依頼が返らない断られるのを防ぐ) | Gemini・Claudeの無応答の防止 | クラウド API の Gemini・Claude で、user role の無い依頼が返らない・断られるのを防ぐ | - | 取込済 136_cloud_model_override |
 | [`409_fix_crafted_item_type`](MODS.md#409_fix_crafted_item_type-右クリックに消費が出ない飲食物薬を使えるようにする) | 右クリックに「消費」が出ない飲食物・薬を使えるようにする | 右クリックに「消費」が出ない飲食物・薬を使えるようにする | 1 |  |
 
 ---
@@ -255,7 +255,7 @@
 
 ## 提案を取り込んだ MOD
 
-MOD 自体はこちらの著作物で、機能の一部を外部からの提案（PR）で取り込んだ 3 本。
+MOD 自体はこちらの著作物で、機能の一部を外部からの提案（PR）で取り込んだ 4 本。
 上の「提供を受けた MOD」とは分けてある（出どころが違う）。
 
 権利の所在は [NOTICE](../NOTICE) が持つ。
@@ -263,5 +263,6 @@ MOD 自体はこちらの著作物で、機能の一部を外部からの提案�
 | フォルダ | 提案 |
 |---|---|
 | [`130_currency_unit`](MODS.md#130_currency_unit-通貨の呼び名と所持金の表示を変える) | MoririnJP 様 |
+| [`136_cloud_model_override`](MODS.md#136_cloud_model_override-クラウドのモデルを差し替える) | MoririnJP 様 |
 | [`314_area_move_custom`](MODS.md#314_area_move_custom-エリア移動の日数料金文言を変える) | MoririnJP 様 |
 | [`335_player_portrait_regenerate`](MODS.md#335_player_portrait_regenerate-人物欄から主人公の立ち絵を描き直せる) | MoririnJP 様 |

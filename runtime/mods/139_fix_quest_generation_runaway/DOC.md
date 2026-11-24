@@ -5,8 +5,8 @@
 1回あたり 2 分ほど待たされ、続けて起きると 4 分、多いときは 25 分かかっていた。
 この MOD は LLM へ渡す型の配列に件数の上限を付けて、生成が書き終わるようにする。
 
-ローカル LLM（llama.cpp）で遊んでいるときだけ効く。
-クラウド（APIキー）は型の制約（grammar）を使わないので、この MOD は何もしない。
+ゲーム内蔵のローカル LLM（llama.cpp）と、「任意の OpenAI 互換サーバー」（LM Studio など）、OpenAI で効く。
+Claude と Gemini では何もしない。
 
 ## 何が起きていたか
 
@@ -49,6 +49,7 @@ llama.cpp の grammar は「上限を超える要素を書き始めること」�
 上限を付けるのは依頼の型（`title` が `QuestStructure`）だけ。
 ゲームが持っている型の辞書は書き換えず、コピーを渡す。
 上限を付けた回は `out\quest_generation_runaway.log` に1行出る。
+行の括弧の中は経路で、内蔵の llama.cpp は `llama.cpp`、OpenAI 互換サーバーと OpenAI は `openai`。
 
 | 設定 | 既定 | 意味 |
 |---|---|---|
@@ -58,5 +59,5 @@ llama.cpp の grammar は「上限を超える要素を書き始めること」�
 
 | 症状 | やること |
 |---|---|
-| まだ依頼の生成に 2 分かかる回がある | `out\quest_generation_runaway.log` に `limited QuestStructure` の行が出ているか。出ていなければこの MOD が効いていない（クラウドで遊んでいる、または型の名前が変わった。`WARN a quest-like schema` の行を見る）。出ているのに遅いなら、敵のほかの欄で書き続けている。`216_probe_llm_overlap` の `SLOW` の行を添えて報告してほしい |
+| まだ依頼の生成に 2 分かかる回がある | `out\quest_generation_runaway.log` に `limited QuestStructure` の行が出ているか。出ていなければこの MOD が効いていない（Claude か Gemini で遊んでいる、または型の名前が変わった。`WARN a quest-like schema` の行を見る）。出ているのに遅いなら、敵のほかの欄で書き続けている。`216_probe_llm_overlap` の `SLOW` の行を添えて報告してほしい |
 | 依頼の敵の種類が少なくなった気がする | 上限で打ち切られている。設定の上限を上げる |

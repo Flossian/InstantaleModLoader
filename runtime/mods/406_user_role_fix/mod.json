@@ -11,5 +11,6 @@
     "ja": "クラウドAPI使用時のGemini系統で応答不能になり、Claudeで依頼を断られる、user roleの欠落をダミーで補完します。"
   },
   "version": "3",
-  "author": "MoririnJP, R01/Flossian"
+  "author": "MoririnJP, R01/Flossian",
+  "superseded": "136_cloud_model_override"
 }

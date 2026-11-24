@@ -10,6 +10,8 @@
   設定     … ENEMY_LIMIT を変えれば敵の上限が変わる（1 未満は 1）
   包み     … 本体は1回だけ、format は位置でもキーワードでも上限つきの写しが渡る。記録が1行出る
   名前違い … 依頼らしい型（enemies と boss を持つ）の名前が違えば WARN を1度だけ出す
+  OpenAI   … openai の SDK の送信（LM Studio などの互換サーバー）でも、response_format の型の写しに
+             上限が付く。body と messages・ゲームの型は書き換えない。依頼でない型・型の無い送信はそのまま
 
 実機の LLM での効き目（失敗が消えるか・打ち切っても型どおりか）は `tools\\quest_gen_probe.py` で見る。
 """
@@ -29,6 +31,7 @@ if RUNTIME_DIR not in sys.path:
 import instantale_modloader as ml  # noqa: E402
 
 CHAT = "llama_cpp_runtime_completion:LlamaCppClient.chat"
+POST = "openai._base_client:SyncAPIClient.post"
 LOG_NAME = "quest_generation_runaway.log"
 
 
@@ -158,6 +161,27 @@ def call(ctx, fmt, keyword=False):
     return (seen[0] if seen else None), len(seen), result
 
 
+def post(ctx, body, path="/chat/completions"):
+    """openai の送信の包みを通す。`(本体に渡った body, 本体の呼ばれた回数, 本体に渡った位置引数)`。"""
+    seen = []
+
+    def orig(self, *args, **kwargs):
+        seen.append((args, kwargs))
+        return "戻り値"
+    result = ctx.hooks[POST](orig, object(), path, cast_to=dict, body=body, options={})
+    check("openai: 戻り値はそのまま", result == "戻り値")
+    args, kwargs = seen[0] if seen else ((), {})
+    return kwargs.get("body"), len(seen), args
+
+
+def openai_body(schema):
+    """SDK の `beta.chat.completions.parse` が組む送信の中身の形。"""
+    return {"messages": [{"role": "user", "content": "x"}], "model": "local-model", "max_tokens": 30000,
+            "response_format": {"type": "json_schema",
+                                "json_schema": {"name": schema.get("title"), "schema": schema,
+                                                "strict": True}}}
+
+
 def max_of(schema, def_name, field):
     node = schema if def_name == "QuestStructure" else schema["$defs"][def_name]
     return node["properties"][field].get("maxItems")
@@ -203,7 +227,41 @@ def main():
     check("名前の違う依頼らしい型は WARN を1度だけ",
           len([l for l in read_log() if "WARN a quest-like schema" in l]) == 1, read_log())
 
+    module, ctx = fresh()
+    body = openai_body(QUEST)
+    before = json.loads(json.dumps(body))
+    sent_body, calls, args = post(ctx, body)
+    check("openai: 本体は1回・位置引数はそのまま", calls == 1 and args == ("/chat/completions",), (calls, args))
+    schema = sent_body["response_format"]["json_schema"]["schema"]
+    got = {key: max_of(schema, *key) for key in expected}
+    check("openai: 型の写しに上限が付く", got == expected, got)
+    check("openai: 呼び出し側の body とゲームの型は書き換えない",
+          body == before and QUEST == original and sent_body is not body)
+    check("openai: messages は同じものを渡す", sent_body["messages"] is body["messages"])
+    check("openai: 型のほかの指定は残る",
+          sent_body["response_format"]["json_schema"]["strict"] is True
+          and sent_body["response_format"]["json_schema"]["name"] == "QuestStructure"
+          and sent_body["max_tokens"] == 30000)
+    check("openai: 記録に経路が出る", any("limited QuestStructure #1 (openai)" in l for l in read_log()),
+          read_log())
+    plain = {"messages": [], "model": "local-model"}
+    sent_body, calls, _args = post(ctx, plain)
+    check("openai: 型の無い送信はそのまま", sent_body is plain and calls == 1)
+    other_body = openai_body({"title": "Structure", "properties": {"summary": {"type": "string"}}})
+    sent_body, calls, _args = post(ctx, other_body)
+    check("openai: 依頼でない型はそのまま", sent_body is other_body and calls == 1)
+    sent_body, calls, _args = post(ctx, None)
+    check("openai: body 無しはそのまま", sent_body is None and calls == 1)
+    renamed_body = openai_body(renamed)
+    post(ctx, renamed_body)
+    check("openai: 名前の違う依頼らしい型は WARN を出す",
+          len([l for l in read_log() if "WARN a quest-like schema" in l]) == 1, read_log())
+    check("openai: 例外を出していない", not ctx.errors, ctx.errors)
+
     module, ctx = fresh(ENEMY_LIMIT=3)
+    sent_body, _calls, _args = post(ctx, openai_body(QUEST))
+    check("openai: 設定の敵の上限が効く",
+          max_of(sent_body["response_format"]["json_schema"]["schema"], "QuestStructure", "enemies") == 3)
     sent, _calls, _result = call(ctx, QUEST)
     check("設定の敵の上限が効く", max_of(sent, "QuestStructure", "enemies") == 3)
     module, ctx = fresh(ENEMY_LIMIT=0)

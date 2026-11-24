@@ -16,6 +16,7 @@ Gemini は版8で足した。
     claude_grammar.py         Claude API で型の文法が大きすぎて断られたときの迂回・SDK が外した const を戻す
     claude_bounds.py          Claude API の応答の数を、SDK が外した型の範囲に寄せる
     prefix_cache.py           キャッシュの印をどこに置くか（両方が使う）
+    user_role.py              Gemini・Claude で user role の無いリクエストに user を1件足す（元の 406）
 
 設定の定数は入口に置く（ローダが値を書き込むのは入口のモジュールで、
 `tools/check_mods.py` も入口の定数と `mod.json` を突き合わせる。TECH.md §3.8.3）。
@@ -54,6 +55,9 @@ SDK が呼び出し側の dict をそのまま握っている場合に、
 ゲームが組み立てた要求は**ゲームが選んだモデル向け**なので、
 差し替え先が 400 で断る引数を直してから送る（各ファイルの `fix`）。
 
+user role の補い（`user_role.py`）だけは `llm_manager:send_request` を包む。
+足す本文をリクエストの種類で選ぶためで、SDK の送信からはそれが見えない。
+
 ## タイトル画面の1行
 
 ゲームの設定画面には、ゲームが選んだモデルが出る（差し替え先は出ない）。
@@ -80,7 +84,7 @@ import os
 
 from instantale_modloader import llm, ui
 
-from . import claude_side, gemini_side, openai_side
+from . import claude_side, gemini_side, openai_side, user_role
 
 # 「差し替えない」を表す選択肢。一覧の先頭に置く。
 OFF = "off"
@@ -131,6 +135,10 @@ GEMINI_CUSTOM = ""
 GEMINI_EFFORT = "keep"
 
 # ------------------------------------------------------------------ 共通
+# Gemini・Claude で、ゲームが user role を付けずに送る4件へ user を1件足すか（`user_role.py`）。
+# 足さないと Gemini は返答せず、Claude は 400 で断るので、既定は足す。
+USER_ROLE_FIX = True
+
 # 差し替え（とキャッシュの使用量）をログに出す回数。
 # 毎回出すとログが埋まるので先頭だけ。
 LOG_LIMIT = 3
@@ -260,6 +268,8 @@ def apply(ctx):
     openai_side.install(ctx, openai_target, openai_effort, openai_cache, log)
     claude_side.install(ctx, claude_target, claude_effort, claude_cache, log)
     gemini_side.install(ctx, gemini_target, gemini_effort, log)
+    if USER_ROLE_FIX:
+        user_role.install(ctx)
 
     # タイトル画面の右上。出さないときも包んでおき、注入し直す前の1行を外す（設定を切ったときに残さない）。
     shown = title_text(llm.game_choice(), openai_target, claude_target, model_names(ctx.mod_dir),
@@ -276,7 +286,7 @@ def apply(ctx):
     ui.on_title_screen(ctx, decorate, key="136_cloud_model_override")
 
     ctx.log("cloud model override: openai={} (effort {}, cache {}) / claude={} (effort {}, cache {})"
-            " / gemini={} (effort {}) / title {!r}".format(
+            " / gemini={} (effort {}) / user role {} / title {!r}".format(
                 openai_target or OFF, openai_effort, openai_cache,
                 claude_target or OFF, claude_effort, claude_cache,
-                gemini_target or OFF, gemini_effort, shown))
+                gemini_target or OFF, gemini_effort, "on" if USER_ROLE_FIX else "off", shown))

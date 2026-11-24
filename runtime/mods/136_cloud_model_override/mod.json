@@ -7,11 +7,11 @@
     "ja": "クラウドモデルの差し替え"
   },
   "description": {
-    "en": "Use OpenAI / Claude / Gemini models the game does not list (GPT-6.1 Terra, Claude Fable 5.2, Haiku 5.5, Gemini 4 and others) from a list, and any other model by typing its name. The model name is swapped right before sending, and arguments the target rejects are fixed. Prompt cache markers can be chosen too. Also fixes Claude refusing the game's quest schema as too large (no quests get made) and world generation resending over and over",
-    "ja": "ゲームの一覧に無い OpenAI / Claude / Gemini のモデル（GPT-6.1 Terra・Claude Fable 5.2・Haiku 5.5・Gemini 4 など）を一覧から選び、一覧に無い名前は欄に書いて使う。送信直前にモデル名を差し替え、差し替え先が受け付けない引数も直す。プロンプトキャッシュの印の置き方も選べる。Claude がゲームの依頼の型を大きすぎるとして断り、依頼が作られないのと、世界の生成が何度も送り直しになるのも直す"
+    "en": "Use OpenAI / Claude / Gemini models the game does not list (GPT-6.1 Terra, Claude Fable 5.2, Haiku 5.5, Gemini 4 and others) from a list, and any other model by typing its name. The model name is swapped right before sending, and arguments the target rejects are fixed. Prompt cache markers can be chosen too. Also fixes Claude refusing the game's quest schema as too large (no quests get made), world generation resending over and over, and Gemini / Claude leaving shop stock and epilogue requests unanswered",
+    "ja": "ゲームの一覧に無い OpenAI / Claude / Gemini のモデル（GPT-6.1 Terra・Claude Fable 5.2・Haiku 5.5・Gemini 4 など）を一覧から選び、一覧に無い名前は欄に書いて使う。送信直前にモデル名を差し替え、差し替え先が受け付けない引数も直す。プロンプトキャッシュの印の置き方も選べる。Claude がゲームの依頼の型を大きすぎるとして断り、依頼が作られないのと、世界の生成が何度も送り直しになるのと、Gemini・Claude で店の品揃えやエピローグの返事が無いのも直す"
   },
-  "version": "8",
-  "author": "R01/Flossian",
+  "version": "9",
+  "author": "R01/Flossian, MoririnJP",
   "settings": {
     "OPENAI_MODEL": {
       "type": "choice",
@@ -281,6 +281,22 @@
       "note": {
         "ja": "差し替えるときだけ効く。keep はゲームが組み立てた値（minimal）のまま。上げると賢くなるが応答が遅くなる。差し替え先が受けない段階は近い段階に寄せて送る（Gemini 4 と Gemini 3.8 Flash は minimal を受けないので low、xhigh を受けるのは Gemini 4 Hydrogen だけ）",
         "en": "Only applies when swapping. keep = what the game built (minimal). Higher is smarter but slower. A level the target rejects is sent as the nearest one it accepts (Gemini 4 and Gemini 3.8 Flash reject minimal, so low is sent; only Gemini 4 Hydrogen accepts xhigh)"
+      }
+    },
+    "USER_ROLE_FIX": {
+      "type": "bool",
+      "default": true,
+      "group": {
+        "ja": "共通",
+        "en": "Common"
+      },
+      "label": {
+        "ja": "Gemini・Claude で返事の無いリクエストを直す",
+        "en": "Fix requests Gemini / Claude leave unanswered"
+      },
+      "note": {
+        "ja": "店の品揃え・エピローグ・自由施設の要約は、ゲームが user role を付けずに送るので、Gemini では返答が無く、Claude では断られる。オンでそこへ user role を1件足す。GPT 系とローカルには足さない。上のモデルを off にしていても効く",
+        "en": "The game sends shop stock, epilogue and free facility summary requests without a user role, so Gemini never answers and Claude rejects them. On adds one user role to them. Not added for GPT or local models. Works even when the models above are off"
       }
     },
     "LOG_LIMIT": {

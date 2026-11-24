@@ -31,6 +31,12 @@ sys.modules[NAME] = MOD
 spec.loader.exec_module(MOD)
 OA = sys.modules[NAME + ".openai_side"]
 CL = sys.modules[NAME + ".claude_side"]
+UR = sys.modules[NAME + ".user_role"]
+# user role の補いは `llm.watch_aliases` で見張りを立てるので、この検査の Ctx では立てずに呼ばれたかだけ控える。
+# 中身は末尾で別に確かめる。
+UR_INSTALL = UR.install
+UR_CALLS = []
+UR.install = UR_CALLS.append
 for key, spec_ in manifest["settings"].items():
     assert getattr(MOD, key) == spec_["default"], key
     if spec_["type"] == "choice":
@@ -826,6 +832,79 @@ same = game_request()
 assert ctx.hooks[GM.STREAMED](genai_orig, GEMINI, "post", "models/gemini-3.6-flash:streamGenerateContent?alt=sse",
                               same, None)[1] is same
 MOD.GEMINI_MODEL = "off"
+
+
+# -- user role の補い（元の 406_user_role_fix） ------------------------------
+# 差し替えの設定と関わりなく、設定がオンなら仕掛ける
+assert MOD.USER_ROLE_FIX is True
+del UR_CALLS[:]
+ctx = Ctx()
+MOD.apply(ctx)
+assert UR_CALLS == [ctx], UR_CALLS
+MOD.USER_ROLE_FIX = False
+del UR_CALLS[:]
+MOD.apply(Ctx())
+assert UR_CALLS == [], "オフなら仕掛けない"
+MOD.USER_ROLE_FIX = True
+UR.install = UR_INSTALL
+
+SYSTEM = {"role": "system", "content": "s"}
+# 位置引数の message。system の直後へ足し、元の並びは壊さない
+message = [SYSTEM, {"role": "assistant", "content": "a"}]
+args, kwargs, manager = UR.rewrite(("shop_item_generator_ordinary", message, 1), {})
+assert manager == "shop_item_generator_ordinary"
+assert args[1] == [SYSTEM, {"role": "user", "content": "＜売買する＞"}, {"role": "assistant", "content": "a"}], args
+assert args[0] == "shop_item_generator_ordinary" and args[2] == 1 and kwargs == {}
+assert message == [SYSTEM, {"role": "assistant", "content": "a"}], "元の message は書き換えない"
+# キーワード引数の message
+args, kwargs, _manager = UR.rewrite((), {"manager_name": "epilogue_generator", "message": [SYSTEM], "x": 2})
+assert args == () and kwargs == {"manager_name": "epilogue_generator", "x": 2,
+                                 "message": [SYSTEM, {"role": "user", "content": "＜エピローグを生成する＞"}]}, kwargs
+# system が無ければ末尾へ
+args, _kwargs, _manager = UR.rewrite(("free_facility_summary", [{"role": "assistant", "content": "a"}]), {})
+assert args[1][-1] == {"role": "user", "content": "＜行動記録を要約する＞"}, args
+# user が既にある・対象外のリクエスト・message が空なら触らない
+assert UR.rewrite(("epilogue_pre_evaluator", [SYSTEM, {"role": "user", "content": "u"}]), {}) is None
+assert UR.rewrite(("conversation_facilitator", [SYSTEM]), {}) is None
+assert UR.rewrite(("epilogue_pre_evaluator", []), {}) is None
+assert UR.rewrite((None, [SYSTEM]), {}) is None
+assert set(UR.USER_TEXTS) == {"shop_item_generator_ordinary", "epilogue_pre_evaluator",
+                              "epilogue_generator", "free_facility_summary"}
+
+# 包みは Gemini・Claude の送信モジュールが在るときだけ足す。ローカル・GPT 系には足さない
+watched = []
+UR_llm = UR.llm
+saved = (UR_llm.watch_aliases, UR_llm.request_modules, UR_llm.is_local_runtime)
+try:
+    UR_llm.watch_aliases = lambda ctx_, targets, install, **kw: watched.append((targets, install, kw))
+    ctx = Ctx()
+    UR.install(ctx)
+    (targets, install, kw), = watched
+    assert targets == [UR.MANAGER_TARGET], targets
+    install(UR.MANAGER_TARGET)
+    send = ctx.hooks[UR.MANAGER_TARGET]
+    sent = []
+
+    def manager_orig(*args, **kwargs):
+        sent.append((args, kwargs))
+        return "reply"
+
+    for modules, local, added in ((["scripts.llm.llm_request_claude"], False, True),
+                                  (["scripts.llm.llm_request_gemini"], False, True),
+                                  (["scripts.llm.llm_request_openai"], False, False),
+                                  (["scripts.llm.llm_request_claude"], True, False)):
+        del sent[:]
+        del ctx.lines[:]
+        UR_llm.request_modules = lambda modules=modules: list(modules)
+        UR_llm.is_local_runtime = lambda local=local: local
+        assert send(manager_orig, "epilogue_generator", [SYSTEM]) == "reply"
+        (args, _kwargs), = sent
+        assert (len(args[1]) == 2) is added, (modules, local, args)
+        assert bool(ctx.lines) is added, ctx.lines
+        if added:
+            assert ctx.lines == ["cloud model override: inserted user role for epilogue_generator"], ctx.lines
+finally:
+    UR_llm.watch_aliases, UR_llm.request_modules, UR_llm.is_local_runtime = saved
 
 
 print("ok")
