@@ -282,6 +282,32 @@ if pydantic is not None:
     result, seen = send("referee_x", ["msg"], NoVfx)
     check("vfx の無い型はそのまま", seen["args"][2] is NoVfx)
 
+    # 手引きをプロンプトにも置く（OpenAI 互換サーバーの経路では型の説明が届かない）
+    game_system = "【生成要素】\n- narration: 書く。\n- vfx: 画面に表示するvfxを選択する。\n"
+    prompt = [{"role": "system", "content": game_system}, {"role": "user", "content": "状況"}]
+    result, seen = send("referee_npc", prompt, Structure)
+    sent = seen["args"][1]
+    lines = sent[0]["content"].split("\n")
+    check("vfx の行の次に手引きを足す",
+          lines[2].startswith("- vfx:") and lines[3] == "  " + MOD.VFX_GUIDE, lines)
+    check("元の messages と辞書は書き換えない",
+          prompt[0]["content"] == game_system and sent is not prompt and sent[1] is prompt[1])
+    check("手引きを足したログは審判ごとに1回",
+          len([n for n in ctx.notes if "vfx guide added to the prompt for referee_npc" in n]) == 1)
+    result, seen = send("referee_npc", sent, Structure)
+    check("手引きが載っていれば足さない", seen["args"][1] is sent)
+    result, seen = send("referee_npc", [], structure=Structure,
+                        message=[{"role": "system", "content": "前置き"}])
+    check("名前で渡した messages にも足し、vfx の行が無ければ system の末尾に",
+          seen["kwargs"]["message"][0]["content"] == "前置き\n- vfx: " + MOD.VFX_GUIDE,
+          seen["kwargs"]["message"])
+    result, seen = send("referee_x", prompt, NoVfx)
+    check("vfx の無い型の審判には足さない", seen["args"][1] is prompt)
+    check("system が無ければ足さない", MOD.with_vfx_guide([{"role": "user", "content": "x"}]) is None)
+    two = [{"role": "system", "content": "前置き"}, {"role": "system", "content": game_system}]
+    check("vfx の行のある system を選ぶ",
+          MOD.with_vfx_guide(two)[0] is two[0] and MOD.VFX_GUIDE in MOD.with_vfx_guide(two)[1]["content"])
+
     # 1手ごとに作られる型は、使い終えたら控えごと回収される
     import gc
 

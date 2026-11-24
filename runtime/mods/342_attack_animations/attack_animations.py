@@ -145,6 +145,7 @@ BLANK_PNG = bytes.fromhex(
     "0000000d49444154789c6360606060000000050001a5f645400000000049454e44ae426082")
 
 #: 足した選択肢の手引き。型の `vfx` の説明に足す（クラウドの構造化出力と、ローカルの埋め込みの型の文に載る）。
+#: OpenAI 互換サーバーの経路ではゲームが型をプロンプトに書かないので、審判の system の `vfx` の行にも足す（`with_vfx_guide`）。
 #: 世界観によらないよう、武器の仕組みと当たり方だけを書く。
 VFX_GUIDE = (
     "Pick the visual that matches how this action actually lands. "
@@ -160,6 +161,8 @@ VFX_GUIDE = (
     "arcane (pure magical force), poison (venom, acid, toxic gas); "
     "use the _aoe form when it hits all enemies at once."
 )
+#: ゲームの審判のプロンプトの【生成要素】にある `vfx` の行の頭。
+VFX_LINE_HEAD = "- vfx:"
 
 #: 控えた差し替えを捨てるまでの秒数。ゲームは絵と音を Clock で少し後に出す。
 PENDING_SECONDS = 6.0
@@ -215,6 +218,39 @@ def extend_structure(structure, pydantic_module):
         field = pydantic_module.Field(default=info.default, description=description)
     return pydantic_module.create_model(
         structure.__name__, __base__=structure, vfx=(widened, field))
+
+
+def with_vfx_guide(message):
+    """審判の messages の写しに手引き（`VFX_GUIDE`）を1行足したもの。足さないなら None。
+
+    足す場所は system の `- vfx:` の行の次。その行が無ければ最初の system の末尾。
+    既に手引きが載っている・system が無いときは足さない。元の並びと辞書は書き換えない。
+    """
+    if not isinstance(message, list):
+        return None
+    systems = []
+    for index, item in enumerate(message):
+        content = llm.content_of(item)
+        if content is None:
+            continue
+        if VFX_GUIDE in content:
+            return None
+        if item.get("role") == "system":
+            systems.append((index, content))
+    if not systems:
+        return None
+    for at, text in systems:
+        lines = text.split("\n")
+        heads = [n for n, line in enumerate(lines) if line.lstrip().startswith(VFX_LINE_HEAD)]
+        if heads:
+            lines.insert(heads[0] + 1, "  " + VFX_GUIDE)
+            break
+    else:
+        at, text = systems[0]
+        lines = text.split("\n") + [VFX_LINE_HEAD + " " + VFX_GUIDE]
+    rewritten = list(message)
+    rewritten[at] = dict(message[at], content="\n".join(lines))
+    return rewritten
 
 
 def carrier_of(vfx):
@@ -353,6 +389,7 @@ def apply(ctx):
                "art": False, "heard": False, "side": None}
     effect_seen = {}
     widened_for = set()
+    guided_for = set()
     # 運び手に置き換えて返した足した値（`NARROWED_MANAGERS` の答え）。`resolve_battle_effect` が元に戻す。
     narrowed = []
 
@@ -394,8 +431,21 @@ def apply(ctx):
                 kwargs["structure"] = widened
             else:
                 args = args[:2] + (widened,) + tuple(args[3:])
-            answer = orig(*args, **kwargs)
             manager_name = args[0] if args else kwargs.get("manager_name")
+            # 手引きはプロンプトにも置く（OpenAI 互換サーバーの経路では型の説明がモデルに届かない）。
+            guided = None
+            if "message" in kwargs:
+                guided = with_vfx_guide(kwargs["message"])
+                if guided is not None:
+                    kwargs = dict(kwargs, message=guided)
+            elif len(args) >= 2:
+                guided = with_vfx_guide(args[1])
+                if guided is not None:
+                    args = args[:1] + (guided,) + tuple(args[2:])
+            if guided is not None and manager_name not in guided_for:
+                guided_for.add(manager_name)
+                write("vfx guide added to the prompt for {}".format(manager_name))
+            answer = orig(*args, **kwargs)
             if manager_name in NARROWED_MANAGERS:
                 for carrier, value in narrow_answer(answer):
                     narrowed.append({"carrier": carrier, "vfx": value,

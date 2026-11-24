@@ -102,7 +102,7 @@ ICON_ORDER = 20
 RNG = random.Random()
 #: 住人の立場を1回に聞く人数（街の住人がこれより多ければ分けて聞く）。
 PEOPLE_BATCH = 20
-#: 抽出の並びの件数の上限（ローカル LLM が書き足し続けないように。139 と同じ穴）。ローカルのときだけ付ける。
+#: 抽出の並びの件数の上限（ローカル LLM が書き足し続けないように。139 と同じ穴）。grammar で縛る経路のときだけ付ける。
 LIST_LIMITS = {"factions": 8, "towns": 40, "relations": 28, "standings": 8, "people": PEOPLE_BATCH}
 
 RUMOR_NOTE = "【各地の噂】{rumor}\nこれは各地に広まっている噂で、あなたも耳にしている。"
@@ -187,10 +187,10 @@ def apply(ctx):
     # ------------------------------------------------------------ 型（構造化出力）
     def structure(name):
         """抽出・判定・情勢の返却型。作れなければ None。"""
-        local = llm.is_local_runtime()
+        grammar = llm.is_grammar_runtime()
         known = store["structures"].get(name)
         module = llm.manager()
-        if known is not None and known[0] is module and known[2] == local:
+        if known is not None and known[0] is module and known[2] == grammar:
             return known[1]
         factory = getattr(module, "create_model", None) if module is not None else None
         if not callable(factory):
@@ -203,8 +203,9 @@ def apply(ctx):
             Annotated = None
 
         def listed(item, key):
-            # 件数の上限は grammar で縛るローカルだけに付ける（139 と同じ穴。クラウドの型の対応は測っていない）。
-            if local and callable(field) and Annotated is not None:
+            # 件数の上限は grammar で縛る経路（内蔵の llama.cpp と OpenAI 互換サーバー）だけに付ける
+            # （139 と同じ穴。クラウドの型の対応は測っていない）。
+            if grammar and callable(field) and Annotated is not None:
                 return (Annotated[list[item], field(max_length=LIST_LIMITS[key])], ...)
             return (list[item], ...)
 
@@ -245,7 +246,7 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("town factions: cannot build the structure {!r}".format(name))
             return None
-        store["structures"][name] = (module, made, local)
+        store["structures"][name] = (module, made, grammar)
         return made
 
     def ask(manager_name, messages, kind):

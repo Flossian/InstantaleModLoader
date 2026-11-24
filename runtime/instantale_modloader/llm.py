@@ -283,6 +283,38 @@ def text_limit(local_chars, path=None):
     return local_chars if runs_bundled_llm(path) else None
 
 
+#: 任意の OpenAI 互換サーバーの送信モジュール。
+ANY_SERVER_REQUEST_MODULE = "scripts.llm.request_llm_inference_any_server"
+
+#: `config.json` の `cloud_llm_provider` で、任意の OpenAI 互換サーバーを選んだときの値（ゲームの設定画面の表記）。
+ANY_SERVER_PROVIDER = "任意OpenAI互換サーバー"
+
+
+def is_any_server_runtime() -> bool:
+    """任意の OpenAI 互換サーバー（LM Studio など）で推論しているか。"""
+    return sys.modules.get(ANY_SERVER_REQUEST_MODULE) is not None
+
+
+def is_grammar_runtime(path=None) -> bool:
+    """返却型を grammar で縛る経路か。内蔵の llama.cpp と、任意の OpenAI 互換サーバー。
+
+    この経路では型の配列に件数の上限（`maxItems`）を付けると、上限を超える要素を書き始められなくなる。
+    上限の無い配列は、モデルが書き足し続けてコンテキスト長を使い切ることがある（`139_`。
+    VERIFICATION.md §3.135）。
+    互換サーバーの宛先はクラウドのこともあるが、上限を付けて困る形は測れていない。
+    まだ1度も LLM を呼んでいない間は送信モジュールで決まらないので、`config.json` の選択で決める。
+    読めなければ False（上限を付けない側）。
+    """
+    if is_local_runtime() or is_any_server_runtime():
+        return True
+    if is_cloud_runtime():
+        return False
+    choice = game_choice(path)
+    if choice is None:
+        return False
+    return choice.get("inference") != CLOUD_API_KEY or choice.get("provider") == ANY_SERVER_PROVIDER
+
+
 def content_of(message):
     """メッセージの本文。dict でなければ None（＝触らない）。"""
     try:

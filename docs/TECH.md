@@ -3938,6 +3938,26 @@ LLM を切り替えるとゲームが起動し直すので、注入の時に1回
 #### リクエストに足す文の上限（`text_limit`）
 
 ```python
+#### 型を grammar で縛る経路（`is_grammar_runtime`）
+
+```python
+llm.is_grammar_runtime()     # 内蔵の llama.cpp か、任意の OpenAI 互換サーバー（LM Studio など）か
+llm.is_any_server_runtime()  # 任意の OpenAI 互換サーバーか
+```
+
+どちらの経路も、返却型から作った grammar で出力を縛る。
+型の配列に件数の上限（`maxItems`）を付けると、上限を超える要素を書き始められなくなる。
+上限の無い配列は、モデルが書き足し続けてコンテキスト長を使い切ることがある（`139_`。[VERIFICATION.md §3.135](verification/3.135.md)）。
+MOD が自分の型に上限を付けるかは、`is_local_runtime()` ではなくこれで決める（`339_`）。
+`is_local_runtime()` は内蔵の llama.cpp だけで、互換サーバーが抜ける。
+
+判定は `is_local_runtime()` か `is_any_server_runtime()` なら True、`is_cloud_runtime()` なら False。
+まだ決まらなければ `game_choice()` の `inference` が `cloud_api_key` 以外か、`provider` が `任意OpenAI互換サーバー`（`llm.ANY_SERVER_PROVIDER`）か。
+`config.json` が読めなければ False（上限を付けない側）。
+
+互換サーバーの経路では、ゲームは型の文をプロンプトに書かない（内蔵の経路は書く。クラウドは API が型をモデルに見せる）。
+型の `description` に置いた手引きはこの経路のモデルに届かないので、プロンプトの地の文にも置く（`342_`・`347_`）。
+
 llm.runs_bundled_llm()   # ゲーム同梱の llama.cpp で推論しているか
 llm.text_limit(600)      # 同梱の llama.cpp なら 600、それ以外は None（切らない）
 ```

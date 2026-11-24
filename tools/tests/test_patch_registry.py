@@ -386,6 +386,33 @@ def main():
     finally:
         sys.modules.pop(cloud_mod, None)
 
+    print("=== 型を grammar で縛る経路（内蔵の llama.cpp と OpenAI 互換サーバー） ===")
+    def config_at(name, inference, provider):
+        path = os.path.join(out_dir, name)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump({"ai_setting": {"llm_inference": inference,
+                                       "cloud_model_setting": {"cloud_llm_provider": provider}}}, fh)
+        return path
+
+    any_server = config_at("cfg_any.json", LLM.CLOUD_API_KEY, LLM.ANY_SERVER_PROVIDER)
+    claude = config_at("cfg_claude.json", LLM.CLOUD_API_KEY, "Claude API")
+    local = config_at("cfg_local.json", "local", "Claude API")
+    missing = os.path.join(out_dir, "cfg_missing.json")
+    check(LLM.is_grammar_runtime(any_server) and LLM.is_grammar_runtime(local),
+          "LLM を呼ぶ前は config.json で決める（互換サーバー・ローカルは True）")
+    check(not LLM.is_grammar_runtime(claude) and not LLM.is_grammar_runtime(missing),
+          "クラウド・読めない config.json は False（上限を付けない側）")
+    for name, expected in ((LLM.ANY_SERVER_REQUEST_MODULE, True), (LLM.LOCAL_REQUEST_MODULE, True),
+                           (LLM.REQUEST_MODULE_PREFIX + "claude", False)):
+        sys.modules[name] = types.ModuleType(name)
+        try:
+            check(LLM.is_grammar_runtime(any_server if not expected else claude) is expected,
+                  "送信モジュールが載れば config.json より優先: {} -> {}".format(name, expected))
+            check(LLM.is_any_server_runtime() is (name == LLM.ANY_SERVER_REQUEST_MODULE),
+                  "互換サーバーの送信モジュールだけで is_any_server_runtime: {}".format(name))
+        finally:
+            sys.modules.pop(name, None)
+
     print("=== 画面を開くまで来ないモジュールは段階適用の待ちに数えない ===")
     # 世界の一括生成のモジュールは「開始／再開」を押すまで import されない。
     # 待ちに数えると GUI が「段階適用の途中」と言い続け、1時間で諦めると後から開いた画面で当たらない。

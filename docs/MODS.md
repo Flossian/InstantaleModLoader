@@ -282,7 +282,7 @@ llama.cpp の grammar は「上限を超える要素を書き始めること」�
 
 | 症状 | やること |
 |---|---|
-| まだ依頼の生成に 2 分かかる回がある | `out\quest_generation_runaway.log` に `limited QuestStructure` の行が出ているか。出ていなければこの MOD が効いていない（Claude か Gemini で遊んでいる、または型の名前が変わった。`WARN a quest-like schema` の行を見る）。出ているのに遅いなら、敵のほかの欄で書き続けている。`216_probe_llm_overlap` の `SLOW` の行を添えて報告してほしい |
+| まだ依頼の生成に 2 分かかる回がある | `out\quest_generation_runaway.log` に `limited QuestStructure` の行が出ているか。出ていなければこの MOD が効いていない（Claude か Gemini で遊んでいる、または型の名前が変わった。`WARN a quest-like schema` の行を見る）。出ているのに遅いなら、敵のほかの欄で書き続けている。内蔵の llama.cpp なら `216_probe_llm_overlap` の `SLOW` の行、OpenAI 互換サーバーならサーバーのログの `finish_reason` と `completion_tokens` を添えて報告してほしい |
 | 依頼の敵の種類が少なくなった気がする | 上限で打ち切られている。設定の上限を上げる |
 
 ### `106_fix_battle_bgm_restore`: 戦闘後にBGMが戻らないのを直す

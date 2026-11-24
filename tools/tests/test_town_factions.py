@@ -538,7 +538,7 @@ class FakeModel:
 
 def create_model(model_name, /, __base__=FakeModel, **fields):
     """pydantic と同じく型の名前は位置だけで受ける（項目に name を持てる）。"""
-    return type(model_name, (__base__,), {"fields": tuple(__base__.fields) + tuple(fields)})
+    return type(model_name, (__base__,), {"fields": tuple(__base__.fields) + tuple(fields), "specs": dict(fields)})
 
 
 Result = create_model("Result", summary=(str, ...))
@@ -548,6 +548,11 @@ sys.modules[MANAGER.__name__] = MANAGER
 
 ASKED = []
 ANSWERS = {}
+#: 聞いたときに渡した型（件数の上限の確かめ）。
+SHAPES = []
+#: grammar で縛る経路か（`llm.is_grammar_runtime` の代わり。手元の config.json に左右されないように固定する）。
+GRAMMAR = {"on": False}
+llm.is_grammar_runtime = lambda *a, **k: GRAMMAR["on"]
 
 
 #: 住人の立場の答え（頼みに並んだ id ごと。書いていない id は一員）。
@@ -562,6 +567,7 @@ def people_answer(message):
 
 def fake_ask(ctx, manager_name, message, *, timeout, structure=None, **kw):
     ASKED.append((manager_name, message))
+    SHAPES.append(structure)
     answer = ANSWERS.get(manager_name)
     return answer(message) if callable(answer) else answer
 
@@ -1575,6 +1581,31 @@ for fn in ctx.ready:
     fn()
 check("読み込み直しても聞き直さない", len(ASKED) == 1)
 check("会話に足さない", notes_fn()({"app": app, "npc_id": "37"}) is None)
+
+print("[流れ] 件数の上限は grammar で縛る経路（内蔵の llama.cpp と OpenAI 互換サーバー）だけに付ける")
+try:
+    import pydantic                     # noqa: F401  ゲームの中では読み込み済み。339 は sys.modules から引く
+except ImportError:
+    pydantic = None
+if pydantic is None:
+    print("  skip pydantic が無い")
+else:
+    limits = {}
+    for grammar in (True, False):
+        GRAMMAR["on"] = grammar
+        module, ctx, app = fresh()
+        ANSWERS[module.MANAGER_EXTRACT] = {"factions": EXTRACT_ANSWER["factions"][:1], "towns": [],
+                                           "relations": [], "peaceful": "true"}
+        del SHAPES[:]
+        for fn in ctx.ready:
+            fn()
+        made = [shape for shape in SHAPES if getattr(shape, "__name__", "") == "FactionExtract"]
+        spec = made[0].specs["factions"][0] if made else None
+        limits[grammar] = [getattr(bound, "max_length", None) for item in getattr(spec, "__metadata__", ())
+                           for bound in getattr(item, "metadata", ())]
+    GRAMMAR["on"] = False
+    check("grammar の経路では勢力の並びに上限 8", limits[True] == [module.LIST_LIMITS["factions"]], limits)
+    check("それ以外は上限を付けない", limits[False] == [], limits)
 
 print("[流れ] 抽出が答えない")
 module, ctx, app = fresh()
