@@ -88,7 +88,19 @@ class Ctx(object):
         return deco
 
     def hook(self, target):
-        return self.hooks[target][-1]
+        """同じ対象を包んだフックを、本物と同じく重ねて呼ぶ（先に包んだものが内側）。
+
+        最後の1枚だけを呼ぶと、窓口 `choices` の包みを先に立てたとき（追手が入口で最初に預ける）に
+        保存の包みが呼ばれない。本物のローダでは `choices` の包みは 336 より前の MOD が立てるので内側にある。
+        """
+        layers = list(self.hooks[target])
+
+        def call(orig, *args, **kwargs):
+            inner = orig
+            for fn in layers:
+                inner = (lambda fn, below: lambda *a, **k: fn(below, *a, **k))(fn, inner)
+            return inner(*args, **kwargs)
+        return call
 
     def logger(self, name, **kw):
         return self.lines.append

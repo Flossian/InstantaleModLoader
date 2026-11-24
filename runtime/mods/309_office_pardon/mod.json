@@ -67,5 +67,7 @@
         "en": "One line, only while you are wanted in this area"
       }
     }
-  }
+  },
+  "superseded": "336_crime_overhaul",
+  "shares": ["mod_pardon_action"]
 }

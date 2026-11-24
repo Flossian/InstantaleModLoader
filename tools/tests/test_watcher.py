@@ -11,6 +11,8 @@
              （注入済みかもしれない。そのプレイの記録を途中で分けない）
   --once   … 注入に失敗・準備が整わない・ゲームが無い、は終了コード 1。保留は 0。
              頼まれた注入なので入れ替える（injector.py と同じ）
+  片付け   … 起動のときにローダの `drop_renamed` を配布フォルダの mods で呼ぶ。
+             検査の中では差し替える（本物を呼ぶと、開発機の `settings/` の設定を移してしまう）
 """
 import os
 import sys
@@ -23,6 +25,13 @@ if TOOLS_DIR not in sys.path:
 
 import injector                                        # noqa: E402
 import watcher                                         # noqa: E402
+
+if injector.RUNTIME_DIR not in sys.path:
+    sys.path.insert(0, injector.RUNTIME_DIR)
+import instantale_modloader as ml                      # noqa: E402
+
+#: `drop_renamed` に渡された場所（検査の中では本物を呼ばない）。
+DROPPED_AT = []
 
 failures = []
 
@@ -65,7 +74,8 @@ def run(polls, results=None, ready=lambda pid: True, once=False):
 
     saved = (injector.find_processes, injector.inject, injector.rotate_logs,
              injector.use_utf8_console, watcher.wait_until_ready, watcher.log,
-             time.sleep, sys.argv)
+             time.sleep, sys.argv, ml.drop_renamed)
+    ml.drop_renamed = lambda mods_dir: DROPPED_AT.append(mods_dir) or []
     injector.find_processes = find_processes
     injector.inject = inject
     injector.rotate_logs = lambda *a, **k: events.append(("rotate",))
@@ -79,7 +89,7 @@ def run(polls, results=None, ready=lambda pid: True, once=False):
     finally:
         (injector.find_processes, injector.inject, injector.rotate_logs,
          injector.use_utf8_console, watcher.wait_until_ready, watcher.log,
-         time.sleep, sys.argv) = saved
+         time.sleep, sys.argv, ml.drop_renamed) = saved
     return events, rc
 
 
@@ -108,6 +118,8 @@ check("前から動いていた pid は入れ替えずに注入、後から来�
       events == [("inject", 100), ("rotate",), ("inject", 200),
                  ("rotate",), ("inject", 300), ("inject", 400)], events)
 check("Ctrl-C で 0", rc == 0, rc)
+check("起動のときに配布フォルダの mods で片付けを呼ぶ（検査では差し替えたもの）",
+      DROPPED_AT[-1:] == [os.path.join(injector.RUNTIME_DIR, "mods")], DROPPED_AT)
 events, rc = run([[], [500], []], ready=lambda pid: False)
 check("準備が整わなかった pid では入れ替えも注入もしない", events == [], events)
 events, rc = run([[], [600, 700]], ready=lambda pid: pid == 700)

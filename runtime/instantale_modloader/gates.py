@@ -23,6 +23,7 @@ VERIFICATION.md §3.113）。ゲームの更新で名前や引数が変わると
 | 登録した ctx が用済み（`ctx.superseded()`）なら呼ばない | 切った MOD・前の世代の登録が残っても効かない |
 | `before` の戻り値は、同じ持ち主の `after` に `call.memo` で渡る | 前と後で控えを受け渡す形（暦の前後の差など）が多い |
 | `after` は `orig` が返ったときだけ。`always=True` なら投げたときも呼ぶ（`call.error` に例外） | `try/finally` で包んでいた形（ロード中の印・移動中の窓） |
+| `enter` / `leave` は `orig` のすぐ前と後。`enter` は全部の `before` の後に登録の古い順、`leave` は `orig` が返っても投げても、どの `after` より先に新しい順で呼ぶ（`call.memo` は同じ持ち主の `enter` の戻り値） | `orig` の間だけゲームの値を変えておき、ほかの MOD の前後の処理には元の値を見せる形（`336_` の、裏の事務所に入る移動の間だけ手配度を平常に見せる） |
 | 前後の処理の例外は握って記録し、残りの MOD と `orig` は止めない | 1本の不具合でゲームの処理を巻き込まない |
 | 前後の処理は引数も戻り値も変えない | 変えるものは用途ごとの窓口（`durations.claim_days` など）で決める |
 
@@ -122,11 +123,14 @@ class Gate(object):
             setattr(sys, self.attr, store)
         return store
 
-    def on(self, owner, ctx, before=None, after=None, always=False, write=None):
-        """前後の処理を登録する。同じ持ち主の登録は差し替える。差し替えたら True。"""
-        if before is None and after is None:
-            raise ValueError("{}: on() needs before= or after=".format(self.name))
-        for fn in (before, after):
+    def on(self, owner, ctx, before=None, after=None, always=False, write=None, enter=None, leave=None):
+        """前後の処理を登録する。同じ持ち主の登録は差し替える。差し替えたら True。
+
+        `enter` / `leave` は `orig` のすぐ前と後（モジュールの説明の表）。
+        """
+        if before is None and after is None and enter is None and leave is None:
+            raise ValueError("{}: on() needs before=, after=, enter= or leave=".format(self.name))
+        for fn in (before, after, enter, leave):
             if fn is not None and not callable(fn):
                 raise TypeError("{}: on() needs callables, got {!r}".format(self.name, type(fn)))
         store = self._store()
@@ -134,6 +138,7 @@ class Gate(object):
         previous = store["hooks"].get(str(owner))
         store["hooks"][str(owner)] = {
             "ctx": ctx, "before": before, "after": after, "always": bool(always),
+            "enter": enter, "leave": leave,
             "write": write, "seq": store["seq"],
         }
         return previous is not None
@@ -202,7 +207,7 @@ class Gate(object):
             if entry.get("before") is not None:
                 memos[owner] = self._call(owner, entry, "before", call)
         try:
-            result = invoke()
+            result = self._inside(rows, call, invoke)
         except BaseException as exc:
             call.error = exc
             for owner, entry in rows:
@@ -217,3 +222,21 @@ class Gate(object):
                 self._call(owner, entry, "after", call)
         call.memo = None
         return result
+
+    def _inside(self, rows, call, invoke):
+        """`enter` → `invoke()` → `leave`。`leave` は `invoke()` が投げても呼ぶ（例外はそのまま流す）。"""
+        entered = []
+        for owner, entry in rows:
+            if entry.get("enter") is not None or entry.get("leave") is not None:
+                memo = self._call(owner, entry, "enter", call) if entry.get("enter") is not None else None
+                entered.append((owner, entry, memo))
+        if not entered:
+            return invoke()
+        try:
+            return invoke()
+        finally:
+            for owner, entry, memo in reversed(entered):
+                if entry.get("leave") is not None:
+                    call.memo = memo
+                    self._call(owner, entry, "leave", call)
+            call.memo = None

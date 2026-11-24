@@ -111,13 +111,13 @@
 | [`306_party_train_exp`](MODS.md#306_party_train_exp-宿屋の訓練で仲間も育つ) | 仲間も訓練で育つ | 宿屋の訓練で仲間も育つ | 6 |  |
 | [`307_area_move_dungeon`](MODS.md#307_area_move_dungeon-第3の移動手段危険な道を行くを足す) | ダンジョン経由のエリア移動 | 第3の移動手段「危険な道を行く」を足す | 8 |  |
 | [`308_battle_damage_display`](MODS.md#308_battle_damage_display-戦闘のダメージ表示) | 戦闘のダメージ表示 | 戦闘のダメージ表示 | 8 |  |
-| [`309_office_pardon`](MODS.md#309_office_pardon-役場で罰金を納めて手配を解く) | 役場で手配を解く | 役場で罰金を納めて手配を解く | 4 |  |
+| [`309_office_pardon`](MODS.md#309_office_pardon-役場で罰金を納めて手配を解く) | 役場で手配を解く | 役場で罰金を納めて手配を解く | 4 | 取込済 336_crime_overhaul |
 | [`311_npc_profile_memory`](MODS.md#311_npc_profile_memory-npcが会話の内容を覚える) | NPCが会話を覚える | NPCが会話の内容を覚える | 5 |  |
 | [`312_shop_restock`](MODS.md#312_shop_restock-日数経過で店の在庫を更新) | 店の品揃えの入れ替え | 日数経過で店の在庫を更新 | 4 |  |
 | [`313_event_ability_check`](MODS.md#313_event_ability_check-行動の成否判定に能力値を効かせる) | 行動判定に能力値を効かせる | 行動の成否判定に能力値を効かせる | 9 |  |
 | [`314_area_move_custom`](MODS.md#314_area_move_custom-エリア移動の日数料金文言を変える) | 街移動のカスタマイズ | エリア移動の日数・料金・文言を変える | 16 |  |
 | [`315_vacation_custom`](MODS.md#315_vacation_custom-宿の宿泊期間部屋宿代を変える) | 宿泊のカスタマイズ | 宿の宿泊期間・部屋・宿代を変える | 14 |  |
-| [`316_bounty_hunter`](MODS.md#316_bounty_hunter-手配されていると追手が来る) | 賞金稼ぎが襲ってくる | 手配されていると追手が来る | 17 |  |
+| [`316_bounty_hunter`](MODS.md#316_bounty_hunter-手配されていると追手が来る) | 賞金稼ぎが襲ってくる | 手配されていると追手が来る | 17 | 取込済 336_crime_overhaul |
 | [`317_reputation`](MODS.md#317_reputation-評判と二つ名) | 評判と二つ名 | 評判と二つ名 | 12 |  |
 | [`318_area_difficulty_growth`](MODS.md#318_area_difficulty_growth-土地が育つ依頼の難易度が上がる) | 依頼クリアで難易度上昇 | 土地が育つ（依頼の難易度が上がる） | 7 |  |
 | [`319_battle_tactics`](MODS.md#319_battle_tactics-戦闘を複数手の駆け引きにする) | 戦闘の数値とバフ・デバフの作り直し | 戦闘を複数手の駆け引きにする | 18 |  |
@@ -137,7 +137,7 @@
 | [`333_equipment_slots`](MODS.md#333_equipment_slots-インベントリに装備枠を追加) | インベントリに装備枠を追加 | インベントリに装備枠を追加 | 4 |  |
 | [`334_colosseum_custom`](MODS.md#334_colosseum_custom-闘技場の相手の強さと懸賞金を決める) | 闘技場のカスタマイズ | 闘技場の相手の強さと懸賞金を決める | 13 |  |
 | [`335_player_portrait_regenerate`](MODS.md#335_player_portrait_regenerate-人物欄から主人公の立ち絵を描き直せる) | 人物欄から主人公の立ち絵を描き直せる | 人物欄から主人公の立ち絵を描き直せる | - |  |
-| [`336_crime_overhaul`](MODS.md#336_crime_overhaul-犯罪まわりの全面改修) | 犯罪まわりの全面改修 | 犯罪まわりの全面改修 | 80 |  |
+| [`336_crime_overhaul`](MODS.md#336_crime_overhaul-犯罪まわりの全面改修) | 犯罪まわりの全面改修 | 犯罪まわりの全面改修 | 103 |  |
 | [`337_conversation_affinity`](MODS.md#337_conversation_affinity-会話による好感度の変動) | 会話による好感度の変動 | 会話による好感度の変動 | 4 |  |
 | [`338_town_incidents`](MODS.md#338_town_incidents-街に盗賊や疫病などの困り事や祝祭や豊作などの良い出来事が起き日を追って移り変わる) | 街の出来事 | 街に盗賊や疫病などの困り事や、祝祭や豊作などの良い出来事が起き、日を追って移り変わる | 18 |  |
 | [`339_town_factions`](MODS.md#339_town_factions-勢力ごとに主人公の見られ方が変わりその勢力の-npc-の態度に表れる) | 街の勢力 | 勢力ごとに主人公の見られ方が変わり、その勢力の NPC の態度に表れる | 22 |  |

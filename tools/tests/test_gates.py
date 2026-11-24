@@ -6,6 +6,8 @@
   順番   … before は登録の新しい順、after は古い順（MOD が自分で包んでいたときの重なりと同じ）
   控え   … before の戻り値が同じ持ち主の after に call.memo で渡る
   例外   … orig が投げたら after は always=True のものだけ。前後の処理の例外は握って残りを止めない
+  内側   … enter は全部の before の後（古い順）、leave は orig のすぐ後で全部の after より先（新しい順）。
+           leave は orig が投げても来る。enter の戻り値が同じ持ち主の leave に call.memo で渡る
   寿命   … 用済みの ctx の登録は呼ばない。同じ持ち主は差し替え、順は登録し直した時点になる
   1枚    … 同じ世代では何本登録しても包みは1枚
   loads  … 3つの種類が別々の関数を包む。WORLD は save_data と引数の app を渡す
@@ -126,6 +128,61 @@ def gate_order():
         check("前も後も無い登録は断る", True)
 
 
+def inner_hooks():
+    print("内側（enter / leave）")
+    gate = gates.Gate("t2", "m:g", "_instantale_test_gate_inner")
+    gate.reset()
+    seen = []
+    ctx = Ctx()
+    gate.on("A", ctx, before=lambda call: seen.append("before A"),
+            after=lambda call: seen.append("after A"))
+    gate.on("B", ctx, enter=lambda call: seen.append("enter B") or "b",
+            leave=lambda call: seen.append("leave B memo={}".format(call.memo)))
+    gate.on("C", ctx, before=lambda call: seen.append("before C"),
+            after=lambda call: seen.append("after C"),
+            enter=lambda call: seen.append("enter C") or "c",
+            leave=lambda call: seen.append("leave C memo={}".format(call.memo)))
+
+    def invoke():
+        seen.append("orig")
+        return 7
+
+    result = gate.run(gates.Call("k", None, (), {}), invoke)
+    check("戻り値は orig のまま", result == 7, result)
+    check("enter は before の後に古い順・leave は after より先に新しい順",
+          seen == ["before C", "before A", "enter B", "enter C", "orig",
+                   "leave C memo=c", "leave B memo=b", "after A", "after C"], seen)
+
+    seen[:] = []
+
+    def failing():
+        seen.append("orig")
+        raise ValueError("game")
+
+    raised = None
+    try:
+        gate.run(gates.Call("k", None, (), {}), failing)
+    except ValueError as exc:
+        raised = exc
+    check("orig が投げても leave は来る（例外はそのまま流す）",
+          isinstance(raised, ValueError) and seen[-2:] == ["leave C memo=c", "leave B memo=b"], seen)
+
+    gate.reset()
+    seen[:] = []
+
+    def broken(call):
+        raise RuntimeError("boom")
+
+    gate.on("D", ctx, enter=broken, leave=lambda call: seen.append("leave D memo={}".format(call.memo)))
+    check("enter が投げても orig と leave は走る（memo は None）",
+          gate.run(gates.Call("k", None, (), {}), invoke) == 7 and seen == ["orig", "leave D memo=None"], seen)
+    gate.reset()
+    gate.on("E", ctx, leave=lambda call: seen.append("leave E"))
+    seen[:] = []
+    gate.run(gates.Call("k", None, (), {}), invoke)
+    check("leave だけの登録も受ける", seen == ["orig", "leave E"], seen)
+
+
 def loads_gate():
     print("loads")
     loads.reset()
@@ -244,12 +301,21 @@ def arrival_gates():
     except RuntimeError:
         pass
     check("always の後の処理は orig が投げても来る", seen == ["area before", ("area after", True)], seen)
+    seen[:] = []
+    arrivals.on("336_y", ctx, (arrivals.FACILITY,),
+                enter=lambda call: seen.append(("enter", call.obj.app is app)),
+                leave=lambda call: seen.append("leave"))
+    move(lambda self: seen.append("orig"), Manager(app))
+    check("施設の包みも enter / leave を通す（ほかの後の処理より先に leave）",
+          seen == [("enter", True), "orig", "leave", ("facility", 2, app)], seen)
+    arrivals.off("336_y")
     arrivals.off("405_x")
     check("off で下がる", arrivals.owners(arrivals.FACILITY) == [], arrivals.owners(arrivals.FACILITY))
 
 
 def main():
     gate_order()
+    inner_hooks()
     loads_gate()
     days_gate()
     arrival_gates()

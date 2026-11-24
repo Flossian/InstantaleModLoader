@@ -1152,6 +1152,104 @@ ABSORBED_MODS = {
 }
 
 
+#: 別の MOD に取り込んだ MOD（古いフォルダ名 → (取り込んだ MOD, 入切の設定名, {古い設定名: 新しい設定名})）。
+#: 新しい設定名が None の項目は、取り込むときに外した設定で、値は移さずに捨てる。
+#: 古いフォルダは `"superseded"` で伏せて残す（`RENAMED_MODS` と違って消さない。105・406 と同じ扱い）。
+#: 選んだ設定の値は取り込んだ MOD の新しい名前へ移し、順序ファイルで切っていたら取り込んだ機能の入切を切る。
+#: 移すのは1回だけ（`settings/loader.json` の `MERGED_FLAG` に済んだ名前を残す）。
+#: 何度も移すと、デバッグモードで古い MOD を切ったときに、取り込んだ機能まで切ってしまう。
+MERGED_MODS = {
+    "309_office_pardon": ("336_crime_overhaul", "PARDON_ENABLED", {
+        "PRICE_PER_POINT": "PARDON_PRICE_PER_POINT",
+        "WANTED_THRESHOLD": None,                           # 外した（境目は窓口 `wanted` の値）。値は移さない
+        "RESTORE_TO": "PARDON_RESTORE_TO",
+        "ANNOUNCE_ON_ARRIVAL": "PARDON_ANNOUNCE_ON_ARRIVAL",
+    }),                                                     # v1.22.0
+    "316_bounty_hunter": ("336_crime_overhaul", "HUNTER_ENABLED", {
+        "START_WANTED": "HUNTER_START_WANTED",
+        "START_TOTAL": "HUNTER_START_TOTAL",
+        "CHANCE_PERCENT": "HUNTER_CHANCE_PCT",
+        "COOLDOWN_DAYS": "HUNTER_COOLDOWN_DAYS",
+        "DIFFICULTY_BASE": "HUNTER_DIFFICULTY_BASE",
+        "DIFFICULTY_PER_WANTED": "HUNTER_DIFFICULTY_PER_WANTED",
+        "DIFFICULTY_MAX": "HUNTER_DIFFICULTY_MAX",
+        "ON_AREA_ARRIVAL": "HUNTER_ON_AREA_ARRIVAL",
+        "ON_FACILITY_ARRIVAL": "HUNTER_ON_FACILITY_ARRIVAL",
+        "ON_DAYS": "HUNTER_ON_DAYS",
+        "ON_FREE_ACTION": "HUNTER_ON_FREE_ACTION",
+        "HUNTER_NAME": "HUNTER_NAME",
+        "KEEP_WANTED": "HUNTER_KEEP_WANTED",
+        "BOUNTY_ENABLED": "BOUNTY_ENABLED",
+        "BOUNTY_PURSE_PCT": "BOUNTY_PURSE_PCT",
+        "YIELD_TO_GUARDS": "HUNTER_YIELD_TO_GUARDS",
+        "ANNOUNCE": "HUNTER_ANNOUNCE",
+    }),                                                     # v1.22.0
+}
+
+#: `settings/loader.json` の、設定を移し終えた古いフォルダ名の一覧のキー。
+MERGED_FLAG = "merged_mods"
+
+
+def merge_settings(mods_dir: str) -> list[str]:
+    """別の MOD に取り込んだ MOD の設定の値と入切を、取り込んだ MOD へ移す。移した古いフォルダ名を返す。
+
+    取り込んだ MOD（`mod.json`）が無いときと、古いフォルダが取り込む前の版（`"superseded"` が違う）のときは何もしない
+    （古い版の zip で戻したときは、古い MOD がまだ単独で動く）。
+    取り込んだ MOD の側で既に選んでいる値は上書きしない。移した古い名前の値は `mod_settings.json` から外す。
+    `drop_renamed` と同じ所（GUI の起動・更新の展開・watcher の起動）で呼ぶ。
+    """
+    from . import config as _config
+    runtime_dir = os.path.dirname(os.path.abspath(mods_dir))
+    moved = []
+    for old, (into, switch, renames) in MERGED_MODS.items():
+        if not os.path.isfile(os.path.join(mods_dir, into, MANIFEST_NAME)):
+            continue
+        old_manifest = read_json(os.path.join(mods_dir, old, MANIFEST_NAME))
+        if isinstance(old_manifest, dict) and old_manifest.get("superseded") != into:
+            continue
+        flags = _config.load_flags(runtime_dir)
+        done = flags.get(MERGED_FLAG)
+        done = [name for name in done if isinstance(name, str)] if isinstance(done, list) else []
+        if old in done:
+            continue
+        try:
+            store = _config.load_store_for_write(runtime_dir)
+        except ValueError:
+            log_exc("cannot move the settings of the merged mod {}".format(old))
+            continue
+        before = store.get(into) if isinstance(store.get(into), dict) else {}
+        target = dict(before)
+        values = store.get(old) if isinstance(store.get(old), dict) else {}
+        carried = []
+        for name, value in values.items():
+            new = renames.get(name)
+            if new and new not in target:
+                target[new] = value
+                carried.append(new)
+        order = read_json(order_path(mods_dir))
+        disabled = order.get("disabled") if isinstance(order, dict) else None
+        if isinstance(disabled, list) and old in disabled and switch not in target:
+            target[switch] = False
+            carried.append(switch)
+        if target != before or old in store:
+            store.pop(old, None)
+            if target:
+                store[into] = target
+            try:
+                _config.save_store(runtime_dir, store)
+            except Exception:
+                log_exc("cannot move the settings of the merged mod {}".format(old))
+                continue
+        try:
+            _config.save_flags(runtime_dir, dict(flags, **{MERGED_FLAG: done + [old]}))
+        except Exception:
+            log_exc("cannot record that the settings of {} were moved".format(old))
+        log("merged mod {}: settings moved into {} ({})".format(
+            old, into, ", ".join(carried) if carried else "nothing to move"))
+        moved.append(old)
+    return moved
+
+
 def _drop_absorbed(mods_dir: str) -> list[str]:
     """ローダに取り込んだ MOD の古いフォルダ・順序ファイルの行・設定値を外す。消したフォルダ名を返す。
 
@@ -1199,9 +1297,14 @@ def drop_renamed(mods_dir: str) -> list[str]:
     新しい名前のフォルダ（`mod.json`）が無ければ何もしない（古い版の zip で戻したときなど）。
     古い名前を切っていたら新しい名前も切り、順序ファイルから古い名前を外す。
     ローダに取り込んだ MOD（`ABSORBED_MODS`）の古いフォルダも同じ所で消し、名前を戻りに含める。
+    別の MOD に取り込んだ MOD（`MERGED_MODS`）の設定もここで移す（フォルダは消さないので、戻りには含めない）。
     GUI の起動・更新の展開・watcher の起動で呼ぶ。v1.15.0 の GUI の更新はこれを持たないので、
     更新の後に開き直した GUI が片付ける。
     """
+    try:
+        merge_settings(mods_dir)
+    except Exception:
+        log_exc("cannot move the settings of the merged mods")
     dropped = _drop_absorbed(mods_dir)
     for old, new in RENAMED_MODS.items():
         if not os.path.isfile(os.path.join(mods_dir, new, MANIFEST_NAME)):

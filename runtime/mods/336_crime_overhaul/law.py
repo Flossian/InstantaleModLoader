@@ -13,11 +13,12 @@
 - 離れている土地だけ、離れていた日数 3ヵ月ごとに手配度が 10 戻る。戻るのは平常の 10 まで
 - ただし全ての土地の手配の重さの合計が全域手配の線以上の間は、
   合計がその線に届いたところで止める（追手は続く。そこから先は役場の罰金）。
-  線は追手を出す MOD（`316_`）がローダの窓口 `wanted` に置く。置かれていなければ全域手配は無いので止めない
+  線は追手（`hunter`）がローダの窓口 `wanted` に置く。置かれていなければ全域手配は無いので止めない。
+  同じ 336 の中だが窓口から読む（ほかの MOD が線を置いたときも同じ形で効く。いちばん低い線が返る）
 - 新しい罪は、戻った後の値にそのまま足される（数え直さない）
 - 日数は `elapse_days` の前後の暦の差。エリア移動の日数は出発地からも目的地からも離れていた日数として数える
 
-追手を倒したときの前金は `316_bounty_hunter` へ移した（追手を出す MOD が、その戦闘の報酬も持つ）。
+追手を倒したときの前金は追手（`hunter`）が払う（追手を出す機能が、その戦闘の報酬も持つ）。
 """
 import threading
 
@@ -160,7 +161,7 @@ def install(env):
         period = max(1, int(cfg.STATUTE_PERIOD_MONTHS)) * DAYS_PER_MONTH
         entries = {str(raw_id): entry for raw_id, entry in history.items()}
         values = {area_id: ui.lawfulness_of(entry) for area_id, entry in entries.items()}
-        # 全域手配かどうかは居る土地も含めた合計で見る（`316_` と同じ数え方）。
+        # 全域手配かどうかは居る土地も含めた合計で見る（追手（`hunter`）と同じ数え方）。
         total = wanted.total_of(values)
         plans = []
         key = worlds.playthrough(app)

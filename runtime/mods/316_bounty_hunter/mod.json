@@ -238,5 +238,7 @@
         "en": "Leave it empty to go straight into the battle"
       }
     }
-  }
+  },
+  "superseded": "336_crime_overhaul",
+  "shares": ["bounty_hunter"]
 }

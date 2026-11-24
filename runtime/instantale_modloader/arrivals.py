@@ -17,6 +17,7 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
 
     arrivals.on(owner, ctx, (arrivals.FACILITY,), after=fn)          # 施設に着いた後
     arrivals.on(owner, ctx, (arrivals.AREA,), before=fn, after=fn, always=True)   # 街を移る前後
+    arrivals.on(owner, ctx, (arrivals.FACILITY,), enter=fn, leave=fn)  # 移動の処理の間だけ（ほかの前後の処理の内側）
     fn(call)    # call.app / call.obj（マネージャ）/ call.args …（gates.Call）
 
 `call.app` はマネージャの `app`（無ければ走っている app）。前後の処理は引数も戻り値も変えない。
@@ -86,10 +87,15 @@ def _app_of(manager):
         return None
 
 
-def on(owner, ctx, kinds, before=None, after=None, always=False, write=None):
-    """着いた前後の処理を登録し、包みを立てる。`apply()` の中で呼ぶ。同じ持ち主の登録は差し替える。"""
+def on(owner, ctx, kinds, before=None, after=None, always=False, write=None, enter=None, leave=None):
+    """着いた前後の処理を登録し、包みを立てる。`apply()` の中で呼ぶ。同じ持ち主の登録は差し替える。
+
+    `enter` / `leave` は `orig`（移動の処理そのもの）のすぐ前と後で、ほかの MOD の `before` / `after` の内側
+    （`gates` の説明の表）。`leave` は `orig` が投げても呼ぶ。
+    """
     for kind in _kinds_of(kinds):
-        HOOKS[kind].on(owner, ctx, before=before, after=after, always=always, write=write)
+        HOOKS[kind].on(owner, ctx, before=before, after=after, always=always, write=write,
+                       enter=enter, leave=leave)
         if kind == FACILITY:
             install(ctx, write)
         else:

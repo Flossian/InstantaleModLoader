@@ -502,9 +502,9 @@ git に残らないので、記録を残したい MOD は `local/` へ移す前�
 `docs/MODS.md` はそれを結合したもので、`tools/build_mods.py` が組む。
 
 ```text
-runtime/mods/316_bounty_hunter/
+runtime/mods/300_event_facility_arrival/
     mod.json
-    bounty_hunter.py
+    event_facility_arrival.py
     DOC.md      ← 説明・設定・困ったとき
 ```
 
@@ -524,7 +524,7 @@ python tools\build_mods.py --check    # ずれていたら 1 で終わる（CI �
 1行目はフォルダ名とタイトルの宣言で、フォルダ名と一致していないと生成が止まる。
 
 ```markdown
-# `316_bounty_hunter`: 手配されていると追手が来る
+# `300_event_facility_arrival`: 施設でNPCから話しかけてくる
 
 （本文）
 
@@ -1620,10 +1620,11 @@ value, by = talk_affinity.ceiling(app, npc_id, 自分の上限)   # 好感度を
 
 #### 3.3.9 全域手配の線と追手の戦闘も連携 API で分け合う（`wanted`）
 
-`316_bounty_hunter` は「全ての土地の手配の重さの合計がこれ以上なら、手配されていない土地に居ても追ってくる」線を持つ。
+`336_crime_overhaul` の追手（もと `316_bounty_hunter`）は「全ての土地の手配の重さの合計がこれ以上なら、手配されていない土地に居ても追ってくる」線を持つ。
 手配度を時とともに戻すような MOD は、その線を越えて戻して全域手配を解いてしまわないよう、線を知りたい。
 `instantale_modloader/wanted.py` で、線を持つ MOD が置き、手配を動かす MOD が聞く。
-重さの数え方（手配度が 0 からどれだけ下か。手配されていない土地は数えない）も同じモジュールが持ち、`316_` の追手の条件と強さもこれで数える。
+重さの数え方（手配度が 0 からどれだけ下か。手配されていない土地は数えない）も同じモジュールが持ち、追手の条件と強さもこれで数える。
+線を置く追手と線を読む時効はどちらも `336_` の中の機能だが、窓口を通して読む（ほかの MOD が線を置いたときも同じ形で効く）。
 
 ```python
 wanted.declare_hunted(owner, ctx, fn)       # 線を持つ側。apply() の中。fn(app) -> 合計の線 / None（いまは全域から追わない）
@@ -1644,9 +1645,9 @@ taker = wanted.shop_pressure_taker()        # 率を置いた側が確かめる�
 `outcome` はゲームの `BattleEndManager(app, end_type)` の `end_type`（勝ち `'won'`・逃げ `'escaped'`。GAME.md §2.10）を渡す。
 どの戦闘が追手の戦闘かは、追手を出した MOD にしか分からない（ゲーム自身の衛兵と同じ戦闘を使うので、戦闘の側からは見分けられない）。
 そのため通知する側は追手を出した MOD に限る。
-`316_` は自分が組んだマネージャの `start_battle` でフラグを立て、終わりで1回だけ通知する。
+追手（`336_` の `hunter.py`）は自分が組んだマネージャの `start_battle` でフラグを立て、終わりで1回だけ通知する（`by` は `336_crime_overhaul:hunter`）。
 別の戦闘が始まったらフラグを捨てる（追手に負けてゲームオーバーになった後の戦闘と取り違えない）。
-倒したときの前金は `316_` 自身が同じ終わりで払う（追手が来なければ働かない機能なので）。
+倒したときの前金は追手の機能自身が同じ終わりで払う（追手が来なければ働かない機能なので）。
 同梱の MOD で終わりを受けているものは今は無いが、通知はほかの MOD が追手の戦闘に何かを足す入口として続ける。
 
 店の値の圧は、手配中の土地で店の値段をどれだけ動かすか（率）と、どちらへ動かすか（向き）を分けるための API（2026-10-20）。
@@ -1657,7 +1658,7 @@ taker = wanted.shop_pressure_taker()        # 率を置いた側が確かめる�
 | 決まり | 理由 |
 |---|---|
 | 線を置く MOD が入っていなければ `(None, None)`。聞く側は全域手配そのものが無いとして扱う | 追手の MOD を無効にした遊び方で、ありもしない線に止められない |
-| `316_` は発生率 0 か、来る場面を全部 OFF にした設定では線を置かない（`None`） | 追手が来ない設定は、入っていないのと同じ |
+| 追手は、切っている・発生率 0・来る場面を全部 OFF にした設定では線を置かない（`None`） | 追手が来ない設定は、入っていないのと同じ |
 | 複数が置いたらいちばん低い線（`by` はそれを置いた持ち主） | どれか1つの条件を満たせば追われる |
 | 登録は持ち主ごとに1つ。登録した ctx が用済みなら数えない。`fn` が例外を送出したら線を置かなかったものとみなす（`errors` に残す） | `talk_affinity`（§3.3.8）と同じ |
 | 設定は聞かれたときに読む（`fn` が関数なのはこのため） | GUI で線を変えたら次の問い合わせから効く |
@@ -1667,7 +1668,7 @@ taker = wanted.shop_pressure_taker()        # 率を置いた側が確かめる�
 
 #### 3.3.10 ゲームの衛兵の戦闘を起こすのも連携 API で（`guards`）
 
-`316_bounty_hunter`（追手）と `336_crime_overhaul`（脱獄の決行）は、どちらもゲームの衛兵の戦闘を借りて、強さだけを変えて起こす。
+`336_crime_overhaul` の追手（もと `316_bounty_hunter`）と脱獄の決行は、どちらもゲームの衛兵の戦闘を借りて、強さだけを変えて起こす。
 強さは `create_guard_enemies` の中から呼ばれる2か所（`guard_npc_generator` の難易度と `generate_enemy_instance_from_quest_dict` の難易度）に届く数1つで決まる（GAME.md §2.20）。
 同じ2か所を MOD ごとにフックすると、どちらの差し替えが勝つかがラッパーの重なる順で決まってしまうので、`instantale_modloader/guards.py` が1つだけフックする。
 
@@ -1683,7 +1684,7 @@ guards.arm(phase, difficulty)            # 組んだ後に強さを決め直す�
 | 差し替えるのは、組んだマネージャの `start_battle` の中だけ | 時間で開けておくと、その間にゲーム自身が出した衛兵まで強くする（`316_` で起きた） |
 | 組んだマネージャには弱参照でマークを付け、`start_battle` を抜けたら外す | 起こさずに捨てたマネージャのマークを残さない。1回の戦闘で使い切る |
 | 敵の実体の難易度の位置は、数が1つならそれ、複数なら実測の5番目 | 引数が増減しても追随する。見つからなければ元のまま作らせる |
-| 改名やいつ起こすかは MOD が持つ | 連携 API は強さだけ。追手の改名（`316_`）や脱獄の本文（`336_`）は場面ごとに違う |
+| 改名やいつ起こすかは MOD が持つ | 連携 API は強さだけ。追手の改名や脱獄の本文（どちらも `336_`）は場面ごとに違う |
 
 #### 3.3.11 倒れた戦闘を死なせずに終えるのも連携 API で（`defeat`）
 
@@ -1877,7 +1878,7 @@ choices.repaint(app)                          # 次のフレームで組み直�
 | `330_` / `331_` | 役場の窓口のボタン（`offer`）と、その先の画面（`screens`。330 の窓口、331 の出資の窓口・等級の画面） |
 | `336_` | 8つの機能。衛兵の買収（突き返された後の「大人しく捕まる」は `replace`）・盗品買取商・裏の仕事（掲示板の枠は `replace`、一覧は `screens`）・脱獄（一覧は `screens`）・同房の囚人・処刑場からの脱出・裁判の介入（無罪放免は `claim`） |
 | `307_` | 確認画面の「危険な道を行く」（`offer`。確認画面の組み終わりのラッパーをやめた） |
-| `309_` | 役場の「罰金を納めて手配を解く」（`offer`）と確認の画面（`screens`） |
+| `309_`（`336_` に取り込んだ） | 役場の「罰金を納めて手配を解く」（`offer`）と確認の画面（`screens`）。取り込んだ後は `336_` の宣言型の口に載る |
 | `314_` | 移動の確認画面の徒歩・馬車の文言（ゲームのボタンの `replace` のコピー。セーブには元の文言が残る。運賃が足りないときに断るのは `intercept`） |
 | `319_` | 戦闘のスキル一覧の「防御」（`offer`） |
 | `320_` | ギルドの冒険者の一覧の「冒険者を募集する」（`offer`） |
@@ -2130,6 +2131,7 @@ loads.on(owner, ctx, (loads.WORLD,), before=fn, after=fn)           # 世界を�
 durations.on_days(owner, ctx, before=fn, after=fn)                  # 日数が進む前後（call.granted / call.moved）
 arrivals.on(owner, ctx, (arrivals.FACILITY,), after=fn)             # 施設に着いた後
 arrivals.on(owner, ctx, (arrivals.AREA,), before=fn, after=fn, always=True)   # 街を移る前後
+arrivals.on(owner, ctx, (arrivals.FACILITY,), enter=fn, leave=fn) # 移動の処理の間だけ（ほかの前後の処理の内側）
 quest_ends.on(owner, ctx, before=fn, after=fn)                      # 依頼が終わる前後（call.quest_id / call.quest は orig の前に読んである）
 saving.on(owner, ctx, before=fn, after=fn, always=True)             # ゲームの保存の前後
 fn(call)    # gates.Call: call.app / call.obj（フックした関数の self）/ call.args / call.result / call.error / call.memo
@@ -2151,6 +2153,7 @@ fn(call)    # gates.Call: call.app / call.obj（フックした関数の self）
 | `before` は登録の新しい順、`after` は古い順（登録は `apply()` の順） | MOD が自分でフックしたときの重なりと同じ。後から適用した MOD ほど外側に載る |
 | `before` の戻り値は同じ持ち主の `after` に `call.memo` で渡る | 前の暦・前の土地・開いたウィンドウのように、前後で値を受け渡す形が多い |
 | `after` は `orig` が返ったときだけ。`always=True` なら例外のときも来る（`call.error`） | `try/finally` で囲む形（ロード中のフラグ・移動中のウィンドウ・関係の一時値）のため |
+| `enter` / `leave` は `orig` のすぐ前と後。`enter` は全部の `before` の後に登録の古い順、`leave` は `orig` が返っても例外でも、どの `after` より先に新しい順。`call.memo` は同じ持ち主の `enter` の戻り値。今は `arrivals.on` だけが受ける | `orig` の間だけゲームの値を変え、ほかの MOD の前後の処理には元の値を見せる形のため。`after` は登録の古い順なので、後から適用した MOD が `after` で戻すと、先に適用した MOD の `after` が変えた値を読む（`336_` の裏の事務所に入る移動の間だけ手配度を平常に見せる処理と、到着の後に手配度を読む `317_`） |
 | 前後の処理の例外は捕捉して記録し、残りの MOD と `orig` を止めない | 各 MOD がフックすると、`safe=True` を付ける MOD と付けない MOD が混ざる |
 | 前後の処理は引数も戻り値も変えない | 変えるものは用途ごとの連携 API で決める（日数は `claim_days`、値段は `prices`、依頼の生成は `quest_generation`（§3.3.30）、本文の1行は `text_filters`（§3.3.31）） |
 | 登録した ctx が用済み（`ctx.superseded()`）なら呼ばない | OFF にした MOD・前の世代の登録が `sys` に残っても効かない |
@@ -3502,7 +3505,7 @@ ui.right_panel_left_open(app) / ui.fold_right_panel(app)   # 取り残された�
 ```
 
 場面の終わりの合図の直後に `process_choice` で次の場面を起こすと、ゲームが遅れて前の場面の選択肢を描画する（GAME.md §2.2）。
-ボタンを押さずに場面を起こす MOD は、`choices_painted` が True になるまでフレームごとに待ってから起こす（`316_` は上限 60 フレーム）。
+ボタンを押さずに場面を起こす MOD は、`choices_painted` が True になるまでフレームごとに待ってから起こす（`336_` の追手は上限 60 フレーム）。
 
 ボタンを出さない MOD が「次のフレーム・メインスレッド」だけ要るときは `ui.scheduler`
 （Kivy が無ければその場で実行するので、オフライン検証でも同じ経路を通る。
@@ -3615,7 +3618,7 @@ ui.COIN_LONG / ui.COIN_SHORT             # 元のゲームの言い方（`ゴー
 
 | 使う側 | 何のために |
 |---|---|
-| `309_` / `local/` の MOD | 自分で組んだ文言を画面に出す直前に `rewrite_coins` を通す |
+| `336_`（役場の罰金）/ `local/` の MOD | 自分で組んだ文言を画面に出す直前に `rewrite_coins` を通す |
 | `314_` / `315_` / `332_` | 設定のテンプレートを `ui.fill_template` で埋める（知らない変数名は残し、埋めた後に `rewrite_coins` を通す）。`314_` / `315_` はゲームのラベルから額を読むのに `parse_coin` も使う |
 
 `set_currency` は何度通しても伸びない表記しか受け取らない
@@ -3636,12 +3639,12 @@ ui.set_lawfulness(entry, value) / ui.LAWFULNESS_KEY
 そこから罰金や敵の強さまで計算してしまう）。
 
 いくつから手配とみなすかは各 MOD の判断で、ここには置かない
-（`309_` は罰金の基準に、`316_` は追手の条件に、`220_` は下調べの要約に、
+（`336_` の役場の罰金は罰金の基準に、同じく追手は追手の条件に、`220_` は下調べの要約に、
 同じ読み方から別の数え方をする）。
 複数の MOD が同じ基準で比べる重さ（手配度が 0 からどれだけ下か）と全域手配のしきい値は、連携 API `wanted`（§3.3.9）が持つ。
 
 `set_lawfulness` は読めた記録にしか渡さない（項目を新設しない）のが呼ぶ側の決まり。
-書き戻す MOD は2本ある（`309_` が罰金で平常値へ戻す、`316_` が追手を倒したぶんを戻す）。
+書き戻すのは `336_` の2つの機能（役場の罰金が平常値へ戻す、追手が倒したぶんを戻す）と、時効・無罪などほかの `336_` の機能。
 
 **能力値**:
 
@@ -3935,9 +3938,6 @@ llm.CLOUD_API_KEY   # inference の「API キーでクラウド」の値
 LLM を切り替えるとゲームが起動し直すので、注入の時に1回読めば足りる。
 `is_cloud_runtime()` と違い、最初の LLM リクエストを待たずに分かる（`136_` がタイトル画面に出すのに使う）。
 
-#### リクエストに足す文の上限（`text_limit`）
-
-```python
 #### 型を grammar で縛る経路（`is_grammar_runtime`）
 
 ```python
@@ -3958,6 +3958,9 @@ MOD が自分の型に上限を付けるかは、`is_local_runtime()` ではな�
 互換サーバーの経路では、ゲームは型の文をプロンプトに書かない（内蔵の経路は書く。クラウドは API が型をモデルに見せる）。
 型の `description` に置いた手引きはこの経路のモデルに届かないので、プロンプトの地の文にも置く（`342_`・`347_`）。
 
+#### リクエストに足す文の上限（`text_limit`）
+
+```python
 llm.runs_bundled_llm()   # ゲーム同梱の llama.cpp で推論しているか
 llm.text_limit(600)      # 同梱の llama.cpp なら 600、それ以外は None（切らない）
 ```
@@ -4084,7 +4087,7 @@ bucket = worlds.load(key)
 
 - 移した後は、このプロセスの記録（`WorldStore`。`state.owner_of` のレジストリに載るもの）のキャッシュを全部捨てる。捨てないと、前の周回の中身を覚えた `WorldStore` が次の `save` でファイルを作り直す
 - 退避した周回も `other_playthroughs` が別の周回として数える。退避の後に残った古い世界名だけの記録は、新しい主人公へ移らない
-- 1つのファイルの中にキーごとの記録を持つ MOD（`301_` の `quest_clients.json`・`307_` の `road_travel.json`）と、記録を `WorldStore` の外のメモリにも持つ MOD（`122_`・`316_`・ローダの値切りの固定）は、`loads.NEW_GAME` の `before` で `call.world` の分を自分で捨てる。捨てた分は `state.retire_entries` で同じ退避のフォルダに書き残す。キーがその世界のものかは `state.key_in_world`
+- 1つのファイルの中にキーごとの記録を持つ MOD（`301_` の `quest_clients.json`・`307_` の `road_travel.json`）と、記録を `WorldStore` の外のメモリにも持つ MOD（`122_`・`336_` の追手・ローダの値切りの固定）は、`loads.NEW_GAME` の `before` で `call.world` の分を自分で捨てる。捨てた分は `state.retire_entries` で同じ退避のフォルダに書き残す。キーがその世界のものかは `state.key_in_world`
 - `323_` は、その世界で置いた予約を「終了」にする（置き直さない。まだ置いていない予約は新しい主人公の世界へ置く）
 - 世界名は `start_game` の引数で決める。始まった世界の `world_key` と食い違えば、ローダのログに WARN を残す
 - `NEW_GAME` の共通フックはローダが注入のたびに設置する（登録する MOD が無くても退避は走る）

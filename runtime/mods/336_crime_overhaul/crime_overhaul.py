@@ -2,14 +2,18 @@
 """犯罪まわりの全面改修。遊び方は DOC.md、決めた仕様と確認手順は VERIFICATION.md §3.84。
 
 素のゲームの犯罪は、自由行動のその場で LLM が出す金品しか見返りが無く、
-額も出すかどうかも LLM 任せだった。手配はリスクだけを積む（衛兵・懲役、`309_` の罰金、`316_` の追手）。
+額も出すかどうかも LLM 任せだった。手配はリスクだけを積む（衛兵・懲役、役場の罰金、追手）。
 見返りは機能ごとのファイルに分けてある。ここは設定と、ゲームの入口（本文）を1枚だけ包んで配る役。
 選択肢と押下は、ローダの窓口 `choices` に預ける。
+役場の罰金（`pardon`）は `309_office_pardon` を、追手（`hunter`）は `316_bounty_hunter` を取り込んだもの。
 
 | ファイル | 機能 |
 |---|---|
 | `loot` | 盗みの稼ぎ（自由行動の盗みの額に床と天井を付ける） |
 | `law` | 手配への反応（店が委縮して値を下げる・時効） |
+| `pardon` | 役場で手配を解く（罰金を納めて、その土地の手配度を平常へ戻す） |
+| `hunter` | 追手（手配されていると土地を跨いで追手が来る）。数は `hunt` |
+| `sanctuary` | 裏の事務所には衛兵と追手が来ない（移動の間だけ手配度を平常に見せる・追手は出るまで待つ） |
 | `theft` | 店で盗む（売買画面の右クリック）。盗んだ店には売れず、よその店では買い取り額が半分 |
 | `fence` | 盗品買取商（裏の事務所で盗品を売る） |
 | `office` | 裏の仕事（裏の事務所の違法な依頼）。種類の表は `underworld` |
@@ -31,7 +35,8 @@ import random
 
 from instantale_modloader import choices, text_filters, wanted
 
-from . import cellmate, common, court, custody, encounter, fence, law, loot, office, prison, rescue, theft
+from . import (cellmate, common, court, custody, encounter, fence, hunter, law, loot, office, pardon, prison,
+               rescue, sanctuary, theft)
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
@@ -55,6 +60,29 @@ STATUTE_STEP = 10             # 1回に戻る手配度
 STATUTE_RESTORE_TO = 10       # ここまで戻る（素の平常値）
 STATUTE_HOLD_HUNTED = True    # 全域手配の間は、合計がその線に届いたところで止める（追手は続く）
 STATUTE_NOTICE = True         # 戻ったときに1行出す
+PARDON_ENABLED = True         # 役場に「罰金を納めて手配を解く」が出る
+PARDON_PRICE_PER_POINT = 1000 # 手配度1あたりの罰金
+PARDON_RESTORE_TO = 10        # 罰金を納めた後の手配度（素の平常値）
+PARDON_ANNOUNCE_ON_ARRIVAL = True  # 手配されている状態で役場に入ったら1行出す
+HUNTER_ENABLED = True         # 手配されていると、土地を跨いで追手が来る
+HUNTER_START_WANTED = 20      # 追手が来る手配の重さ（今いる土地）
+HUNTER_START_TOTAL = 40       # 追手が来る手配の重さの合計（全ての土地）
+HUNTER_CHANCE_PCT = 30        # 条件を満たした場面1回あたりの発生率（%）
+HUNTER_COOLDOWN_DAYS = 10     # 次の追手までに空ける日数（ゲーム内）
+HUNTER_DIFFICULTY_BASE = 20   # 追手の難易度の下限（ゲーム自身の衛兵と同じ）
+HUNTER_DIFFICULTY_PER_WANTED = 1.0  # 手配の重さ1あたりの難易度
+HUNTER_DIFFICULTY_MAX = 75    # 追手の難易度の上限
+HUNTER_ON_AREA_ARRIVAL = True # 土地に着いたときに来る
+HUNTER_ON_FACILITY_ARRIVAL = False  # 施設に入ったときに来る
+HUNTER_ON_DAYS = True         # 日数が進んだときに来る
+HUNTER_ON_FREE_ACTION = False # 自由行動のときに来る
+HUNTER_NAME = "賞金稼ぎ"      # 追手の名前（空ならゲームのまま「衛兵」）
+HUNTER_KEEP_WANTED = True     # 追手を倒しても手配度を増やさない
+HUNTER_YIELD_TO_GUARDS = True # ゲーム自身の衛兵が出た回も1回の遭遇として数える
+HUNTER_ANNOUNCE = "首にかけられた賞金を目当てに、追手が行く手を塞いだ。"  # 追手が来たときの1行
+BOUNTY_ENABLED = True         # 追手を倒すと前金が手に入る
+BOUNTY_PURSE_PCT = 30         # 前金の額。追手の難易度での依頼1件の報酬に対する %
+SANCTUARY_ENABLED = True      # 裏の事務所には衛兵と追手が来ない
 THEFT_ENABLED = True          # 売買画面で店の品を右クリックすると「盗む」が出る
 THEFT_BASE_PCT = 30           # 能力値 15 のときの確率（器用で抜き取る・判断で視線に気づく、の両方）
 THEFT_PER_POINT = 3           # 能力値1点ごとに動く確率（%）
@@ -139,8 +167,9 @@ class _Settings(object):
 
 def apply(ctx):
     env = common.Env(ctx, _Settings())
-    screen = env.screen
-    for feature in (custody, loot, law, theft, office, fence, prison, cellmate, court, rescue, encounter):
+    # 追手（`hunter`）を先に入れる。316 の頃は 336 より前に適用され、同じゲームの関数を包む層が内側だった。
+    for feature in (hunter, custody, loot, law, pardon, theft, office, fence, prison, cellmate, court, rescue,
+                    encounter, sanctuary):
         feature.install(env)
 
     # ---- ゲームの入口は1枚だけ包み、機能へ配る ------------------------------------------
@@ -158,9 +187,28 @@ def apply(ctx):
     text_filters.on(env.owner, ctx, crime_text, write=env.write)
 
     # ---- 選択肢と押下は、ローダの窓口 `choices`（TECH.md §3.3.14）に預ける ---------------------
-    # 自前のボタンは宣言型の口で、組み直しのたびに機能の状態から作る（押下は窓口がボタンの処理を呼ぶ。
-    # セーブには残らず、ロードの後も人物が揃ってから組み直す）。ゲームの一覧を直す処理だけ `refresh` に残す。
-    # ここは機能の処理を読み込んだ順に渡すだけ。
+    provide_choices(ctx, env)
+
+    ctx.log("crime incentive: installed (loot {} shares {} floor {}% ceiling {}%; "
+            "intimidation {} {}%/pt cap {}% sell {} unafraid at affinity {}; statute {} +{} per {} month(s) up to {}, "
+            "hold {} at the line from {})".format(
+                "on" if LOOT_ENABLED else "off", loot.loot_shares(env.cfg), LOOT_FLOOR_PCT,
+                LOOT_CEILING_PCT, "on" if INTIMIDATION_ENABLED else "off",
+                INTIMIDATION_PER_POINT, INTIMIDATION_CAP,
+                "on" if INTIMIDATION_SELL else "off", INTIMIDATION_FRIEND_AFFINITY,
+                "on" if STATUTE_ENABLED else "off",
+                STATUTE_STEP, STATUTE_PERIOD_MONTHS, STATUTE_RESTORE_TO,
+                "on" if STATUTE_HOLD_HUNTED else "off", wanted.owners() or "nobody"))
+
+
+def provide_choices(ctx, env):
+    """機能の宣言（`env.on_offer` ほか）を、ローダの窓口 `choices`（TECH.md §3.3.14）に1つにまとめて預ける。
+
+    自前のボタンは宣言型の口で、組み直しのたびに機能の状態から作る（押下は窓口がボタンの処理を呼ぶ。
+    セーブには残らず、ロードの後も人物が揃ってから組み直す）。ゲームの一覧を直す処理だけ `refresh` に残す。
+    ここは機能の処理を読み込んだ順に渡すだけ。機能を入れた（`install`）後に呼ぶ。
+    持ち主の名前を `env.choices_owner` に置いて返す。
+    """
     def refresh(app, buttons):
         if not isinstance(buttons, list) or not buttons:
             return
@@ -197,16 +245,6 @@ def apply(ctx):
         return out
 
     env.choices_owner = choices.provide(
-        ctx, screen, refresh=refresh, offer=offer, claim=claim,
+        ctx, env.screen, refresh=refresh, offer=offer, claim=claim,
         screens=dict(env.screen_builders), labels=labels, priority=CLAIM_PRIORITY)
-
-    ctx.log("crime incentive: installed (loot {} shares {} floor {}% ceiling {}%; "
-            "intimidation {} {}%/pt cap {}% sell {} unafraid at affinity {}; statute {} +{} per {} month(s) up to {}, "
-            "hold {} at the line from {})".format(
-                "on" if LOOT_ENABLED else "off", loot.loot_shares(env.cfg), LOOT_FLOOR_PCT,
-                LOOT_CEILING_PCT, "on" if INTIMIDATION_ENABLED else "off",
-                INTIMIDATION_PER_POINT, INTIMIDATION_CAP,
-                "on" if INTIMIDATION_SELL else "off", INTIMIDATION_FRIEND_AFFINITY,
-                "on" if STATUTE_ENABLED else "off",
-                STATUTE_STEP, STATUTE_PERIOD_MONTHS, STATUTE_RESTORE_TO,
-                "on" if STATUTE_HOLD_HUNTED else "off", wanted.owners() or "nobody"))
+    return env.choices_owner

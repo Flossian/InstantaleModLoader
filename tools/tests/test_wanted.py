@@ -12,7 +12,7 @@
   終わり   … 追手の戦闘の終わりは生きている受け手へ写しで届く。受け手が投げても残りへ届け、errors に残す
   店の値の圧 … 誰も置かなければ (0.0, None)。いちばん大きい率（1 で止める）。None・真偽・投げた関数・用済みは数えない。
                引き受けた持ち主は生きている間だけ返す
-  316      … 追手の数え方（hunt.weight_of）が窓口の数え方と同じ
+  336      … 追手の数え方（hunt.weight_of）が窓口の数え方と同じ
 """
 import os
 import sys
@@ -142,11 +142,11 @@ def main():
 
     import importlib.util
     spec = importlib.util.spec_from_file_location(
-        "hunt_for_wanted", os.path.join(MODS_DIR, "316_bounty_hunter", "hunt.py"))
+        "hunt_for_wanted", os.path.join(MODS_DIR, "336_crime_overhaul", "hunt.py"))
     hunt = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(hunt)
     values = (-170, -1, 0, 10, None, True)
-    check("316 の追手の数え方が窓口と同じ",
+    check("336 の追手の数え方が窓口と同じ",
           [hunt.weight_of(v) for v in values] == [wanted.weight_of(v) for v in values])
 
     print()

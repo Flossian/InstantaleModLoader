@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""316_bounty_hunter をゲーム抜きで通す。
+"""336_crime_overhaul の追手（`hunter.py`。もと 316_bounty_hunter）をゲーム抜きで通す。
 
     python tools/tests/test_bounty_hunter.py
 
@@ -18,8 +18,14 @@
   合図     … 契機は決めるだけで、起こすのは refresh_choice_buttons の中だけ
   窓口     … 全域手配の線を `wanted` に置く（追手が来ない設定では置かない）。
              追手の戦闘の終わりだけを勝敗つきで1回知らせる。ゲーム自身の衛兵・途中で別の戦闘に変わった回は知らせない
+  入切     … 336 で足した入切（`HUNTER_ENABLED`）を切れば、追手は来ず、全域手配の線も置かない
+  裏の事務所 … `env.sanctuary` が施設の名前を返す間は控えたまま待ち、出たところで出す
   変えない … どのフックでも本体が1回だけ呼ばれ、戻り値がそのまま返る
   補う     … 取り残された右の欄は自分で畳まない（版4から窓口 `choices`）
+
+336 の入口は読み込むだけで、`hunter.install(env)` だけを当てる（ほかの機能は入れない）。
+設定は 316 の頃の名前で書き、336 の名前（`HUNTER_*` / `BOUNTY_*`）へ読み替えて入口の定数に置く
+（読み替えの表はローダの `MERGED_MODS`。設定を引き継ぐときと同じ表）。
 """
 import importlib.util
 import io
@@ -37,6 +43,7 @@ STATE_DIR = os.path.join(OUT_DIR, "state")
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
+import instantale_modloader as ml  # noqa: E402
 from instantale_modloader import arrivals, confinement, durations, gates, guards  # noqa: E402
 
 TARGETS = (
@@ -73,7 +80,6 @@ def find_mod(suffix, exclude=None):
     """mod を **番号を除いた名前** で探す（番号は振り直されることがある）。
 
     `exclude` は名前に含まれていたら外す語。
-    この MOD には同じ語尾の計測（`220_probe_bounty_hunter`）が居る。
     """
     matches = sorted(name for name in os.listdir(MODS_DIR)
                      if name.endswith(suffix)
@@ -89,7 +95,11 @@ def find_mod(suffix, exclude=None):
     return folder, os.path.join(folder, entry), matches[0]
 
 
-MOD_DIR, MOD, MOD_FOLDER = find_mod("_bounty_hunter", exclude="_probe_")
+MOD_DIR, MOD, MOD_FOLDER = find_mod("_crime_overhaul")
+#: 追手が窓口に名乗る持ち主（336 の中の機能ごとの名前）。
+HUNTER_OWNER = MOD_FOLDER + ":hunter"
+#: 316 の頃の設定名 → 336 の設定名。
+RENAMED = dict(ml.MERGED_MODS["316_bounty_hunter"][2])
 
 failures = []
 
@@ -300,26 +310,60 @@ def load_mod(name="bounty_hunter_mod"):
     return module
 
 
-def fresh_mod(app, screen_cls=FakeScreen, **settings):
-    """mod を読み直して当て直す。設定は当てる前に差し替える。"""
+class Handle(object):
+    """追手の機能（`hunter`）を、316 の頃の MOD と同じ名前で触る仲介。
+
+    設定（316 の頃の名前）と抽選の乱数は 336 の入口の定数へ、ほかは `hunter` のモジュールへ読み書きする。
+    `OWNER` は追手が窓口に名乗る持ち主。
+    """
+
+    def __init__(self, crime, hunter):
+        object.__setattr__(self, "_crime", crime)
+        object.__setattr__(self, "_hunter", hunter)
+
+    def _where(self, name):
+        if name in RENAMED:
+            return self._crime, RENAMED[name]
+        if name == "_RNG" or name in ("HUNTER_ENABLED",):
+            return self._crime, name
+        return self._hunter, name
+
+    def __getattr__(self, name):
+        if name == "OWNER":
+            return HUNTER_OWNER
+        target, real = self._where(name)
+        return getattr(target, real)
+
+    def __setattr__(self, name, value):
+        target, real = self._where(name)
+        setattr(target, real, value)
+
+
+def fresh_mod(app, screen_cls=FakeScreen, sanctuary=None, **settings):
+    """336 を読み直して追手だけを当て直す。設定は当てる前に差し替える。"""
     path = os.path.join(OUT_DIR, LOG_NAME)
     if os.path.exists(path):
         os.remove(path)
     BattleStartManager.built = []
     BattleStartManager.last = None
-    module = load_mod()
+    crime = load_mod()
+    module = crime.hunter
     module.ui = FakeUI(app, screen_cls)
     # 衛兵の戦闘を組むのと強さの差し替えはローダの窓口 `guards`。偽の画面を同じに見せ、包みは当て直す。
     guards.reset()
     guards.ui = module.ui
-    module._RNG = types.SimpleNamespace(random=lambda: 0.0)   # 抽選は必ず当たる
+    handle = Handle(crime, module)
+    handle._RNG = types.SimpleNamespace(random=lambda: 0.0)   # 抽選は必ず当たる
     for name, value in settings.items():
-        setattr(module, name, value)
+        setattr(handle, name, value)
     ctx = FakeCtx(OUT_DIR)
     # 窓口（arrivals / durations）の包みは1つの世代に1枚。偽の ctx を作り直すたびに忘れさせる
     gates.reset_all()
-    module.apply(ctx)
-    return module, ctx
+    env = types.SimpleNamespace(ctx=ctx, cfg=crime._Settings(), owner=MOD_FOLDER)
+    if sanctuary is not None:
+        env.sanctuary = sanctuary          # 336 の `sanctuary` が置く口（裏の事務所に居れば施設の名前）
+    module.install(env)
+    return handle, ctx
 
 
 def read_log():
@@ -407,7 +451,7 @@ def main():
     check("今いる土地の重さを引ける",
           hunt.area_weight(wanted, "0") == 22 and hunt.area_weight(wanted, "1") == 0)
     check("平常（10）は重さ0", hunt.weight_of(10) == 0)
-    check("手配度 0 も重さ0（309_ と同じ境界）", hunt.weight_of(0) == 0)
+    check("手配度 0 も重さ0（役場の罰金と同じ境界）", hunt.weight_of(0) == 0)
     check("数でない値は重さ0",
           hunt.weight_of(True) == 0 and hunt.weight_of(None) == 0
           and hunt.weight_of("-5") == 0)
@@ -883,11 +927,11 @@ def main():
     app = App({"0": -25})
     module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
     wanted.on_hunt_end("listener", None, listen)
-    check("全域手配の線を窓口に置く", wanted.hunted_line(app) == (40, "316_bounty_hunter"),
+    check("全域手配の線を窓口に置く", wanted.hunted_line(app) == (40, HUNTER_OWNER),
           wanted.hunted_line(app))
     wanted.declare_hunted("broken_line", None, lambda _app: float("nan"))
     check("NaN を返す登録は線を置かなかったものとみなす（落ちない）",
-          wanted.hunted_line(app) == (40, "316_bounty_hunter"), wanted.hunted_line(app))
+          wanted.hunted_line(app) == (40, HUNTER_OWNER), wanted.hunted_line(app))
     wanted.withdraw("broken_line")
     arrive(ctx, app)
     start_of(ctx, app, BattleStartManager.last)
@@ -895,7 +939,7 @@ def main():
     check("勝った追手の戦闘を知らせる（勝敗・難易度・重さ・持ち主）",
           len(heard) == 1 and heard[0]["outcome"] == "won"
           and heard[0]["difficulty"] == 45 and heard[0]["here"] == 25
-          and heard[0]["by"] == "316_bounty_hunter", heard)
+          and heard[0]["by"] == HUNTER_OWNER, heard)
     end(app, "won")
     check("知らせるのは1回だけ", len(heard) == 1, heard)
 
@@ -1118,6 +1162,42 @@ def main():
     check("週単位の宿泊（30 が 7 に縮む）も7日と数える",
           [v for v in ctx.files.values()] == [{"days": 21.0, "last": None}],
           ctx.files)
+
+    print("入切")
+    wanted.reset()
+    app = App({"0": -25})
+    module, ctx = fresh_mod(app, CHANCE_PERCENT=100, HUNTER_ENABLED=False)
+    arrive(ctx, app)
+    check("切ってあれば、条件を満たしても追手は来ない",
+          not app.choices and BattleStartManager.built == [], (app.choices, BattleStartManager.built))
+    check("切ってあれば、全域手配の線を置かない",
+          wanted.hunted_line(app) == (None, None), wanted.hunted_line(app))
+    wanted.reset()
+    app = App({"0": -25})
+    module, ctx = fresh_mod(app, CHANCE_PERCENT=100)
+    orig, _calls = counting("戻り値")
+    ctx.hooks["__main__:AreaMoveManager.execute"](orig, types.SimpleNamespace(app=app), "馬車(1000G)")
+    module.HUNTER_ENABLED = False
+    ready_screen(ctx, app)
+    check("決まった後に切ったら、その追手も出さない",
+          not app.choices and BattleStartManager.built == [], (app.choices, BattleStartManager.built))
+
+    print("裏の事務所")
+    app = App({"0": -25})
+    place = {"name": "闇の窓口"}
+    module, ctx = fresh_mod(app, CHANCE_PERCENT=100, sanctuary=lambda _app: place["name"])
+    arrive(ctx, app)
+    check("裏の事務所の中では、決まっても出さない",
+          not app.choices and BattleStartManager.built == [], (app.choices, BattleStartManager.built))
+    check("出るまで待つと記録に1行", sum("の中なので、出るまで待つ" in line for line in read_log()) == 1,
+          read_log())
+    ready_screen(ctx, app)
+    check("中に居る間は何度画面が整っても出さない（記録も増やさない）",
+          not app.choices and sum("出るまで待つ" in line for line in read_log()) == 1, read_log())
+    place["name"] = None
+    ready_screen(ctx, app)
+    check("出て画面が整ったら出る", len(app.choices) == 1 and BattleStartManager.built == [("guard", None)],
+          (app.choices, BattleStartManager.built))
 
     print("変えない")
     app = App({"0": 10})

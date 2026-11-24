@@ -25,7 +25,7 @@ STORE_ATTR = "_instantale_crime_incentive"
 #: 版2までの自前のボタンの印のキー（他の MOD と別のキー）。いまは宣言型の口で組むので付けない。
 #: セーブから戻った前の版の印のボタンを片付けるためだけに残す（`drop_old_marks`）。
 MARK = "mod_crime_incentive_action"
-#: 施設の選択肢だと見なす目印（出口のマネージャ。`309_` と同じ）。
+#: 施設の選択肢だと見なす目印（出口のマネージャ。役場の罰金（`pardon`）と同じ）。
 FACILITY_MARK = "MovePhaseManager"
 #: ゲーム自身の衛兵戦を起こすときに `process_choice` へ渡す文字列（GAME.md §2.20）。
 GUARD_CHOICE_TEXT = "衛兵"
@@ -151,9 +151,11 @@ class Env(object):
         #: 盗品買取商の売買の窓を開いている間の相手（主の id）。閉じたら None。`opening` は押してから窓が出るまで（`fence`）。
         self.fence = {"broker": None, "opening": False}
         #: 機能どうしの口（入れたファイルが置く）。`stolen_entry(app, item)` は盗品の控え（`theft`）、
-        #: `underworld_banned(app)` は司法取引の締め出しの間か（`office`）。
+        #: `underworld_banned(app)` は司法取引の締め出しの間か（`office`）、
+        #: `sanctuary(app)` は衛兵と追手が来ない施設に居るならその施設の名前（`sanctuary`。追手が見る）。
         self.stolen_entry = lambda app, item: None
         self.underworld_banned = lambda app: False
+        self.sanctuary = lambda app: None
         #: 牢の出来事を受ける関数（`cellmate` が受ける）。`prison` / `rescue` が `prison_event` で知らせる。
         #: "break"（決行の戦闘を起こす直前）/
         #: "abort"（決行が始まらなかった。戦闘を起こせなかった・ロードで戦闘の続きに戻らなかった）/

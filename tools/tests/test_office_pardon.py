@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""309_office_pardon をゲーム抜きで通す。
+"""336_crime_overhaul の役場で手配を解く（`pardon.py`。もと 309_office_pardon）をゲーム抜きで通す。
 
     python tools/tests/test_office_pardon.py
 
@@ -12,12 +12,16 @@ Clock を差し込み、次を確認する。
   押下   … 印で横取りしてゲームの経路（`process_choice`）に乗せる。
            `PhaseSpec` に自前クラス名を書かない
   金額   … 罰金 = 1点あたりの額 × 手配度（閾値との差）。0円設定なら無料
-  支払   … 所持金が減り、手配度が `RESTORE_TO` に戻り、ボタンが消える。
+  支払   … 所持金が減り、手配度が `PARDON_RESTORE_TO` に戻り、ボタンが消える。
            **今いるエリアの手配度しか動かない**
   拒否   … 所持金が足りなければ何も動かない。所持金が読めなくても何も動かない
   取消   … 「やめておく」で元の選択肢に戻り、値は1つも動かない
   安全   … 手配度を下げる方向には動かさない。書けなかったら金も取らない
   共存   … `301_` / `302_` / `305_` / `307_` と印のキーが衝突していない
+  入切   … 336 で足した入切（`PARDON_ENABLED`）を切れば出ない
+
+336 の入口は読み込むだけで、`pardon.install(env)` と、宣言を窓口へ預ける `provide_choices` だけを当てる
+（ほかの機能は入れない）。設定は 336 の名前（`PARDON_*`）で入口の定数に置く。
 """
 import importlib.util
 import io
@@ -50,7 +54,7 @@ def find_mod(suffix):
     return folder, os.path.join(folder, entry)
 
 
-MOD_DIR, MOD = find_mod("_office_pardon")
+MOD_DIR, MOD = find_mod("_crime_overhaul")
 
 failures = []
 
@@ -337,13 +341,13 @@ class FakeCtx:
         return _ml.write_json(path, data, indent=indent)
 
 
-def load_mod(path=MOD, name="office_pardon_mod"):
+def load_mod(path=MOD, name="crime_pardon_mod"):
     """本番と同じ形（**パッケージとして**）読み込む。
 
     `submodule_search_locations` を渡すのも、
     `exec_module` の**前に**
     `sys.modules` へ登録するのもローダと同じ（`_load_mod_file`）。
-    これが無いと mod の中の `from . import record` が落ちる。
+    これが無いと mod の中の `from . import pardon` が落ちる。
     """
     spec = importlib.util.spec_from_file_location(
         name, path, submodule_search_locations=[os.path.dirname(path)])
@@ -427,7 +431,9 @@ def setup(configure=None, lawfulness=-3, gold=100000, facility_type=OFFICE_TYPE,
     if configure is not None:
         configure(module)
     ctx = FakeCtx(OUT_DIR)
-    module.apply(ctx)
+    env = module.common.Env(ctx, module._Settings())
+    module.pardon.install(env)
+    module.provide_choices(ctx, env)
     install(ctx.hooks, (
         ("__main__:InstantaleApp.refresh_choice_buttons", app_cls,
          "refresh_choice_buttons"),
@@ -639,16 +645,14 @@ check("もう手配は無いと出す",
 print("\n[金額] 設定で変えられる")
 
 
-def configure(price=None, threshold=None, restore=None, announce=None):
+def configure(price=None, restore=None, announce=None):
     def apply_settings(module):
         if price is not None:
-            module.PRICE_PER_POINT = price
-        if threshold is not None:
-            module.WANTED_THRESHOLD = threshold
+            module.PARDON_PRICE_PER_POINT = price
         if restore is not None:
-            module.RESTORE_TO = restore
+            module.PARDON_RESTORE_TO = restore
         if announce is not None:
-            module.ANNOUNCE_ON_ARRIVAL = announce
+            module.PARDON_ANNOUNCE_ON_ARRIVAL = announce
     return apply_settings
 
 
@@ -669,9 +673,9 @@ check("無料なら所持金は動かない", app.player.gold == 100000, app.pla
 check("無料なら「納めた」とは言わない",
       not any("ゴールドを納めた" in text for text in app.texts), app.texts)
 
-module, ctx, app = setup(configure=configure(threshold=5), lawfulness=3)
-check("閾値を上げると手配とみなす範囲が広がる（罰金は差の2点ぶん）",
-      "2,000" in (pardon_label(app) or ""), pardon_label(app))
+module, ctx, app = setup(lawfulness=0)
+check("手配度 0 は手配ではない（境目は追手・時効と同じ窓口の値）", pardon_label(app) is None, app.labels())
+check("境目の設定はもう無い（窓口 `wanted` の値で数える）", not hasattr(module, "PARDON_WANTED_THRESHOLD"))
 
 module, ctx, app = setup(configure=configure(restore=1))
 app.press(pardon_label(app))
@@ -686,20 +690,18 @@ app.press(pardon_label(app))
 CLOCK.settle()
 app.press("3,000ゴールドを納める")
 CLOCK.settle()
-check("**手配度を下げる方向には動かさない**（戻し先が低すぎれば閾値の 0 まで）",
+check("**手配度を下げる方向には動かさない**（戻し先が低すぎれば境目の 0 まで）",
       app.player.area_history["0"]["lawfulness"] == 0,
       app.player.area_history["0"])
 
-module, ctx, app = setup(configure=configure(threshold=20, restore=10))
+module, ctx, app = setup(configure=configure(restore=0))
 app.press(pardon_label(app))
 CLOCK.settle()
-app.press("23,000ゴールドを納める")
+app.press("3,000ゴールドを納める")
 CLOCK.settle()
-check("戻し先が閾値より低ければ閾値まで戻す（払えば手配は解ける）",
-      app.player.area_history["0"]["lawfulness"] == 20,
-      app.player.area_history["0"])
-check("閾値まで戻ればボタンはもう出ない", pardon_label(app) is None, app.labels())
-check("罰金は1回ぶんだけ", app.player.gold == 100000 - 23000, app.player.gold)
+check("境目の 0 まで戻ればボタンはもう出ない", app.player.area_history["0"]["lawfulness"] == 0
+      and pardon_label(app) is None, (app.player.area_history["0"], app.labels()))
+check("罰金は1回ぶんだけ", app.player.gold == 100000 - 3000, app.player.gold)
 
 module, ctx, app = setup(configure=configure(announce=False))
 check("知らせを切れる",
@@ -785,6 +787,8 @@ check("ゲーム側の別文言のボタンを消さない", vanilla in app.butt
 
 # ================================================================== 共存
 print("\n[共存] 他の mod と印が衝突しない")
+# 印はフォルダの直下の .py の `MARK = ` で見る（336 は機能ごとのファイルに持つ）。
+# 取り込んで伏せた MOD（`"superseded"`）は数えない（取り込んだ先と同じ印を持ったまま残してある）。
 marks = {}
 for name in sorted(os.listdir(MODS_DIR)):
     entry_dir = os.path.join(MODS_DIR, name)
@@ -792,15 +796,18 @@ for name in sorted(os.listdir(MODS_DIR)):
     if not os.path.isfile(manifest):
         continue
     with io.open(manifest, encoding="utf-8") as fh:
-        entry = json.load(fh)["entry"]
-    path = os.path.join(entry_dir, entry)
-    if not os.path.isfile(path):
-        continue
-    with io.open(path, encoding="utf-8") as fh:
-        for line in fh:
-            if line.startswith("MARK = "):
-                marks.setdefault(line.split("=", 1)[1].strip(), []).append(name)
-                break
+        if json.load(fh).get("superseded"):
+            continue
+    for file_name in sorted(os.listdir(entry_dir)):
+        if not file_name.endswith(".py"):
+            continue
+        with io.open(os.path.join(entry_dir, file_name), encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("MARK = "):
+                    owners = marks.setdefault(line.split("=", 1)[1].strip(), [])
+                    if name not in owners:
+                        owners.append(name)
+                    break
 check("印のキーが他の mod と重なっていない",
       all(len(owners) == 1 for owners in marks.values()), marks)
 check("この mod の印が一覧に入っている", '"{}"'.format(MARK_KEY) in marks
@@ -810,8 +817,10 @@ check("この mod の印が一覧に入っている", '"{}"'.format(MARK_KEY) in
 print("\n[名乗り] mod.json とコードの既定値が一致する")
 with io.open(os.path.join(MOD_DIR, "mod.json"), encoding="utf-8") as fh:
     manifest = json.load(fh)
-fresh = load_mod(name="office_pardon_defaults")
+fresh = load_mod(name="crime_pardon_defaults")
 for key, spec in manifest.get("settings", {}).items():
+    if not key.startswith("PARDON_"):
+        continue
     check("既定値が一致: {}".format(key),
           getattr(fresh, key, object()) == spec.get("default"),
           (getattr(fresh, key, None), spec.get("default")))
@@ -820,6 +829,12 @@ for key, spec in manifest.get("settings", {}).items():
 print("\n[ログ] 何が起きたか残る")
 text = read_log()
 check("ログが書かれている", bool(text.strip()), LOG_PATH)
+
+# ================================================================== 入切
+# ログの節の後に置く（setup がログを消すので、前に置くと上の検査が空のログを読む）。
+print("\n[入切] 336 で足した入切を切れば出ない")
+module, ctx, app = setup(configure=lambda m: setattr(m, "PARDON_ENABLED", False))
+check("切ってあれば、役場で手配されていても出ない", pardon_label(app) is None, app.labels())
 
 print("\n失敗 {} 件".format(len(failures)))
 if failures:
