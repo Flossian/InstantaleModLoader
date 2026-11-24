@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
-"""922_town_quest_difficulty（開発中）をゲーム抜きで通す。
+"""318_area_difficulty_growth の街ごとの範囲（`town_bands.py` / `bands.py` / `tool.py`）をゲーム抜きで通す。
 
-    python tools/tests/test_wip_town_quest_difficulty.py
+    python tools/tests/test_town_quest_bands.py
+
+開発中の `922_town_quest_difficulty` の検査を、318 に取り込んだ形に向け直したもの。
 
   範囲       … 収め方（上限・逆さま・幅3以上）、中心と幅からの範囲、ゲームの範囲の表
   街と道     … 世界の areas から街だけを拾い、片側だけの道を両側へ足す
@@ -10,6 +12,7 @@
   初訪問     … 街の中身を作る間の `sample(range, 3)` の最初の1回だけ、決めた範囲から引く。範囲の無い街は素通し
   探す       … 依頼を探す間の最初の `randint` だけ。窓の外と別のスレッドは素通し
   上限・読み直し … 設定の上限で頭打ち。控えを書き換えれば次の引きから効く
+  入切     … 機能を切れば、決めた範囲があっても素通し
   画面の材料 … 骨格とセーブの読み込み、控えの組み立て（素と同じで固定なしは書かない）、今の依頼に合わせる
 """
 import importlib.util
@@ -19,6 +22,7 @@ import os
 import random
 import shutil
 import sys
+import tempfile
 import threading
 import time
 import types
@@ -26,7 +30,7 @@ import types
 HERE = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "runtime"))
 MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
-OUT_DIR = os.path.normpath(os.path.join(HERE, os.pardir, os.pardir, "out", "test", "town_quest_difficulty"))
+OUT_DIR = os.path.join(tempfile.gettempdir(), "instantale_test_town_quest_bands")
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
@@ -52,7 +56,7 @@ def find_mod(suffix):
     return os.path.join(MODS_DIR, matches[0])
 
 
-FOLDER = find_mod("_town_quest_difficulty")
+FOLDER = find_mod("_area_difficulty_growth")
 sys.path.insert(0, FOLDER)
 import bands  # noqa: E402
 
@@ -62,7 +66,7 @@ SEARCH = "__main__:DisplayQuestChoice.generate_random_quest"
 
 
 class FakeCtx:
-    _mod = "922_town_quest_difficulty"
+    _mod = "318_area_difficulty_growth"
 
     def __init__(self, out_dir, state_dir):
         self.out_dir = out_dir
@@ -100,13 +104,18 @@ class FakeCtx:
 
 
 def load_mod():
-    path = os.path.join(FOLDER, "town_quest_difficulty.py")
-    name = "town_quest_difficulty_mod"
-    spec = importlib.util.spec_from_file_location(name, path, submodule_search_locations=[FOLDER])
+    """318 を包みとして読み、その中の `town_bands` を返す（`from . import bands` を通すため）。"""
+    with io.open(os.path.join(FOLDER, "mod.json"), encoding="utf-8") as fh:
+        entry = json.load(fh)["entry"]
+    name = "instantale_mod_test_area_difficulty"
+    for cached in [key for key in sys.modules if key == name or key.startswith(name + ".")]:
+        sys.modules.pop(cached, None)
+    spec = importlib.util.spec_from_file_location(name, os.path.join(FOLDER, entry),
+                                                  submodule_search_locations=[FOLDER])
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
     spec.loader.exec_module(module)
-    return module
+    return importlib.import_module(name + ".town_bands")
 
 
 def write_towns(state_dir, towns):
@@ -219,12 +228,13 @@ def setup():
     quest_bands.reset()
     module = load_mod()
     ctx = FakeCtx(os.path.join(OUT_DIR, "out"), state_dir)
-    module.apply(ctx)
-    return module, ctx, state_dir
+    cfg = types.SimpleNamespace(DIFFICULTY_LIMIT=76, TOWN_BANDS_ENABLED=True)
+    module.install(ctx, cfg, "318_area_difficulty_growth")
+    return cfg, ctx, state_dir
 
 
 def test_game_hooks():
-    module, ctx, state_dir = setup()
+    cfg, ctx, state_dir = setup()
     path = write_towns(state_dir, {"9": {"lo": 8, "hi": 12, "pinned": False}})
     check("フック: 4つ", all(t in ctx.hooks for t in (BUILD, SEARCH, "random:sample", "random:randint")),
           sorted(ctx.hooks))
@@ -309,9 +319,17 @@ def test_game_hooks():
     write_towns(state_dir, {"9": {"lo": 90, "hi": 100}})
     capped = [ctx.hooks[SEARCH](lambda self: randint(random.randint, 1, 76), owner) for _ in range(30)]
     check("上限 76: 74〜76 に収める", all(74 <= v <= 76 for v in capped), capped)
-    module.DIFFICULTY_LIMIT = 100
+    cfg.DIFFICULTY_LIMIT = 100
     raised = [ctx.hooks[SEARCH](lambda self: randint(random.randint, 1, 76), owner) for _ in range(30)]
     check("上限 100: 90〜100", all(90 <= v <= 100 for v in raised) and max(raised) > 76, raised)
+    check("窓口: 持ち主は 318", quest_bands.band_of(app, "9")[1] == "318_area_difficulty_growth",
+          quest_bands.band_of(app, "9"))
+
+    cfg.TOWN_BANDS_ENABLED = False
+    plain = ctx.hooks[SEARCH](lambda self: randint(recorder, 1, 76), owner)
+    check("入切: 切れば決めた範囲があっても素通し", plain == 42 and calls[-1] == (1, 76), calls[-1])
+    check("入切: 切れば窓口にも出さない", quest_bands.band_of(app, "9") == (None, None))
+    cfg.TOWN_BANDS_ENABLED = True
     check("例外を記録していない", not ctx.errors, ctx.errors)
     check("控えは書かない", os.path.getsize(path) > 0 and not os.path.exists(path + ".tmp"))
     quest_bands.reset()
@@ -336,6 +354,9 @@ def test_tool_data():
     os.makedirs(os.path.join(data_dir, "worlds", "空のフォルダ"), exist_ok=True)
 
     import tool
+    check("画面: 範囲の控えは town_quest_difficulty（フォルダ名から作らない）",
+          os.path.dirname(tool.store_path(OUT_DIR, "S", WORLD)) == os.path.join("S", "town_quest_difficulty"),
+          tool.store_path(OUT_DIR, "S", WORLD))
     worlds = tool.world_folders(data_dir)
     check("画面: 骨格のある世界だけ", worlds == [(WORLD, "w1")], worlds)
     loaded = tool.load_world("w1", data_dir)

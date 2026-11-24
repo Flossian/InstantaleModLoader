@@ -119,7 +119,7 @@
 | [`315_vacation_custom`](MODS.md#315_vacation_custom-宿の宿泊期間部屋宿代を変える) | 宿泊のカスタマイズ | 宿の宿泊期間・部屋・宿代を変える | 14 |  |
 | [`316_bounty_hunter`](MODS.md#316_bounty_hunter-手配されていると追手が来る) | 賞金稼ぎが襲ってくる | 手配されていると追手が来る | 17 | 取込済 336_crime_overhaul |
 | [`317_reputation`](MODS.md#317_reputation-評判と二つ名) | 評判と二つ名 | 評判と二つ名 | 12 |  |
-| [`318_area_difficulty_growth`](MODS.md#318_area_difficulty_growth-土地が育つ依頼の難易度が上がる) | 依頼クリアで難易度上昇 | 土地が育つ（依頼の難易度が上がる） | 7 |  |
+| [`318_area_difficulty_growth`](MODS.md#318_area_difficulty_growth-街ごとに依頼の難易度の範囲を決め片付けるたびに上げる) | 街ごとの依頼の難易度と上昇 | 街ごとに依頼の難易度の範囲を決め、片付けるたびに上げる | 8 |  |
 | [`319_battle_tactics`](MODS.md#319_battle_tactics-戦闘を複数手の駆け引きにする) | 戦闘の数値とバフ・デバフの作り直し | 戦闘を複数手の駆け引きにする | 18 |  |
 | [`320_guild_adventurer_recruit`](MODS.md#320_guild_adventurer_recruit-ギルドの冒険者の補充) | ギルドの冒険者の補充 | ギルドの冒険者の補充 | 2 |  |
 | [`321_area_chronicle`](MODS.md#321_area_chronicle-エリアの状況を更新依頼クリアで案内文が変わる) | 功績による土地の案内文の書き換え | エリアの状況を更新（依頼クリアで案内文が変わる） | 4 |  |

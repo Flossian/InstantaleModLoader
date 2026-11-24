@@ -1086,7 +1086,7 @@ MOD 同梱の設定画面（`tool.py`。§3.12）はゲームの中では走ら�
 | ゲームの表示言語 | `ui.language` | 5本（`134_` / `346_` / `409_` / `410_` / `411_`）とローダの `battle_effects`。一字一句同じ写しだった（各モジュールの `language` は名前を残して `ui.language` を指す） |
 | エリアのギルドの引き当て | `ui.guild_of` | 2本（`320_` / `336_`） |
 | LLM に書かせた NPC の項目を均す（名前・見た目の種類と語・土地の説明・経験値レベル） | `npcs.clean_text` / `clean_name` / `clean_category` / `clean_look` / `area_notes` / `exp_level`、`npcs.NAME_MAX` / `LOOK_CATEGORIES` | 3本（`320_` / `336_` の同房者 / `339_` の追手）。`339_` の `area_notes` だけ文字列の説明を空にしていたので、文字列はそのまま返す側に揃えた |
-| 閉じるときの未保存の確認 | `modtool.close_window` / `confirm_unsaved`（§3.12） | 6本（`111_` / `322_` / `324_` / `922_` の `tool.py`、`modtool` のワールド別設定画面と `SettingsFooter`） |
+| 閉じるときの未保存の確認 | `modtool.close_window` / `confirm_unsaved`（§3.12） | 6本（`111_` / `322_` / `324_` / `318_` の `tool.py`、`modtool` のワールド別設定画面と `SettingsFooter`） |
 
 ```python
 from instantale_modloader import state
@@ -2245,7 +2245,7 @@ imagegen.METHOD_LABELS                      # 選択肢に出す名前（chain �
 #### 3.3.25 街ごとの依頼の難易度の範囲も連携 API で分け合う（`quest_bands`）
 
 ゲームは街の依頼の難易度を、街の id ごとに決まった範囲から引く（GAME.md §2.9。id 9 以降は 1〜76 の全域）。
-範囲を決め直すのは `922_town_quest_difficulty`（ゲームが数を引く所で差し替える）で、
+範囲を決め直すのは `318_area_difficulty_growth` の街ごとの範囲（`town_bands.py`。ゲームが数を引く所で差し替える）で、
 範囲を読んで見せるのは `133_ui_area_difficulty`（訪ねる前の街の「推定」の帯）。
 `instantale_modloader/quest_bands.py` で、範囲を決めた側から読む側へ渡す。
 
@@ -2257,11 +2257,11 @@ band, by = quest_bands.band_of(app, area_id)   # 読む側。どの MOD も返�
 | 決まり | 理由 |
 |---|---|
 | 範囲は両端を含む `(下限, 上限)`。逆さまは並べ直し、2つの整数でなければ何も返さなかったものとみなす | ゲームの `range(lo, hi)` と `randint(lo, hi)` で端の含み方が違うので、連携 API では片方に揃える |
-| どの登録も範囲を返さなければ、読む側は自分の表（ゲームの範囲）を使う | 922 が無くても 133 の推定は動く |
+| どの登録も範囲を返さなければ、読む側は自分の表（ゲームの範囲）を使う | 318 が無くても（街ごとの範囲を切っていても）133 の推定は動く |
 | 登録の新しいものから聞き、最初に範囲を返した登録を使う（`by` はその持ち主） | `shop_lineup`（§3.3.22）と同じ |
 | 登録は持ち主ごとに1つ。登録した ctx が用済みなら聞かない。`fn` が例外を送出したら何も返さなかったものとみなす（`errors` に残す） | 同上 |
 
-置き場は `sys` の属性（`_instantale_quest_bands`）。検査は `tools\tests\test_wip_town_quest_difficulty.py`。
+置き場は `sys` の属性（`_instantale_quest_bands`）。検査は `tools\tests\test_town_quest_bands.py`。
 
 #### 3.3.26 品の価値がどこまで数に効くかも連携 API で分け合う（`value_limits`）
 

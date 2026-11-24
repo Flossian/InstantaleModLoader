@@ -35,7 +35,7 @@ from instantale_modloader import value_limits
 
 LOG_BASENAME = "beyond_76.log"
 
-#: 延ばす上限。難易度の天井（`318_` の `DIFFICULTY_CEILING`、`922_` の上限）と同じ 100。
+#: 延ばす上限。難易度の天井（`318_` の `DIFFICULTY_CEILING`。街ごとの範囲の上限も同じ）と同じ 100。
 LIMIT = 100
 
 #: 決まった値を返す関数の傾きを計る幅（76 と 76 − SPAN の差を SPAN で割る）。

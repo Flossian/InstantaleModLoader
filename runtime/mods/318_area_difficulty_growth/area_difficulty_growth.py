@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""依頼を片付けるたび、その土地の依頼の難易度が上がっていく。
+"""依頼を片付けるたび、その土地の依頼の難易度が上がっていく。街ごとに難易度の範囲も決められる。
+
+街ごとの範囲（開発中の `922_town_quest_difficulty` を取り込んだもの）は `town_bands.py`、その設定画面は `tool.py`、
+範囲の表と式は `bands.py`。このファイルは育ちを持つ。
 
 素のゲームでは、土地の難易度は世界を作った時点で決まったまま動かない。
 最初の町の依頼は 3,4,5 のまま何十回通っても 3,4,5 で、
@@ -134,6 +137,8 @@ import threading
 from instantale_modloader import frames, loads, quest_ends, quest_generation, ui
 from instantale_modloader.state import UNKNOWN_WORLD, WorldStore
 
+from . import town_bands
+
 LOG_BASENAME = "area_difficulty.log"
 
 STATE_DIRNAME = "area_difficulty"
@@ -164,6 +169,21 @@ DIFFICULTY_LIMIT = 76
 SCOPE = "all"
 ROLLBACK = False
 ANNOUNCE = "この地に貼り出される依頼は、以前より歯応えのあるものになっている。"
+# 設定画面で街ごとに決めた難易度の範囲を、新しく作られる依頼に使う（`town_bands.py`）。
+TOWN_BANDS_ENABLED = True
+
+
+class _Settings(object):
+    """入口のモジュールの定数を、その場で読む窓（`town_bands.py` へ渡す）。
+
+    ローダは apply() の前に設定を定数へ書き込む。部品は値を控えず、使うたびにここから読む。
+    """
+
+    def __getattr__(self, name):
+        try:
+            return globals()[name]
+        except KeyError:
+            raise AttributeError(name)
 
 
 def by_area_id(bucket):
@@ -660,6 +680,9 @@ def apply(ctx):
                 step_range()[0], step_range()[1], max_bonus(),
                 int(DIFFICULTY_LIMIT), SCOPE,
                 ", ROLLBACK" if ROLLBACK else "", LOG_BASENAME))
+
+    # 街ごとの範囲。育ちのフックより後に当てる（922 の頃と同じく、ゲームの関数を包む層が外側）。
+    town_bands.install(ctx, _Settings(), owner)
 
 
 def _int(value, fallback):

@@ -55,7 +55,7 @@ id6≈62 / id7≈43 / id8≈70）なので、決め方はゲームのコード�
 
 版9: 「クエストを探す」（`DisplayQuestChoice.generate_random_quest`）の間も窓を開け、
 乱数・関数・前後の街の状態を同じ形で写す。探した依頼の難易度の引き方を見るため
-（`922_town_quest_difficulty` がゲームの引く所で差し替えられるか）。
+（街ごとの範囲がゲームの引く所で差し替えられるか。いまは `318_area_difficulty_growth` の `town_bands.py`）。
 
 版10: 窓の中の記録の無駄と、包みの約束の抜けを直した。
 

@@ -34,7 +34,7 @@
   （`225_` の実測。VERIFICATION_LOG.md §2.84）。枠の表（`SLOT_RANGES`）から見積もった帯を
   `BAND_ESTIMATE` の表記で出す。枠の無い街（エディタで足した id 9 以降）は `BAND_UNKNOWN`。
   空なら名前のまま。
-  街ごとの範囲を決める MOD（`922_town_quest_difficulty`）が窓口 `quest_bands` に範囲を出していれば、
+  街ごとの範囲を決める MOD（`318_area_difficulty_growth`）が窓口 `quest_bands` に範囲を出していれば、
   枠の表より先にそちらを使う（版5。id 9 以降の街にも推定が出る。TECH.md §3.3.25）
 - 「既定=素の挙動」の原則の例外。素の値を変えず情報を足すだけの UI なので、
   既定で表示する（`314_` の馬車の日数と同じ判断）

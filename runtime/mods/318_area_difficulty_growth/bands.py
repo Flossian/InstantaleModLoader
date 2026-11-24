@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """街ごとの依頼の難易度の範囲と、なだらかにする計算。素の Python（ゲームにもローダにも依存しない）。
 
-本体（`town_quest_difficulty.py`）と設定画面（`tool.py`）が同じ表と式を使うため、ここに1つだけ置く。
+ゲームの中の `town_bands.py` と設定画面（`tool.py`）が同じ表と式を使うため、ここに1つだけ置く。
 範囲はどれも両端を含む `(下限, 上限)`。
 
 ゲームの範囲（GAME.md §2.9）:
@@ -16,7 +16,7 @@
 GAME_MIN = 1
 GAME_MAX = 76
 
-#: 設定で上げられる上限の天井（`318_area_difficulty_growth` の `DIFFICULTY_LIMIT` と同じ）。
+#: 設定で上げられる上限の天井（入口の `DIFFICULTY_CEILING` と同じ）。
 LIMIT_CEILING = 100
 
 #: 初訪問の3件は重なりなしで引くので、範囲には少なくとも3つの値が要る。

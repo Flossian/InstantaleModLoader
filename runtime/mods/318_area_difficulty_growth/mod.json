@@ -3,16 +3,19 @@
   "api": 1,
   "kind": "feature",
   "name": {
-    "en": "Quest grows harder",
-    "ja": "依頼クリアで難易度上昇"
+    "en": "Quest difficulty per town, growing with clears",
+    "ja": "街ごとの依頼の難易度と上昇"
   },
   "description": {
-    "en": "Clearing a quest raises the difficulty of the quests that land offers. Every clear draws a random step and adds it, up to a cap. Nothing else is touched: the game already derives the shop stock, the item prices, the enemies, the rewards and the talent points from that one number, so they all follow. A land raised to 23 produced level 24 enemies, and its shop stocked items of a value the plain save cannot produce",
-    "ja": "依頼を1つ片付けるたびに、その土地で受けられる依頼の難易度が上がる。上がる量は毎回ランダムで、上限まで積み上がる。触るのはその1つの数だけで、店の在庫・値段・敵・報酬・才能はゲーム自身がそこから決めているので後から付いてくる。難易度を23まで上げた土地ではレベル24の敵が出て、その土地の店に素のセーブからは出ない value 33 の品が並んだ"
+    "en": "Set the range each town draws its new quests' difficulty from, and raise the difficulty of a land's quests each time you clear one there. The game fixes a town's range by its slot and gives towns past the ninth (added by bulk generation or the editor) the whole 1-76 range; the settings screen lists every town with its roads and lets you set each range or smooth them along the roads. Every clear draws a random step and adds it, up to a cap. Only the quest difficulty is touched: the game derives the shop stock, prices, enemies, rewards and talent points from it, so they all follow",
+    "ja": "街ごとに、新しく作られる依頼の難易度の範囲を決められ、依頼を1つ片付けるたびにその土地の依頼の難易度が上がる。ゲームは街の番号で範囲を決め、9番目より後の街（一括生成やエディタで足した街）は 1〜76 の全域から引くので、設定画面で街ごとに範囲を決めるか、道に沿ってなだらかにできる。上がる量は毎回ランダムで、上限まで積み上がる。触るのは依頼の難易度だけで、店の在庫・値段・敵・報酬・才能はゲーム自身がそこから決めているので後から付いてくる"
   },
-  "version": "8",
+  "version": "9",
   "author": "R01/Flossian",
-  "state": ["area_difficulty"],
+  "state": [
+    "area_difficulty",
+    "town_quest_difficulty"
+  ],
   "after": [
     "307_area_move_dungeon",
     "312_shop_restock"
@@ -70,8 +73,8 @@
         "en": "Difficulty ceiling"
       },
       "note": {
-        "ja": "既定 76 はゲームが依頼の難易度に使う上限。100 まで上げられる（敵のレベルが 101 まで上がる）。76 を超えた分は敵だけが強くなり、報酬・才能点・店の品は 76 のときのまま増えない（923「難易度と品の価値の 76 超えを、報酬と品の強さにも効かせる」を入れれば伸びる）。下げると世界全体の天井が下がる",
-        "en": "Default 76 is the ceiling the game uses for quest difficulty. It can go up to 100 (enemies up to level 101). Above 76 only the enemies get stronger; rewards, talent points and shop goods stay as at 76 unless 923 (Make difficulty and item value above 76 count) is on. Lower it to cap the whole world"
+        "ja": "既定 76 はゲームが依頼の難易度に使う上限。100 まで上げられる（敵のレベルが 101 まで上がる）。76 を超えた分は敵だけが強くなり、報酬・才能点・店の品は 76 のときのまま増えない（923「難易度と品の価値の 76 超えを、報酬と品の強さにも効かせる」を入れれば伸びる）。下げると世界全体の天井が下がる。街ごとの範囲もこの数で頭打ちになる",
+        "en": "Default 76 is the ceiling the game uses for quest difficulty. It can go up to 100 (enemies up to level 101). Above 76 only the enemies get stronger; rewards, talent points and shop goods stay as at 76 unless 923 (Make difficulty and item value above 76 count) is on. Lower it to cap the whole world; the ranges per town are capped here too"
       }
     },
     "SCOPE": {
@@ -113,6 +116,29 @@
         "ja": "依頼を片付けて難易度が上がった回に出る（上限に達した後は出ない）。報酬と才能の文章が流れ切ってから出す。空にすると何も出さない",
         "en": "Shown on every clear that raises the difficulty, and not once the cap is reached, after the reward and talent text has finished. Leave it empty for no line"
       }
+    },
+    "TOWN_BANDS_ENABLED": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "街ごとに決めた範囲を使う",
+        "en": "Use the ranges set per town"
+      },
+      "note": {
+        "ja": "「街ごとの範囲」のタブで決めた範囲から、新しく作られる依頼の難易度を引く。範囲を決めていない街はゲームのまま。切ると、決めた範囲は残したままどの街もゲームのまま",
+        "en": "New quests draw their difficulty from the ranges set on the \"Ranges per town\" tab. Towns without a range stay as in the game. Off: every town stays as in the game, and the ranges are kept"
+      }
+    }
+  },
+  "tool": {
+    "entry": "tool.py",
+    "label": {
+      "ja": "難易度の設定と街ごとの範囲",
+      "en": "Difficulty settings and ranges per town"
+    },
+    "note": {
+      "ja": "「設定」のタブで育ちと上限を、「街ごとの範囲」のタブで世界を選んで街ごとの範囲を決める。なだらかにするボタンもある。範囲は state/town_quest_difficulty/<世界名>.json に保存する",
+      "en": "The \"Settings\" tab holds the growth and the ceiling; on \"Ranges per town\" pick a world and set each town's range, or smooth them along the roads. Ranges are saved to state/town_quest_difficulty/<world>.json"
     }
   }
 }

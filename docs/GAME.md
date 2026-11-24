@@ -934,7 +934,7 @@ random.randint(lo, hi - 1)                 instantale.py:5957（DisplayQuestChoi
 
 id 8 で `randint(67, 76)`。引いた値が LLM への指示と記録（セーブに残る側）へ渡る。
 id 9 以降の街での引数は測っていない（初訪問と同じ全域とみられる）。
-`922_town_quest_difficulty` はこの `randint` と上の `sample` の2か所で範囲を差し替える。
+`318_area_difficulty_growth` の街ごとの範囲は、この `randint` と上の `sample` の2か所で範囲を差し替える。
 
 #### 依頼の生成は、ローカル LLM で敵の一覧を書き続けて失敗することがある
 

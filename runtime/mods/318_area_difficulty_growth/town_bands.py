@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
-"""街ごとに、これから作られる依頼の難易度の範囲を決める。
+"""街ごとに、これから作られる依頼の難易度の範囲を決める（設定 `TOWN_BANDS_ENABLED`）。
+
+開発中の `922_town_quest_difficulty` を取り込んだもの。
 
 ゲームは街の依頼の難易度を、街の id ごとに決まった範囲から引く（GAME.md §2.9）:
 
-    初訪問の3件   random.sample(range(lo, hi), 3)      save_area_json:write_area_data_to_world_dict（:329）
-    探した1件     random.randint(lo, hi - 1)          DisplayQuestChoice.generate_random_quest（:5957）
+    初訪問の3件   random.sample(range(lo, hi), 3)      save_area_json:write_area_data_to_world_dict
+    探した1件     random.randint(lo, hi - 1)          DisplayQuestChoice.generate_random_quest
 
 id 0〜8 の範囲は世界の形と関係なく id で決まり、id 9 以降（世界の一括生成やエディタで足した街）は 1〜76 の全域。
-この MOD は、設定画面（`tool.py`）で決めた範囲をこの2つの乱数の場所でだけ差し替える。
-**引いた値はゲーム自身が LLM への指示と依頼の記録へ渡す**ので、指示の「難易度は N」・セーブ・
-`318_area_difficulty_growth` の素の値がどれも同じ数になる（作った後で書き直す形だと 318 と順番を取り合う）。
+設定画面（`tool.py`）で決めた範囲を、この2つの乱数の場所でだけ差し替える。
+引いた値はゲーム自身が LLM への指示と依頼の記録へ渡すので、指示の「難易度は N」・セーブ・
+入口の育ちの素の値がどれも同じ数になる（作った後で書き直す形だと、育ちと順番を取り合う）。
 
 すでにある依頼は触らない。範囲を決めていない街は素のまま。
 
@@ -18,14 +20,11 @@ id 0〜8 の範囲は世界の形と関係なく id で決まり、id 9 以降�
 | `random.sample` | `write_area_data_to_world_dict` の中、母集団が `range` で `k=3` の最初の1回 |
 | `random.randint` | `generate_random_quest` の中の最初の1回 |
 
-どちらもスレッドごとの印で窓を開く（ゲームは移動も依頼探しも別スレッドで走らせる）。
-窓の外の乱数は素通しする。
+どちらもスレッドごとの印で窓を開く（ゲームは移動も依頼探しも別スレッドで走らせる）。窓の外の乱数は素通しする。
 
-範囲は `state/town_quest_difficulty/<世界名>.json` の `towns`（設定画面が書く。本体は読むだけ）。
+範囲は `state/town_quest_difficulty/<世界名>.json` の `towns`（設定画面が書く。ここは読むだけ）。
 世界名だけを鍵にするのは、世界の設定だから（同じ世界で作り直した主人公にも効く）。
 範囲は窓口 `quest_bands` にも出す（`133_ui_area_difficulty` が訪ねる前の街の見積もりに使う。TECH.md §3.3.25）。
-
-遊び方の説明は DOC.md、検証の経過は VERIFICATION.md §3.117。
 """
 
 import threading
@@ -37,34 +36,30 @@ from . import bands
 
 LOG_BASENAME = "town_quest_difficulty.log"
 
-#: `state/` 直下のフォルダ名。設定画面と同じ（`modtool.state_dirname`）。
+#: `state/` 直下のフォルダ名。設定画面と同じ。922 の頃から変えていない（控えを引き継ぐ）。
 STATE_DIRNAME = "town_quest_difficulty"
 
-# ---------------------------------------------------------------- 設定（mod.json）
-# 範囲の上限。既定 76 はゲームが依頼の難易度に使う上限。100 まで上げられる。
-# 76 を超えた分は敵だけが強くなる（報酬・才能点・品はゲームが 76 で止める。GAME.md §2.13.2。
-# `923_beyond_76` が入っていれば伸びる）。
-DIFFICULTY_LIMIT = 76
 
-
-def apply(ctx):
+def install(ctx, cfg, owner):
+    """`cfg` は入口の設定（`TOWN_BANDS_ENABLED` / `DIFFICULTY_LIMIT`）を使うたびに読む窓。"""
     write = ctx.logger(LOG_BASENAME)
-    owner = "922_town_quest_difficulty"
 
-    # 設定画面が書く控え。本体は読むだけなので、フォルダは作らない（own=False）。
+    # 設定画面が書く控え。ここは読むだけなので、フォルダは作らない（own=False）。
     store = WorldStore(ctx, STATE_DIRNAME, own=False, write=write)
 
     #: スレッドごとの窓。`build`（初訪問）/ `search`（探す）。
     local = threading.local()
 
     def limit():
-        return bands.clamp_limit(DIFFICULTY_LIMIT)
+        return bands.clamp_limit(cfg.DIFFICULTY_LIMIT)
 
     def band_for(key, area_id):
-        """その世界のその街に決めた範囲。決めていなければ None。
+        """その世界のその街に決めた範囲。決めていない・機能を切ってあれば None。
 
         設定画面が遊んでいる間に書き換えても次の生成から効くよう、更新時刻が変われば読み直す。
         """
+        if not cfg.TOWN_BANDS_ENABLED:
+            return None
         if not key or key == UNKNOWN_WORLD or area_id is None:
             return None
         bucket = store.load(key, fresh=True)
@@ -144,5 +139,5 @@ def apply(ctx):
             window["area"], tuple(args), band[0], band[1], result))
         return result
 
-    ctx.log("town quest difficulty: limit {}; ranges in state/{}/<world>.json; log goes to out/{}"
-            .format(limit(), STATE_DIRNAME, LOG_BASENAME))
+    ctx.log("town quest difficulty: {}; limit {}; ranges in state/{}/<world>.json; log goes to out/{}"
+            .format("on" if cfg.TOWN_BANDS_ENABLED else "off", limit(), STATE_DIRNAME, LOG_BASENAME))

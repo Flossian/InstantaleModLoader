@@ -232,8 +232,16 @@ class FakeCtx:
         return ml.read_json(path, default, report=self.log_exc)
 
     def wrap(self, target, **kw):
+        """同じ対象に2つ目が来たら、本物のローダと同じく後から当てた方を外側に重ねる
+        （`generate_random_quest` は育ちと街ごとの範囲の両方が包む）。"""
         def decorator(func):
-            self.hooks[target] = func
+            inner = self.hooks.get(target)
+            if inner is None:
+                self.hooks[target] = func
+            else:
+                def stacked(orig, *args, **kwargs):
+                    return func(lambda *a, **k: inner(orig, *a, **k), *args, **kwargs)
+                self.hooks[target] = stacked
             return func
         return decorator
 

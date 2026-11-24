@@ -1,16 +1,22 @@
 # -*- coding: utf-8 -*-
-r"""街ごとの依頼の難易度の範囲を決める画面。
+r"""依頼の難易度の設定と、街ごとの範囲を決める画面。
 
-    python runtime/mods/922_town_quest_difficulty/tool.py
+    python runtime/mods/318_area_difficulty_growth/tool.py
 
 TECH.md §3.12 の契約で動く。ローダの設定画面（`tools/gui.py`）が `mod.json` の `"tool"` を見て
 このファイルを別プロセスで開き、場所は環境変数で渡す。直接起動したときは自分で探す。
+`"tool"` を持つ MOD は宣言の設定もこの画面が引き受ける約束なので、タブを2つ置く。
 
-世界の骨格（`worlds\<世界>\world_data.json`）から街と道を、セーブ（`saves\<世界>\savedata.json`）から
-今の依頼を読む。どちらも読むだけで書かない（骨格はゲームが保存のたびに書く。GAME.md §2.9.1）。
-決めた範囲は `state\town_quest_difficulty\<世界名>.json` に書き、ゲームの中の本体が次の生成から読む。
+| タブ | 中身 | 保存先 |
+|---|---|---|
+| 設定 | `mod.json` の宣言の全項目（`modtool.Form`） | `settings\mod_settings.json` |
+| 街ごとの範囲 | 世界を選んで街ごとに依頼の難易度の範囲を決める（開発中の `922_town_quest_difficulty` の画面を取り込んだもの） | `state\town_quest_difficulty\<世界名>.json` |
 
-範囲の表と式は `bands.py`（本体と同じもの）。場所・窓の記憶・配色は `tools/modtool.py`。
+下の「保存」は両方を書く（`modtool.SettingsFooter` の `before_save` / `extra_dirty`）。
+
+街と道は世界の骨格（`worlds\<世界>\world_data.json`）から、今の依頼はセーブ（`saves\<世界>\savedata.json`）から読む。
+どちらも読むだけで書かない（骨格はゲームが保存のたびに書く。GAME.md §2.9.1）。
+範囲の表と式は `bands.py`（ゲームの中の `town_bands.py` と同じもの）。場所・窓の記憶・配色は `tools/modtool.py`。
 """
 import io
 import os
@@ -29,6 +35,10 @@ if MOD_DIR not in sys.path:
 import modtool  # noqa: E402
 import bands  # noqa: E402  範囲の表と式（素の Python）
 
+#: 街ごとの範囲の控えの置き場（`town_bands.STATE_DIRNAME` と同じ）。
+#: フォルダ名から作る `modtool.world_store_path` は使わない（この MOD のフォルダ名とは別の名前のため）。
+STATE_DIRNAME = "town_quest_difficulty"
+
 #: 敵のレベルは難易度+1（GAME.md §2.17）。画面の「適正Lv」に使う。
 LEVEL_OFFSET = 1
 
@@ -45,8 +55,7 @@ def _saves():
 def world_folders(base=""):
     """`[(世界名, フォルダ名), ...]`。骨格を持つ世界だけ。世界名の順。
 
-    セーブの一覧（`saves.world_names`）ではなく骨格の側から並べる。
-    セーブを持たない世界（まだ主人公がいない、セーブを退避した）でも範囲を決められるように。
+    セーブを持たない世界（まだ主人公がいない、セーブを退避した）でも範囲を決められるように、骨格の側から並べる。
     """
     saves = _saves()
     root = saves.worlds_dir(base)
@@ -100,7 +109,8 @@ def load_world(folder, base=""):
 
 
 def store_path(root, state_dir, world):
-    return modtool.world_store_path(root, state_dir, MOD_DIR, world)
+    """その世界の範囲の控え。ファイル名はゲームの中と同じ関数で作る（§3.11）。"""
+    return os.path.join(state_dir, STATE_DIRNAME, modtool.world_filename(root, world, MOD_DIR))
 
 
 def load_record(path):
@@ -178,29 +188,35 @@ def build_window(mod_dir=MOD_DIR, base=""):
     import tkinter as tk
     from tkinter import messagebox, ttk
 
-    info = modtool.manifest(mod_dir)
-    title = (info.get("name") or {}).get("ja") or modtool.mod_name(mod_dir)
-    root_dir, state_dir, _game_dir = modtool.locate(mod_dir)
-    limit = bands.clamp_limit(modtool.load_settings(root_dir, mod_dir).get(
-        "DIFFICULTY_LIMIT", bands.GAME_MAX))
+    win = modtool.SettingsWindow(mod_dir, geometry="1180x720", minsize=(980, 560),
+                                 subtitle="「設定」は依頼の難易度の育ちと上限、「街ごとの範囲」は新しく作られる依頼の難易度の範囲",
+                                 subtitle_wrap=1120)
+    root, root_dir, state_dir = win.root, win.root_dir, win.state_dir
     worlds = world_folders(base)
     beyond = beyond_enabled(root_dir)
 
-    root = tk.Tk()
-    root.title(title)
-    root.minsize(980, 560)
-    modtool.restore_window(root_dir, mod_dir, root, "1180x720")
-    modtool.setup_theme(root, root_dir)
+    tabs = ttk.Notebook(win.outer)
+    tabs.pack(fill="both", expand=True)
 
-    outer = ttk.Frame(root, padding=12)
-    outer.pack(fill="both", expand=True)
-    ttk.Label(outer, text=title, style="Title.TLabel").pack(anchor="w")
-    ttk.Label(outer, style="Sub.TLabel", wraplength=1120, justify="left",
-              text="これから作られる依頼に効く。すでにある依頼は変わらない。\n"
-                   "範囲を決めていない街はゲームのまま。上限は {}（設定「範囲の上限」）".format(limit)
-              ).pack(anchor="w", pady=(0, 8))
+    # ---- 設定
+    settings_page = ttk.Frame(tabs, padding=(0, 8, 0, 0))
+    tabs.add(settings_page, text="設定")
+    settings_body = modtool.scrollable(settings_page)
+    form = win.form(settings_body, list(win.found))
 
-    top = ttk.Frame(outer)
+    def limit():
+        """いま画面にある上限（保存前の値も効かせる）。読めなければ保存してある値。"""
+        var = form.vars.get("DIFFICULTY_LIMIT")
+        text = var.get() if var is not None else ""
+        return bands.clamp_limit(text if str(text).strip() else win.current.get("DIFFICULTY_LIMIT", bands.GAME_MAX))
+
+    # ---- 街ごとの範囲
+    towns_page = ttk.Frame(tabs, padding=(0, 8, 0, 0))
+    tabs.add(towns_page, text="街ごとの範囲")
+    limit_label = ttk.Label(towns_page, style="Faint.TLabel", wraplength=1120, justify="left")
+    limit_label.pack(anchor="w", pady=(0, 6))
+
+    top = ttk.Frame(towns_page)
     top.pack(fill="x")
     ttk.Label(top, text="世界").pack(side="left")
     world_var = tk.StringVar()
@@ -210,7 +226,7 @@ def build_window(mod_dir=MOD_DIR, base=""):
     source_label = ttk.Label(top, style="Faint.TLabel")
     source_label.pack(side="left")
 
-    smooth_box = ttk.Frame(outer, padding=(0, 8, 0, 4))
+    smooth_box = ttk.Frame(towns_page, padding=(0, 8, 0, 4))
     smooth_box.pack(fill="x")
     smooth_vars = {key: tk.StringVar() for key in ("start_lo", "start_hi", "end_lo", "end_hi", "width")}
     for text, keys in (("開始の街", ("start_lo", "start_hi")), ("最も遠い街", ("end_lo", "end_hi"))):
@@ -226,30 +242,23 @@ def build_window(mod_dir=MOD_DIR, base=""):
     game_button.pack(side="left", padx=(6, 0))
     fit_button = ttk.Button(smooth_box, text="今の依頼に合わせる")
     fit_button.pack(side="left", padx=(6, 0))
-    ttk.Label(outer, style="Faint.TLabel", wraplength=1120, justify="left",
+    ttk.Label(towns_page, style="Faint.TLabel", wraplength=1120, justify="left",
               text="なだらかにする: 固定した街と、開始の街・開始から最も遠い街を基準にして、"
                    "ほかの街の範囲を道でつながる街の平均に寄せる。\n"
                    "今の依頼に合わせる: 依頼のある街を、今の依頼の最小〜最大にする。\n"
                    "どのボタンも、固定した街は変えない"
               ).pack(anchor="w")
 
-    over_label = ttk.Label(outer, style="Faint.TLabel", foreground="#c0392b")
+    over_label = ttk.Label(towns_page, style="Faint.TLabel", foreground="#c0392b")
     over_label.pack(anchor="w", pady=(4, 0))
 
-    footer = ttk.Frame(outer)
-    footer.pack(side="bottom", fill="x")
-    ttk.Separator(outer).pack(side="bottom", fill="x", pady=8)
-
-    body = modtool.scrollable(outer)
+    body = modtool.scrollable(towns_page)
     table = ttk.Frame(body, padding=(0, 6, 0, 0))
     table.grid(row=0, column=0, sticky="ew")
     headings = ("番号", "名前", "規模", "つながる街", "ゲームの範囲", "今の依頼", "下限", "上限", "固定", "適正Lv")
     for column, heading in enumerate(headings):
         ttk.Label(table, text=heading).grid(row=0, column=column, sticky="w", padx=(0, 10))
     table.columnconfigure(3, weight=1)
-
-    status = ttk.Label(footer, style="Faint.TLabel")
-    status.pack(side="left")
 
     current = {"world": None, "folder": None, "data": None, "rows": {}, "saved": None}
 
@@ -259,37 +268,50 @@ def build_window(mod_dir=MOD_DIR, base=""):
                 child.destroy()
         current["rows"] = {}
 
-    def row_values():
+    def row_values(top_limit=None):
         """`{id: ((下限, 上限), 固定)}`。読めない入力の街は入れない。"""
+        top_limit = top_limit or limit()
         out = {}
         for area_id, widgets in current["rows"].items():
-            band = bands.normalize(widgets["lo"].get(), widgets["hi"].get(), limit)
+            band = bands.normalize(widgets["lo"].get(), widgets["hi"].get(), top_limit)
             if band is not None:
                 out[area_id] = (band, bool(widgets["pin"].get()))
         return out
 
-    def smooth_values():
+    def smooth_values(top_limit=None):
+        top_limit = top_limit or limit()
+
         def number(key, fallback):
             try:
                 return int(smooth_vars[key].get())
             except (TypeError, ValueError):
                 return fallback
-        end = default_end(limit)
+        end = default_end(top_limit)
         return {"start": list(bands.normalize(number("start_lo", bands.DEFAULT_START[0]),
-                                              number("start_hi", bands.DEFAULT_START[1]), limit)),
-                "end": list(bands.normalize(number("end_lo", end[0]), number("end_hi", end[1]), limit)),
-                "width": max(bands.MIN_WIDTH, min(limit, number("width", bands.DEFAULT_WIDTH)))}
+                                              number("start_hi", bands.DEFAULT_START[1]), top_limit)),
+                "end": list(bands.normalize(number("end_lo", end[0]), number("end_hi", end[1]), top_limit)),
+                "width": max(bands.MIN_WIDTH, min(top_limit, number("width", bands.DEFAULT_WIDTH)))}
 
     def snapshot():
-        return (sorted((k, v) for k, v in row_values().items()), sorted(smooth_values().items()))
+        """未保存の変更を見るための、入力のままの値。
 
-    def dirty():
+        上限で収めた値では比べない。上限を変えただけで範囲が変わったことになり、保存のたびに控えの範囲が収め直される。
+        """
+        rows = sorted((area_id, (w["lo"].get(), w["hi"].get(), bool(w["pin"].get())))
+                      for area_id, w in current["rows"].items())
+        return rows, sorted((key, var.get()) for key, var in smooth_vars.items())
+
+    def towns_dirty():
         return current["data"] is not None and snapshot() != current["saved"]
 
     def refresh(*_args):
+        top_limit = limit()
+        limit_label.configure(text="これから作られる依頼に効く。すでにある依頼は変わらない。"
+                                   "範囲を決めていない街はゲームのまま。上限は {}（「設定」の「難易度の上限」）"
+                                   .format(top_limit))
         over = False
-        for area_id, widgets in current["rows"].items():
-            band = bands.normalize(widgets["lo"].get(), widgets["hi"].get(), limit)
+        for widgets in current["rows"].values():
+            band = bands.normalize(widgets["lo"].get(), widgets["hi"].get(), top_limit)
             if band is None:
                 widgets["level"].configure(text="（数を入れてください）")
                 continue
@@ -316,6 +338,7 @@ def build_window(mod_dir=MOD_DIR, base=""):
             source_label.configure(text="世界の骨格が読めません。")
             current["saved"] = None
             return
+        top_limit = limit()
         record, smooth = load_record(store_path(root_dir, state_dir, data["name"]))
         source_label.configure(text="街 {} か所。依頼は{}から".format(
             len(data["towns"]), "セーブ" if data["has_save"] else "世界の骨格（セーブがありません）"))
@@ -323,8 +346,8 @@ def build_window(mod_dir=MOD_DIR, base=""):
         for row, area_id in enumerate(sorted(data["towns"], key=bands.id_sort_key), start=1):
             town = data["towns"][area_id]
             entry = record.get(area_id) if isinstance(record.get(area_id), dict) else {}
-            band = bands.normalize(entry.get("lo"), entry.get("hi"), limit) if entry else None
-            band = band or bands.normalize(*bands.game_band(area_id), limit=limit)
+            band = bands.normalize(entry.get("lo"), entry.get("hi"), top_limit) if entry else None
+            band = band or bands.normalize(*bands.game_band(area_id), limit=top_limit)
             widgets = {"lo": tk.StringVar(value=str(band[0])), "hi": tk.StringVar(value=str(band[1])),
                        "pin": tk.BooleanVar(value=bool(entry.get("pinned")))}
             cells = (area_id, town["name"], SIZE_NAMES.get(town["size"], town["size"]),
@@ -344,7 +367,7 @@ def build_window(mod_dir=MOD_DIR, base=""):
             for var in (widgets["lo"], widgets["hi"]):
                 var.trace_add("write", refresh)
             current["rows"][area_id] = widgets
-        end = default_end(limit)
+        end = default_end(top_limit)
         start_band = smooth.get("start") or bands.DEFAULT_START
         end_band = smooth.get("end") or end
         for key, value in (("start_lo", start_band[0]), ("start_hi", start_band[1]),
@@ -353,17 +376,17 @@ def build_window(mod_dir=MOD_DIR, base=""):
             smooth_vars[key].set(str(value))
         refresh()
         current["saved"] = snapshot()
-        status.configure(text="読み込みました {}".format(time.strftime("%H:%M:%S")))
+        footer_status("読み込みました {}".format(time.strftime("%H:%M:%S")))
 
-    def ask_unsaved():
-        """未保存の変更があれば聞く。続けてよければ True。"""
-        return modtool.confirm_unsaved(root, dirty, save, "変更を保存してから続けますか？")
+    def footer_status(text):
+        if win.footer is not None:
+            win.footer.status.configure(text=text)
 
     def pick(_event=None):
         name = world_var.get()
         if name == current["world"]:
             return
-        if not ask_unsaved():
+        if not modtool.confirm_unsaved(root, towns_dirty, win.footer.save, "変更を保存してから続けますか？"):
             world_var.set(current["world"] or "")
             return
         load(name)
@@ -372,25 +395,26 @@ def build_window(mod_dir=MOD_DIR, base=""):
         data = current["data"]
         if data is None:
             return
-        values = row_values()
+        top_limit = limit()
+        values = row_values(top_limit)
         pinned = [area_id for area_id, (_band, pin) in values.items() if pin]
-        options = smooth_values()
+        options = smooth_values(top_limit)
         result = bands.smooth(data["towns"], dict((k, band) for k, (band, _pin) in values.items()),
                               pinned, tuple(options["start"]), tuple(options["end"]),
-                              options["width"], limit)
+                              options["width"], top_limit)
         reached = bands.depths(data["towns"], bands.start_of(data["towns"]))
         for area_id, band in result.items():
             if area_id in current["rows"]:
                 set_band(area_id, band)
         missing = len(data["towns"]) - len(reached)
-        status.configure(text="なだらかにしました（固定 {} か所{}）。保存すると次の生成から効きます".format(
+        footer_status("なだらかにしました（固定 {} か所{}）。保存すると次の生成から効きます".format(
             len(pinned), "、道でたどり着けない街 {} か所はそのまま".format(missing) if missing else ""))
 
     def do_game():
         for area_id, widgets in current["rows"].items():
             if not widgets["pin"].get():
                 set_band(area_id, bands.game_band(area_id))
-        status.configure(text="固定していない街をゲームの範囲に戻しました。保存すると次の生成から効きます")
+        footer_status("固定していない街をゲームの範囲に戻しました。保存すると次の生成から効きます")
 
     def do_fit():
         data = current["data"]
@@ -398,52 +422,58 @@ def build_window(mod_dir=MOD_DIR, base=""):
             return
         fitted = 0
         for area_id, widgets in current["rows"].items():
-            band = fit_quests(data["quests"].get(area_id), limit)
+            band = fit_quests(data["quests"].get(area_id), limit())
             if band is not None and not widgets["pin"].get():
                 set_band(area_id, band)
                 fitted += 1
-        status.configure(text="{} か所を今の依頼に合わせました。保存すると次の生成から効きます".format(fitted))
+        footer_status("{} か所を今の依頼に合わせました。保存すると次の生成から効きます".format(fitted))
 
-    def save():
+    def save_towns(values):
+        """下の「保存」で、設定より先に呼ばれる。範囲に変更が無ければ書かない。False で保存をやめる。"""
         data = current["data"]
-        if data is None:
-            return False
+        if data is None or not towns_dirty():
+            return True
+        top_limit = bands.clamp_limit(values.get("DIFFICULTY_LIMIT", bands.GAME_MAX))
         bad = [area_id for area_id, widgets in current["rows"].items()
-               if bands.normalize(widgets["lo"].get(), widgets["hi"].get(), limit) is None]
+               if bands.normalize(widgets["lo"].get(), widgets["hi"].get(), top_limit) is None]
         if bad:
+            tabs.select(towns_page)
             messagebox.showerror("範囲を確かめてください",
                                  "数でない範囲があります: 番号 " + "、".join(bad), parent=root)
             return False
-        values = row_values()
-        record = build_record(data["towns"], values, smooth_values())
+        rows = row_values(top_limit)
         path = store_path(root_dir, state_dir, data["name"])
-        if not modtool.write_json(root_dir, path, record):
+        if not modtool.write_json(root_dir, path, build_record(data["towns"], rows, smooth_values(top_limit))):
             messagebox.showerror("保存に失敗しました", path, parent=root)
             return False
-        for area_id, (band, _pin) in values.items():
+        for area_id, (band, _pin) in rows.items():
             set_band(area_id, band)        # 入力を収めた形（上限・幅）に揃えて見せる
-        current["saved"] = snapshot()
-        status.configure(text="保存しました {}  {}（次の生成から効きます）".format(
-            time.strftime("%H:%M:%S"), path))
         return True
 
-    def close():
-        modtool.close_window(root, root_dir, mod_dir, dirty, save)
+    def after_save(_values):
+        if current["data"] is not None:
+            current["saved"] = snapshot()
+
+    def set_values(values):
+        form.set(dict((key, values[key]) for key in form.vars))
+
+    win.finish(form.get, set_values, before_save=save_towns, after_save=after_save, extra_dirty=towns_dirty)
 
     picker.bind("<<ComboboxSelected>>", pick)
     smooth_button.configure(command=do_smooth)
     game_button.configure(command=do_game)
     fit_button.configure(command=do_fit)
-    ttk.Button(footer, text="閉じる", command=close).pack(side="right")
-    ttk.Button(footer, text="保存", style="Accent.TButton", command=save).pack(side="right", padx=(0, 6))
-    root.protocol("WM_DELETE_WINDOW", close)
+    if "DIFFICULTY_LIMIT" in form.vars:
+        form.vars["DIFFICULTY_LIMIT"].trace_add("write", refresh)
 
     if worlds:
         world_var.set(worlds[0][0])
         load(worlds[0][0])
     else:
-        status.configure(text="世界が見つかりません。ゲームで世界を作ってから開いてください")
+        refresh()
+        footer_status("世界が見つかりません。街ごとの範囲は、ゲームで世界を作ってから決められます")
     root._town_quest_difficulty = current       # 検査が中を読む
+    root._area_difficulty_tabs = tabs
     return root
 
 
