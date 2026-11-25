@@ -2272,7 +2272,7 @@ fn(call)    # gates.Call: call.app / call.obj（フックした関数の self）
 | `arrivals.AREA` | `AreaMoveManager.execute` | 連携 API `arrivals`。`call.target_area_id` / `call.mode` も載る（`AREA_SETUP` の行）。`AREA` を登録すると組み立てのラッパーも立つ |
 | `arrivals.AREA_SETUP` | `AreaMoveManager.__init__` | 連携 API `arrivals`。`execute` には引数が来ないので、行き先と手段は組み立ての引数でしか読めない。行き先の土地の id（`call.target_area_id`）と手段（`call.mode`。`walk` など）を `orig` の前に読み、どちらも文字列か None にしてマネージャに控える。前後の処理の外（`execute` の側）で読むときは `arrivals.move_of(manager)`（控えが無ければ None）。`307_` / `314_` / `325_` が組み立てを各自でフックして読んでいた。`arrivals.KINDS` は前からの2つのままで、`AREA_SETUP` を含む全部は `arrivals.ALL_KINDS`。`arrivals.off(owner)` の既定は `ALL_KINDS` |
 | 依頼の終わり | `QuestEndManager.execute` | 連携 API `quest_ends`。依頼のデータは `orig` の中で片付くので、終わる依頼（`call.quest_id` / `call.quest`）を `orig` の前に読んで渡す |
-| 依頼の放棄 | `QuestRetireManager.execute` | 連携 API `quest_ends` の `on_retire`（`off_retire` / `retire_owners`）。終わりと同じく、放棄する依頼を `orig` の前に読んで渡す（`call.kind` は `"quest_retire"`）。終わりとは別の登録なので、両方を見る MOD は `on` と `on_retire` の両方に登録する。放棄の後に道の取り消し・帰りの日数・救出の決着を進める MOD（307 / 325 / 336 / 344 / 926）が載る |
+| 依頼の放棄 | `QuestRetireManager.execute` | 連携 API `quest_ends` の `on_retire`（`off_retire` / `retire_owners`）。終わりと同じく、放棄する依頼を `orig` の前に読んで渡す（`call.kind` は `"quest_retire"`）。終わりとは別の登録なので、両方を見る MOD は `on` と `on_retire` の両方に登録する。放棄の後に道の取り消し・帰りの日数・救出の決着を進める MOD（307 / 325 / 336 / 344 / 350）が載る |
 | 保存 | `InstantaleApp.save_game` | 連携 API `saving`。保存の間だけ素の値へ戻す形（前で戻して後で掛け直す）と、保存が通ったら控えを書く形（前で錠を取り、後で `call.error` を見て書いて放す）。ローダ自身の保存の関所（`choices` / `modfacility` / `modnpc`）は別 |
 
 | 決まり | 理由 |
@@ -2384,7 +2384,7 @@ notes = shop_lineup.notes_of(facility)             # 足す文を繋いだもの
 | 決まり | 理由 |
 |---|---|
 | 登録の新しいものから聞き、最初に文を返した登録を使う（`by` はその持ち主） | 傾向は1つの文で、混ぜると矛盾したプロンプトになる。後から適用した MOD が上書きできるようにする |
-| 足す文は全部を登録の古いものから繋ぐ（句点で終わらない文には「。」を足す）。`lineup_of` の返り値には入れず、品を作る側が `notes_of` を読んで傾向か既定の文の後ろに1回だけ繋ぐ。世界の一括生成では足さない（足す側は読み込んでいる世界の設定で答えるが、一括生成の間に読み込まれているのは作っている世界ではない） | 傾向を決める MOD とは別の MOD が「この店にはこの品も置いてほしい」と頼む口（`926_` が診療所に体に組み込む素材を置かせる）。傾向を決める MOD が1つしか答えられないので、別の口にした |
+| 足す文は全部を登録の古いものから繋ぐ（句点で終わらない文には「。」を足す）。`lineup_of` の返り値には入れず、品を作る側が `notes_of` を読んで傾向か既定の文の後ろに1回だけ繋ぐ。世界の一括生成では足さない（足す側は読み込んでいる世界の設定で答えるが、一括生成の間に読み込まれているのは作っている世界ではない） | 傾向を決める MOD とは別の MOD が「この店にはこの品も置いてほしい」と頼む口（`350_` が診療所に体に組み込む素材を置かせる）。傾向を決める MOD が1つしか答えられないので、別の口にした |
 | どの登録も文を返さなければ、作る側は自分の既定の文を使う（312 はゲームと同じく武器と防具を含めさせる） | 340 が無くても入れ替えは動く |
 | 並べない種類は、作る側がプロンプトの語彙・返ってきた品・テンプレートからの作り直しの全部で外す | プロンプトで止めても LLM は返すことがある。テンプレートに残った品を作り直すと、入れ替えのたびに戻ってくる |
 | 登録は持ち主ごとに1つ。登録した ctx が用済みなら聞かない。`fn` が例外を送出したら何も返さなかったものとみなす（`errors` に残す） | `talk_affinity`（§3.3.8）と同じ |
@@ -2749,8 +2749,8 @@ result = town_events.nudge(app, area_id, steps, by)   # 誰も受けなければ
 | 登録は持ち主ごとに1つ。登録した ctx が用済みなら数えない。`fn` が例外を送出したら答えなかったものとみなす（`errors` に残す） | `wanted`（§3.3.9）と同じ |
 
 `338_` は、1段目からさらに戻されると主人公が収めたものとして終え、最後の段で悪くなる側へ頼まれると段の起点だけを今日に置き直す。
-読んで動かしているのは労働の MOD（開発中）で、困り事の人手の仕事を務め終えると収まる側へ、裏の仕事を務め終えると悪くなる側へ1段を頼む。
-置き場は `sys` の属性（`_instantale_town_events`）。検査は `test_town_incidents.py`（`338_` の答えと段の動かし方）と `test_wip_labor_overhaul.py`（読む側）。
+読んで動かしているのは労働の MOD（`349_`）で、困り事の人手の仕事を務め終えると収まる側へ、裏の仕事を務め終えると悪くなる側へ1段を頼む。
+置き場は `sys` の属性（`_instantale_town_events`）。検査は `test_town_incidents.py`（`338_` の答えと段の動かし方）と `test_labor_overhaul.py`（読む側）。
 
 #### 3.3.33 戦闘の節目の前後も連携 API で（`battles`）
 
@@ -3083,7 +3083,7 @@ items.off_made(owner) / items.off_sight(owner) / items.off(owner)
 |---|---|
 | `items.unwrap(item)` | 画面の部品（所持品の欄の `InventoryItem`）が来たら中の品（`item_instance`）を返す。部品でなければそのまま |
 | `items.RARITIES` | 品のレア度の6段（`common` / `rare` / `magical` / `epic` / `legendary` / `mythic`。低い順。GAME.md §2.13.2） |
-| `items.ITEM_TYPES` | `generate_item_from_item_data` に渡す `item_type` → `item_sub_type` の並びの語彙（ゲームの品揃えの生成のスキーマと同じ組）。LLM に品を書かせる MOD はここから選ばせる（`312_` / `925_`）。品の `item_detail` を渡すと画像の埋め込みが見つからずに落ちる（VERIFICATION.md §3.76） |
+| `items.ITEM_TYPES` | `generate_item_from_item_data` に渡す `item_type` → `item_sub_type` の並びの語彙（ゲームの品揃えの生成のスキーマと同じ組）。LLM に品を書かせる MOD はここから選ばせる（`312_` / `349_`）。品の `item_detail` を渡すと画像の埋め込みが見つからずに落ちる（VERIFICATION.md §3.76） |
 | `items.rarity_rank(value)` | レア度の段の番号（`common` が 0、`mythic` が 5）。`value` は文字列か、`rarity` を持つもの（セーブの形の辞書・`Item`・画面の部品）。知らない語・読めなければ 0。照合は完全一致で、大文字小文字や前後の空白は均さない |
 
 窓口に載らない形は MOD が自分でフックする。

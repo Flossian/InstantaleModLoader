@@ -37,7 +37,7 @@ RARITIES = ("common", "rare", "magical", "epic", "legendary", "mythic")
 #: `item_detail` に直す（武器は `small` -> `small_weapon`、薬草は `herb` -> `plant`）。
 #: 品の `item_detail`（`small_weapon`）を渡すと `small_weapon_weapon` になり、画像の埋め込み
 #: `Data/item_embeddings/<item_detail>.json` が見つからずに落ちる（VERIFICATION.md §3.76）。
-#: LLM に品を書かせる MOD はこの組から選ばせ、外れたら先頭の細分に寄せる（`312_` と `925_` が使う）。
+#: LLM に品を書かせる MOD はこの組から選ばせ、外れたら先頭の細分に寄せる（`312_` と `349_` が使う）。
 ITEM_TYPES = {
     "weapon": ("small", "medium", "large", "long", "throwable"),
     "wearable": ("headgear", "body_armor", "legwear", "gauntlets", "shield",
@@ -56,7 +56,7 @@ def rarity_rank(value) -> int:
 
     `value` はレア度の文字列か、`rarity` を持つもの（セーブの形の辞書・`Item`・画面の部品）。
     照合は `RARITIES` との完全一致で、大文字小文字や前後の空白は均さない
-    （写しの `336_` の `rarity_rank`・`926_` の `rarity_index` と同じ答え。ゲームが書く語は小文字）。
+    （写しの `336_` の `rarity_rank`・`350_` の `rarity_index` と同じ答え。ゲームが書く語は小文字）。
     """
     if not isinstance(value, str):
         holder = unwrap(value)

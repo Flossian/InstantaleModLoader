@@ -21,7 +21,7 @@
 - ラッパーは、全 MOD の適用の後にローダが一番外側に1枚立てる（`gates.defer_outermost`・TECH.md §3.3.21）。MOD の適用の間に呼んだ `on` / `install` は包まない
 
 依頼の放棄（`QuestRetireManager.execute`）も同じ形で預かる。放棄の後に道の取り消し・帰りの日数・
-救出の決着を進める MOD（307/325/336/344/926）が、終わりと同じ「依頼の id を `orig` の前に読む」を各自で包んでいた。
+救出の決着を進める MOD（307/325/336/344/350）が、終わりと同じ「依頼の id を `orig` の前に読む」を各自で包んでいた。
 
     quest_ends.on_retire(owner, ctx, before=fn, after=fn, always=False, write=write)    # apply() の中で
     fn(call)    # call.obj は QuestRetireManager。call.app / call.quest_id / call.quest は終わりと同じ読み方

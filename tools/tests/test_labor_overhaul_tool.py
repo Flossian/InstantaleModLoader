@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""925_labor_overhaul の設定画面（`tool.py`）を、ウィンドウを開かずに通す。
+"""349_labor_overhaul の設定画面（`tool.py`）を、ウィンドウを開かずに通す。
 
-    python tools/tests/test_wip_labor_overhaul_tool.py
+    python tools/tests/test_labor_overhaul_tool.py
 
   置き方 … 宣言の設定がどれもちょうど1回、どこかのカードに置かれている
   試算   … 右の試算が、ゲームの中と同じ式（`rules.py`）で出る。設定を変えると変わる。打ちかけの欄では落ちない

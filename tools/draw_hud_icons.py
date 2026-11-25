@@ -183,7 +183,7 @@ def laurel():
 
 
 def augment():
-    """`926_body_augmentation` の行の絵（胸像。向かって左が生身、右が機械で目が青く光る。右下に銀の歯車）。"""
+    """`350_body_augmentation` の行の絵（胸像。向かって左が生身、右が機械で目が青く光る。右下に銀の歯車）。"""
     g = Grid()
     skin = (221, 168, 129)
     metal = (164, 168, 191)
@@ -243,7 +243,7 @@ ICONS = (
     (os.path.join(ROOT, "runtime", "mods", "339_town_factions", "icon_flag"), flag, 7),
     (os.path.join(ROOT, "runtime", "instantale_modloader", "assets", "holdings"), house, 13),
     (os.path.join(ROOT, "runtime", "mods", "317_reputation", "icon_laurel"), laurel, 17),
-    (os.path.join(ROOT, "runtime", "mods", "926_body_augmentation", "icon_augment"), augment, 19),
+    (os.path.join(ROOT, "runtime", "mods", "350_body_augmentation", "icon_augment"), augment, 19),
 )
 
 

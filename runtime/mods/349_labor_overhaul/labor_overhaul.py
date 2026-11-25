@@ -228,7 +228,7 @@ RECORD_ILLEGAL_FIRED = "{player}は{area}で表に出せない仕事を引き受
 RECORD_ILLEGAL_QUIT = "{player}は{area}で表に出せない仕事を引き受けたが、{period}で手を引いた。"
 
 # ---- コード側の決まり
-OWNER = "925_labor_overhaul"
+OWNER = "349_labor_overhaul"
 LOG_BASENAME = "labor_overhaul.log"
 STATE_DIRNAME = "labor_overhaul"
 STORE_ATTR = "_instantale_labor_overhaul"

@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""925_labor_overhaul の闇労働のアイコンを、生成 AI の一枚絵から切り出して書く。
+"""349_labor_overhaul の闇労働のアイコンを、生成 AI の一枚絵から切り出して書く。
 
     python tools/make_labor_icons.py
 
 一枚絵は仕事の種類ごとに1枚（2x2 の4場面を黒い隙間で区切ったもの）で、`local/labor_icons/sheet_<種類>.png` に置く
 （大きいので git の外。共有リンクから取った原寸）。黒い隙間を探して4枚に切り、`ICON_SIZE` に縮めて
-`runtime/mods/925_labor_overhaul/icons/<種類>_<番号>.png` に書く。番号は 左上・右上・左下・右下 の順に 1〜4。
+`runtime/mods/349_labor_overhaul/icons/<種類>_<番号>.png` に書く。番号は 左上・右上・左下・右下 の順に 1〜4。
 """
 import os
 import sys
@@ -14,7 +14,7 @@ from PIL import Image, ImageStat
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
 SOURCE = os.path.join(ROOT, "local", "labor_icons")
-OUT = os.path.join(ROOT, "runtime", "mods", "925_labor_overhaul", "icons")
+OUT = os.path.join(ROOT, "runtime", "mods", "349_labor_overhaul", "icons")
 #: 札の欄は約 132px（拡縮の倍率で 1.5 倍まで）。縮めて置く大きさ。
 ICON_SIZE = 256
 #: 隙間とみなす明るさの平均（0〜255）。

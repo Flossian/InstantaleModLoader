@@ -3393,7 +3393,7 @@ class Screen(object):
         """押されたボタンの処理 `fn(app, *args)` を、ゲームと同じ経路（`start_phase`）で走らせる。
 
         MOD が各自で書いていた「`execute(choice_text)` だけを持つ自前のフェーズ」
-        （`301_` / `307_` / `320_` / `325_` / `330_` / `331_` / `336_` / `348_` / `925_` / `926_`）の代わり。
+        （`301_` / `307_` / `320_` / `325_` / `330_` / `331_` / `336_` / `348_` / `349_` / `350_`）の代わり。
         フェーズはこちらで作るので、`PhaseSpec` に載せない注意もここだけで済む。
 
           * `fn` はゲームの別スレッド（`execute` の中）で呼ばれる。例外はゲームへ抜けさせず、
@@ -3408,7 +3408,7 @@ class Screen(object):
         `choice_text` を `fn` に渡したい側は `args` に入れる
         （`execute` が受ける文字列は `process_choice` に渡した `choice_text` そのもの）。
         `fn` の戻り値は `execute` の戻り値になる（投げたときは None）。
-        処理が偽を返したときの手当て（`926_` の塗り直し）は `fn` の中に書く。
+        処理が偽を返したときの手当て（`350_` の塗り直し）は `fn` の中に書く。
         戻り値は `start_phase` と同じ（`process_choice` に渡せたら True）。
         """
         name = label if label is not None else getattr(fn, "__name__", "phase")

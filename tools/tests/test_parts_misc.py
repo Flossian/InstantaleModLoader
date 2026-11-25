@@ -10,7 +10,7 @@ MOD に写されていた読み方をローダへ寄せた関数。
 | `npcs.player_row` が `_player_row` と同じもの | 中と MOD の両方が前の名前で引いている |
 | `npcs.life_log` / `life_log_text` が写しと同じ答え | `327_` は辞書、`336_` / `341_` は `str()` にした文を使う |
 | `items.unwrap` が画面の部品から品を出す | 6か所に写されていた |
-| `items.rarity_rank` が知らない語を 0 にする | `336_` / `926_` の段の番号 |
+| `items.rarity_rank` が知らない語を 0 にする | `336_` / `350_` の段の番号 |
 | `equipment.worn` が窓口の答えと本体の2枠を読む | `410_` / `411_` / `408_` に写されていた |
 | `saves.read_world` が素の JSON と XOR の両方を読む | `read_save` と対 |
 | `panels.Toggle` が1枚だけ持ち、もう一度押すと閉じる | 5本に写されていた |

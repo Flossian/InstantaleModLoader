@@ -386,12 +386,12 @@ class Toggle(object):
     `opener(app, on_dismiss)` は画面を開いて返す。`on_dismiss` を画面が閉じたときに呼ばせると
     （`open_window(on_dismiss=)` へそのまま渡す）、`store[key]` が空になる。
 
-    `122_` / `317_` / `338_` / `339_` / `926_` の `close_view` / `toggle_view` の写しにそろえた形:
+    `122_` / `317_` / `338_` / `339_` / `350_` の `close_view` / `toggle_view` の写しにそろえた形:
 
     - 押したとき、開いていれば閉じるだけ。開いていなくて `app` が None なら開かない（317・338・339）
-    - 開くときは、残っている画面を先に閉じる（926 の `open_view`。317 の開き直しもこれで書ける）
+    - 開くときは、残っている画面を先に閉じる（350 の `open_view`。317 の開き直しもこれで書ける）
     - 開くのに失敗したら `store[key]` を None に戻し、`log_exc` に1行渡す（317・338・339）
-    - 閉じるのに失敗しても `store[key]` は None にして、`log_exc` に1行渡す（926 は黙って握っていた）
+    - 閉じるのに失敗しても `store[key]` は None にして、`log_exc` に1行渡す（350 は黙って握っていた）
 
     `log_exc` に渡す文は `"could not open the window"` / `"could not close the window"` で、MOD の名前は
     付けない（呼び側が頭に付ける）。None ならローダの `log_exc` へ `"panels: "` を付けて渡す。

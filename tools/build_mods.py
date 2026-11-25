@@ -200,6 +200,8 @@ BANDS = (
         "345_date_display",
         "346_player_trait_effects",
         "347_conversation_expressions",
+        "349_labor_overhaul",
+        "350_body_augmentation",
     )),
     #: 提供（4xx）は出どころの帯なので kind を固定しない（TECH.md §3.2.2）。
     (None, CONTRIB_HEAD, (

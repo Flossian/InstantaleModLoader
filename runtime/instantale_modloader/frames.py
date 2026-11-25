@@ -246,7 +246,7 @@ def short(value, limit: "int | None" = 200, *, collapse: bool = False) -> str:
     半角の空白1つに畳む。LLM の答えや説明文を1行に収める用。
     `341_` / `346_` / `143_` / `144_` が `short(" ".join(v.split()), limit)` と同じ処理を写していた。
     「…」は `limit` 字の後ろに足す（字数に数えない）。
-    「…」を付けない写し（`npcs.clean_text`・`926_`・`902_`）とは答えが違う。
+    「…」を付けない写し（`npcs.clean_text`・`350_`・`902_`）とは答えが違う。
     """
     if value is None:
         return ""

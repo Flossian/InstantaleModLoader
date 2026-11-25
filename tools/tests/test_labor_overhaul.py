@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""925_labor_overhaul をゲーム抜きで通す。
+"""349_labor_overhaul をゲーム抜きで通す。
 
-    python tools/tests/test_wip_labor_overhaul.py
+    python tools/tests/test_labor_overhaul.py
 
 偽の app / Player / Area / Facility / PhaseSpec / HUD / Clock を差し込み、次を確認する。
 

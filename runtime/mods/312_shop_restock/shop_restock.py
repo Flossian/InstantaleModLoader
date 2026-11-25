@@ -189,7 +189,7 @@ NEW_STOCK_TIMEOUT = 120      # LLM を待つ秒数（`405_` と同じ。返ら�
 NEW_STOCK_MIN = 4            # 1回の入れ替えで作る品の数の下限・上限（雛形の件数に合わせる）
 NEW_STOCK_MAX = 12
 
-# `item_type` / `item_sub_type` の語彙（ローダの `items.ITEM_TYPES`。925 も同じ組で品を書かせる）。
+# `item_type` / `item_sub_type` の語彙（ローダの `items.ITEM_TYPES`。349 も同じ組で品を書かせる）。
 # LLM にはこの組から選ばせ、外れたら先頭の細分に寄せる。
 ITEM_TYPES = items.ITEM_TYPES
 #: レア度の6段（GAME.md §2.13.2）。ゲームのスキーマの定数なので、ローダの `items.RARITIES` を使う。

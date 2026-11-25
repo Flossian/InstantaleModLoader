@@ -84,7 +84,7 @@ PLACE_FALLBACK = "施設"
 PLAYER_FALLBACK = "主人公"
 
 # ---- コード側の決まり
-OWNER = "926_body_augmentation"
+OWNER = "350_body_augmentation"
 LOG_BASENAME = "body_augmentation.log"
 SETTINGS_DIRNAME = "body_augmentation"
 PLAY_DIRNAME = "body_augmentation_play"
@@ -1078,7 +1078,7 @@ def apply(ctx):
 
     #: 依頼の終わり・放棄の前後で開いている数。開いている間に進んだ日数はサイクルに数えない
     #: （依頼1回ぶんは `QUEST_CYCLES` で足す。344 が帰りの日数を進めると二重になる）。
-    #: 926 の後の処理が 344 より後に来るよう、mod.json で `"after"` を宣言している。
+    #: 350 の後の処理が 344 より後に来るよう、mod.json で `"after"` を宣言している。
     quest_window = {"depth": 0}
 
     def after_days(call):

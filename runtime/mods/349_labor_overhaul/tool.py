@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 r"""労働の MOD の設定画面。左に表の形の入力欄、右にその設定での試算。
 
-    python runtime/mods/925_labor_overhaul/tool.py
+    python runtime/mods/349_labor_overhaul/tool.py
 
 TECH.md §3.12 の契約で動く。ローダの設定画面（`tools/gui.py`）が `mod.json` の `"tool"` を見て
 このファイルを別プロセスで開き、場所は環境変数で渡す。直接起動したときは自分で探す。

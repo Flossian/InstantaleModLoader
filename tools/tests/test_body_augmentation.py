@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""926_body_augmentation の規則をゲーム抜きで通す。
+"""350_body_augmentation の規則をゲーム抜きで通す。
 
-    python tools/tests/test_wip_body_augmentation.py
+    python tools/tests/test_body_augmentation.py
 
   見立て … LLM の答えの検算（表に無い部位・能力値・特殊効果を落とす、断りの理由、名前の長さ）。伸びと代償は重ねない
   量     … レア度・仕立て・違法で量の段が動く。特殊効果は設定のレア度から、違法は必ず。違法には暴走か侵食が付く

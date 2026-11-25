@@ -785,7 +785,7 @@ def main():
           read_log(module))
 
     # 傾向の登録があるときも、足す文は傾向の後ろに1回だけ繋ぐ（窓口の lineup_of の返り値には入っていない）。
-    shop_lineup.add_note("926_body_augmentation", object(), lambda f: "体に組み込む部品も少し並べる。")
+    shop_lineup.add_note("350_body_augmentation", object(), lambda f: "体に組み込む部品も少し並べる。")
     reset_state()
     module, ctx = fresh_mod(new_stock=True)
     app, owner, facility = make_world(
@@ -803,7 +803,7 @@ def main():
     check("足す文: 傾向の後ろに1回だけ入る",
           "ここは宿なので料理が中心。体に組み込む部品も少し並べる。" in prompt
           and prompt.count("体に組み込む部品も少し並べる。") == 1, prompt)
-    shop_lineup.withdraw_note("926_body_augmentation")
+    shop_lineup.withdraw_note("350_body_augmentation")
 
     # 窓口が口を出さない店の種類は、ゲームと同じく武器と防具を含めさせる。
     reset_state()
@@ -821,9 +821,9 @@ def main():
     prompt = LLM.asked[0][1][0]["content"] if LLM.asked else ""
     check("傾向: 口を出さない種類は既定の文", "武器と防具をそれぞれ1つ以上" in prompt, prompt)
 
-    # 傾向を決める MOD が居なくても、足す文（926_ の治療院の一文）は既定の文の後ろに繋ぐ。
+    # 傾向を決める MOD が居なくても、足す文（350_ の治療院の一文）は既定の文の後ろに繋ぐ。
     shop_lineup.reset()
-    shop_lineup.add_note("926_body_augmentation", object(), lambda f: "体に組み込む部品も少し並べる。")
+    shop_lineup.add_note("350_body_augmentation", object(), lambda f: "体に組み込む部品も少し並べる。")
     reset_state()
     module, ctx = fresh_mod(new_stock=True)
     app, owner, facility = make_world(

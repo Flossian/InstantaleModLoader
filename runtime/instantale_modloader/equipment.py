@@ -175,7 +175,7 @@ def worn(app, holder, *, free=True):
     写し（`410_` / `411_` の `worn_items`、`408_` の `_equipment`）にそろえた形で、違いは2つ。
     `410_` / `411_` は品だけを返す（`[item for _region, item in equipment.worn(...)]` で同じになる）。
     `equipments` の値が真偽値なら品とみなさない（`410_` / `411_` は真偽値をそのまま品として返した）。
-    `926_` のように素の装備品を数えたくない用途は `gear` を直に使う。
+    `350_` のように素の装備品を数えたくない用途は `gear` を直に使う。
     """
     if holder is None:
         return []
