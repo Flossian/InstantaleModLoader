@@ -64,7 +64,7 @@
       "min": 1,
       "max": 720,
       "label": {
-        "ja": "闇労働の1期の長さ（日）",
+        "ja": "闇労働の1回の長さ（日）",
         "en": "Days per term of illegal labour"
       },
       "note": {
@@ -78,7 +78,7 @@
       "min": 1,
       "max": 48,
       "label": {
-        "ja": "闇労働の期の数",
+        "ja": "闇労働の回数",
         "en": "Terms of illegal labour"
       },
       "note": {
@@ -128,7 +128,7 @@
     },
     "EVENT_PERCENT": {
       "type": "int",
-      "default": 50,
+      "default": 30,
       "min": 0,
       "max": 100,
       "label": {
@@ -136,8 +136,8 @@
         "en": "Incident chance (%)"
       },
       "note": {
-        "ja": "90日あたりの確率。1回の長さを短くすると、1回あたりの確率も同じ割合で下がる。0 で起きない",
-        "en": "Per 90 days. Shorter terms get a proportionally lower chance each. 0 turns incidents off"
+        "ja": "1回（「働く」1回）ごとの確率。1回の長さによらない。闇労働は危険が起きなかった回だけ。0 で起きない",
+        "en": "Per term, whatever its length. In illegal labour only on terms without a risk. 0 turns incidents off"
       }
     },
     "ABILITY_MAX_PERCENT": {
@@ -150,7 +150,7 @@
         "en": "Top pay rate from ability scores (%)"
       },
       "note": {
-        "ja": "仕事に効く能力値2つの平均が 30 のときの賃金。11 で 100%。100 にすると能力値で賃金が上がらない",
+        "ja": "仕事に関わる能力値2つの平均が 30 のときの賃金。11 で 100%。100 にすると能力値で賃金が上がらない",
         "en": "Pay when the two abilities the job uses average 30. 11 gives 100%. 100 stops abilities from raising pay"
       }
     },
@@ -432,7 +432,7 @@
         "en": "Lowest pay rate from low ability scores (%)"
       },
       "note": {
-        "ja": "仕事に効く能力値の平均が 11 より低いと、この値まで下がる",
+        "ja": "仕事に関わる能力値の平均が 11 より低いと、この値まで下がる",
         "en": "Pay falls towards this when the job's abilities average below 11"
       }
     },
@@ -570,7 +570,7 @@
         "en": "Risk chance at danger 1 (%)"
       },
       "note": {
-        "ja": "90日の1期あたり。能力値が 11 のとき",
+        "ja": "90日の1回あたり。能力値が 11 のとき",
         "en": "Per 90-day term, at ability 11"
       }
     },
@@ -634,8 +634,84 @@
       "min": 0,
       "max": 20,
       "label": {
-        "ja": "仕返しで奪われる額（賃金の何期ぶんか）",
+        "ja": "仕返しで奪われる額（賃金の何回ぶんか）",
         "en": "Gold lost to retaliation (terms of pay)"
+      }
+    },
+    "AVOID_PERCENT_1": {
+      "type": "int",
+      "default": 60,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "危険を避ける判定の基準（危険度 1・%）",
+        "en": "Base chance to avoid a risk (danger 1, %)"
+      },
+      "note": {
+        "ja": "能力値 11 のとき。能力値1つにつき判定の上がり幅だけ上がる",
+        "en": "At ability 11; rises with the ability like other checks"
+      }
+    },
+    "AVOID_PERCENT_2": {
+      "type": "int",
+      "default": 50,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "危険を避ける判定の基準（危険度 2・%）",
+        "en": "Base chance to avoid a risk (danger 2, %)"
+      }
+    },
+    "AVOID_PERCENT_3": {
+      "type": "int",
+      "default": 40,
+      "min": 0,
+      "max": 100,
+      "label": {
+        "ja": "危険を避ける判定の基準（危険度 3・%）",
+        "en": "Base chance to avoid a risk (danger 3, %)"
+      }
+    },
+    "BRIBE_PAY_PERCENT": {
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 1000,
+      "label": {
+        "ja": "見張りに握らせる額（1回の賃金に対する %）",
+        "en": "Bribe for the watch (% of one term's pay)"
+      },
+      "note": {
+        "ja": "所持金から払う。見逃してもらえなくても戻らない",
+        "en": "Paid from your gold and not returned if it fails"
+      }
+    },
+    "ITEM_VALUE_TERMS": {
+      "type": "int",
+      "default": 2,
+      "min": 1,
+      "max": 50,
+      "label": {
+        "ja": "受け取る品の値の上限（1回の賃金の何倍か）",
+        "en": "Top price of a gift item (times one term's pay)"
+      },
+      "note": {
+        "ja": "店の品揃えから品を作るとき、店の買値がこの額までの品を選ぶ。無ければいちばん安い品",
+        "en": "When made from the shop's goods, picks one priced up to this; else the cheapest"
+      }
+    },
+    "ITEM_FALLBACK_PERCENT": {
+      "type": "int",
+      "default": 20,
+      "min": 0,
+      "max": 1000,
+      "label": {
+        "ja": "品の代わりの心付け（1回の賃金に対する %）",
+        "en": "Tip instead of an item (% of one term's pay)"
+      },
+      "note": {
+        "ja": "品を作れなかったとき（AI の返事が無いなど）",
+        "en": "When no item could be made (no answer from the AI, etc.)"
       }
     },
     "TOWN_GROWTH": {
@@ -686,6 +762,54 @@
       "note": {
         "ja": "途中でやめた契約は数えない",
         "en": "Contracts you quit do not count"
+      }
+    },
+    "LIST_WINDOW": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "募集をウィンドウで出す",
+        "en": "Show the job list in a window"
+      },
+      "note": {
+        "ja": "雇い主の顔・勤続・契約の額を札で並べる。切ると選択肢のボタンで選ぶ",
+        "en": "Cards with the employer's face, seniority and contract pay. Off: pick from the choice buttons"
+      }
+    },
+    "PROGRESS_STRIP": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "契約の進みを帯で出す",
+        "en": "Show contract progress as a strip"
+      },
+      "note": {
+        "ja": "働いている間、背景の上に回ごとの賃金と出来事の結果を並べる",
+        "en": "While working, the pay and event result of each term appear above the background"
+      }
+    },
+    "FINISH_SCENE": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "務め終えたとき雇い主が出てくる",
+        "en": "The employer appears when you finish"
+      },
+      "note": {
+        "ja": "雇い主の立ち絵が出て、一言かけてくる",
+        "en": "The employer's portrait appears with a parting word"
+      }
+    },
+    "FINISH_LINE": {
+      "type": "bool",
+      "default": true,
+      "label": {
+        "ja": "雇い主の一言を AI が書く",
+        "en": "The AI writes the employer's word"
+      },
+      "note": {
+        "ja": "働いた間の出来事に触れる一言になる。切ると決まった一言",
+        "en": "The word mentions what happened at work. Off: a fixed word"
       }
     }
   },

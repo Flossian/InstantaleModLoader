@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """労働の規則。ゲームには触らない（ゲーム抜きの検査で全部通せる）。
 
-職種の表・賃金の式・期ごとの出来事の表・勤続の段・裏の仕事の危険の式・控えの形を持つ。
+職種の表・賃金の式・回ごとの出来事の表・勤続の段・裏の仕事の危険の式・控えの形を持つ。
 設定は読まない（必要な値は引数で受け取る。TECH.md §3.1.1.1）。
 遊び方は DOC.md。
 """
@@ -16,7 +16,7 @@ ABILITY_NAMES = {"strength": "筋力", "dexterity": "器用", "constitution": "�
 GAME_TERM_DAYS = 90
 #: 29歳までの1回の長さ（月）。30歳から5歳ごとに1ヵ月伸びる（役場も裏の事務所も同じ。GAME.md「役場の労働」）。
 AGE_BASE_MONTHS = 3
-#: ゲームの闇労働の1期の長さ（日）。危険の確率はこの長さの1期ぶんで決めてある。
+#: ゲームの闇労働の1回の長さ（日）。危険の確率はこの長さの1回ぶんで決めてある。
 GAME_ILLEGAL_TERM_DAYS = 90
 DAYS_PER_MONTH = 30
 
@@ -30,15 +30,15 @@ LOW_RATE_PERCENT = 80
 #: 雇い主になる施設の種類 → 効く能力値2つと、一覧に出す仕事の中身。
 #: 並びは一覧に出す順。
 OFFICE_JOBS = (
-    ("blacksmith", ("strength", "constitution"), "力仕事"),
-    ("inn", ("charisma", "constitution"), "客の世話"),
-    ("general_store", ("charisma", "wisdom"), "売り場"),
-    ("specialty_shop", ("intelligence", "dexterity"), "品の扱い"),
-    ("medical_facility", ("wisdom", "dexterity"), "手当ての手伝い"),
-    ("guild", ("intelligence", "charisma"), "受付と書類"),
-    ("administrative_office", ("intelligence", "wisdom"), "書類の整理"),
-    ("training_facility", ("strength", "dexterity"), "稽古の相手"),
-    ("colosseum", ("constitution", "strength"), "設営と雑用"),
+    ("blacksmith", ("strength", "constitution"), "重い物を運び、作業場の力仕事をする。"),
+    ("inn", ("charisma", "constitution"), "客の世話と部屋の支度をする。"),
+    ("general_store", ("charisma", "wisdom"), "店番と品出しをする。"),
+    ("specialty_shop", ("intelligence", "dexterity"), "扱いの難しい品の手入れと客の応対をする。"),
+    ("medical_facility", ("wisdom", "dexterity"), "手当ての手伝いと病人の世話をする。"),
+    ("guild", ("intelligence", "charisma"), "受付と依頼の書類を受け持つ。"),
+    ("administrative_office", ("intelligence", "wisdom"), "書類の整理と窓口の応対をする。"),
+    ("training_facility", ("strength", "dexterity"), "稽古の相手と道具の手入れをする。"),
+    ("colosseum", ("constitution", "strength"), "催しの設営と雑用をする。"),
 )
 OFFICE_JOB_BY_TYPE = {row[0]: row for row in OFFICE_JOBS}
 
@@ -65,7 +65,7 @@ RISKS = (CRACKDOWN, RETALIATION, BETRAYAL)
 
 #: 裏の仕事。`danger` は 1〜3（賃金の倍率と、危険が起きる確率を決める）。`risks` は起きたときの種類の重み。
 ILLEGAL_JOBS = (
-    {"key": "courier", "name": "荷の運び", "danger": 1,
+    {"key": "courier", "name": "荷運び", "danger": 1,
      "abilities": ("dexterity", "constitution"),
      "risks": {CRACKDOWN: 3, RETALIATION: 1, BETRAYAL: 1},
      "detail": "中身を問わない荷を、決められた先へ届ける。"},
@@ -77,20 +77,22 @@ ILLEGAL_JOBS = (
      "abilities": ("strength", "charisma"),
      "risks": {CRACKDOWN: 1, RETALIATION: 3, BETRAYAL: 1},
      "detail": "払いの滞った相手から、貸しを取り立てる。"},
-    {"key": "ledger", "name": "帳簿の細工", "danger": 2,
-     "abilities": ("intelligence", "dexterity"),
+    {"key": "insider", "name": "内通", "danger": 2,
+     "abilities": ("intelligence", "charisma"),
      "risks": {CRACKDOWN: 2, RETALIATION: 1, BETRAYAL: 3},
-     "detail": "表に出せない金の流れを、帳簿の上で消す。"},
-    {"key": "breakin", "name": "押し込みの手引き", "danger": 3,
+     "detail": "表の店や役所に潜り込み、内情を流し続ける。"},
+    {"key": "breakin", "name": "侵入の手引き", "danger": 3,
      "abilities": ("dexterity", "wisdom"),
      "risks": {CRACKDOWN: 3, RETALIATION: 2, BETRAYAL: 2},
-     "detail": "狙った先の下見をし、当日の出入りを手引きする。"},
+     "detail": "盗みに入る先を下見し、出入りを手引きする。"},
 )
 ILLEGAL_JOB_BY_KEY = {job["key"]: job for job in ILLEGAL_JOBS}
+#: 前の版の仕事のキー（控えに残った契約を、替えた仕事として続けさせる）。帳簿の改ざんは長い契約に合わず内通に替えた。
+ILLEGAL_JOB_BY_KEY["ledger"] = ILLEGAL_JOB_BY_KEY["insider"]
 MAX_DANGER = 3
 #: この危険度の仕事は、勤続の段がこの番号以上で並ぶ。
 DANGER_NEEDS_RANK = {3: 1}
-#: 危険が起きる確率（%。ゲームの闇労働の1期＝90日ぶん。能力値が基準のとき）。
+#: 危険が起きる確率（%。ゲームの闇労働の1回＝90日ぶん。能力値が基準のとき）。
 RISK_BASE_PERCENT = {1: 10, 2: 18, 3: 28}
 #: 能力値で確率に掛かる率の幅（基準より低いと上がり、高いと下がる）。
 RISK_FACTOR_MIN = 0.4
@@ -99,7 +101,7 @@ RISK_PERCENT_CAP = 90
 #: 取り締まりで下がる手配度（危険度1つにつき）と、裏切りで下がる手配度。
 CRACKDOWN_LAW_PER_DANGER = 2
 BETRAYAL_LAW = 1
-#: 仕返しで失う額（その期の賃金の倍数）。
+#: 仕返しで失う額（その回の賃金の倍数）。
 RETALIATION_LOSS_TERMS = 2
 #: 街に困り事が起きている間の、裏の仕事の賃金（%）。
 ILLEGAL_TROUBLE_PERCENT = 130
@@ -120,11 +122,11 @@ FINISH_AFFINITY = (3, 6)
 #: 満了の割増（%。短い契約・長い契約）。ゲームの 16ヵ月・32ヵ月の額から逆算した値。
 FINISH_BONUS_PERCENT = (12.5, 25.0)
 
-# ---------------------------------------------------------------- 期ごとの出来事
+# ---------------------------------------------------------------- 回ごとの出来事
 # 1件 = {"key", "jobs"（施設の種類の並び。None はどの仕事でも）, "text", "options"}
 # 選択肢 = {"label", "ability"（判定に使う能力値。None は判定なし）, "base"（能力値が基準のときの成功 %）,
 #           "win" / "lose"（判定ありの結果）, "result"（判定なしの結果）}
-# 結果 = {"text", "pay"（その期の賃金の増減 %）, "tenure"（勤続の増減・日）, "affinity"（雇い主の好感度の増減）,
+# 結果 = {"text", "pay"（その回の賃金の増減 %）, "tenure"（勤続の増減・日）, "affinity"（雇い主の好感度の増減）,
 #         "law"（手配度の増減）, "fired"（その場で契約が終わる）}
 # 文は {owner}（雇い主の名前）・{place}（施設の名前）を差し込む。舞台の物は書かず、関係と出来事だけを書く。
 #: 能力値が基準から1上がるごとに成功の % に足す数と、成功の % の範囲。
@@ -184,7 +186,7 @@ EVENTS = (
      "text": "{owner}が、働きぶりを見て賃金の話を切り出した。",
      "options": (
          _check("条件を掛け合う", "charisma", 45,
-                {"text": "言い分が通り、今期の賃金が大きく上がった。", "pay": 40},
+                {"text": "言い分が通り、今回の賃金が大きく上がった。", "pay": 40},
                 {"text": "欲をかいたと思われた。話は流れた。", "affinity": -1}),
          _plain("言い値で受ける", {"text": "{owner}の言い値で受けた。", "pay": 15}))},
     {"key": "theft", "jobs": None,
@@ -422,8 +424,226 @@ EVENTS = (
                 {"text": "当たり散らされても動じずに支度を整えた。勝った後、祝儀が回ってきた。", "pay": 30},
                 {"text": "手際が悪いと怒鳴られ、世話役を替えられた。", "tenure": -10}),
          _plain("ほかの者に替わってもらう", {"text": "ほかの者に替わってもらった。"}))},
+    # ---- 品を受け取る出来事（施設ごとに1件。成功すると雇い主の持ち物から1品を受け取る）
+    {"key": "smith_test", "jobs": ("blacksmith",),
+     "text": "{owner}が、打ち上がったばかりの品の具合を見てほしいと言う。",
+     "options": (
+         _check("使い込んで確かめる", "strength", 55,
+                {"text": "使い込んで癖まで伝えた。{owner}が礼をしたいと言う。", "item": True, "affinity": 1},
+                {"text": "試すうちに傷を付けてしまった。", "pay": -15}),
+         _plain("ざっと見て返す", {"text": "ざっと見て返した。"}))},
+    {"key": "inn_supply", "jobs": ("inn",),
+     "text": "{owner}が、仕入れの目利きを頼んできた。",
+     "options": (
+         _check("質の良い物を選び抜く", "wisdom", 50,
+                {"text": "良い物だけを選び抜いた。{owner}が余った分を持たせてくれると言う。", "item": True},
+                {"text": "傷んだ物を混ぜてしまった。", "affinity": -1}),
+         _plain("言われた数だけ揃える", {"text": "言われた数だけ揃えた。"}))},
+    {"key": "store_shelf", "jobs": ("general_store",),
+     "text": "{owner}が、売れ残った品の並べ方を変えてみろと言う。",
+     "options": (
+         _check("客の目を引くように並べる", "charisma", 50,
+                {"text": "並べ替えた棚から品がよく売れた。{owner}が好きな物を持っていけと言う。", "item": True},
+                {"text": "かえって客の足が遠のいた。", "pay": -10}),
+         _plain("元のままにしておく", {"text": "元のままにしておいた。"}))},
+    {"key": "shop_appraise", "jobs": ("specialty_shop",),
+     "text": "{owner}が、持ち込まれた品の目利きを任せてきた。",
+     "options": (
+         _check("見立てる", "intelligence", 55,
+                {"text": "見立ては{owner}と同じだった。{owner}が棚の物を分けてくれると言う。", "item": True},
+                {"text": "見立てを外し、{owner}に損をさせかけた。", "affinity": -1}),
+         _plain("{owner}に任せる", {"text": "{owner}に任せた。"}))},
+    {"key": "clinic_mix", "jobs": ("medical_facility",),
+     "text": "{owner}が、手当てに使う物の支度を教えてくれることになった。",
+     "options": (
+         _check("手順を覚えて支度する", "dexterity", 50,
+                {"text": "手順を一度で覚えた。{owner}が支度した物を持たせてくれると言う。", "item": True},
+                {"text": "分量を誤り、作り直しになった。", "pay": -10}),
+         _plain("見ているだけにする", {"text": "見ているだけにした。"}))},
+    {"key": "guild_lost", "jobs": ("guild",),
+     "text": "報告に来た冒険者が、受け取り手のいない品を置いていった。",
+     "options": (
+         _check("持ち主を辿る", "wisdom", 50,
+                {"text": "持ち主は見つからなかった。{owner}がそれをお前の取り分にしようと言う。", "item": True},
+                {"text": "持ち主を取り違えて騒ぎになった。", "tenure": -10}),
+         _plain("{owner}に預ける", {"text": "{owner}に預けた。", "affinity": 1}))},
+    {"key": "office_seized", "jobs": ("administrative_office",),
+     "text": "差し押さえた品の目録づくりを手伝うことになった。",
+     "options": (
+         _check("一晩で目録を仕上げる", "intelligence", 50,
+                {"text": "目録を一晩で仕上げた。{owner}が払い下げの品を回してくれると言う。", "item": True},
+                {"text": "数え漏れが見つかり、やり直しになった。", "pay": -10}),
+         _plain("数えるだけ数える", {"text": "数えるだけ数えた。"}))},
+    {"key": "train_bout", "jobs": ("training_facility",),
+     "text": "{owner}が、稽古の締めに一本勝負を挑んできた。",
+     "options": (
+         _check("受けて立つ", "strength", 50,
+                {"text": "一本取った。{owner}が笑って、稽古場の物を寄越すと言う。", "item": True, "affinity": 1},
+                {"text": "あっさり転がされた。", "tenure": -5}),
+         _plain("辞退する", {"text": "辞退した。"}))},
+    {"key": "arena_prize", "jobs": ("colosseum",),
+     "text": "催しの裏で、余った景品の配り役を任された。",
+     "options": (
+         _check("揉めないように配る", "charisma", 50,
+                {"text": "揉めずに配り終えた。{owner}が残りの一つを回してくれると言う。", "item": True},
+                {"text": "配り方で揉め事が起きた。", "affinity": -1}),
+         _plain("ほかの者に任せる", {"text": "ほかの者に任せた。"}))},
 )
 EVENT_BY_KEY = {event["key"]: event for event in EVENTS}
+
+# ---------------------------------------------------------------- 闇労働の出来事
+# 危険が起きなかった回に、役場の出来事と同じ確率で起きる。形は役場の出来事と同じ（"affinity" は事務所の主人）。
+ILLEGAL_EVENTS = (
+    {"key": "skim", "jobs": None,
+     "text": "預かった物から少し抜いても、誰も気づかなそうだ。",
+     "options": (
+         _check("抜く", "dexterity", 45,
+                {"text": "誰にも気づかれなかった。", "pay": 40},
+                {"text": "気づかれた。{owner}の信用を失った。", "tenure": -60, "affinity": -3}),
+         _plain("手を付けない", {"text": "手を付けなかった。", "tenure": 5}))},
+    {"key": "extra", "jobs": None,
+     "text": "{owner}から、急ぎの追加の仕事を頼まれた。",
+     "options": (
+         _check("引き受ける", "constitution", 55,
+                {"text": "急ぎの仕事も片付けた。{owner}は上乗せを払った。", "pay": 35, "tenure": 10},
+                {"text": "手が回らず、どちらも中途半端になった。", "pay": -10}),
+         _plain("断る", {"text": "手一杯だと断った。", "tenure": -5}))},
+    {"key": "mess", "jobs": None,
+     "text": "仲間の一人がしくじり、後始末が要る。",
+     "options": (
+         _check("跡を消して回る", "wisdom", 50,
+                {"text": "跡を残さず片付けた。{owner}の覚えがよくなった。", "tenure": 20, "affinity": 1},
+                {"text": "片付けの最中に顔を見られた。", "law": -1}),
+         _plain("放っておく", {"text": "放っておいた。{owner}は不満げだった。", "affinity": -1}))},
+    {"key": "hush", "jobs": None,
+     "text": "仕事を見ていた者が、口止め料を求めてきた。",
+     "options": (
+         _check("凄んで黙らせる", "strength", 50,
+                {"text": "相手は青い顔で引き下がった。", "tenure": 10},
+                {"text": "相手は逃げて、役人に話を持ち込んだ。", "law": -2}),
+         _plain("払って黙らせる", {"text": "稼ぎの一部を渡して黙らせた。", "pay": -30}))},
+    {"key": "stranger", "jobs": None,
+     "text": "見知らぬ者が、割のいい頼み事を持ちかけてきた。",
+     "options": (
+         _check("素性を探ってから受ける", "intelligence", 50,
+                {"text": "怪しい所は無かった。頼み事は割のいい稼ぎになった。", "pay": 30},
+                {"text": "罠だった。逃げ帰る羽目になった。", "pay": -20, "law": -1}),
+         _plain("断る", {"text": "断った。"}))},
+    {"key": "rival", "jobs": None,
+     "text": "別の筋の者が、縄張りを荒らすなと脅してきた。",
+     "options": (
+         _check("話をつける", "charisma", 50,
+                {"text": "互いの縄張りを決めて手打ちにした。{owner}が感心した。", "affinity": 2, "tenure": 10},
+                {"text": "話はこじれ、稼ぎの一部を譲る羽目になった。", "pay": -20}),
+         _plain("引き下がる", {"text": "引き下がった。", "tenure": -5}))},
+    {"key": "informant", "jobs": None,
+     "text": "役人の動きを知る者が、話を売りたいと言ってきた。",
+     "options": (
+         _check("値を叩いて買う", "charisma", 50,
+                {"text": "安く聞き出した。次の手入れの日取りが分かった。", "pay": -10, "tenure": 15},
+                {"text": "高値で掴まされたうえ、中身は古い話だった。", "pay": -25}),
+         _plain("断る", {"text": "断った。"}))},
+    {"key": "bonus", "jobs": None,
+     "text": "{owner}が、今回の働きに上乗せを考えていると言う。",
+     "options": (
+         _check("吹っかける", "charisma", 45,
+                {"text": "思った以上の額を引き出した。", "pay": 40},
+                {"text": "欲をかいたと思われ、{owner}の機嫌を損ねた。", "affinity": -2}),
+         _plain("素直に受け取る", {"text": "素直に受け取った。", "pay": 15}))},
+)
+ILLEGAL_EVENT_BY_KEY = {event["key"]: event for event in ILLEGAL_EVENTS}
+
+
+def pick_illegal_event(rng, last_key=None):
+    """闇労働の出来事を1つ選ぶ。直前と同じものは続けない。"""
+    pool = [event for event in ILLEGAL_EVENTS if event["key"] != last_key] or list(ILLEGAL_EVENTS)
+    return pool[int(rng.random() * len(pool)) % len(pool)]
+
+
+# ---------------------------------------------------------------- 危険を避ける選択肢
+# 危険が起きたら、すぐに損をさせず選択肢を出す。成功すれば避け、失敗すれば危険のとおりの損。
+# 選択肢 = {"label", "how", "ability", "shift"（危険度ごとの基準に足す %）, "win"（成功の結果）, "lose"（失敗の頭の文）}
+#   how: "check"（能力値の判定）/ "bribe"（1回の賃金を所持金から払い、能力値で判定。失敗しても払った額は戻らない）
+#        / "sure"（判定なしで決まる結果）
+# 結果の "pay" は、その回の賃金の増減 %（-100 で賃金なし）。"quit" は手を引いて契約を終える（稼ぎは守る）。
+#: 危険度ごとの、避ける判定の基準の成功 %（能力値 11 のとき）。危険度が高い仕事ほど避けにくい。
+RISK_CHECK_BASE = {1: 60, 2: 50, 3: 40}
+
+
+def _avoid(label, ability, shift, win, lose, how="check"):
+    return {"label": label, "how": how, "ability": ability, "shift": shift, "win": win, "lose": lose}
+
+
+def _sure(label, result):
+    return {"label": label, "how": "sure", "ability": None, "shift": 0, "win": result, "lose": None}
+
+
+RISK_EVENTS = {
+    CRACKDOWN: {
+        "text": "仕事の最中に、取り締まりの手が回ってきた。",
+        "options": (
+            _avoid("裏口から逃げる", "dexterity", 0,
+                   {"text": "裏口から抜け出し、追っ手を撒いた。", "tenure": 10}, "逃げ切れなかった。"),
+            _avoid("荷を捨てて人混みに紛れる", "wisdom", 10,
+                   {"text": "荷を捨てて紛れ込み、顔を見られずに済んだ。今回の稼ぎは半分になった。", "pay": -50},
+                   "紛れ込む前に見咎められた。"),
+            _avoid("見張りに金を握らせる", "charisma", 0,
+                   {"text": "金を受け取った見張りは、黙って目を逸らした。"}, "金は受け取られたが、見逃してはもらえなかった。",
+                   how="bribe"),
+        )},
+    RETALIATION: {
+        "text": "仕事の相手方が、仕返しに人を差し向けてきた。",
+        "options": (
+            _avoid("迎え撃つ", "strength", 0,
+                   {"text": "差し向けられた者たちを追い返した。", "tenure": 15}, "多勢に押し切られた。"),
+            _sure("今回の稼ぎを渡して収める", {"text": "今回の稼ぎを差し出して、相手を収めた。", "pay": -100}),
+            _avoid("身を隠してやり過ごす", "dexterity", 5,
+                   {"text": "身を隠し、相手が諦めるまでやり過ごした。"}, "隠れ家を嗅ぎつけられた。"),
+        )},
+    BETRAYAL: {
+        "text": "組んでいる者の様子がおかしい。役人と通じているのかもしれない。",
+        "options": (
+            _avoid("先回りして段取りを変える", "wisdom", 0,
+                   {"text": "相手が動く前に段取りを変え、売られずに済んだ。", "tenure": 30}, "先回りは間に合わなかった。"),
+            _avoid("問い詰める", "charisma", -5,
+                   {"text": "問い詰めると、相手は白状して手を引いた。", "tenure": 20}, "相手はしらを切り、その夜のうちに動いた。"),
+            _sure("ここで手を引く", {"text": "嫌な予感に従って手を引いた。ここまでの稼ぎは守ったが、仕事はここまでになった。",
+                                    "pay": -100, "quit": True}),
+        )},
+}
+
+
+def tidy_item(raw, value, item_types, rarities):
+    """LLM が書いた品1つを、ゲームの `generate_item_from_item_data` の引数の並びにする。読めなければ None。
+
+    `(item_name, description, item_type, item_sub_type, value, item_appearance, rarity)`。
+    種類が語彙（`items.ITEM_TYPES`）から外れたら `utility`、細分が外れたらその種類の先頭、レア度が外れたら先頭に寄せる。
+    価値は呼び側が決める（その土地の平均難易度）。
+    """
+    if not isinstance(raw, dict):
+        return None
+    name = str(raw.get("item_name") or "").strip()[:40]
+    if not name:
+        return None
+    item_type = str(raw.get("item_type") or "")
+    if item_type not in item_types:
+        item_type = "utility"
+    sub = str(raw.get("item_sub_type") or "")
+    if sub not in item_types[item_type]:
+        sub = item_types[item_type][0]
+    rarity = str(raw.get("rarity") or "")
+    if rarity not in rarities:
+        rarity = rarities[0]
+    appearance = str(raw.get("item_appearance") or "").strip() or name
+    return (name, str(raw.get("description") or "").strip(), item_type, sub, int(value), appearance, rarity)
+
+
+def avoid_percent(option, danger, score):
+    """危険を避ける選択肢の成功 %。判定の無い選択肢は None。"""
+    if option.get("how") == "sure":
+        return None
+    danger = min(MAX_DANGER, max(1, int(_number(danger, 1))))
+    return check_percent(RISK_CHECK_BASE[danger] + int(_number(option.get("shift"))), score)
 
 
 #: 良い出来事の賃金（段階ごとに足す %・上限・崩れた段階の %）。
@@ -463,6 +683,7 @@ def values_from_settings(get):
         "RISK_BASE_PERCENT": (get("RISK_PERCENT_1"), get("RISK_PERCENT_2"), get("RISK_PERCENT_3")),
         "CRACKDOWN_LAW_PER_DANGER": get("CRACKDOWN_LAW"), "BETRAYAL_LAW": get("BETRAYAL_LAW"),
         "RETALIATION_LOSS_TERMS": get("RETALIATION_TERMS"),
+        "RISK_CHECK_BASE": (get("AVOID_PERCENT_1"), get("AVOID_PERCENT_2"), get("AVOID_PERCENT_3")),
     }
 
 
@@ -496,6 +717,9 @@ def configure(**values):
     risks = several("RISK_BASE_PERCENT")
     if risks is not None:
         scope["RISK_BASE_PERCENT"] = {1: risks[0], 2: risks[1], 3: risks[2]}
+    avoids = several("RISK_CHECK_BASE")
+    if avoids is not None:
+        scope["RISK_CHECK_BASE"] = {1: avoids[0], 2: avoids[1], 3: avoids[2]}
     days, pays, cuts = several("RANK_DAYS"), several("RANK_PAY_PERCENT"), several("RANK_DISCOUNT_PERCENT")
     ranks = [DEFAULT_RANKS[0]]
     for index in range(1, len(DEFAULT_RANKS)):
@@ -646,10 +870,12 @@ def finish_bonus(earned, long_contract, relief=False):
     return int(_number(earned) * percent / 100.0)
 
 
-def event_percent(percent_per_game_term, term_days):
-    """1回の「働く」で出来事が起きる確率（%）。設定はゲームの1回（90日）あたりで、長さに比例させる。"""
-    percent = float(_number(percent_per_game_term)) * max(1, int(_number(term_days, GAME_TERM_DAYS))) / GAME_TERM_DAYS
-    return max(0.0, min(100.0, percent))
+def event_percent(percent_per_term, term_days=None):
+    """1回（「働く」1回）で出来事が起きる確率（%）。1回の長さによらず同じ（`term_days` は使わない）。
+
+    前の版は「90日あたり」で長さに比例させていたので、1回を短くするほど出来事が起きなくなった。
+    """
+    return max(0.0, min(100.0, float(_number(percent_per_term))))
 
 
 def events_for(job_type):
@@ -674,7 +900,7 @@ def check_percent(base, score):
 
 
 def risk_percent(danger, average, term_days, rank_days=0):
-    """裏の仕事の1期で危険が起きる確率（%）。能力値が高いほど・勤続が長いほど下がる。"""
+    """裏の仕事の1回で危険が起きる確率（%）。能力値が高いほど・勤続が長いほど下がる。"""
     danger = min(MAX_DANGER, max(1, int(_number(danger, 1))))
     base = RISK_BASE_PERCENT[danger] * max(1, int(_number(term_days, GAME_ILLEGAL_TERM_DAYS))) \
         / float(GAME_ILLEGAL_TERM_DAYS)
@@ -708,14 +934,18 @@ def risk_words(job):
 # 周回（世界×主人公）ごとに1つ。
 #   employers  {"<土地id>/<施設id>": {"days": 勤続の日数, "owner": 雇い主の人物 id, "barred_until": 一覧に戻る日}}
 #   contract   進行中の契約（無ければ None）
-#   last_event 直前に起きた出来事のキー
+#   last_event 直前に起きた出来事のキー（役場と闇労働の出来事で同じ欄。キーは重ならない）
 #   last_done  {"<土地id>": 最後に務め終えた雇い主}（一覧の「前回の仕事」の枠）
 #   towns      {"<土地id>": {"growth": その街の労働の実績, "done": 務め終えた契約の数}}
 BUCKET_KEYS = ("employers", "contract", "last_event", "last_done", "towns")
 TOWN_KEYS = ("growth", "done")
 EMPLOYER_KEYS = ("days", "owner", "barred_until")
+#   log        回ごとの結果 [{"pay", "kind", ...}]（契約の帯のマスと、雇い主の一言の頼みに使う）
+#   rank_start 契約を始めたときの勤続の段（務め終えた帯に「勤続が上がった」を出すか決める）
+#   icon       闇労働の仕事の様子のアイコンのパス（一覧で選んだ1枚を、契約の間ずっと帯に出す）
 CONTRACT_KEYS = ("kind", "job", "employer", "name", "owner", "owner_name", "place", "abilities", "term_days",
-                 "terms", "done", "pay", "earned", "long", "started", "area", "danger", "pending")
+                 "terms", "done", "pay", "earned", "long", "started", "area", "danger", "pending", "log",
+                 "rank_start", "icon")
 OFFICE = "office"
 ILLEGAL = "illegal"
 

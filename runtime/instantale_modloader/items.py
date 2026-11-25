@@ -32,6 +32,24 @@ ITEM_FIELDS = ("name", "item_type", "attributes", "description", "value", "rarit
 #: 品のレア度の6段（GAME.md §2.13.2 のスキーマ）。低い順。
 RARITIES = ("common", "rare", "magical", "epic", "legendary", "mythic")
 
+#: `generate_item_from_item_data` に渡す `item_type` / `item_sub_type` の語彙。ゲーム自身の品揃えの生成
+#: （`shop_item_generator_ordinary`）のスキーマと同じ組（`output_data` の実記録）。入口はこの語彙を受けて
+#: `item_detail` に直す（武器は `small` -> `small_weapon`、薬草は `herb` -> `plant`）。
+#: 品の `item_detail`（`small_weapon`）を渡すと `small_weapon_weapon` になり、画像の埋め込み
+#: `Data/item_embeddings/<item_detail>.json` が見つからずに落ちる（VERIFICATION.md §3.76）。
+#: LLM に品を書かせる MOD はこの組から選ばせ、外れたら先頭の細分に寄せる（`312_` と `925_` が使う）。
+ITEM_TYPES = {
+    "weapon": ("small", "medium", "large", "long", "throwable"),
+    "wearable": ("headgear", "body_armor", "legwear", "gauntlets", "shield",
+                 "accessory", "clothing"),
+    "healing_item": ("food", "drink", "herb", "medicine", "potion"),
+    "consumable": ("food", "drink", "herb", "medicine", "potion", "scroll"),
+    "utility": ("tool", "document"),
+    "material": ("creature_part", "ore", "gem", "treasure", "metal", "creature",
+                 "plant", "mushroom", "relic", "scrap", "magical_material",
+                 "other_material"),
+}
+
 
 def rarity_rank(value) -> int:
     """レア度の段の番号（common が 0、mythic が 5）。知らない語・読めなければ 0（common とみなす）。

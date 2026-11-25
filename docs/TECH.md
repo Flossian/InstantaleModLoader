@@ -3083,6 +3083,7 @@ items.off_made(owner) / items.off_sight(owner) / items.off(owner)
 |---|---|
 | `items.unwrap(item)` | 画面の部品（所持品の欄の `InventoryItem`）が来たら中の品（`item_instance`）を返す。部品でなければそのまま |
 | `items.RARITIES` | 品のレア度の6段（`common` / `rare` / `magical` / `epic` / `legendary` / `mythic`。低い順。GAME.md §2.13.2） |
+| `items.ITEM_TYPES` | `generate_item_from_item_data` に渡す `item_type` → `item_sub_type` の並びの語彙（ゲームの品揃えの生成のスキーマと同じ組）。LLM に品を書かせる MOD はここから選ばせる（`312_` / `925_`）。品の `item_detail` を渡すと画像の埋め込みが見つからずに落ちる（VERIFICATION.md §3.76） |
 | `items.rarity_rank(value)` | レア度の段の番号（`common` が 0、`mythic` が 5）。`value` は文字列か、`rarity` を持つもの（セーブの形の辞書・`Item`・画面の部品）。知らない語・読めなければ 0。照合は完全一致で、大文字小文字や前後の空白は均さない |
 
 窓口に載らない形は MOD が自分でフックする。

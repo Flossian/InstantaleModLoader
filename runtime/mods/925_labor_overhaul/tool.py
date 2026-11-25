@@ -64,11 +64,13 @@ CARDS = (
             ("満了で上がる好感度", ["SHORT_AFFINITY", "LONG_AFFINITY"]),
         ]),
     )),
-    ("pay", "能力値と出来事", None, "仕事ごとに効く能力値2つの平均で、賃金と判定が変わる", (
+    ("pay", "能力値と出来事", None, "仕事ごとに決まった能力値2つの平均で、賃金と判定が変わる", (
         ("line", ["能力値の平均が 30 のとき賃金は", "ABILITY_MAX_PERCENT", "%、低いときの下限は",
                   "ABILITY_LOW_PERCENT", "%"]),
-        ("line", ["出来事は 90日につき", "EVENT_PERCENT", "% で起きる"]),
+        ("line", ["出来事は1回ごとに", "EVENT_PERCENT", "% で起きる（闇労働は危険が起きなかった回だけ）"]),
         ("line", ["出来事の判定は、能力値1つにつき", "CHECK_PER_POINT", "% 上がる"]),
+        ("line", ["店の品揃えから作る品は、買値が1回の賃金の", "ITEM_VALUE_TERMS", "倍まで。作れなければ心付け",
+                  "ITEM_FALLBACK_PERCENT", "%"]),
     )),
     ("age", "年齢", "AGE_RULES", "素のゲームと同じく、30歳から5歳ごとに1回が3分の1ずつ長くなり（賃金は増えない）、老いると断られる", (
         ("line", ["役場は", "OFFICE_AGE_LIMIT", "歳から、裏の事務所は", "ILLEGAL_AGE_LIMIT", "歳から断られる"]),
@@ -97,18 +99,26 @@ CARDS = (
         ("line", ["臨時の募集を務め終えると、困り事が", "RELIEF_STEPS", "段階収まる"]),
     )),
     ("illegal", "闇労働", None, "賃金は役場の同じ長さの賃金に対する割合。危険は能力値が 11 のときの確率", (
-        ("line", ["1期は", "ILLEGAL_TERM_DAYS", "日（29歳まで）で、", "ILLEGAL_TERMS", "期"]),
+        ("line", ["1回は", "ILLEGAL_TERM_DAYS", "日（29歳まで）で、", "ILLEGAL_TERMS", "回"]),
         ("line", ["危険の起きやすさ", "RISK_STRENGTH_PERCENT", "%"]),
         ("table", ["危険度 1", "危険度 2", "危険度 3"], [
             ("賃金（%）", ["ILLEGAL_PAY_MIN_PERCENT", FIXED + "中間", "ILLEGAL_PAY_MAX_PERCENT"]),
             ("危険の確率（%）", ["RISK_PERCENT_1", "RISK_PERCENT_2", "RISK_PERCENT_3"]),
+            ("避ける判定の基準（%）", ["AVOID_PERCENT_1", "AVOID_PERCENT_2", "AVOID_PERCENT_3"]),
         ]),
         ("line", ["街に困り事がある間は賃金", "ILLEGAL_TROUBLE_PERCENT", "%"]),
         ("line", ["その間に務め終えると、困り事が", "ILLEGAL_STEPS", "段階悪くなる"]),
     )),
-    ("risk", "危険が起きたとき", None, "どれも、その期の賃金は入らない", (
+    ("screen", "画面", None, "数には効かない。見せ方だけ", (
+        ("check", "LIST_WINDOW"),
+        ("check", "PROGRESS_STRIP"),
+        ("check", "FINISH_SCENE"),
+        ("check", "FINISH_LINE"),
+    )),
+    ("risk", "危険を避けられなかったとき", None, "どれも、その回の賃金は入らない", (
+        ("line", ["見張りに握らせる額は1回の賃金の", "BRIBE_PAY_PERCENT", "%"]),
         ("line", ["取り締まり: 手配度が、危険度1つにつき", "CRACKDOWN_LAW", "下がる"]),
-        ("line", ["仕返し: 賃金", "RETALIATION_TERMS", "期ぶんを奪われる"]),
+        ("line", ["仕返し: 賃金", "RETALIATION_TERMS", "回ぶんを奪われる"]),
         ("line", ["裏切り: その契約の稼ぎを失い、手配度が", "BETRAYAL_LAW", "下がる"]),
         ("line", ["裏切り: 勤続が", "BETRAYAL_TENURE_DAYS", "日減る"]),
     )),
@@ -483,7 +493,7 @@ def build_window(mod_dir=MOD_DIR):
     bars = tk.Canvas(box, height=108, background=surface, highlightthickness=0)
     bars.pack(fill="x", pady=(2, 6))
 
-    ttk.Label(box, text="闇労働（1期ごと）", style="CardCol.TLabel").pack(anchor="w")
+    ttk.Label(box, text="闇労働（1回ごと）", style="CardCol.TLabel").pack(anchor="w")
     risk = tk.Canvas(box, height=122, background=surface, highlightthickness=0)
     risk.pack(fill="x", pady=(2, 0))
 
@@ -555,7 +565,7 @@ def build_window(mod_dir=MOD_DIR):
                                   fill=warn_color, outline="")
         risk.create_text(0, 104, anchor="w", fill=faint_color, font=("", 9),
                          text=("この年齢では裏の事務所でも断られる" if result["illegal_refused"] else
-                               "{} の1期ぶん。能力値と勤続が高いほど危険は起きにくい".format(
+                               "{} の1回ぶん。能力値と勤続が高いほど危険は起きにくい".format(
                                    rules.days_in_words(result["illegal_days"]))))
 
     for canvas in (bars, risk):
