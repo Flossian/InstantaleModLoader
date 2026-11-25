@@ -39,7 +39,7 @@ QUALITY_KEYS = {"portrait": "character_generation_quality",
 #: sdcpp 系で、画質ごとに通る段（実測できた組だけ。GAME.md §2.33）。
 #: 立ち絵の `highres_upscale` は1段目で下描きして2段目で描き直す。
 STAGES_BY_QUALITY = {
-    "portrait": {"highres_upscale": ("stage1", "stage2"), "highres_faster": ("lcm",)},
+    "portrait": {"highres_upscale": ("stage1", "stage2"), "highres_faster": ("lcm",), "highres": ("stage1",)},
     "enemy": {"highres_faster": ("lcm",)},
     "background": {"highres_faster": ("lcm",)},
 }

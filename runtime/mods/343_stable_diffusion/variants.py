@@ -155,6 +155,79 @@ def load_template(path):
     return got if isinstance(got, dict) else None
 
 
+#: 画質ごとの、立ち絵を仕上げる段とゲームがその段の出口へ渡す引数（GAME.md §2.33 の実測。main_026）。
+#: 呼び方の控えが無いときに仮の控えを組むのと、どの段が仕上げか（顔の描き直し・差分・控えの記録をする段）の見分けに使う。
+#: `highres` は1段目の1回で仕上げる（`highres_upscale` の1段目は 256x512 の下描き）。
+PORTRAIT_FINISH = {
+    "highres_faster": ("lcm", {"width": 512, "height": 1024, "sample_method": "lcm", "sample_steps": 5,
+                               "cfg_scale": 1, "seed": -1}),
+    "highres_upscale": ("stage2", {"width": 512, "height": 1024, "sample_method": "dpmpp2m", "sample_steps": 15,
+                                   "cfg_scale": 7, "scheduler": "karras", "seed": -1}),
+    "highres": ("stage1", {"width": 512, "height": 1024, "sample_method": "euler_a", "sample_steps": 20,
+                           "cfg_scale": 8, "scheduler": "default", "seed": -1}),
+}
+
+#: 画質によらない、立ち絵の工程（縮小・減色）の引数（3つの画質とも同じだった。GAME.md §2.30）。
+PORTRAIT_STEPS = {"pixel_art_process": [[], {"pixelation_width": 165, "pixelation_height": 330}],
+                  "reduce_image_colors": [[64], {}]}
+
+
+def finish_stage(quality):
+    """その画質で立ち絵を仕上げる段。知らない画質・読めない（None）なら None。"""
+    got = PORTRAIT_FINISH.get(quality)
+    return got[0] if got else None
+
+
+def is_draft_stage(stage, quality):
+    """立ち絵の下描きの段か（顔の描き直し・差分・控えの記録を飛ばす段）。
+
+    画質が分かれば、その画質の仕上げの段でない段。分からなければ `stage1`（2段で描くときの1段目）。
+    """
+    final = finish_stage(quality)
+    return stage == "stage1" if final is None else stage != final
+
+
+def template_ready(template):
+    """呼び方の控えに、差分を描くのに要る段と引数が揃っているか（工程の引数は別に見る）。"""
+    return isinstance(template, dict) and isinstance(template.get("params"), dict) \
+        and bool(template["params"]) and bool(template.get("stage"))
+
+
+def fallback_template(quality, saved=None):
+    """控えが無い・段と引数が欠けているときの仮の控え（ファイルには書かない）。知らない画質なら None。
+
+    工程の引数は、控えにあればそれを、無ければ `PORTRAIT_STEPS` を使う。
+    """
+    got = PORTRAIT_FINISH.get(quality)
+    if got is None:
+        return None
+    steps = (saved or {}).get("steps") if isinstance(saved, dict) else None
+    merged = json.loads(json.dumps(PORTRAIT_STEPS))
+    if isinstance(steps, dict):
+        merged.update((name, row) for name, row in steps.items() if row is not None)
+    return {"stage": got[0], "params": dict(got[1]), "steps": merged}
+
+
+def template_differences(template, quality):
+    """本物の控えと、その画質の仮の控えの食い違い（`["params.cfg_scale: 7 / 仮 6", ...]`）。比べられなければ空。
+
+    段・引数・工程の引数が揃った控えだけを比べる（工程は片方だけ控えた途中の形があるため）。
+    """
+    guess = fallback_template(quality)
+    if guess is None or not template_ready(template) or template.get("stage") != guess["stage"]:
+        return []
+    got = []
+    params = template["params"]
+    for name, value in sorted(guess["params"].items()):
+        if name in params and params[name] != value:
+            got.append("params.{}: {} / 仮 {}".format(name, params[name], value))
+    steps = template.get("steps") if isinstance(template.get("steps"), dict) else {}
+    for name, value in sorted(guess["steps"].items()):
+        if name in steps and steps[name] != value:
+            got.append("steps.{}: {} / 仮 {}".format(name, steps[name], value))
+    return got
+
+
 def save_template(path, data):
     """呼び方の控えを書く（ローダの `write_json`。ゲームの中でだけ呼ぶので、道具画面のためにここで import する）。書けたか。"""
     from instantale_modloader import write_json

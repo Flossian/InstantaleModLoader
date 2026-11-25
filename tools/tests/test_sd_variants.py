@@ -124,6 +124,37 @@ cases = [
 got = [V.strength_for(conf, model) for model, _want in cases]
 check("強さ: モデルごとに変える行を前から見て最初に当たったもの、無ければ SD1.5 の系統は SD1.5 の欄、"
       "ほか（SDXL・読めない系統）は SDXL・その他の欄", got == [want for _model, want in cases], got)
+# 呼び方の控えが無いときの仮の控えと、仕上げの段の見分け（VERIFICATION.md §3.132）
+check("仕上げの段は画質で決まる（highres は1段目、highres_upscale は2段目、highres_faster は LCM）",
+      [V.finish_stage(q) for q in ("highres", "highres_upscale", "highres_faster", "other", None)]
+      == ["stage1", "stage2", "lcm", None, None])
+check("下描きの段: 画質が分かればその仕上げの段でない段、分からなければ1段目",
+      [V.is_draft_stage("stage1", q) for q in ("highres", "highres_upscale", None, "other")]
+      == [False, True, True, True]
+      and not V.is_draft_stage("stage2", "highres_upscale") and V.is_draft_stage("stage2", "highres")
+      and not V.is_draft_stage("lcm", "highres_faster") and not V.is_draft_stage("lcm", None))
+guess = V.fallback_template("highres_upscale")
+check("仮の控えは画質のゲームの値と工程の引数（知らない画質は None）",
+      guess["stage"] == "stage2" and guess["params"]["sample_method"] == "dpmpp2m"
+      and guess["params"]["cfg_scale"] == 7 and guess["steps"] == V.PORTRAIT_STEPS
+      and V.fallback_template("other") is None and V.fallback_template(None) is None, guess)
+guess["steps"]["reduce_image_colors"][0].append(1)
+check("仮の控えは表の写し（書き換えても表は変わらない）", V.PORTRAIT_STEPS["reduce_image_colors"] == [[64], {}])
+half = {"steps": {"reduce_image_colors": [[16], {}]}}
+check("段と引数の欠けた控えは揃っていないとみなし、仮の控えには控えの工程の引数を使う",
+      not V.template_ready(half) and not V.template_ready(None) and not V.template_ready({"stage": "lcm", "params": {}})
+      and V.template_ready({"stage": "lcm", "params": {"width": 512}})
+      and V.fallback_template("highres", half)["steps"]["reduce_image_colors"] == [[16], {}]
+      and V.fallback_template("highres", half)["steps"]["pixel_art_process"] == V.PORTRAIT_STEPS["pixel_art_process"])
+real = V.fallback_template("highres_faster")
+check("本物の控えが仮の値と同じなら食い違いは無い", V.template_differences(real, "highres_faster") == [])
+real["params"]["sample_steps"] = 6
+real["steps"]["reduce_image_colors"] = [[16], {}]
+check("本物の控えと仮の値の食い違いを並べる（段が違う・揃っていない控えは比べない）",
+      V.template_differences(real, "highres_faster")
+      == ["params.sample_steps: 6 / 仮 5", "steps.reduce_image_colors: [[16], {}] / 仮 [[64], {}]"]
+      and V.template_differences(real, "highres_upscale") == [] and V.template_differences(half, "highres") == [],
+      V.template_differences(real, "highres_faster"))
 check("SD1.5 の欄の読めない値は SD1.5 の既定",
       [V.derive({V.STRENGTH_SD15: v})["sd15"] for v in (0, "x", None, 2)] == [0.5, 0.5, 0.5, 1.0])
 
@@ -131,6 +162,8 @@ check("SD1.5 の欄の読めない値は SD1.5 の既定",
 if MOD_DIR not in sys.path:
     sys.path.insert(0, MOD_DIR)
 import outlook  # noqa: E402
+check("段の表は仮の控えの仕上げの段と食い違わない（道具画面の見通しと同じ表）",
+      all(outlook.STAGES_BY_QUALITY["portrait"][q][-1] == V.finish_stage(q) for q in V.PORTRAIT_FINISH))
 _spec_v = importlib.util.spec_from_file_location("variants_reloaded", os.path.join(MOD_DIR, "variants.py"))
 variants_reloaded = importlib.util.module_from_spec(_spec_v)
 _spec_v.loader.exec_module(variants_reloaded)
@@ -780,6 +813,45 @@ else:
             ctx.hooks[MOD.BULK_TARGET](game_bulk, object(), os.path.join(wdir, "world_data.json"),
                                        threading.Event(), [].append)
             check("用意されていれば、ゲームの用意は呼ばない", loaded["calls"] == 1 and len(VarSD.calls) == 4, loaded)
+
+            # ---- 呼び方の控えが無い起動（更新の後に立ち絵を1枚も描かずに一括生成をかけた形。VERIFICATION.md §3.132）
+            tpl_path = os.path.join(ctx.state_dir, "stable_diffusion", V.TEMPLATE_NAME)
+            os.replace(tpl_path, tpl_path + ".keep")
+            cfg_path = os.path.join(base, "config.json")
+
+            def set_quality(quality):
+                with io.open(cfg_path, "w", encoding="utf-8") as fh:
+                    json.dump({"ai_setting": {"local_model_setting": {"sd_backend": {
+                        "name": "sdcpp_cuda", "character_generation_quality": quality}}}}, fh)
+            try:
+                set_quality("highres_faster")
+                ctx_nt = Ctx(ctx.out_dir, values)              # 控えを持たない起動
+                MOD.apply(ctx_nt)
+                VarSD.calls[:] = []
+                expressions.clear(ana)
+                ctx_nt.hooks[MOD.BULK_TARGET](game_bulk, object(), os.path.join(wdir, "world_data.json"),
+                                              threading.Event(), [].append)
+                check("控えが無ければ、画質の設定のゲームの値で仮の控えを組んで差分だけ描く（ファイルには書かない）",
+                      len(VarSD.calls) == 4 and expressions.image(ana, "smile") is not None
+                      and not os.path.isfile(tpl_path)
+                      and any("画質の設定（highres_faster）のゲームの値で描く" in n for n in ctx_nt.notes),
+                      (VarSD.calls, [n for n in ctx_nt.notes if "一括生成" in n]))
+                set_quality("someday_quality")
+                ctx_nt = Ctx(ctx.out_dir, values)
+                MOD.apply(ctx_nt)
+                VarSD.calls[:] = []
+                expressions.clear(ana)
+                progress_seen = []
+                ctx_nt.hooks[MOD.BULK_TARGET](game_bulk, object(), os.path.join(wdir, "world_data.json"),
+                                              threading.Event(), progress_seen.append)
+                check("画質からも組めなければ描かずに理由を知らせ、「画像生成を用意しています」は出さない",
+                      VarSD.calls == [] and progress_seen == [game_done]
+                      and any("画質の設定（someday_quality）からも組めない" in m for _k, m in ctx_nt.warnings),
+                      (progress_seen, ctx_nt.warnings))
+            finally:
+                os.replace(tpl_path + ".keep", tpl_path)
+                os.remove(cfg_path)
+                MOD.apply(ctx)                                 # 続きの検査はもとの起動の登録で
 
             # 一括生成がローダの当て直しの最中に終わった回（ゲームの仕事が無い。VERIFICATION.md §3.132）。
             # 当て直しは boot の錠を持って走り、347 の宣言はその終わり近くで戻る。一括生成はゲームの裏のスレッドで走る

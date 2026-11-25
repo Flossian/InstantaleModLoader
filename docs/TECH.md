@@ -5697,6 +5697,7 @@ from instantale_modloader import imagegen
 def generated(orig, *args, **kwargs): ...
 
 imagegen.backend()                         # config.json の sd_backend.name。読めなければ None
+imagegen.quality("portrait")                # config.json の画質（portrait / enemy / background）。読めなければ None。呼ぶたびに読む
 imagegen.creature_targets("pixel_art_process")   # フックする対象（`モジュール:関数`）の一覧
 imagegen.creature_module()                 # 読み込まれている方の image_generation_creature。無ければ None
 imagegen.FAMILIES / imagegen.CREATURE_FORMAT

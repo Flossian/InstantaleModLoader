@@ -546,6 +546,13 @@ def apply(ctx):
                     now["steps"] = merged
                 if now != template["value"] and variants.save_template(template_path, now):
                     template["value"] = now
+                    quality = imagegen.quality("portrait")
+                    differs = variants.template_differences(now, quality)
+                    if differs:
+                        # 控えが無いときに使う仮の値（variants.PORTRAIT_FINISH）がゲームとずれている。ゲームの更新を疑う
+                        warn("expression-template-differs",
+                             "立ち絵の呼び方が、控えが無いときに使う画質（{}）の値と違う: {}".format(
+                                 quality, "、".join(differs)))
         except Exception:
             ctx.log_exc("image quality: remembering the portrait call failed")
 
@@ -1299,7 +1306,8 @@ def apply(ctx):
 
             def finish(result, route):
                 # 立ち絵の最後の段（ゲームの2段の1段目は除く）だけ、顔を描き直す
-                if not sdcpp or kind != "portrait" or stage == "stage1":
+                # `highres_upscale` の1段目は下描き。`highres` は1段目で仕上げる（画質で見分ける。variants.is_draft_stage）
+                if not sdcpp or kind != "portrait" or variants.is_draft_stage(stage, imagegen.quality("portrait")):
                     return result
                 # 表情差分を描く材料を控える（入口を抜けるときに仕事を始める。`make_kind_hook`）。
                 # 入口の中（入口の印が立っている）だけ。入口を包めていない回に控えると、受け取る者が無くスレッドに残る
@@ -1735,16 +1743,30 @@ def apply(ctx):
         attach()
         return None
 
-    def backfill_materials():
-        """差分だけ描く材料。`(材料, None)` か `(None, 揃わない理由)`。
+    def backfill_template():
+        """差分だけ描く呼び方。`(控え, None)` か `(None, 揃わない理由)`。用意（モデルの読み込み）の前に見る。
 
-        部品はゲームの立ち絵の部品、描く関数は sdcpp の出口の `draw`、引数は控え（`remember_template`）。
+        控え（`remember_template`）が無い・段と引数が欠けていれば、ゲームの画質の設定から仮の控えを組む
+        （`variants.fallback_template`。ファイルには書かず、ゲームが立ち絵を描けば本物が書かれる）。
         """
         if str(imagegen.backend() or "").startswith("diffusers"):
             return None, "画像生成の方式が diffusers 系（下絵の口が無い）"
         saved = template["value"] or variants.load_template(template_path)
-        if not saved or not isinstance(saved.get("params"), dict) or not saved.get("stage"):
-            return None, "ゲームが立ち絵を描いたときの呼び方の控えが無い（立ち絵を1枚描くと控えができる）"
+        if variants.template_ready(saved):
+            return saved, None
+        quality = imagegen.quality("portrait")
+        guessed = variants.fallback_template(quality, saved)
+        if guessed is None:
+            return None, ("ゲームが立ち絵を描いたときの呼び方の控えが無く、画質の設定（{}）からも組めない"
+                          "（立ち絵を1枚描くと控えができる）".format(quality or "読めない"))
+        write("表情差分（一括生成）: 立ち絵の呼び方の控えが無いので、画質の設定（{}）のゲームの値で描く".format(quality))
+        return guessed, None
+
+    def backfill_materials(saved):
+        """差分だけ描く材料。`(材料, None)` か `(None, 揃わない理由)`。
+
+        部品はゲームの立ち絵の部品、描く関数は sdcpp の出口の `draw`、引数は呼び方（`backfill_template`）。
+        """
         why = prepare_image_generation()
         if why:
             return None, why
@@ -2020,15 +2042,7 @@ def apply(ctx):
                     ctx.log_exc("image quality: reporting the expression progress failed")
             return False
 
-        if imagegen.creature_module() is None:
-            # ゲームの画面はもう「完了」を出している。用意（モデルの読み込み）の間も止まって見えないよう、
-            # 先にログと画面へ出す（VERIFICATION.md §3.132）
-            write("一括生成 [{}]: 顔の描き直し {} 人・表情差分 {} 人を描く前に、ゲームの画像生成を用意する".format(
-                world, len(redo), len(todo)))
-            reported = report(0, len(redo) or len(todo), 0, variants.PROGRESS_PREPARING,
-                              variants.PROGRESS_FACE if redo else variants.PROGRESS_VARIANTS) or reported
-        materials, why = backfill_materials()
-        if materials is None:
+        def unready(why):
             if redo:
                 warn("face-existing-unready",
                      "一括生成で、既存の立ち絵 {} 人の顔を描き直せなかった（{}）".format(len(redo), why))
@@ -2036,6 +2050,21 @@ def apply(ctx):
                 warn("expression-backfill-unready",
                      "一括生成で、立ち絵のある {} 人に表情差分だけ描けなかった（{}）".format(len(todo), why))
             return reported
+
+        # 呼び方は用意の知らせより前に見る（描けないのに「用意しています」を出さない）
+        saved, why = backfill_template()
+        if saved is None:
+            return unready(why)
+        if imagegen.creature_module() is None:
+            # ゲームの画面はもう「完了」を出している。用意（モデルの読み込み）の間も止まって見えないよう、
+            # 先にログと画面へ出す（VERIFICATION.md §3.132）
+            write("一括生成 [{}]: 顔の描き直し {} 人・表情差分 {} 人を描く前に、ゲームの画像生成を用意する".format(
+                world, len(redo), len(todo)))
+            reported = report(0, len(redo) or len(todo), 0, variants.PROGRESS_PREPARING,
+                              variants.PROGRESS_FACE if redo else variants.PROGRESS_VARIANTS) or reported
+        materials, why = backfill_materials(saved)
+        if materials is None:
+            return unready(why)
         route = portrait_route()
 
         def handed_off():

@@ -270,9 +270,16 @@ class LaborWindow(object):
                 button = kit._font(Button(text=text, markup=True, background_normal="", background_down="",
                                           background_color=(0, 0, 0, 0), font_size=kit.base * panels.BODY))
                 if card.get("compact"):
+                    # 幅は「文言＋余白」と「段の残り（1回の額と間隔を除く）」の小さい方。固定の幅は BoxLayout が
+                    # 縮めないので、2列で欄が狭いとボタンが札の内側の余白へはみ出した
                     button.size_hint_x = None
-                    button.bind(texture_size=lambda w, value: setattr(
-                        w, "width", max(kit.px(BUTTON_MIN), value[0] + kit.px(BUTTON_PAD))))
+
+                    def fit(*_a, w=button, r=row, p=per):
+                        room = r.width - p.width - r.spacing * 2
+                        w.width = min(max(kit.px(BUTTON_MIN), w.texture_size[0] + kit.px(BUTTON_PAD)), room)
+                    button.bind(texture_size=fit)
+                    row.bind(width=fit)
+                    per.bind(width=fit)
                 button.bind(on_release=lambda *_a, i=index, p=payload: self.pick(i, p))
                 row.add_widget(kit.framed(button))
             right.add_widget(row)

@@ -52,6 +52,21 @@ with open(broken, "w", encoding="utf-8") as fh:
     fh.write("{")
 check("壊れたファイルは None", imagegen.backend(broken) is None)
 
+print("[画質の読み取り]")
+quality_config = os.path.join(tmp, "quality.json")
+with open(quality_config, "w", encoding="utf-8") as fh:
+    json.dump({"ai_setting": {"local_model_setting": {"sd_backend": {
+        "name": "sdcpp_cuda", "character_generation_quality": "highres_faster",
+        "monster_generation_quality": "highres_upscale", "background_generation_quality": ""}}}}, fh)
+check("種類ごとの画質の欄を読む（既定は立ち絵）",
+      imagegen.quality(path=quality_config) == "highres_faster"
+      and imagegen.quality("enemy", quality_config) == "highres_upscale")
+check("空・欄が無い・知らない種類・読めないファイルは None",
+      imagegen.quality("background", quality_config) is None
+      and imagegen.quality("portrait", config) is None
+      and imagegen.quality("item", quality_config) is None
+      and imagegen.quality("portrait", broken) is None)
+
 print("[包む先]")
 check("sdcpp_* は下線を落とした1つだけ",
       imagegen.creature_modules("sdcpp_cpu") == ["image_generation.sdcppcpu.image_generation_creature"])

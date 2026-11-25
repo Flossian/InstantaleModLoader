@@ -49,6 +49,25 @@ def backend(path=None):
         return None
 
 
+#: 種類ごとの、`config.json` の `sd_backend` の画質の欄（GAME.md §2.33）。
+QUALITY_KEYS = {"portrait": "character_generation_quality",
+                "enemy": "monster_generation_quality",
+                "background": "background_generation_quality"}
+
+
+def quality(kind="portrait", path=None):
+    """ゲームの画質の設定（`highres_faster` など）。種類は `portrait` / `enemy` / `background`。読めなければ None。
+
+    呼ぶたびに `config.json` を読み直す（方式と違って、注入のときの値を持ち続けない）。
+    """
+    setting = saves._game_ai_setting(path)
+    try:
+        got = setting["local_model_setting"]["sd_backend"][QUALITY_KEYS[kind]]
+    except Exception:
+        return None
+    return got if isinstance(got, str) and got else None
+
+
 def _resolve(name):
     return backend() if name is _READ else name
 

@@ -4155,7 +4155,7 @@ Atk:<n>(+<n>)\nDef:<n>(+<n>)\nExp:<n>/<n>\nGold:<n>\nAge:<n>\nSta:…\nLocation:
 | `generated_image.png` | 512x1024 | SD の出力。`detect_face_coordinates` はこれに対して走る |
 | `no_bg_image.png` | 512x1024 | 背景を抜いた画像（`remove_background`。rembg のサイドカー） |
 | `pixelated_image_original.png` | 165x330 | `pixel_art_process(絵)` の戻り値 `(入力そのまま, 縮めた絵)` の2つ目 |
-| `reduced_color_image.png` | 330x660 | 上を2倍に伸ばし、`reduce_image_colors` で 16色にしたもの。立ち絵。会話中に見えるのはこれ |
+| `reduced_color_image.png` | 330x660 | 上を2倍に伸ばし、`reduce_image_colors` で減色したもの（main_026 は 64色。前は16色だった）。立ち絵。会話中に見えるのはこれ |
 | `face_image.png` | 165x165 | 立ち絵から切り出した顔 |
 
 - 描いた細かさは `pixel_art_process` で捨てられる。165x330 に縮めて2倍に伸ばすので、
@@ -4430,6 +4430,9 @@ MOD なしの値（`sdcpp_cuda`、実測）:
 画質の設定で立ち絵の経路が変わる。
 `highres_upscale` は上の2段階（`generate_image_anime` と `image_to_image_anime`）を通り、
 `highres_faster` は LCM の処理1回（`generate_image_real_lcm`、512x1024）で描く（実測）。
+`highres` は1段目の関数（`generate_image_anime`）の1回で、512x1024 を `euler_a` / 20 / 8 / `default` で描く（2026-11-25 実測。2段目は通らない）。
+どの画質でも、立ち絵の工程は `pixel_art_process(絵, pixelation_width=165, pixelation_height=330)` と `reduce_image_colors(絵, 64)` だった（同日、`343_` の呼び方の控え）。
+`highres_upscale` の2段目の引数は `dpmpp2m` / 15 / 7 / `karras`・seed -1。
 LCM の処理を通る回はプロンプトに `<lora:LCM_LoRA_Weights_SD15:1>` が入る。
 
 敵・モンスターは立ち絵とは別の経路で、
