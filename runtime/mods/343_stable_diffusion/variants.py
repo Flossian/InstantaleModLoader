@@ -103,13 +103,14 @@ PROMPTS_NAME = "prompts.json"
 
 
 def shared():
-    """当て直しをまたぐ置き場。`{"depth": 一括生成の数, "steps": 工程の引数, "backfill": 差分だけ描く関数}`。
+    """当て直しをまたぐ置き場。`{"depth": 一括生成の数, "steps": 工程の引数, "backfill": 差分だけ描く関数,
+    "noted": ログに出した画質}`。
 
     置き方はローダの `state.process_store`（足りない鍵と型の変わった鍵を埋める）。
     ゲームの中でだけ呼ぶので、道具画面のためにここで import する。
     """
     from instantale_modloader import state
-    return state.process_store(SHARED_ATTR, {"depth": 0, "steps": {}, "backfill": None})
+    return state.process_store(SHARED_ATTR, {"depth": 0, "steps": {}, "backfill": None, "noted": []})
 
 
 def _scalar(value):
@@ -176,6 +177,16 @@ def finish_stage(quality):
     """その画質で立ち絵を仕上げる段。知らない画質・読めない（None）なら None。"""
     got = PORTRAIT_FINISH.get(quality)
     return got[0] if got else None
+
+
+def quality_note(quality):
+    """仕上げの段の分からない画質のときにログへ出す文。分かる画質なら None。"""
+    if finish_stage(quality) is not None:
+        return None
+    tail = "、2段で描く画質とみなす。1段で描き終える画質なら、顔の描き直しと表情差分は付かない"
+    if quality is None:
+        return "ゲームの設定から立ち絵の画質を読めないので" + tail
+    return "立ち絵の画質の設定（{}）は 343 で未把握の値なので".format(quality) + tail
 
 
 def is_draft_stage(stage, quality):

@@ -532,6 +532,15 @@ def apply(ctx):
     #: 呼び方の控えの読み合わせと書き戻しの錠（立ち絵の出口と工程のフックが別のスレッドから呼ぶ）。
     template_lock = threading.Lock()
 
+    def portrait_quality():
+        """立ち絵の画質の設定。仕上げの段の分からない画質なら、その旨を1プロセスに1回ログへ出す（variants.quality_note）。"""
+        quality = imagegen.quality("portrait")
+        note = variants.quality_note(quality)
+        if note is not None and quality not in BULK["noted"]:
+            BULK["noted"].append(quality)
+            write(note)
+        return quality
+
     def remember_template(stage=None, arguments=None, steps=None):
         """呼び方の控えを更新する。変わったときだけ書く。"""
         try:
@@ -1307,7 +1316,7 @@ def apply(ctx):
             def finish(result, route):
                 # 立ち絵の最後の段（ゲームの2段の1段目は除く）だけ、顔を描き直す
                 # `highres_upscale` の1段目は下描き。`highres` は1段目で仕上げる（画質で見分ける。variants.is_draft_stage）
-                if not sdcpp or kind != "portrait" or variants.is_draft_stage(stage, imagegen.quality("portrait")):
+                if not sdcpp or kind != "portrait" or variants.is_draft_stage(stage, portrait_quality()):
                     return result
                 # 表情差分を描く材料を控える（入口を抜けるときに仕事を始める。`make_kind_hook`）。
                 # 入口の中（入口の印が立っている）だけ。入口を包めていない回に控えると、受け取る者が無くスレッドに残る

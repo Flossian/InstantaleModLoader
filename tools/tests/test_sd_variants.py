@@ -133,6 +133,11 @@ check("下描きの段: 画質が分かればその仕上げの段でない段�
       == [False, True, True, True]
       and not V.is_draft_stage("stage2", "highres_upscale") and V.is_draft_stage("stage2", "highres")
       and not V.is_draft_stage("lcm", "highres_faster") and not V.is_draft_stage("lcm", None))
+check("仕上げの段の分からない画質だけ、ログへ出す文を返す（読めない・未把握の値で言い分ける）",
+      V.quality_note("highres") is None and V.quality_note("highres_faster") is None
+      and V.quality_note(None).startswith("ゲームの設定から立ち絵の画質を読めないので、2段で描く画質とみなす")
+      and V.quality_note("someday").startswith("立ち絵の画質の設定（someday）は 343 で未把握の値なので")
+      and V.quality_note("someday").endswith("顔の描き直しと表情差分は付かない"))
 guess = V.fallback_template("highres_upscale")
 check("仮の控えは画質のゲームの値と工程の引数（知らない画質は None）",
       guess["stage"] == "stage2" and guess["params"]["sample_method"] == "dpmpp2m"
@@ -546,6 +551,9 @@ else:
         check("表情を見せる MOD が宣言していなければ差分を描かない",
               len(VarSD.calls) == 1 and not os.path.isdir(expressions.folder_of(folder)), VarSD.calls)
         kept_template = V.load_template(os.path.join(ctx.state_dir, "stable_diffusion", V.TEMPLATE_NAME)) or {}
+        check("画質を読めなければ、立ち絵を何枚描いてもその旨をログへ1回だけ出す",
+              sum("立ち絵の画質を読めないので" in n for n in ctx.notes) == 1,
+              [n for n in ctx.notes if "画質" in n])
         check("宣言が無くても呼び方の控え（段と引数）は書く（既存の立ち絵の顔の描き直しが使う）",
               kept_template.get("stage") and kept_template.get("params", {}).get("width") == 512, kept_template)
 
