@@ -207,6 +207,26 @@ rules.reload_kinds(mine)
 check("手元の表が読めなければ同梱の表で動かし、読めないファイルを控える",
       len(rules.KINDS) > 1 and rules.UNREADABLE == [os.path.join(mine, rules.USER_FILE)],
       (len(rules.KINDS), rules.UNREADABLE))
+# JSON としては読めるが中身が不正な表も、片付けを止める（進行中の出来事と依頼を表に無い種類として終わらせない）
+with io.open(os.path.join(mine, rules.USER_FILE), "w", encoding="utf-8") as fh:
+    fh.write(json.dumps({"kinds": []}))
+why = rules.reload_kinds(mine)
+check("手元の表が [ … ] でなければ同梱の表で動かし、読めないファイルとして控える",
+      len(rules.KINDS) > 1 and rules.UNREADABLE == [os.path.join(mine, rules.USER_FILE)]
+      and any("[ … ]" in w for w in why), (len(rules.KINDS), rules.UNREADABLE, why))
+os.remove(os.path.join(mine, rules.USER_FILE))
+os.makedirs(os.path.join(mine, rules.EXTRA_DIRNAME), exist_ok=True)
+slip = os.path.join(mine, rules.EXTRA_DIRNAME, "slip.json")
+with io.open(slip, "w", encoding="utf-8") as fh:
+    fh.write(json.dumps({"key": "outlaws", "name": "無法者", "what": "x",
+                         "stages": [{"name": "一", "tone": "bad"}]}, ensure_ascii=False))   # arrive が無い
+rules.reload_kinds(mine)
+check("書き損じで飛ばした出来事のあるファイルも控え、ほかの出来事はそのまま使う",
+      rules.UNREADABLE == [slip] and rules.known({"kind": "outlaws"}) and len(rules.KINDS) > 1,
+      (rules.UNREADABLE, len(rules.KINDS)))
+os.remove(slip)
+rules.reload_kinds(mine)
+check("直せば控えは消える", rules.UNREADABLE == [], rules.UNREADABLE)
 rules.use_kinds(saved)
 rules.UNREADABLE[:] = []
 saved = list(rules.KINDS)

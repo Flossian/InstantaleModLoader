@@ -110,7 +110,7 @@ def toggle(answer, save_works):
     gui.messagebox.askyesno = lambda *a, **k: bool(answer)
     gui.messagebox.askyesnocancel = lambda *a, **k: answer
     # 本物の settings/loader.json は書かない
-    gui.C = types.SimpleNamespace(load_flags=lambda _d: {},
+    gui.C = types.SimpleNamespace(load_flags_for_write=lambda _d: {},
                                   save_flags=lambda _d, flags: calls["flags"].append(dict(flags)))
     try:
         gui.App._toggle_debug_mode(fake)

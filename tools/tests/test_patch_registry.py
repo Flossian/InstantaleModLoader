@@ -398,10 +398,15 @@ def main():
     claude = config_at("cfg_claude.json", LLM.CLOUD_API_KEY, "Claude API")
     local = config_at("cfg_local.json", "local", "Claude API")
     missing = os.path.join(out_dir, "cfg_missing.json")
+    no_inference = os.path.join(out_dir, "cfg_no_inference.json")
+    with open(no_inference, "w", encoding="utf-8") as fh:
+        json.dump({"ai_setting": {"cloud_model_setting": {"cloud_llm_provider": "Claude API"}}}, fh)
     check(LLM.is_grammar_runtime(any_server) and LLM.is_grammar_runtime(local),
           "LLM を呼ぶ前は config.json で決める（互換サーバー・ローカルは True）")
     check(not LLM.is_grammar_runtime(claude) and not LLM.is_grammar_runtime(missing),
           "クラウド・読めない config.json は False（上限を付けない側）")
+    check(not LLM.is_grammar_runtime(no_inference),
+          "llm_inference の項が無い config.json も False（上限を付けない側）")
     for name, expected in ((LLM.ANY_SERVER_REQUEST_MODULE, True), (LLM.LOCAL_REQUEST_MODULE, True),
                            (LLM.REQUEST_MODULE_PREFIX + "claude", False)):
         sys.modules[name] = types.ModuleType(name)

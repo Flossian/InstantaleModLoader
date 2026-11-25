@@ -322,12 +322,16 @@ def set_affinity(app, npc_id, value, character=None):
     ただし実行時の人物に欄が無く素データに欄があるときは、素データの欄を丸ごと写してから書く。
     保存のときゲームは実行時の値を写すので、素データにだけ書くと保存で消える。
     名簿に居ない相手は素データにしか居ないので両方に書く。
+    世界の骨格（`world_dict`）には書かない。骨格は世界のファイルに保存され、同じ世界で始めた別の主人公にも
+    効く（GAME.md §2.9.1）。好感度はその周回の主人公への感情なので、セーブの素データまでにとどめる。
     書いた所の数を返す。
     """
     raw_rows = []
     for where, holder in npc_stores(app):
         if "characters" in where.rsplit(".", 1)[-1]:
             continue                    # 実行時の名簿。素データではない
+        if "world_dict" in where:
+            continue                    # 世界の骨格
         raw_rows.append(_player_row(holder.get(str(npc_id)) if isinstance(holder, dict) else None))
     template = next((row for row in raw_rows if row is not None), None)
     live = [character, ui.character_of(app, npc_id)]

@@ -12,6 +12,9 @@
   },
   "version": "1",
   "author": "R01/Flossian",
+  "after": [
+    "344_quest_return_days"
+  ],
   "state": [
     "body_augmentation",
     "body_augmentation_play",
@@ -146,14 +149,14 @@
         "en": "Legal failure chance (%)"
       },
       "note": {
-        "ja": "表（施術用の部品 3%・加工品 8%・未加工 15% にレア度で 0〜6% を足す）に掛ける。耐久と判断が 11 より高いと1つにつき 0.5% 下がり、1% より下がらない",
-        "en": "Scales the table (3% part, 8% processed, 15% raw, plus 0 to 6% by rarity). Each point of CON and WIS above 11 takes 0.5% off, down to 1%"
+        "ja": "表（施術用の部品 3%・加工品 8%・未加工 15% にレア度で 0〜6% を足す）に掛ける。耐久と判断の平均1点ごとに 11 を境に 0.5% 上下し、1% より下がらない",
+        "en": "Scales the table (3% part, 8% processed, 15% raw, plus 0 to 6% by rarity). 0.5% per point of the CON/WIS average off 11, never below 1%"
       }
     },
     "ILLEGAL_FAIL": {
       "type": "int",
       "default": 30,
-      "min": 0,
+      "min": 10,
       "max": 90,
       "label": {
         "ja": "違法の施術の失敗の見込み（%）",

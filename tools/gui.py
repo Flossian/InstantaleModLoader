@@ -2818,7 +2818,7 @@ class App(ttk.Frame):
             self.debug_var.set(self.debug_mode)
             return
         try:
-            flags = C.load_flags(RUNTIME_DIR)
+            flags = C.load_flags_for_write(RUNTIME_DIR)
             flags["debug"] = want
             C.save_flags(RUNTIME_DIR, flags)
         except Exception as exc:
@@ -2852,7 +2852,7 @@ class App(ttk.Frame):
         """
         want = bool(self.log_rotate_var.get())
         try:
-            flags = C.load_flags(RUNTIME_DIR)
+            flags = C.load_flags_for_write(RUNTIME_DIR)
             flags[logrotate.SETTINGS_FLAG_KEY] = want
             C.save_flags(RUNTIME_DIR, flags)
         except Exception as exc:

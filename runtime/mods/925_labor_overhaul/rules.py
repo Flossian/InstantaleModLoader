@@ -845,10 +845,19 @@ def employer_row(bucket, key, owner_id=None):
     return row
 
 
-def tenure_days(bucket, key):
+def tenure_days(bucket, key, owner_id=None):
+    """その雇い主での勤続の日数（読むだけ）。
+
+    `owner_id` を渡すと、控えの雇い主の人物と違うときは 0（`employer_row` が次に消す勤続を、
+    消す前に読んで使わない。値段のフックは控えを書かないのでこちらで見分ける）。
+    """
     employers = bucket.get("employers") if isinstance(bucket, dict) else None
     row = employers.get(key) if isinstance(employers, dict) else None
-    return max(0, int(_number(row.get("days")))) if isinstance(row, dict) else 0
+    if not isinstance(row, dict):
+        return 0
+    if owner_id is not None and row.get("owner") not in (None, str(owner_id)):
+        return 0
+    return max(0, int(_number(row.get("days"))))
 
 
 def add_tenure(bucket, key, days):

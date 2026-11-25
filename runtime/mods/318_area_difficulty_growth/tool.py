@@ -113,8 +113,8 @@ def load_record(path):
     return towns, smooth
 
 
-def build_record(towns, rows, smooth):
-    """画面の値から控えを組む。ゲームの範囲と同じで固定していない街は書かない。
+def build_record(towns, rows, smooth, limit=bands.GAME_MAX):
+    """画面の値から控えを組む。ゲームの範囲（`limit` で収めたもの）と同じで固定していない街は書かない。
 
     `rows` は id -> `((下限, 上限), 固定)`。並びは id の順（控えの差分を読めるように）。
     """
@@ -123,7 +123,7 @@ def build_record(towns, rows, smooth):
         if area_id not in towns:
             continue
         band, pinned = rows[area_id]
-        if not pinned and not bands.changed_from_game(area_id, band):
+        if not pinned and not bands.changed_from_game(area_id, band, limit):
             continue
         out[area_id] = {"lo": band[0], "hi": band[1], "pinned": bool(pinned)}
     return {"towns": out, "smooth": smooth}
@@ -435,7 +435,8 @@ def build_window(mod_dir=MOD_DIR, base=""):
             return False
         rows = row_values(top_limit)
         path = store_path(root_dir, state_dir, data["name"])
-        if not modtool.write_json(root_dir, path, build_record(data["towns"], rows, smooth_values(top_limit))):
+        if not modtool.write_json(root_dir, path, build_record(data["towns"], rows, smooth_values(top_limit),
+                                                               top_limit)):
             messagebox.showerror("保存に失敗しました", path, parent=root)
             return False
         for area_id, (band, _pin) in rows.items():

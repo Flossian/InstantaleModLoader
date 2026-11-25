@@ -68,6 +68,7 @@ RESTORE_TEXT = "失っていた{part}の働きを、「{name}」が取り戻し�
 RAMPAGE_TEXT = "暴走の負荷で{part}が傷んだ。"
 RETURN_TEXT = "{item}は手元に戻った。"
 NO_RETURN_TEXT = "取り外した{item}は、もう使えない。"
+CANNOT_RETURN_TEXT = "{item}を持ち物に戻せないため、取り外しをやめた。代金は返された。"
 PAID_TEXT = "代金{fee}Gを支払った。"
 DISCOVERED_TEXT = "医師は{illegal}に気付き、役人へ届け出た。この土地での立場が悪くなった。"
 NO_GOLD_TEXT = "代金が足りない。"
@@ -894,6 +895,21 @@ def apply(ctx):
         if not pay(app, fee):
             screen.say(app, NO_GOLD_TEXT)
             return
+        item_name = (record.get("item_info") or {}).get("name") or ""
+        returning = bool(setting(app, "RETURN_ITEM")) and isinstance(record.get("item"), dict)
+        if returning:
+            # 改造を外す前に品を戻す。戻せなければ代金を返して取り外しをやめる（改造も品も失わない）
+            new_key = ids.claim(app, "item", write=write)
+            data = dict(record["item"])
+            if isinstance(spot, tuple):
+                data["grid_pos"] = list(spot)     # 施術の時の位置のままだと、ほかの品と重なりうる
+            made = items.rebuild(app, player_of(app), {new_key: data}, write=write)
+            write("remove: returned {!r} as {} ({})".format(item_name, new_key, made))
+            if not made:
+                if fee > 0:
+                    ui.add_gold(app, int(fee), refresh=True)
+                screen.say(app, CANNOT_RETURN_TEXT.format(item=item_name))
+                return
         with play.lock:
             pkey, bucket = ledger(app)
             had_illegal = rules.has_illegal(bucket)
@@ -911,17 +927,7 @@ def apply(ctx):
         lines = [coins(PAID_TEXT.format(fee=money(fee))),
                  REMOVE_TEXT.format(place=place, days=rules.days_words(days),
                                     part=rules.PART_NAMES[part], name=record.get("name") or "")]
-        item_name = (record.get("item_info") or {}).get("name") or ""
-        if setting(app, "RETURN_ITEM") and isinstance(record.get("item"), dict):
-            new_key = ids.claim(app, "item", write=write)
-            data = dict(record["item"])
-            if isinstance(spot, tuple):
-                data["grid_pos"] = list(spot)     # 施術の時の位置のままだと、ほかの品と重なりうる
-            made = items.rebuild(app, player_of(app), {new_key: data}, write=write)
-            lines.append(RETURN_TEXT.format(item=item_name) if made else NO_RETURN_TEXT.format(item=item_name))
-            write("remove: returned {!r} as {} ({})".format(item_name, new_key, made))
-        else:
-            lines.append(NO_RETURN_TEXT.format(item=item_name))
+        lines.append((RETURN_TEXT if returning else NO_RETURN_TEXT).format(item=item_name))
         record_life(app, RECORD_REMOVE, part, record.get("name") or "")
         write("remove: {} {} slot {} {!r} fee {} days {}".format(mode, part, slot, record.get("name"), fee, days))
         for line in lines:
@@ -1070,29 +1076,53 @@ def apply(ctx):
             if save and callable(getattr(app, "save_game", None)):
                 app.save_game()
 
+    #: 依頼の終わり・放棄の前後で開いている数。開いている間に進んだ日数はサイクルに数えない
+    #: （依頼1回ぶんは `QUEST_CYCLES` で足す。344 が帰りの日数を進めると二重になる）。
+    #: 926 の後の処理が 344 より後に来るよう、mod.json で `"after"` を宣言している。
+    quest_window = {"depth": 0}
+
     def after_days(call):
+        if quest_window["depth"] > 0:
+            write("{} day(s) passed at the end of a quest; the quest's {} cycles cover them".format(
+                call.moved, rules.QUEST_CYCLES))
+            return
         advance_cycles(call.app, "{} day(s)".format(call.moved), days=call.moved)
 
     durations.on_days(OWNER, ctx, after=after_days, write=write)
 
     def quest_end_before(call):
-        """片付けると移動する依頼か（ローダの窓口 `quest_ends`。依頼のデータは元の処理の中で片付くので先に読む）。"""
-        return durations.quest_travels(call.app, call.quest_id, write=write)
+        """片付けると移動する依頼か（ローダの窓口 `quest_ends`。依頼のデータは元の処理の中で片付くので先に読む）。
+
+        移動しない依頼なら、後の処理まで日数を数えない窓を開く。
+        """
+        travels = durations.quest_travels(call.app, call.quest_id, write=write)
+        if not travels:
+            quest_window["depth"] += 1
+        return travels
 
     def quest_end_after(call):
         """依頼から帰った。移動する依頼は移動の日数でサイクルが進むので重ねない（344 と同じ扱い）。"""
         if call.memo:
             write("quest {!r} moves on to another area; the journey's days advance the cycles".format(call.quest_id))
             return
-        advance_cycles(call.app, "quest {!r} cleared".format(call.quest_id), cycles=rules.QUEST_CYCLES, save=True)
+        quest_window["depth"] = max(0, quest_window["depth"] - 1)
+        if call.error is None:
+            advance_cycles(call.app, "quest {!r} cleared".format(call.quest_id), cycles=rules.QUEST_CYCLES, save=True)
 
-    quest_ends.on(OWNER, ctx, before=quest_end_before, after=quest_end_after, write=write)
+    quest_ends.on(OWNER, ctx, before=quest_end_before, after=quest_end_after, always=True, write=write)
+
+    def quest_retire_before(call):
+        """放棄は移動しないので、いつも窓を開く。"""
+        quest_window["depth"] += 1
 
     def quest_retire_after(call):
         """依頼を放棄した（ローダの窓口 `quest_ends.on_retire`。依頼の id は窓口が元の処理の前に読む）。放棄は移動しない。"""
-        advance_cycles(call.app, "quest {!r} abandoned".format(call.quest_id), cycles=rules.QUEST_CYCLES, save=True)
+        quest_window["depth"] = max(0, quest_window["depth"] - 1)
+        if call.error is None:
+            advance_cycles(call.app, "quest {!r} abandoned".format(call.quest_id), cycles=rules.QUEST_CYCLES, save=True)
 
-    quest_ends.on_retire(OWNER, ctx, after=quest_retire_after, write=write)
+    quest_ends.on_retire(OWNER, ctx, before=quest_retire_before, after=quest_retire_after, always=True,
+                         write=write)
 
     # ------------------------------------------------------------ 治療院の棚
     def shop_note(facility):

@@ -576,8 +576,8 @@ else:
 
         expressions.clear(folder)
         VarSD.calls[:] = []
-        ctx.hooks[MOD.BULK_TARGET](lambda: ctx.hooks[entrance](
-            game_draw, "w", "Zeno", "cat", "masterpiece, full body, young man"))
+        ctx.hooks[MOD.BULK_TARGET](lambda _app: ctx.hooks[entrance](
+            game_draw, "w", "Zeno", "cat", "masterpiece, full body, young man"), object())
         check("一括生成のあいだは、入口を抜ける前に描き終える（待たずに差分が在る）",
               expressions.image(folder, "angry") is not None and len(VarSD.calls) == 5, VarSD.calls)
         check("一括生成なので続けて描いたとログに残る", any("続けて描いた" in n for n in ctx.notes))

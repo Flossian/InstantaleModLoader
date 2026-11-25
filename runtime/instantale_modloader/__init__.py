@@ -1290,7 +1290,7 @@ ABSORBED_MODS = {
 
 #: 別の MOD に取り込んだ MOD（古いフォルダ名 → (取り込んだ MOD, 入切の設定名, {古い設定名: 新しい設定名})）。
 #: 新しい設定名が None の項目は、取り込むときに外した設定で、値は移さずに捨てる。
-#: 古いフォルダは `"superseded"` で伏せて残す（`RENAMED_MODS` と違って消さない。105・406 と同じ扱い）。
+#: 古いフォルダは `"superseded"` で伏せて残す（`RENAMED_MODS` と違って消さない。105 と同じ扱い）。
 #: 選んだ設定の値は取り込んだ MOD の新しい名前へ移し、順序ファイルで切っていたら取り込んだ機能の入切を切る。
 #: 移すのは1回だけ（`settings/loader.json` の `MERGED_FLAG` に済んだ名前を残す）。
 #: 何度も移すと、デバッグモードで古い MOD を切ったときに、取り込んだ機能まで切ってしまう。
@@ -1333,6 +1333,7 @@ MERGED_MODS = {
     "302_leave_party_in_conversation": ("348_party_departure", "FAREWELL_ENABLED", {
         "RETURN_TO_INITIAL_LOCATION": "STAY_NEARBY",
     }),                                                     # v1.22.0
+    "406_user_role_fix": ("136_cloud_model_override", "USER_ROLE_FIX", {}),    # v1.23.0（406 は設定を持たない）
 }
 
 #: `settings/loader.json` の、設定を移し終えた古いフォルダ名の一覧のキー。
@@ -1356,7 +1357,12 @@ def merge_settings(mods_dir: str) -> list[str]:
         old_manifest = read_json(os.path.join(mods_dir, old, MANIFEST_NAME))
         if isinstance(old_manifest, dict) and old_manifest.get("superseded") != into:
             continue
-        flags = _config.load_flags(runtime_dir)
+        try:
+            # 読めない loader.json を `{}` として書き戻すと、デバッグモードなど他の項と移した記録が消える。
+            flags = _config.load_flags_for_write(runtime_dir)
+        except ValueError:
+            log_exc("cannot read the record of merged mods before moving {}".format(old))
+            continue
         done = flags.get(MERGED_FLAG)
         done = [name for name in done if isinstance(name, str)] if isinstance(done, list) else []
         if old in done:

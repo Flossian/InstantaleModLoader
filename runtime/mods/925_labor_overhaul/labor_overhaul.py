@@ -43,7 +43,7 @@ AGE_RULES = True                 # ゲームと同じく、年齢で1回が長�
 OFFICE_AGE_LIMIT = 55            # 役場で断られる年齢。ゲームは 55
 ILLEGAL_AGE_LIMIT = 50           # 裏の事務所で断られる年齢。ゲームは 50
 ILLEGAL_TERMS = 3                # 闇労働の期の数。ゲームは 3期
-EVENT_PERCENT = 50               # 出来事が起きる確率（%。120日あたり）
+EVENT_PERCENT = 50               # 出来事が起きる確率（%。90日あたり）
 ABILITY_MAX_PERCENT = 200        # 能力値による賃金の倍率の上限（%）
 SENIORITY = True                 # 雇い主ごとの勤続
 SHOP_DISCOUNT = True             # 勤続の段による、働いた店での値引き
@@ -182,6 +182,18 @@ WORK_SCREEN = "work"
 AFFINITY_MIN = -100
 AFFINITY_MAX = 100
 
+
+def affinity_after(current, delta):
+    """労働で動かした後の好感度。上げるのは `AFFINITY_MAX` まで、下げるのは `AFFINITY_MIN` まで。
+
+    範囲の外に居る相手（同行の依頼で 100 を超えるのは普通）は範囲へ引き戻さない
+    （上がる場面で下がらない。337 と同じ切り方）。
+    """
+    current, delta = int(current), int(delta)
+    if delta > 0:
+        return max(current, min(AFFINITY_MAX, current + delta))
+    return min(current, max(AFFINITY_MIN, current + delta))
+
 money = ui.money
 coins = ui.rewrite_coins
 
@@ -241,7 +253,7 @@ def apply(ctx):
         return rules.town_growth(bucket, area_id_here(app))
 
     def base_reward(app, growth=0):
-        """ゲームの式の賃金（120日ぶん）。読めなければ None（そのときはゲームの労働のままにする）。
+        """ゲームの式の賃金（90日ぶん）。読めなければ None（そのときはゲームの労働のままにする）。
 
         渡す難易度は、主人公が片付けた依頼の最高難易度に、その街の労働の実績を足した数。
         """
@@ -779,7 +791,7 @@ def apply(ctx):
             current = npcs.affinity_of(app, owner_id)
             if not frames.is_number(current):
                 return
-            target = max(AFFINITY_MIN, min(AFFINITY_MAX, int(current) + int(delta)))
+            target = affinity_after(current, delta)
             if target != current:
                 npcs.set_affinity(app, owner_id, target)
                 write("affinity: {} ({}) {} -> {}".format(
@@ -1057,9 +1069,10 @@ def apply(ctx):
         if ui.facility_type_of(facility) not in rules.OFFICE_JOB_BY_TYPE:
             return None
         employer = rules.employer_key(area_id_here(app), facility_id_of(facility))
+        owner_id, _owner = ui.facility_owner(app, facility)     # 主が替わっていたら勤続は数えない
         with worlds.lock:
             bucket = worlds.load(loader_state.playthrough_key(app))
-            percent = rules.rank_discount_percent(rules.tenure_days(bucket, employer))
+            percent = rules.rank_discount_percent(rules.tenure_days(bucket, employer, owner_id))
         if percent <= 0:
             return None
         return max(1, int(round(price * (100 - percent) / 100.0)))

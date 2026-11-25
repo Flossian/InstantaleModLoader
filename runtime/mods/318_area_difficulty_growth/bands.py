@@ -50,7 +50,7 @@ def game_band(area_id):
 
 
 def clamp_limit(limit):
-    """設定の上限を 1〜`LIMIT_CEILING` に収める。読めなければ `GAME_MAX`。"""
+    """設定の上限を `MIN_WIDTH`〜`LIMIT_CEILING` に収める。読めなければ `GAME_MAX`。"""
     try:
         value = int(limit)
     except (TypeError, ValueError):
@@ -214,6 +214,10 @@ def smooth(towns, bands, pinned, start_band=DEFAULT_START, end_band=DEFAULT_END,
     return out
 
 
-def changed_from_game(area_id, band):
-    """決めた範囲がゲームの範囲と違うか。"""
-    return tuple(band) != tuple(game_band(area_id))
+def changed_from_game(area_id, band, limit=GAME_MAX):
+    """決めた範囲がゲームの範囲と違うか。比べる相手は、ゲームの範囲を同じ上限で収めたもの。
+
+    画面は控えの無い街にも上限で収めたゲームの範囲を入れるので、素の範囲と比べると
+    上限より上の街が全部「変えた」になり、触っていない街まで控えに書かれる。
+    """
+    return tuple(band) != tuple(normalize(*game_band(area_id), limit=limit))

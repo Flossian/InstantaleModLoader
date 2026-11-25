@@ -320,7 +320,7 @@ def is_grammar_runtime(path=None) -> bool:
     if is_cloud_runtime():
         return False
     choice = game_choice(path)
-    if choice is None:
+    if choice is None or not isinstance(choice.get("inference"), str):
         return False
     return choice.get("inference") != CLOUD_API_KEY or choice.get("provider") == ANY_SERVER_PROVIDER
 

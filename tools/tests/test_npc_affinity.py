@@ -81,9 +81,10 @@ def main():
     app = make_app({"8": raw("8", 5)}, {"8": runtime})
     written = npcs.set_affinity(app, "8", 70)
     ok &= check("実行時の人物に書く", runtime.relationship["player"]["affinity"] == 70)
-    ok &= check("素データの全部に書く", app.save_data_dict["npcs"]["8"]["relationship"]["player"]["affinity"] == 70
-                and app.world_dict["npcs"]["8"]["relationship"]["player"]["affinity"] == 70)
-    ok &= check("書いた所の数（同じ欄は1回）", written == 3)
+    ok &= check("セーブの素データに書く", app.save_data_dict["npcs"]["8"]["relationship"]["player"]["affinity"] == 70)
+    ok &= check("世界の骨格（world_dict）には書かない（同じ世界の別の主人公に漏らさない）",
+                app.world_dict["npcs"]["8"]["relationship"]["player"]["affinity"] == 5)
+    ok &= check("書いた所の数（同じ欄は1回）", written == 2)
 
     talking = person(10)
     app = make_app({"7": raw("7", 10)}, {})

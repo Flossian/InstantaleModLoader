@@ -155,6 +155,20 @@ def main():
               ml.merge_settings(mods) == [] and read(root, "loader.json") is None)
     finally:
         shutil.rmtree(root, ignore_errors=True)
+    store = {HUNTER: {"COOLDOWN_DAYS": 30}}
+    root, mods = make_root(store=store)
+    try:
+        flags_file = os.path.join(root, "settings", "loader.json")
+        with io.open(flags_file, "w", encoding="utf-8") as fh:
+            fh.write('{"debug": true,')
+        moved = ml.merge_settings(mods)
+        with io.open(flags_file, encoding="utf-8") as fh:
+            left = fh.read()
+        check("loader.json が読めなければ移さず、loader.json を書き直さない（デバッグモードなどを消さない）",
+              moved == [] and left == '{"debug": true,' and read(root, "mod_settings.json") == store,
+              (moved, left, read(root, "mod_settings.json")))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
 
     print("[入口]")
     root, mods = make_root(store={HUNTER: {"COOLDOWN_DAYS": 30}})

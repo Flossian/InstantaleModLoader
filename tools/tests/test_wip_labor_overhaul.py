@@ -1243,6 +1243,18 @@ for key, spec in manifest["settings"].items():
 check("素のゲームの長さが既定", fresh.TERM_DAYS == 90 and fresh.SHORT_TERMS == 4 and fresh.LONG_TERMS == 8
       and fresh.ILLEGAL_TERM_DAYS == 90 and fresh.ILLEGAL_TERMS == 3)
 
+print("\n[好感度] 範囲の外に居る相手を範囲へ引き戻さない")
+check("100 を超える相手は、上がる場面で下がらない", fresh.affinity_after(160, 3) == 160)
+check("100 を超える相手は、下がる場面では下がる", fresh.affinity_after(160, -1) == 159)
+check("-100 より下の相手は、下がる場面で上がらない", fresh.affinity_after(-150, -1) == -150)
+check("範囲の中は 100 で止まる", fresh.affinity_after(98, 3) == 100 and fresh.affinity_after(10, 3) == 13)
+
+print("\n[勤続] 雇い主の人物が替わったら、控えを消す前でも勤続を数えない（店の値引き）")
+seniority = {"employers": {"2:7": {"days": 1440, "owner": "5", "barred_until": None}}}
+check("同じ主なら勤続を読む", rules.tenure_days(seniority, "2:7", "5") == 1440)
+check("主が替わっていれば 0", rules.tenure_days(seniority, "2:7", "77") == 0)
+check("主を渡さなければ今までどおり", rules.tenure_days(seniority, "2:7") == 1440)
+
 print("\n失敗 {} 件".format(len(failures)))
 if failures:
     for name in failures:

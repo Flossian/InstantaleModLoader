@@ -371,6 +371,14 @@ def test_tool_data():
     check("画面: 素と同じで固定なしは書かない・固定は書く・知らない街は書かない",
           record["towns"] == {"2": {"lo": 19, "hi": 27, "pinned": True},
                               "9": {"lo": 8, "hi": 12, "pinned": False}}, record)
+    # 上限を下げた画面は、控えの無い街にも上限で収めたゲームの範囲を入れる（load）。
+    # それを素の範囲と比べると、触っていない上の街が全部書かれ、上限を戻しても範囲が戻らなくなる。
+    lowered = dict((area_id, (bands.normalize(*bands.game_band(area_id), limit=50), False))
+                   for area_id in loaded["towns"])
+    lowered["0"] = ((2, 6), False)
+    record = tool.build_record(loaded["towns"], lowered, {"width": 9}, 50)
+    check("画面: 上限を下げて保存しても、触っていない街（上限で収めたゲームの範囲）は書かない",
+          record["towns"] == {"0": {"lo": 2, "hi": 6, "pinned": False}}, record)
     check("画面: 上限を上げた遠い街の既定", tool.default_end(100) == (91, 100) and tool.default_end(76) == (67, 76))
 
 

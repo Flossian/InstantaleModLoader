@@ -318,7 +318,14 @@ def load_store_for_write(runtime_dir: str) -> dict:
     手で編集してカンマを1つ間違えただけでも起きるので、「無い」と「在るのに読めない」を分け、
     後者は書かずに断る。中身は選り分けずにそのまま返す（書き戻しで項を落とさない）。
     """
-    path = store_path(runtime_dir)
+    return _read_dict_for_write(store_path(runtime_dir))
+
+
+def _read_dict_for_write(path: str) -> dict:
+    """書き戻す前に `settings/` の JSON を読む（内部用）。無ければ `{}`、在るのに読めなければ例外。
+
+    `load_store_for_write` と `load_flags_for_write` の本体。
+    """
     try:
         with open(path, "r", encoding="utf-8-sig") as fh:     # 手で直して BOM が付いても読む
             data = json.load(fh)
@@ -342,6 +349,16 @@ def load_flags(runtime_dir: str) -> dict:
     「無い＝デバッグモードは切」が自然に成り立つ。
     """
     return _read_dict(flags_path(runtime_dir), FLAGS_NAME)
+
+
+def load_flags_for_write(runtime_dir: str) -> dict:
+    """書き戻す前に `loader.json` を読む。在るのに読めなければ例外を投げる。
+
+    `load_flags` は読めないファイル（ロック中・壊れている）を `{}` として返す。
+    それに1件足して丸ごと書くと、デバッグモードなど他の項が消える。
+    読み分けは `load_store_for_write` と同じ。
+    """
+    return _read_dict_for_write(flags_path(runtime_dir))
 
 
 def _flag(runtime_dir, name, default=True, label="") -> bool:
