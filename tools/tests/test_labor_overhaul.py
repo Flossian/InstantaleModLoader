@@ -490,6 +490,12 @@ check("能力値が読めなければ基準", rules.ability_average(None, ("stre
 check("1回の長さに比例する（30日は 1/3）", rules.term_pay(100, 30) == 33, rules.term_pay(100, 30))
 check("倍率を順に掛ける", rules.term_pay(100, 90, (200, 150, 130)) == 390)
 check("1 未満にはしない", rules.term_pay(1, 1) == 1)
+check("基準は依頼1件の報酬の 20%（式の値より高いとき）", abs(rules.base_pay(178, 4234) - 846.8) < 1e-9)
+check("基準は式の値を下回らない", rules.base_pay(100, 326) == 100)
+check("依頼の報酬が読めなければ式の値", rules.base_pay(178, None) == 178 and rules.base_pay(178, True) == 178)
+rules.configure(QUEST_PAY_PERCENT=0)
+check("割合 0 なら式の値のまま", rules.base_pay(178, 4234) == 178)
+rules.configure(QUEST_PAY_PERCENT=20)
 check("満了の割増は 12.5% と 25%", rules.finish_bonus(400, False) == 50 and rules.finish_bonus(800, True) == 200)
 check("人手の仕事に割増は付かない", rules.finish_bonus(400, False, relief=True) == 0)
 check("勤続の段の境目", [rules.rank_index(d) for d in (0, 479, 480, 1440, 2880, 99999)] == [0, 0, 1, 2, 3, 3])
@@ -1143,6 +1149,15 @@ app.press("12ヵ月")
 for _ in range(4):
     app.press("働く")
 check("切ると積まない", bucket_of(module, app)["towns"]["0"] == {"growth": 20, "done": 1})
+
+# 依頼1件の報酬が読めれば、その 20% と式の値の高い方が基準になる（偽の報酬は 10 × (90 + 難易度)）
+module, ctx, app = setup(no_growth)
+sys.modules["scripts.functions"].get_quest_reward = lambda difficulty: 10 * (90 + difficulty)
+try:
+    app.press(LABOR_TEXT)
+    check("基準は依頼の報酬の 20%（100 → 200）", app.find("日雇いの人足(200G)") is not None, app.labels())
+finally:
+    del sys.modules["scripts.functions"].get_quest_reward
 
 
 def fast_growth(module):

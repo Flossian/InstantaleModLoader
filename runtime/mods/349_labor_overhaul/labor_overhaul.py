@@ -18,7 +18,8 @@ MOD なしの労働は、役場が「16ヵ月」「32ヵ月」の2択、裏の�
 - 募集の一覧から先は MOD だけの画面（`open_screen`）。ゲームの労働のクラス
   （`LaborChoiceManager` / `LaborPhaseManager` / `IllegalLaborPhaseManager` ほか）は呼ばない。
   期ごとに出来事を挟む・契約の途中で打ち切る、をそのクラスの上では組めないため
-- 賃金の基準はゲームの式（`scripts.functions:get_labor_reward`）を呼ぶ。渡す難易度は `app.highest_cleared_quest_difficulty`
+- 賃金の基準はゲームの式（`scripts.functions:get_labor_reward`）と、同じ難易度の依頼1件の報酬（`get_quest_reward`）の
+  割合の高い方。渡す難易度は `app.highest_cleared_quest_difficulty` にその街の労働の実績を足した数
 - 暦はゲームの `elapse_days` で進める（家賃・街の出来事などの日数の処理がそのまま走る）
 - 所持金・手配度・好感度はローダの部品で書き、保存はゲーム自身の `save_game` に任せる
 - 進行中の契約と雇い主ごとの勤続は `state\\labor_overhaul\\<世界>×<主人公>.json`
@@ -50,6 +51,7 @@ OFFICE_AGE_LIMIT = 55            # 役場で断られる年齢。ゲームは 55
 ILLEGAL_AGE_LIMIT = 50           # 裏の事務所で断られる年齢。ゲームは 50
 ILLEGAL_TERMS = 3                # 闇労働の期の数。ゲームは 3期
 EVENT_PERCENT = 30               # 出来事が起きる確率（%。1期ごと。闇労働は危険が起きなかった期だけ）
+QUEST_PAY_PERCENT = 20           # 賃金の基準: 同じ難易度の依頼1件の報酬に対する割合（%。ゲームの式の値が下限）
 ABILITY_MAX_PERCENT = 200        # 能力値による賃金の倍率の上限（%）
 SENIORITY = True                 # 雇い主ごとの勤続
 SHOP_DISCOUNT = True             # 勤続の段による、働いた店での値引き
@@ -241,6 +243,7 @@ OFFICE_BUTTON_CLS = "DisplayLongTermLaborChoice"
 ILLEGAL_BUTTON_CLS = "DisplayIllegalLaborChoice"
 REWARD_MODULE = "scripts.functions"
 REWARD_FUNCTION = "get_labor_reward"
+QUEST_REWARD_FUNCTION = "get_quest_reward"
 DIFFICULTY_ATTR = "highest_cleared_quest_difficulty"
 #: 賃金の式に渡す難易度の上限（ゲームが難易度に持てる上限。GAME.md の難易度の節）。
 DIFFICULTY_TOP = 100
@@ -335,9 +338,11 @@ def apply(ctx):
         return rules.town_growth(bucket, area_id_here(app))
 
     def base_reward(app, growth=0):
-        """ゲームの式の賃金（90日ぶん）。読めなければ None（そのときはゲームの労働のままにする）。
+        """賃金の基準（90日ぶん）。読めなければ None（そのときはゲームの労働のままにする）。
 
         渡す難易度は、主人公が片付けた依頼の最高難易度に、その街の労働の実績を足した数。
+        ゲームの労働の式の値と、同じ難易度の依頼1件の報酬の割合の高い方（`rules.base_pay`）。
+        依頼の報酬が読めなければ式の値のまま。
         """
         functions = sys.modules.get(REWARD_MODULE)
         reward = getattr(functions, REWARD_FUNCTION, None)
@@ -354,7 +359,14 @@ def apply(ctx):
             return None
         if not frames.is_number(value) or value <= 0:
             return None
-        return value
+        quest = None
+        quest_reward = getattr(functions, QUEST_REWARD_FUNCTION, None)
+        if callable(quest_reward):
+            try:
+                quest = quest_reward(difficulty)
+            except Exception:
+                ctx.log_exc("labor: {} failed".format(QUEST_REWARD_FUNCTION))
+        return rules.base_pay(value, quest if frames.is_number(quest) else None)
 
     # 主人公の年齢。読めなければ None（そのときは年齢の決まりを当てない。ローダの durations.age_of）
     age_of = durations.age_of

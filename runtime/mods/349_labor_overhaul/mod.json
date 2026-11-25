@@ -4,7 +4,7 @@
   "kind": "feature",
   "name": {
     "en": "Jobs, incidents and seniority for labour",
-    "ja": "労働に職種と出来事を足す"
+    "ja": "労働まわりの全面改修"
   },
   "description": {
     "en": "Labour at the administrative office becomes a list of jobs at the town's own facilities: pay follows your ability scores and how long you have worked for that employer, incidents ask for a choice between terms, and town events change the pay or ask for hands. Illegal labour at the underworld office pays 2x to 4x by danger, with crackdowns, retaliation and betrayal that your ability scores make less likely",
@@ -138,6 +138,20 @@
       "note": {
         "ja": "1回（「働く」1回）ごとの確率。1回の長さによらない。闇労働は危険が起きなかった回だけ。0 で起きない",
         "en": "Per term, whatever its length. In illegal labour only on terms without a risk. 0 turns incidents off"
+      }
+    },
+    "QUEST_PAY_PERCENT": {
+      "type": "int",
+      "default": 20,
+      "min": 0,
+      "max": 200,
+      "label": {
+        "ja": "依頼の報酬に対する賃金の割合（%）",
+        "en": "Pay as a share of a quest reward (%)"
+      },
+      "note": {
+        "ja": "90日の賃金の基準を、同じ難易度の依頼1件の報酬のこの割合にする。素の賃金より低くなるときは素の賃金。0 で素の賃金のまま",
+        "en": "Sets the 90-day pay base to this share of one quest reward at the same difficulty. Never below the game's own pay. 0 keeps the game's own pay"
       }
     },
     "ABILITY_MAX_PERCENT": {

@@ -150,7 +150,7 @@
 | [`346_player_trait_effects`](MODS.md#346_player_trait_effects-主人公の特質を能力値戦闘店の値段に効かせる) | 主人公の特質を能力値・戦闘・店の値段に効かせる | 主人公の特質を能力値・戦闘・店の値段に効かせる | 8 |  |
 | [`347_conversation_expressions`](MODS.md#347_conversation_expressions-会話の相手の表情が台詞に合わせて変わる) | 会話の相手の表情が、台詞に合わせて変わる | 会話の相手の表情が、台詞に合わせて変わる | - |  |
 | [`348_party_departure`](MODS.md#348_party_departure-依頼後も仲間が残り会話で別れられる) | 依頼後も仲間が残り、会話で別れられる | 依頼後も仲間が残り、会話で別れられる | 6 |  |
-| [`349_labor_overhaul`](MODS.md#349_labor_overhaul-労働に職種出来事勤続を足す) | 労働に職種と出来事を足す | 労働に職種・出来事・勤続を足す | 65 |  |
+| [`349_labor_overhaul`](MODS.md#349_labor_overhaul-労働まわりの全面改修) | 労働まわりの全面改修 | 労働まわりの全面改修 | 66 |  |
 | [`350_body_augmentation`](MODS.md#350_body_augmentation-素材を体に組み込む人体改造) | 素材を体に組み込む人体改造 | 素材を体に組み込む人体改造 | 16 |  |
 | [`401_battle_character_context`](MODS.md#401_battle_character_context-戦闘の審判へ同行者の人物と装備を見せる) | 戦闘の審判への仲間の情報補完 | 戦闘の審判へ同行者の人物と装備を見せる | - |  |
 | [`402_party_inventory_transfer`](MODS.md#402_party_inventory_transfer-仲間とアイテムを受け渡しできる) | 仲間とのアイテム受け渡し | 仲間とアイテムを受け渡しできる | - |  |

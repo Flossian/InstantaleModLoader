@@ -25,6 +25,8 @@ BASE_SCORE = 11
 TOP_SCORE = 30
 #: 基準より低い能力値で下がる賃金の下限（%）。
 LOW_RATE_PERCENT = 80
+#: 賃金の基準に使う、同じ難易度の依頼1件の報酬の割合（%）。ゲームの労働の式の値より低ければ式の値。0 で式の値のまま。
+QUEST_PAY_PERCENT = 20
 
 # ---------------------------------------------------------------- 役場の仕事
 #: 雇い主になる施設の種類 → 効く能力値2つと、一覧に出す仕事の中身。
@@ -653,6 +655,7 @@ INCIDENT_BAD_PERCENT = 70
 
 #: `configure` がそのまま差し替える数の名前。
 PLAIN_VALUES = ("LIST_JOBS", "ROTATE_DAYS", "QUIT_TENURE_DAYS", "QUIT_BARRED_DAYS", "LOW_RATE_PERCENT",
+                "QUEST_PAY_PERCENT",
                 "CHECK_PER_POINT", "INCIDENT_STEP_PERCENT", "INCIDENT_MAX_PERCENT", "INCIDENT_BAD_PERCENT",
                 "RELIEF_PAY_PERCENT", "RELIEF_TERM_DAYS", "RELIEF_TERMS", "ILLEGAL_TROUBLE_PERCENT",
                 "CRACKDOWN_LAW_PER_DANGER", "BETRAYAL_LAW", "RETALIATION_LOSS_TERMS")
@@ -675,6 +678,7 @@ def values_from_settings(get):
         "RANK_DISCOUNT_PERCENT": (get("RANK2_DISCOUNT_PERCENT"), get("RANK3_DISCOUNT_PERCENT"),
                                   get("RANK4_DISCOUNT_PERCENT")),
         "LOW_RATE_PERCENT": get("ABILITY_LOW_PERCENT"), "CHECK_PER_POINT": get("CHECK_PER_POINT"),
+        "QUEST_PAY_PERCENT": get("QUEST_PAY_PERCENT"),
         "INCIDENT_STEP_PERCENT": get("GOOD_EVENT_STEP_PERCENT"),
         "INCIDENT_MAX_PERCENT": get("GOOD_EVENT_MAX_PERCENT"),
         "INCIDENT_BAD_PERCENT": get("BAD_STAGE_PERCENT"),
@@ -841,6 +845,19 @@ def incident_percent(event):
 def is_trouble(event):
     """人手を求める困り事か（良い出来事でない）。"""
     return isinstance(event, dict) and not event.get("good")
+
+
+def base_pay(labor, quest):
+    """賃金の基準（29歳までの1回＝90日ぶん）。ゲームの労働の式の値 `labor` と、同じ難易度の依頼1件の報酬 `quest` の
+    `QUEST_PAY_PERCENT` % の高い方。`quest` が読めなければ `labor` のまま。
+
+    ゲームの式は依頼の報酬ほど難易度で伸びず（難易度 0→76 で依頼は約3,400倍、労働は75倍）、
+    終盤は長い契約でも依頼1件に届かないため、依頼の報酬につなぐ。
+    """
+    value = float(_number(labor))
+    if not isinstance(quest, bool) and isinstance(quest, (int, float)) and quest > 0:
+        value = max(value, float(quest) * max(0.0, float(_number(QUEST_PAY_PERCENT))) / 100.0)
+    return value
 
 
 def term_pay(base, term_days, percents=()):

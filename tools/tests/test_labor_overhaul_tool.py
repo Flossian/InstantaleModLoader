@@ -66,48 +66,52 @@ check("ひな形の1つめは素のゲームの値（宣言の既定）",
       all(found[key]["default"] == value for key, value in tool.PRESETS[0][1].items()))
 
 print("[試算]")
-sample = 30                              # 難易度 30。素の賃金 178（120日ぶん）、依頼1件 4,234
+sample = 30                              # 難易度 30。素の賃金 178（90日ぶん）、依頼1件 4,234
+BASE = 4234 * 0.2                        # 賃金の基準は依頼1件の 20%（素の賃金より高い）
+PAY = rules.term_pay(BASE, 90)           # 847
 check("測った表は難易度 0〜76", len(tool.LABOR_CURVE) == 77 and len(tool.QUEST_CURVE) == 77
       and tool.LABOR_CURVE[30] == 178 and tool.QUEST_CURVE[30] == 4234 and tool.LABOR_CURVE[76] == 449)
 plain = tool.simulate(rules, found, defaults, sample, 11, 0)
-check("能力値 11・勤続なしなら素の賃金", plain["pay"] == 178 and plain["base"] == 178 and plain["rank"] == "見習い", plain)
+check("能力値 11・勤続なしなら基準のまま", plain["pay"] == PAY == 847 and plain["base"] == PAY and plain["rank"] == "見習い",
+      plain)
 check("契約の稼ぎは割増こみ（4回 12.5%・8回 25%）",
-      plain["short_total"] == 178 * 4 + int(178 * 4 * 0.125) and plain["long_total"] == 178 * 8 + int(178 * 8 * 0.25),
+      plain["short_total"] == PAY * 4 + int(PAY * 4 * 0.125) and plain["long_total"] == PAY * 8 + int(PAY * 8 * 0.25),
       (plain["short_total"], plain["long_total"]))
 check("素の労働は割増なし", plain["plain_long"] == 178 * 8)
 check("依頼1件との比べ", abs(plain["share"] - 100.0 * plain["long_total"] / 4234) < 1e-9)
 strong = tool.simulate(rules, found, defaults, sample, 30, 2880)
-check("能力値 30・右腕で 4 倍", strong["pay"] == 178 * 4 and strong["rank"] == "右腕" and strong["discount"] == 15, strong)
+check("能力値 30・右腕で 4 倍", strong["pay"] == rules.term_pay(BASE, 90, (200, 200)) and strong["rank"] == "右腕" and strong["discount"] == 15, strong)
 check("危険度ごとの賃金は 2・3・4 倍（90日ぶん）",
-      [row["pay"] for row in plain["illegal"]] == [rules.term_pay(178, 90, (p,)) for p in (200, 300, 400)])
+      [row["pay"] for row in plain["illegal"]] == [rules.term_pay(BASE, 90, (p,)) for p in (200, 300, 400)])
 check("危険の確率は表の値（能力値 11）", [row["chance"] for row in plain["illegal"]] == [10.0, 18.0, 28.0],
       plain["illegal"])
 check("能力値と勤続が高いと危険が下がる", strong["illegal"][0]["chance"] < plain["illegal"][0]["chance"])
 monthly = tool.simulate(rules, found, dict(defaults, TERM_DAYS="30", SHORT_TERMS="3", LONG_TERMS="6"), sample, 11, 0)
 check("1回の長さを変えると賃金と契約の長さが変わる",
-      monthly["pay"] == rules.term_pay(178, 30) and monthly["short_days"] == 90 and monthly["long_days"] == 180,
+      monthly["pay"] == rules.term_pay(BASE, 30) and monthly["short_days"] == 90 and monthly["long_days"] == 180,
       monthly)
 check("1回が短いときの臨時の募集は、その長さと短い契約の回数",
       monthly["relief_days"] == 30 and monthly["relief_terms"] == 3 and plain["relief_days"] == 30
       and plain["relief_terms"] == 3)
 tuned = tool.simulate(rules, found, dict(defaults, RANK2_DAYS="100", RANK2_PAY_PERCENT="300",
                                          LONG_BONUS_PERCENT="100"), sample, 11, 100)
-check("画面の数を変えると試算が変わる", tuned["pay"] == 178 * 3 and tuned["long_total"] == 178 * 3 * 8 * 2, tuned)
+tuned_pay = rules.term_pay(BASE, 90, (300,))
+check("画面の数を変えると試算が変わる", tuned["pay"] == tuned_pay and tuned["long_total"] == tuned_pay * 8 * 2, tuned)
 off = tool.simulate(rules, found, dict(defaults, SENIORITY=False), sample, 11, 2880)
-check("勤続を切ると勤続が効かない", off["pay"] == 178 and off["seniority"] is False)
+check("勤続を切ると勤続が効かない", off["pay"] == PAY and off["seniority"] is False)
 check("値引きを切ると値引きが出ない",
       tool.simulate(rules, found, dict(defaults, SHOP_DISCOUNT=False), sample, 11, 2880)["discount"] == 0)
 typing = tool.simulate(rules, found, dict(defaults, TERM_DAYS="", RANK3_DAYS="abc", RISK_PERCENT_1="-"), sample, 11, 0)
-check("打ちかけ・空の欄は既定で試算する（落ちない）", typing["pay"] == 178 and typing["illegal"][0]["chance"] == 10.0)
+check("打ちかけ・空の欄は既定で試算する（落ちない）", typing["pay"] == PAY and typing["illegal"][0]["chance"] == 10.0)
 check("試算の後に既定で呼ぶと既定の結果に戻る", tool.simulate(rules, found, defaults, sample, 11, 0) == plain)
 grown = tool.simulate(rules, found, defaults, 0, 11, 0, 30)
-check("街の実績は賃金の基準の難易度に足される（難易度 0 + 実績 30 → 178）",
-      grown["pay"] == 178 and grown["level"] == 30 and grown["growth"] == 30, grown)
+check("街の実績は賃金の基準の難易度に足される（難易度 0 + 実績 30 → 難易度 30 の基準）",
+      grown["pay"] == PAY and grown["level"] == 30 and grown["growth"] == 30, grown)
 check("比べる素の労働と依頼は、主人公の最高難易度のまま", grown["plain_long"] == 6 * 8 and grown["quest"] == 7, grown)
 check("街の実績は設定の上限で止まる", tool.simulate(rules, found, defaults, 0, 11, 0, 99)["growth"] == 60)
 check("基準は 76 で止まる", tool.simulate(rules, found, defaults, 70, 11, 0, 60)["level"] == 76)
 old = tool.simulate(rules, found, defaults, 30, 11, 0, 0, 50)
-check("年齢 50 では1回が 240 日、賃金は変わらない", old["term_days"] == 240 and old["pay"] == 178, old)
+check("年齢 50 では1回が 240 日、賃金は変わらない", old["term_days"] == 240 and old["pay"] == PAY, old)
 check("年齢 55 で役場、50 で裏の事務所が断る",
       tool.simulate(rules, found, defaults, 30, 11, 0, 0, 55)["office_refused"] is True
       and old["office_refused"] is False and old["illegal_refused"] is True)
@@ -116,7 +120,11 @@ check("年齢の決まりを切ると伸びない",
 check("年齢を渡さなければ伸ばさない", plain["term_days"] == 90 and plain["office_refused"] is False)
 check("街の実績を切ると乗らない",
       tool.simulate(rules, found, dict(defaults, TOWN_GROWTH=False), 0, 11, 0, 30)["pay"] == 6)
-check("闇労働の賃金にも街の実績が乗る", grown["illegal"][0]["pay"] == rules.term_pay(178, 90, (200,)))
+check("闇労働の賃金にも街の実績が乗る", grown["illegal"][0]["pay"] == rules.term_pay(BASE, 90, (200,)))
+check("割合 0 なら素の賃金", tool.simulate(rules, found, dict(defaults, QUEST_PAY_PERCENT="0"), sample, 11, 0)["pay"]
+      == 178)
+check("低い難易度は素の賃金が下限（難易度 10 は 100）",
+      tool.simulate(rules, found, defaults, 10, 11, 0)["pay"] == 100)
 
 print("[表記]")
 check("通貨の表記は文字列（通貨の表記の MOD の一括設定か G）", isinstance(tool.currency(ROOT, MOD_DIR), str)

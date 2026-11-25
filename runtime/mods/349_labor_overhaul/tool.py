@@ -56,6 +56,7 @@ FIXED = "="
 
 CARDS = (
     ("contract", "役場の契約", None, "", (
+        ("line", ["90日の賃金の基準は、同じ難易度の依頼1件の報酬の", "QUEST_PAY_PERCENT", "%（素の賃金より低ければ素の賃金）"]),
         ("line", ["「働く」1回は", "TERM_DAYS", "日（29歳まで）"]),
         ("line", ["一覧には施設の仕事を", "LIST_JOBS", "件並べ、", "ROTATE_DAYS", "日ごとに入れ替える"]),
         ("table", ["短い契約", "長い契約"], [
@@ -217,7 +218,7 @@ def simulate(rules, found, values, difficulty, ability, tenure, growth=0, age=No
     difficulty = max(0, min(DIFFICULTY_MAX, int(difficulty)))
     growth = max(0, min(int(growth), int(v["GROWTH_MAX"]))) if v["TOWN_GROWTH"] else 0
     level = min(DIFFICULTY_MAX, difficulty + growth)
-    base = LABOR_CURVE[level]
+    base = rules.base_pay(LABOR_CURVE[level], QUEST_CURVE[level])
     quest = QUEST_CURVE[difficulty]
     setting_term = max(1, int(v["TERM_DAYS"]))
     aged = bool(v["AGE_RULES"]) and age is not None
