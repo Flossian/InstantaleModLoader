@@ -1308,7 +1308,8 @@ def build_window(rules_in=None, settings_in=None, note=""):
     strength_grid = ttk.Frame(expression_frame)
     strength_grid.pack(anchor="w", padx=(14, 0))
     strength_labels = {}                         # 欄の名前 → 名前の部品（いま効いている行を太字にする）
-    for index, (key, label, width, note) in enumerate((
+    # 注記の変数は note にしない（build_window の引数 note は取り込んだ内容の文で、後で「取り込みました」に出す）
+    for index, (key, label, width, hint) in enumerate((
             (variants.STRENGTH_SD15, variants.LABEL_SD15, 8, "既定 {}".format(variants.DEFAULT_SD15)),
             (variants.STRENGTH, variants.LABEL_OTHER, 8, "既定 {}".format(variants.DEFAULT_STRENGTH)),
             (variants.BY_MODEL, variants.LABEL_BY_NAME, 40,
@@ -1320,9 +1321,9 @@ def build_window(rules_in=None, settings_in=None, note=""):
         ttk.Entry(cell, textvariable=var_for(key), width=width).pack(side="left")
         if key == variants.BY_MODEL:
             # 長い注記は欄の下へ（右に並べると既定の窓の幅で切れる）
-            ttk.Label(strength_grid, text=note, style="Faint.TLabel").grid(row=index + 1, column=1, sticky="w")
+            ttk.Label(strength_grid, text=hint, style="Faint.TLabel").grid(row=index + 1, column=1, sticky="w")
         else:
-            ttk.Label(cell, text=note, style="Faint.TLabel").pack(side="left", padx=(10, 0))
+            ttk.Label(cell, text=hint, style="Faint.TLabel").pack(side="left", padx=(10, 0))
     ttk.Label(expression_frame, text="基本表情のタグ（画像生成の英語のタグ。空にした表情は描かず、会話でも選ばせない）",
               font=bold).pack(anchor="w", pady=(10, 2))
     tag_grid = ttk.Frame(expression_frame)
