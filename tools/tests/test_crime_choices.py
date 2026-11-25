@@ -264,6 +264,26 @@ try:
     app.press(1)
     FakeClock.tick()
     check("「やめる」で事務所の選択肢に戻る", texts(app) == [office.OFFICIAL_BOARD_LABEL, "出る"], texts(app))
+    # 盗品の窓を開いている間は、fence が選択肢を「出る」「会話する」に絞る。絞った並びを「公式の枠が無い」と記録しない
+    import gc  # noqa: E402
+    env = next(obj for obj in gc.get_objects() if isinstance(obj, common.Env) and obj.ctx is ctx)
+    no_way = [line for line in ctx.lines if "no way in" in str(line)]
+    env.fence["broker"] = "1"
+    app.is_popup_window_opened = True          # 売買の窓が開いている（閉じていると fence が控えを片付ける）
+    try:
+        app.buttons = [leave]
+        app.refresh_choice_buttons()
+        check("盗品の窓の間は、絞った並びを公式の枠が無いと記録しない",
+              [line for line in ctx.lines if "no way in" in str(line)] == no_way and texts(app) == ["出る"], ctx.lines[-3:])
+    finally:
+        env.fence["broker"] = None
+        app.is_popup_window_opened = False
+    app.buttons = [leave]
+    app.refresh_choice_buttons()
+    check("窓を閉じた後に本当に枠が無ければ記録する",
+          len([line for line in ctx.lines if "no way in" in str(line)]) == len(no_way) + 1, ctx.lines[-3:])
+    app.buttons = [board, leave]
+    app.refresh_choice_buttons()
     with common._store()["worlds"].lock:
         key = common._store()["worlds"].playthrough(app)
         common._store()["worlds"].load(key)["underworld"] = {"77": {"kind": "smuggle", "area": ""}}

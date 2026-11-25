@@ -405,6 +405,10 @@ def install(env):
         """事務所の選択肢の、公式の「裏の依頼掲示板」の枠を同じ場所で差し替える。"""
         if not common.is_facility_screen(view.buttons):
             return None
+        if env.fence.get("broker"):
+            # 盗品の窓を開いている間は、`fence` が選択肢を「出る」「会話する」に絞っている（閉じたら戻す）。
+            # 絞った並びを見て「公式の枠が無い」と記録すると、1度きりの記録が本当に消えたときに出なくなった。
+            return None
         slot = board_slot(app, view.buttons)
         if slot is None:
             return None
