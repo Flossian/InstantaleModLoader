@@ -2011,6 +2011,22 @@ def apply(ctx):
                 write("表情差分（一括生成）[{}]: {}".format(
                     world, "差分の無い人物・描き足す表情・タグの変わった表情は無い" if blocked is None else blocked))
             return reported
+        def report(done, remaining, failed, name, what):
+            if callable(progress):
+                try:
+                    progress(variants.progress_state(done, remaining, failed, name, what))
+                    return True
+                except Exception:
+                    ctx.log_exc("image quality: reporting the expression progress failed")
+            return False
+
+        if imagegen.creature_module() is None:
+            # ゲームの画面はもう「完了」を出している。用意（モデルの読み込み）の間も止まって見えないよう、
+            # 先にログと画面へ出す（VERIFICATION.md §3.132）
+            write("一括生成 [{}]: 顔の描き直し {} 人・表情差分 {} 人を描く前に、ゲームの画像生成を用意する".format(
+                world, len(redo), len(todo)))
+            reported = report(0, len(redo) or len(todo), 0, variants.PROGRESS_PREPARING,
+                              variants.PROGRESS_FACE if redo else variants.PROGRESS_VARIANTS) or reported
         materials, why = backfill_materials()
         if materials is None:
             if redo:
@@ -2053,15 +2069,6 @@ def apply(ctx):
             if stopped(stop_event):
                 return reported
             write("一括生成 [{}]: {:.0f} 秒待っても当て直されなかったので、このまま描く".format(world, REAPPLY_WAIT))
-
-        def report(done, remaining, failed, name, what):
-            if callable(progress):
-                try:
-                    progress(variants.progress_state(done, remaining, failed, name, what))
-                    return True
-                except Exception:
-                    ctx.log_exc("image quality: reporting the expression progress failed")
-            return False
 
         if redo:
             write("顔の描き直し（一括生成）[{}]: 既存の立ち絵 {} 人の顔を描き直す".format(world, len(redo)))

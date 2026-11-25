@@ -1928,6 +1928,90 @@ check("前の周回の控えへは書かない", saved_keys
       and not [one for one in saved_keys if one[1] == first_key], saved_keys)
 check("ctx.log_exc に例外が出ていない（前の周回の名前・控えの鍵）", not ctx.errors, ctx.errors[:3])
 
+print("[建物の名前と説明は帳簿から]")
+# 説明は建てるときに名前と一緒に生成し、帳簿に `description` として控える。
+# 帳簿を書き換えて読み直せば、控えの写しより帳簿が勝つ。
+module, ctx, app, world, classes = setup()
+made_text = "屋内の広い土間に長机が二つ、奥に暖炉、窓から昼の光。旅の商人がよく泊まる。"
+FakeLLM.load([{"name": "サリ", "category": "middle-aged woman",
+               "speech_style": "短く言い切る", "personality": "荒くれも黙らせる女主人",
+               "profile": "宿を任されている女主人。売上を預かっている。",
+               "facility_name": "風待ちの宿", "facility_description": made_text}])
+try:
+    app.press(module.DESK_LABEL)
+    app.press("宿屋を建てる")
+    app.press_like("並(")
+    asked = FakeLLM.calls[0]["text"] if FakeLLM.calls else ""
+finally:
+    FakeLLM.unload()
+told = holdings()[0]
+keys = list(told)
+check("生成した説明が帳簿に入る", told.get("description") == made_text, told.get("description"))
+check("説明は帳簿の name のすぐ後", keys.index("description") == keys.index("name") + 1, keys)
+check("建物の説明も生成した説明", getattr(building_of(world, told)[0], "description", None) == made_text)
+check("プロンプトで説明を求める", "facility_description" in asked, asked[:200])
+check("プロンプトに世界観の決め打ちが無い", "ダークファンタジー" not in asked, asked[:200])
+check("プロンプトに表の概要を渡さない", "- 概要:" not in asked, asked[:400])
+app.save_game()
+CLOCK.settle()
+
+edited = read_state()
+edited["holdings"][0]["name"] = "改名した宿"
+edited["holdings"][0]["description"] = "書き換えた説明。"
+write_state(edited)
+world_e = classes["world"](make_save(), app)
+app.world = world_e
+renamed, _node = building_of(world_e, told)
+check("書き換えた名前で建ち直る", getattr(renamed, "name", None) == "改名した宿",
+      getattr(renamed, "name", None))
+check("書き換えた説明で建ち直る", getattr(renamed, "description", None) == "書き換えた説明。",
+      getattr(renamed, "description", None))
+app.save_game()
+CLOCK.settle()
+snap = (modfacility._persisted_entry(app, module.OWNER, told["facility"]) or {}).get("snapshot") or {}
+check("次の保存で控えの写しも帳簿の値になる",
+      snap.get("name") == "改名した宿" and snap.get("description") == "書き換えた説明。", snap)
+
+# 説明を持たない古い帳簿は、読み込みで表の文が name の後に書き込まれる。
+old = read_state()
+old["holdings"][0].pop("description", None)
+old["holdings"][0]["name"] = "風待ちの宿"
+write_state(old)
+world_o = classes["world"](make_save(), app)
+app.world = world_o
+filled = holdings()[0]
+filled_keys = list(filled)
+table_text = cat.description_of(filled.get("kind"), filled.get("tier"))
+check("古い帳簿に表の説明が書き込まれる", filled.get("description") == table_text,
+      filled.get("description"))
+check("書き込みも name のすぐ後",
+      filled_keys.index("description") == filled_keys.index("name") + 1, filled_keys)
+check("建物の説明も表の文", getattr(building_of(world_o, filled)[0], "description", None) == table_text)
+
+# 説明を空にすると表の文で建つ（帳簿の空文字はそのまま残す）。
+empty = read_state()
+empty["holdings"][0]["description"] = ""
+write_state(empty)
+world_n = classes["world"](make_save(), app)
+app.world = world_n
+check("空の説明は表の文で建つ",
+      getattr(building_of(world_n, told)[0], "description", None) == table_text)
+check("ctx.log_exc に例外が出ていない（名前と説明）", not ctx.errors, ctx.errors[:3])
+
+# 生成した名前が使えないときは、説明も表の文にする（名前と組で使う）。
+module, ctx, app, world, classes = setup()
+FakeLLM.load([{"name": "サリ", "facility_name": "", "facility_description": made_text}])
+try:
+    app.press(module.DESK_LABEL)
+    app.press("宿屋を建てる")
+    app.press_like("並(")
+finally:
+    FakeLLM.unload()
+fell = holdings()[0]
+check("名前が表へ降りたら説明も表の文",
+      fell.get("description") == cat.description_of(fell.get("kind"), fell.get("tier")),
+      fell.get("description"))
+
 print()
 if failures:
     print("FAILED: " + ", ".join(failures))

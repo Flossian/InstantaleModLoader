@@ -446,12 +446,14 @@ def arena_variety_note(names):
 KEEPER_CATEGORIES = ("young man", "young woman", "middle-aged man",
                      "middle-aged woman", "old man", "old woman")
 
-#: 主人を作らせる頼み文。ゲーム自身の生成（`master_ai_npc_generater`）と同じ口調で、
-#: こちらが要るのは4つ（名前・老若男女・話し方・人柄）と素性の文だけ。
+#: 主人と施設の名前・概要を作らせる頼み文。ゲーム自身の生成（`master_ai_npc_generater`）と同じ口調で、
+#: 主人で要るのは4つ（名前・老若男女・話し方・人柄）と素性の文だけ。
 #: 能力値・見た目・技はゲームの詳細生成が会話の直前に埋める（GAME.md §2.23）。
+#: 世界観は名指ししない。渡した世界の概要に合わせさせる。
+#: 施設の概要は背景の絵のプロンプトの元になるので、見た目の文を先に書かせる（DOC.md「建物の名前と説明」）。
 KEEPER_SYSTEM = (
-    "あなたはダークファンタジーRPGのキャラクター生成AIだ。\n"
-    "出資者の金で建った施設を任される主人を1人設定しろ。\n"
+    "あなたはRPGの設定生成AIだ。\n"
+    "出資者の金で建った施設の名前と概要、それを任される主人を1人設定しろ。\n"
     "【出力要素】\n"
     "- name: 主人の名前。この世界の人名らしく、姓を付けず短く。\n"
     "- category: 老若男女のカテゴリ。次のどれか1つをそのまま書く: {categories}\n"
@@ -461,6 +463,10 @@ KEEPER_SYSTEM = (
     "売上を預かって出資者が訪ねてきたときに渡すことを含める。\n"
     "- facility_name: その施設の名前。看板に出す固有名で、種類の語（宿屋・店など）を"
     "そのまま名乗らせない。土地と格に合わせて短く。\n"
+    "- facility_description: その施設の概要。最初の一文は見た目だけを書く"
+    "（屋内か屋外か、場所の姿、目に入る主な物を2つか3つ、光の具合）。"
+    "人・音・匂いは書かない。続けて一文か二文で、その施設の特色と格を書く。"
+    "施設の名前と主人の名前は書かない。出てくる物は世界の情報に合わせる。\n"
     "【その他】\n"
     "- 出資者に雇われた立場で、出資者には礼を尽くす。敵対的な人物にはしない。\n"
     "- 戦う相手ではない。強さや戦闘の話は書かない。\n"
@@ -469,7 +475,7 @@ KEEPER_SYSTEM = (
 KEEPER_ASK = (
     "【世界の情報】\n- 世界観: {world}\n"
     "【土地の情報】\n- 名前: {area}（{size}）\n"
-    "【施設の情報】\n- 種類: {kind}\n- 格: {tier}\n- 概要: {description}\n"
+    "【施設の情報】\n- 種類: {kind}\n- 格: {tier}\n"
     "【出資者】\n- 名前: {investor}\n"
     "【生成する主人】\n- 立場: {role}\n"
 )
@@ -482,7 +488,7 @@ PLACE_AVOID = "- 次の名前は既にこの世界の施設が使っている。
 
 def keeper_prompt(kind, tier, area_name, size, world_overview,
                   investor, taken=(), places=()):
-    """主人と施設の名前を作らせる頼み文。`(system, user)`。
+    """主人と施設の名前・概要を作らせる頼み文。`(system, user)`。
 
     `taken` はその世界で使っている主人の名前、`places` は施設の名前。どちらも避けさせる。
     """
@@ -498,8 +504,7 @@ def keeper_prompt(kind, tier, area_name, size, world_overview,
         world=world_overview or "", area=area_name or "この街",
         size=SIZE_LABEL.get(normalize_size(size) or "", size or ""),
         kind=spec.get("label", str(kind)),
-        tier=TIER_LABEL.get(tier, tier or ""),
-        description=description_of(kind, tier), investor=investor or "出資者",
+        tier=TIER_LABEL.get(tier, tier or ""), investor=investor or "出資者",
         role=spec.get("keeper_role", "主人"))
     return system, user
 
@@ -515,6 +520,18 @@ def made_name_from(answer, taken=()):
     name = name.strip()[:40] if isinstance(name, str) else ""
     used = set(str(other) for other in (taken or ()) if other)
     return "" if not name or name in used else name
+
+
+#: 生成した施設の概要の長さの上限（字）。
+DESCRIPTION_LIMIT = 300
+
+
+def made_description_from(answer):
+    """答えの中の施設の概要。使えなければ空（呼ぶ側が表の文を使う）。"""
+    if not isinstance(answer, dict):
+        return ""
+    text = answer.get("facility_description")
+    return text.strip()[:DESCRIPTION_LIMIT] if isinstance(text, str) else ""
 
 
 def keeper_fields_from(answer, kind, area_name, facility_name_, seed,

@@ -29,7 +29,9 @@ r"""機能追加: 街に施設を建てる（出資する）。
 どちらもセーブには残らず、控え（`state\`）から建て直す。
 この MOD が持つのは**出資の帳簿**だけ（`state\facility_investment\<世界名×主人公名>.json`）。
 
-    持ち株  = {area, facility, keeper, kind, tier, size, name, built, collected, received}
+    持ち株  = {area, facility, keeper, kind, tier, size, name, description, built, collected, received}
+
+`name` と `description` は建物を建てるたびにここから読む（DOC.md「建物の名前と説明」）。
 
 `received` はこれまでに受け取った売上の合計。積み始める前に受け取った分は額が残っていないので、
 `received` を持たない持ち株は最初に受け取ったときに `received_partial` を立てる（「家と施設」の窓は「以上」と書く）。
@@ -466,22 +468,24 @@ def apply(ctx):
         return name or catalog.keeper_choice(record.get("keeper"))[0]
 
     def generate_keeper(app, record, taken, places):
-        """建物の名前と主人をゲームと同じ生成 AI に作らせる。`(主人の素データ, 施設名)`。
+        """建物の名前・説明と主人をゲームと同じ生成 AI に作らせる。`(主人の素データ, 施設名, 説明)`。
 
         呼ぶのは**建てるときの1回だけ**。答えは帳簿に控えるので、
         建て直しでもロードでも二度と呼ばない（同じ建物と同じ人が戻る）。
-        作れなければ `(None, "")` で、呼ぶ側が表から選ぶ。
+        作れなければ `(None, "", "")` で、呼ぶ側が表から選ぶ。
+        説明は施設名と組で使う（名前が表へ降りたら説明も表の文にする）。
         """
         if str(KEEPER_SOURCE).lower() != "llm":
-            return None, ""
+            return None, "", ""
         structure = llm.create_structure(ctx, "FacilityKeeper", {
             "name": (str, ...), "category": (str, ...),
             "speech_style": (str, ...), "personality": (str, ...),
             "profile": (str, ...), "facility_name": (str, ...),
+            "facility_description": (str, ...),
         }, label="investment")
         if structure is None:
             write("keeper: cannot build the structure; using the table")
-            return None, ""
+            return None, "", ""
         system, user = catalog.keeper_prompt(
             record.get("kind"), record.get("tier"), record.get("area_name"),
             record.get("size"), ui.world_overview(app),
@@ -492,16 +496,17 @@ def apply(ctx):
                          timeout=KEEPER_TIMEOUT, structure=structure,
                          label="investment", write=write)
         made_name = catalog.made_name_from(answer, places)
+        made_description = catalog.made_description_from(answer) if made_name else ""
         fields = catalog.keeper_fields_from(
             answer, record.get("kind"), record.get("area_name"),
             made_name or record.get("name"),
             record.get("keeper"), investor=record.get("investor"), taken=taken)
         if fields is None:
             write("keeper: the answer was not usable; using the table")
-            return None, made_name
+            return None, made_name, made_description
         write("keeper: {!r}（{}）was made for {!r}".format(
             fields.get("name"), fields.get("category"), made_name or record.get("name")))
-        return fields, made_name
+        return fields, made_name, made_description
 
     def keeper_names(app, skip=None):
         """新しい主人が避ける名前。**その世界で使われている名前を全部**。
@@ -553,6 +558,63 @@ def apply(ctx):
                     "on": lambda info: act(info["app"], "collect", facility_id)})
         return out
 
+    def description_of_record(record):
+        """建物の説明。帳簿の `description` → 種類と等級の表の文。"""
+        text = record.get("description")
+        if isinstance(text, str) and text.strip():
+            return text.strip()
+        return catalog.description_of(record.get("kind"), record.get("tier"))
+
+    def fill_descriptions(app):
+        """`description` を持たない持ち株に表の文を書く。書いたら帳簿を保存する。
+
+        版49 より前に建てた持ち株は説明を持たない。項目が帳簿に在れば、
+        ファイルを書き換えるだけで説明を変えられる（DOC.md「建物の名前と説明」）。
+        `name` のすぐ後に入れて、帳簿の項目の並びを新築と揃える。
+        """
+        filled = 0
+        for record in holdings_of(app):
+            if isinstance(record.get("description"), str):
+                continue
+            text = catalog.description_of(record.get("kind"), record.get("tier"))
+            items = [(k, v) for k, v in record.items() if k != "description"]
+            record.clear()
+            for k, v in items:
+                record[k] = v
+                if k == "name":
+                    record["description"] = text
+            record.setdefault("description", text)
+            filled += 1
+        if filled:
+            save(app)
+            write("investment: wrote the table description into {} holding(s)".format(filled))
+        return filled
+
+    def match_ledger(facility, record):
+        """建っている実体の名前と説明を帳簿に揃える。揃えた項目名を返す。
+
+        読み込みでは、ローダの建て直し（`restore_world`）が控えの写しで先に建てることがある。
+        写しは前の保存のときの値なので、帳簿を書き換えた後だと古い名前で建つ。
+        帳簿を正として、ここで上書きする（DOC.md「建物の名前と説明」）。
+        """
+        changed = []
+        for field, value in (("name", record.get("name")),
+                             ("description", description_of_record(record))):
+            if not isinstance(value, str) or not value.strip():
+                continue
+            if getattr(facility, field, None) == value:
+                continue
+            try:
+                setattr(facility, field, value)
+                changed.append(field)
+            except Exception:
+                ctx.log_exc("investment: cannot set the {} of {!r}".format(
+                    field, record.get("facility")))
+        if changed:
+            write("investment: {} of {} set from the ledger".format(
+                "/".join(changed), record.get("facility")))
+        return changed
+
     def register_holding(record):
         """持ち株1つぶんの層を積む（建物と主人）。"""
         facility_id = str(record.get("facility") or "")
@@ -563,8 +625,7 @@ def apply(ctx):
         modfacility.register(
             OWNER, facility_id=facility_id,
             fields={"name": record.get("name") or "",
-                    "description": catalog.description_of(record.get("kind"),
-                                                          record.get("tier")),
+                    "description": description_of_record(record),
                     "facility_type": record.get("kind"),
                     "tier": record.get("tier"),
                     "owner": keeper_id},
@@ -730,6 +791,8 @@ def apply(ctx):
         areas = ui.areas_of_world(world)
         if not areas:
             return 0
+        if key:
+            fill_descriptions(app)
         built = 0
         for record in holdings_of(app) if key else []:
             area_id = str(record.get("area") or "")
@@ -747,6 +810,7 @@ def apply(ctx):
                           "WARN {}: {!r} is not standing in area {!r}".format(
                               why, record.get("name"), area_id))
                 continue
+            match_ledger(facility, record)
             keeper_id = str(record.get("keeper"))
             # 名簿も**読み直しの最中は `world` 側**（`app.world` はまだ前の世界）。
             roster = getattr(world if world is not None
@@ -877,6 +941,7 @@ def apply(ctx):
             "tier": tier,
             "size": size,
             "name": name,
+            "description": catalog.description_of(kind, tier),
             "price": price,
             "built": day,
             "collected": day,
@@ -885,12 +950,14 @@ def apply(ctx):
         }
         # 主人を先に決める（帳簿に控える）。`register_holding` はそれを使う。
         taken = keeper_names(app)
-        made, made_name = generate_keeper(app, record, taken, places)
+        made, made_name, made_description = generate_keeper(app, record, taken, places)
         if made_name:
             # 生成 AI が付けた名前。建物の描写も帳簿もこれで揃える。
             name = made_name
             record["name"] = name
             write("build: the generator named it {!r}".format(name))
+        if made_description:
+            record["description"] = made_description
         if made is None:
             made = catalog.keeper_fields(kind, area_name, name, keeper_id,
                                          investor=record.get("investor"), taken=taken)

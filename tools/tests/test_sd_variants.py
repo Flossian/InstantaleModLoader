@@ -716,11 +716,19 @@ else:
             real_wait = MOD.REAPPLY_WAIT
             MOD.REAPPLY_WAIT = 0.3                          # 当て直しが来ない形（このまま描く）
             VarSD.calls[:] = []
+            progress_seen = []
             try:
                 ctx.hooks[MOD.BULK_TARGET](game_bulk, object(), os.path.join(wdir, "world_data.json"),
-                                           threading.Event(), [].append)
+                                           threading.Event(), progress_seen.append)
             finally:
                 MOD.REAPPLY_WAIT = real_wait
+            check("用意の前に、ゲームが出した「完了」の後へ「画像生成を用意しています」を渡し、ログにも人数を残す"
+                  "（モデルの読み込みの間、画面が完了のまま止まって見えない）",
+                  [(p["completed"], p["remaining"], p.get("label")) for p in progress_seen[1:3]]
+                  == [(0, 1, "{}（表情差分）".format(V.PROGRESS_PREPARING)), (0, 1, "Ana（表情差分）")]
+                  and progress_seen[-1] == game_done
+                  and any("顔の描き直し 0 人・表情差分 1 人を描く前に、ゲームの画像生成を用意する" in n
+                          for n in ctx.notes), progress_seen)
             check("画像生成が用意されていなければ、ゲームの用意（set_ai_models）を1回呼んでから差分だけ描く",
                   loaded["calls"] == 1 and len(VarSD.calls) == 4 and expressions.image(ana, "smile") is not None,
                   (loaded, VarSD.calls))

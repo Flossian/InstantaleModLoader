@@ -283,6 +283,8 @@ def entry_rows(conf):
 #: 一括生成の画面に出す、何を描いているかの言い方。
 PROGRESS_VARIANTS = "表情差分"
 PROGRESS_FACE = "顔の描き直し"
+#: 描く前にゲームの画像生成を用意している間の、一括生成の画面の名前の欄（モデルの読み込みで数十秒かかる）。
+PROGRESS_PREPARING = "画像生成を用意しています"
 
 
 def progress_state(completed, remaining, failed, name, what=PROGRESS_VARIANTS):
