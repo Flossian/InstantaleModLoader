@@ -1306,8 +1306,8 @@
         "en": "part_magitech"
       },
       "note": {
-        "ja": "134枚",
-        "en": "134 images"
+        "ja": "144枚",
+        "en": "144 images"
       }
     },
     "SET_FOOD_RATION": {
@@ -1514,8 +1514,8 @@
         "en": "material_magic"
       },
       "note": {
-        "ja": "190枚",
-        "en": "190 images"
+        "ja": "200枚",
+        "en": "200 images"
       }
     },
     "SET_MATERIAL_CREATURE": {
@@ -1540,8 +1540,8 @@
         "en": "material_creature"
       },
       "note": {
-        "ja": "227枚",
-        "en": "227 images"
+        "ja": "237枚",
+        "en": "237 images"
       }
     },
     "SET_MATERIAL_MODERN": {
@@ -1592,8 +1592,8 @@
         "en": "tool_fantasy"
       },
       "note": {
-        "ja": "207枚",
-        "en": "207 images"
+        "ja": "217枚",
+        "en": "217 images"
       }
     },
     "SET_TOOL_GENRE": {

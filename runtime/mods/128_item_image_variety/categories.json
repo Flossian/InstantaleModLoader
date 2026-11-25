@@ -1319,6 +1319,11 @@
     "sheet": "i144",
     "source": "parts/part_magitech_i144.png",
     "name": "魔導機械_古代の施設の残骸（灰色の板と箱）"
+   },
+   {
+    "sheet": "i154",
+    "source": "parts/part_magitech_i154.png",
+    "name": "魔導機械_義肢と埋め込みの部品"
    }
   ]
  },
@@ -1681,6 +1686,11 @@
     "sheet": "i80",
     "source": "magic_materials/material_magic_i80.png",
     "name": "素材_魔法の素材と古い欠片"
+   },
+   {
+    "sheet": "i152",
+    "source": "magic_materials/material_magic_i152.png",
+    "name": "素材_体に埋める魔術の部品"
    }
   ]
  },
@@ -1730,6 +1740,11 @@
     "sheet": "i150",
     "source": "monster_materials/material_creature_i150.png",
     "name": "魔物の素材_牙と殻"
+   },
+   {
+    "sheet": "i153",
+    "source": "monster_materials/material_creature_i153.png",
+    "name": "魔物の素材_寄生と呪いの移植"
    }
   ]
  },
@@ -1828,6 +1843,11 @@
     "sheet": "i149",
     "source": "tools/tool_fantasy_i149.png",
     "name": "道具_鑿と鐘の舌と袋"
+   },
+   {
+    "sheet": "i151",
+    "source": "tools/tool_fantasy_i151.png",
+    "name": "道具_義肢と義眼"
    }
   ]
  },

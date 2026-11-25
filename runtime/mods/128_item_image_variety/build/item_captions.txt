@@ -3659,3 +3659,43 @@ itm_i150_06	creature_part	A brittle shell plate with rust-brown stains.
 itm_i150_07	creature_part	A thick turtle shell fragment with dried roots.
 itm_i150_08	magical_material	A light hollow wing bones with torn membrane.
 itm_i150_09	magical_material	A hollow white lime shell shaped like a forearm.
+itm_i151_00	other_material	A carved wooden peg leg with iron bands and brown leather straps.
+itm_i151_01	metal	An iron hook hand on a brown leather cuff with a buckle.
+itm_i151_02	metal	A brass prosthetic hand with hinged finger joints.
+itm_i151_03	other_material	A carved wooden prosthetic hand with a brown leather strap.
+itm_i151_04	other_material	A white glass eye with a blue iris in a small purple velvet box.
+itm_i151_05	metal	A silver false eye engraved with fine patterns.
+itm_i151_06	metal	A curved silver skull plate with rivet holes along the rim.
+itm_i151_07	metal	An iron jaw piece with riveted hinges and pale teeth.
+itm_i151_08	metal	An iron knee brace with hinges and brown leather straps.
+itm_i151_09	other_material	Two carved ivory false fingers with brass bands on a short brass chain.
+itm_i152_00	magical_material	A thin grey metal plate etched with a glowing cyan magic circle.
+itm_i152_01	magical_material	A white bone shard carved with glowing blue runes.
+itm_i152_02	relic	A small gold sigil disc with sharp prongs underneath.
+itm_i152_03	magical_material	A slender white bone nail inscribed with red runes.
+itm_i152_04	magical_material	A violet magic stone set in a silver socket with prongs and a faint purple glow.
+itm_i152_05	magical_material	A flat white bone splint carved with blue runes and holes at both ends.
+itm_i152_06	magical_material	A bundle of three silver needles tied with a brown cord.
+itm_i152_07	magical_material	A white vertebra bone set with a glowing blue magic stone.
+itm_i152_08	relic	A black iron ring carved with glowing blue runes.
+itm_i152_09	magical_material	A patch of worn leather marked with a glowing green sigil.
+itm_i153_00	creature_part	A glass jar of writhing pale parasitic worms.
+itm_i153_01	creature_part	A slimy black egg veined with red.
+itm_i153_02	relic	A withered grey monster arm wrapped in iron chains and red cloth strips.
+itm_i153_03	creature_part	A patch of pale hide stitched together with black thread.
+itm_i153_04	creature_part	A glass jar of murky green fluid holding a dark red heart.
+itm_i153_05	creature_part	A red demon eye with a slit pupil in a small iron cage.
+itm_i153_06	creature_part	A small glass vial holding a black leech swollen with blood.
+itm_i153_07	relic	A coiled black thorny vine with red veins.
+itm_i153_08	creature_part	A grey clawed hand with crude black stitches at the wrist.
+itm_i153_09	creature_part	A coiled mass of dark purple tentacles in a black clay pot.
+itm_i154_00	scrap	A brass and crystal prosthetic arm with glowing blue rune lines.
+itm_i154_01	scrap	A brass prosthetic leg with a glowing blue mana core at the knee.
+itm_i154_02	relic	A brass clockwork eye with several glass lenses.
+itm_i154_03	scrap	A brass spine frame studded with small glowing blue crystals.
+itm_i154_04	scrap	A segmented grey stone golem finger with glowing blue runes.
+itm_i154_05	magical_material	A small glass mana battery with a blue crystal and brass caps.
+itm_i154_06	scrap	A brass shoulder socket joint with copper wires and blue crystals.
+itm_i154_07	relic	A rusty brass plate with rivets and a glowing blue rune.
+itm_i154_08	scrap	A bundle of copper nerve wires ending in small blue crystal plugs.
+itm_i154_09	scrap	A brass jaw piece with small gears and steel teeth.
