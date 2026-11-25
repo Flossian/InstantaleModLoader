@@ -853,7 +853,7 @@ app.press("9ヵ月")
 gold = app.player.gold
 app.press("仕事に出る")
 check("取り締まり: 避ける選択肢が出る（確率つき・金は払えるときだけ）", app.labels() == [
-    "裏口から逃げる(器用 60%)", "荷を捨てて人混みに紛れる(賢さ 70%)", "見張りに金を握らせる(200G・魅力 60%)"], app.labels())
+    "裏口から逃げる(器用 60%)", "人混みに紛れる(賢さ 70%)", "金を握らせる\n(200G・魅力 60%)"], app.labels())
 check("取り締まり: 選ぶまでは損をしない", app.player.gold == gold and app.player.area_history["0"]["lawfulness"] == 10)
 app.press("裏口から逃げる")
 check("取り締まり: 逃げ損ねるとその期の賃金が入らない", app.player.gold == gold, app.player.gold - gold)
@@ -880,7 +880,7 @@ app.press("荷運び")
 app.press("9ヵ月")
 gold = app.player.gold
 app.press("仕事に出る")
-app.press("荷を捨てて")
+app.press("人混みに紛れる")
 check("紛れ込むと賃金は半分", app.player.gold == gold + 100, app.player.gold - gold)
 
 module, ctx, app = setup(at=UNDERWORLD_TYPE, rng=Scripted(0.0, 0.0, 0.99))
@@ -889,7 +889,7 @@ app.press("荷運び")
 app.press("9ヵ月")
 gold = app.player.gold
 app.press("仕事に出る")
-app.press("見張りに金を握らせる")
+app.press("金を握らせる")
 check("握らせた金は、見逃してもらえなくても戻らない", app.player.gold == gold - 200
       and app.player.area_history["0"]["lawfulness"] == 8, app.player.gold - gold)
 module, ctx, app = setup(at=UNDERWORLD_TYPE, gold=100, rng=Scripted(0.0, 0.0))
@@ -897,7 +897,7 @@ app.press(ILLEGAL_TEXT)
 app.press("荷運び")
 app.press("9ヵ月")
 app.press("仕事に出る")
-check("払えないときは金を握らせる選択肢が出ない", not app.find("見張りに金を握らせる"), app.labels())
+check("払えないときは金を握らせる選択肢が出ない", not app.find("金を握らせる"), app.labels())
 
 module, ctx, app = setup(at=UNDERWORLD_TYPE, rng=Scripted(0.0, 0.99, 0.99))
 app.press(ILLEGAL_TEXT)
@@ -923,7 +923,7 @@ app.press("取り立て")
 app.press("9ヵ月")
 gold = app.player.gold
 app.press("仕事に出る")
-app.press("今回の稼ぎを渡して収める")
+app.press("稼ぎを渡して収める")
 check("仕返し: 手打ちならその期の賃金だけで済み、契約は続く", app.player.gold == gold
       and app.find("仕事に出る(あと2回)") is not None, (app.player.gold - gold, app.labels()))
 check("手打ちの印", view.tag_of(bucket_of(module, app)["contract"]["log"][0], yen) == ("仕返し 収めた", view.PLAIN))
@@ -1429,6 +1429,8 @@ iconed = view.illegal_card(dict(smith, kind="illegal", job="breakin", name="侵�
                                 terms=[[3, False]], icon=os.path.join(icon_dir, "breakin_1.png")), total, yen)
 check("アイコンがあれば顔の欄に出し、危険の確率は右下の札", iconed["face"].endswith("breakin_1.png")
       and iconed["corner"] == ("危険 21%", view.DANGER), iconed)
+check("闇労働の札は詰めた形（1回の額をボタンの段へ）、役場の札は詰めない", dark.get("compact") is True
+      and not card.get("compact"))
 check("アイコンが無ければ危険の確率を欄いっぱいに出す", dark["face"] is None and dark["corner"] is None
       and dark["placeholder"][0] == "21%")
 check("裏の帯に割増の印は無い", not any((c["tag"] or "").startswith("満了") for c in dm["cells"]))

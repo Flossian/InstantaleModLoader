@@ -30,6 +30,9 @@ GREY_TINT = (0.45, 0.45, 0.45, 1)
 TWO_COLUMNS_RATIO = 1.6
 FACE = 132
 STRIP_SIDE_GAP = 6
+#: 詰めた札（闇労働）の契約のボタンの、文言の両脇の余白の合計と、最小の幅（upx）。
+BUTTON_PAD = 48
+BUTTON_MIN = 220
 #: 帯の内側の余白と段の間（upx）。高さは字の大きさから決める（決め打ちの高さは中が空いた）。
 STRIP_PAD = 10
 STRIP_GAP = 6
@@ -153,8 +156,9 @@ class LaborWindow(object):
             right += kit.px(46)
         elif card.get("note"):
             right += line
-        right += kit.px(6) * (len(card["rows"]) + 3)
-        left = kit.px(FACE) + kit.px(8) + kit.base * panels.TICK * 1.5
+        right += kit.px(6) * (len(card["rows"]) + (2 if card.get("compact") else 3))
+        # 詰めた札（闇労働）は1回の額をボタンの段へ移すので、左の欄は絵だけ
+        left = kit.px(FACE) if card.get("compact") else kit.px(FACE) + kit.px(8) + kit.base * panels.TICK * 1.5
         return max(right, left) + kit.px(16) * 2
 
     def cornered(self, source, corner):
@@ -210,8 +214,9 @@ class LaborWindow(object):
             holder.add_widget(_line(kit, bottom, panels.TICK, panels.FAINT, halign="center"))
             holder.add_widget(Widget())
             left.add_widget(holder)
-        left.add_widget(_line(kit, card.get("per") or "", panels.TICK, panels.FAINT if grey else panels.DIM,
-                              halign="center"))
+        if not card.get("compact"):
+            left.add_widget(_line(kit, card.get("per") or "", panels.TICK, panels.FAINT if grey else panels.DIM,
+                                  halign="center"))
         left.add_widget(Widget())
         box.add_widget(left)
 
@@ -254,10 +259,20 @@ class LaborWindow(object):
         right.add_widget(Widget())
         if card.get("buttons"):
             row = BoxLayout(orientation="horizontal", size_hint_y=None, height=kit.px(46), spacing=kit.px(12))
+            if card.get("compact"):
+                # 詰めた札: 左に1回の額（字の幅どおり）、右に文言の幅のボタン（札の幅いっぱいに伸ばさない）
+                per = kit.label(card.get("per") or "", panels.META, panels.DIM, wrap=False)
+                per.pos_hint = {"center_y": 0.5}
+                row.add_widget(per)
+                row.add_widget(Widget())
             for label, amount, payload in card["buttons"]:
                 text = panels.markup([(label + "　", panels.DIM), (amount, panels.TEXT)])
                 button = kit._font(Button(text=text, markup=True, background_normal="", background_down="",
-                                          background_color=(0, 0, 0, 0), font_size=kit.base * panels.META))
+                                          background_color=(0, 0, 0, 0), font_size=kit.base * panels.BODY))
+                if card.get("compact"):
+                    button.size_hint_x = None
+                    button.bind(texture_size=lambda w, value: setattr(
+                        w, "width", max(kit.px(BUTTON_MIN), value[0] + kit.px(BUTTON_PAD))))
                 button.bind(on_release=lambda *_a, i=index, p=payload: self.pick(i, p))
                 row.add_widget(kit.framed(button))
             right.add_widget(row)

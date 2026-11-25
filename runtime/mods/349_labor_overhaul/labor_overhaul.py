@@ -141,6 +141,11 @@ QUIT_LABEL = "途中でやめる"
 WORKED_TEXT = "{period}を働いて過ごし、{pay}Gを得た。"
 WORKED_NOTHING = "{period}を働いて過ごしたが、今回の賃金は残らなかった。"
 OPTION_LABEL = "{label}({ability} {percent}%)"
+#: 選択肢の文言と確率の括弧を合わせた字数がこれを超えたら、括弧の前で改行する（窓の横縦の比で分ける）。
+#: 選択肢の列は 4:3 の窓では細く、ゲームが語の途中で折り返した（「賢／さ」「1,542／円」）。
+WRAP_CHARS_NARROW = 12
+WRAP_CHARS_WIDE = 18
+WRAP_NARROW_RATIO = 1.6
 RESULT_PAY = "今回の賃金は{pay}Gになった。"
 FIRED_TEXT = "{name}の仕事は、ここで打ち切りになった。"
 FINISH_TEXT = "{name}の契約を務め終えた。稼ぎは合わせて{total}G。"
@@ -1031,11 +1036,22 @@ def apply(ctx):
         for index, option in enumerate(event["options"]):
             label = fill(option["label"], contract)
             if option["ability"]:
-                label = OPTION_LABEL.format(
+                label = wrapped(OPTION_LABEL.format(
                     label=label, ability=rules.ABILITY_NAMES[option["ability"]],
-                    percent=rules.check_percent(option["base"], mine.get(option["ability"])))
+                    percent=rules.check_percent(option["base"], mine.get(option["ability"]))))
             out.append(choices.Choice(label, on_press=_press("option", label, index)))
         return out
+
+    def wrapped(label):
+        """長い選択肢は、確率の括弧の前で改行する（語の途中で折り返させない）。"""
+        cut = label.rfind("(")
+        if cut <= 0:
+            return label
+        width, height = ui.window_size()
+        narrow = height > 0 and width / height < WRAP_NARROW_RATIO
+        if len(label) <= (WRAP_CHARS_NARROW if narrow else WRAP_CHARS_WIDE):
+            return label
+        return label[:cut] + "\n" + label[cut:]
 
     def bribe_cost(contract):
         return max(1, int(round(int(contract["pay"]) * max(0, int(BRIBE_PAY_PERCENT)) / 100.0)))
@@ -1053,11 +1069,12 @@ def apply(ctx):
                 cost = bribe_cost(contract)
                 if not isinstance(gold, int) or gold < cost:
                     continue
-                label = coins(BRIBE_LABEL.format(label=label, cost=money(cost),
-                                                 ability=rules.ABILITY_NAMES[option["ability"]], percent=percent))
+                label = wrapped(coins(BRIBE_LABEL.format(label=label, cost=money(cost),
+                                                         ability=rules.ABILITY_NAMES[option["ability"]],
+                                                         percent=percent)))
             elif percent is not None:
-                label = OPTION_LABEL.format(label=label, ability=rules.ABILITY_NAMES[option["ability"]],
-                                            percent=percent)
+                label = wrapped(OPTION_LABEL.format(label=label, ability=rules.ABILITY_NAMES[option["ability"]],
+                                                    percent=percent))
             out.append(choices.Choice(label, on_press=_press("option", label, index)))
         return out
 

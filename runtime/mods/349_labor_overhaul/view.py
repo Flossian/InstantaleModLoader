@@ -217,7 +217,9 @@ def illegal_card(offer, total_of, money):
             "per": PER_TEXT.format(period=period, pay=money(offer["pay"])),
             "rows": [(label, text.format(**values)) for label, text in ILLEGAL_ROWS],
             "tenure": None, "buttons": contract_buttons(offer, total_of, money), "grey": False, "note": None,
-            "danger": int(offer.get("danger") or 1) >= rules.MAX_DANGER}
+            "danger": int(offer.get("danger") or 1) >= rules.MAX_DANGER,
+            # 契約が1つで勤続の帯も無いので、1回の額をボタンの段へ寄せた詰めた札にする
+            "compact": True}
 
 
 # ---------------------------------------------------------------- 帯
