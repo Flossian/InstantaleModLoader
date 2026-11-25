@@ -109,9 +109,18 @@ class FakeCtx(object):
     # ログは本物の `ctx.logger` をそのまま借りる（`cap` も本物）。
     _mod = None
 
+    @property
+    def mod_name(self):
+        """本物の ctx.mod_name（設定の欄の名前になるフォルダ名）に当たる。"""
+        return os.path.basename(self.mod_dir)
+
     def logger(self, name, **kw):
         import instantale_modloader as _ml
         return _ml.ModContext.logger(self, name, **kw)
+
+    def once(self, write, *args, **kw):
+        import instantale_modloader as _ml
+        return _ml.ModContext.once(self, write, *args, **kw)
 
     def log(self, msg, level="INFO"):
         self.logs.append((level, msg))

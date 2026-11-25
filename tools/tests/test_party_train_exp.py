@@ -486,8 +486,6 @@ sys.modules["__main__"].BattleEndManager(app).execute("戦う")
 check("戦闘の経験値は写さない", member_of(app).gains == [], member_of(app).gains)
 check("プレイヤーには普通に入る", app.player.gains == [30], app.player.gains)
 check("例外も出ない", not ctx.errors, ctx.errors)
-check("訓練の外の支給は記録に残す（触らないが経路は分かる）",
-      "(not training)" in read_log(), read_log()[-300:])
 
 app, ctx, clock, mod = setup()
 sys.modules["__main__"].VacationRestManager(app).execute("休む")
@@ -564,6 +562,12 @@ check("ゲーム自身が配った相手には渡さない", member_of(app).gain
       member_of(app).gains)
 check("その旨をログに残す", "gave 250 exp to" in read_log(), read_log()[-400:])
 check("例外も出ない", not ctx.errors, ctx.errors)
+
+app, ctx, clock, mod = setup(members=("71", "72"), party=["player", "71"])
+train(app, give_to=("72",))
+check("同行していない NPC への支給は控えもログもしない（仲間には渡す）",
+      "gave 250 exp to" not in read_log()
+      and app.world.characters["71"].gains == [250], read_log()[-400:])
 
 print("=== 名簿の在り処 ===")
 app, ctx, clock, mod = setup(members=("71",), party=[])

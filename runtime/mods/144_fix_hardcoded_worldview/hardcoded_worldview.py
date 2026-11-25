@@ -35,14 +35,12 @@
 
 from __future__ import annotations
 
-import io
-import json
 import os
 import re
 import sys
 import time
 
-from instantale_modloader import frames, imagegen, patch, saves, state, ui
+from instantale_modloader import frames, imagegen, patch, read_json, saves, state, ui, write_json
 from instantale_modloader.llm import wrap_outgoing
 
 LOG_BASENAME = "hardcoded_worldview.log"
@@ -108,13 +106,13 @@ BACKGROUND_FUNCS = (("generate_and_save_background", 2, 3), ("generate_image_rea
 # ================================================================== 頼み文
 
 def clip(value, limit=None):
-    """`limit` 字で切って1行に畳んだ文。`limit` が None なら切らず、改行も元のまま。"""
+    """`limit` 字で切って1行に畳んだ文。`limit` が None なら切らず、改行も元のまま。
+
+    文字列でないものは "" にする（`frames.short` は str() にするので、その前で弾く）。
+    """
     if not isinstance(value, str):
         return ""
-    if limit is None:
-        return value.strip()
-    got = " ".join(value.split())
-    return got if len(got) <= limit else got[:limit] + "…"
+    return frames.short(value, limit, collapse=limit is not None)
 
 
 def world_block(world_dict):
@@ -231,11 +229,8 @@ def fix_prompts_json(world, name, note=None, base=""):
     if not (isinstance(world, str) and world and isinstance(name, str) and name):
         return False
     path = os.path.join(saves.worlds_dir(base), world, "characters", name, "prompts.json")
-    try:
-        with io.open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (OSError, ValueError):
-        return False
+    # 読み書きはローダの作法で（BOM 付きも読み、隣の一時ファイルから差し替える。TECH.md §3.5）。
+    data = read_json(path)
     if not isinstance(data, dict):
         return False
     changed = False
@@ -245,10 +240,8 @@ def fix_prompts_json(world, name, note=None, base=""):
         if after != before:
             data[key] = after
             changed = True
-    if not changed:
+    if not changed or not write_json(path, data, indent=2):
         return False
-    with io.open(path, "w", encoding="utf-8", newline="") as fh:
-        json.dump(data, fh, ensure_ascii=False, indent=2)
     if note is not None:
         note("[IMAGE] prompts.json {}: 決め打ちの語を抜いた".format(name))
     return True
@@ -316,10 +309,12 @@ def apply(ctx):
                             kind, target.rpartition(":")[2], name))
             return orig(*args, **kwargs)
 
+    # 人物の側を先に包む。背景のモジュールが持つ同じ関数の写しは `wrapped_raw` で飛ばす。
+    # 背景のモジュール名はローダに口が無い（人物の側の `imagegen.creature_targets` だけ）ので自分で組む。
+    for func, positive_at, negative_at in CREATURE_FUNCS:
+        for target in imagegen.creature_targets(func):
+            strip_hook(target, positive_at, negative_at, "creature")
     for family in imagegen.families():
-        for func, positive_at, negative_at in CREATURE_FUNCS:
-            strip_hook("{}:{}".format(imagegen.CREATURE_FORMAT.format(family), func),
-                       positive_at, negative_at, "creature")
         for func, positive_at, negative_at in BACKGROUND_FUNCS:
             strip_hook("{}:{}".format(BACKGROUND_MODULE.format(family), func),
                        positive_at, negative_at, "background")
@@ -334,58 +329,7 @@ def apply(ctx):
                              frames.arg(args, kwargs, "name", 1), note)
         return result
 
-    _verify(ctx)
-
+    # 書き換えの確かめは固定の入力なので tools/tests/test_hardcoded_worldview.py にある（TECH.md §6.1）。
     armed = hooks.armed()
     ctx.log("hardcoded worldview: armed on {} | log {}".format(
         ", ".join(armed) if armed else "nothing (targets missing)", log_path))
-
-
-# --------------------------------------------------------------------------
-# 自己検証
-# --------------------------------------------------------------------------
-_SAMPLE_WORLD = {"world_data": {"name": "見本の世界", "overview": "見本の概要。"}}
-_SAMPLE_NARRATOR = ["あなたはダークファンタジーTRPGのゲームマスターである。文体は常体。", "【ログ】"]
-_SAMPLE_TOWN = ["あなたはダークファンタジーRPGのワールドマップジェネレーターです。",
-                "【共通世界観】- 冒険者: この世界にはギルドとそれに属する職業冒険者たちがいるが、"
-                "夢のある仕事ではない。- エリア: 世界はいくつかのエリアに分かれている。\n"
-                "【世界のデータ】\n- 世界の概要: 見本"]
-_SAMPLE_TALK = ["ロールプレイとして振舞ってください。" + TONE_FROM,
-                "【世界の情報】\n- 世界の概要: 見本\n- ダークファンタジーであるため、窃盗は許可する。"]
-#: 概要を空にした世界の生成（世界の情報が無い）。ゲームの既定のまま送る。
-_SAMPLE_NO_WORLD = ["あなたはダークファンタジーRPGの世界そのものを生成する担当です。\n面白そうな世界の概要を生成してください。",
-                    "【共通世界観】- 冒険者: この世界にはギルドとそれに属する職業冒険者たちがいるが、夢のある仕事ではない。"]
-_SAMPLE_PREFIX = ("full-body, masterpiece,high quality, detailed face, medieval, dark fantasy, "
-                  "watercolor, standing,shabby, young man, medieval fantasy cloak")
-
-
-def _verify(ctx):
-    got, done = rewrite(_SAMPLE_NARRATOR, _SAMPLE_WORLD)
-    if got is None or done != ["role", "world"] or not got[0].startswith("あなたはTRPGのゲームマスター") \
-            or "見本の概要。" not in got[0] or got[1] != _SAMPLE_NARRATOR[1]:
-        ctx.log("VERIFY FAILED: narrator rewrite {!r}".format(got), level="ERROR")
-        return
-    if rewrite(got, _SAMPLE_WORLD)[0] is not None:
-        ctx.log("VERIFY FAILED: rewrote twice", level="ERROR")
-        return
-    got, done = rewrite(_SAMPLE_TOWN, _SAMPLE_WORLD)
-    if got is None or done != ["role", "common"] or "夢のある" in got[1] or "- エリア:" not in got[1] \
-            or HEAD_WORLD in got[0]:
-        ctx.log("VERIFY FAILED: town rewrite {!r}".format(got), level="ERROR")
-        return
-    got, done = rewrite(_SAMPLE_TALK, _SAMPLE_WORLD)
-    if got is None or done != ["tone", "policy"] or "ダークファンタジー" in "".join(got):
-        ctx.log("VERIFY FAILED: talk rewrite {!r}".format(got), level="ERROR")
-        return
-    if rewrite(_SAMPLE_NO_WORLD, _SAMPLE_WORLD)[0] is not None:
-        ctx.log("VERIFY FAILED: a request without a world was rewritten", level="ERROR")
-        return
-    if rewrite(_SAMPLE_NARRATOR, None)[0] is not None:
-        ctx.log("VERIFY FAILED: the genre was removed without a world", level="ERROR")
-        return
-    stripped = drop_tokens(_SAMPLE_PREFIX, POSITIVE_DROP)
-    if stripped != ("full-body, masterpiece,high quality, detailed face, watercolor, standing,"
-                    " young man, medieval fantasy cloak"):
-        ctx.log("VERIFY FAILED: prefix {!r}".format(stripped), level="ERROR")
-        return
-    ctx.log("hardcoded worldview: self-check passed")

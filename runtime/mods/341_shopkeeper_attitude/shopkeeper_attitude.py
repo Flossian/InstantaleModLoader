@@ -5,18 +5,16 @@
   店主の性格・関係・感情・好感度・会話の回数・人生ログを渡して、裏で LLM に応じ方を1回頼む
 - 手配中の土地では、手配を数える MOD（`336_crime_overhaul`）がローダの窓口 `wanted` に置いた率（店の値の圧）を
   引き受けて、怯える・動じない・足元を見るを決める。窓口に率が無ければ平時として、自分の率で負ける・普段どおり・ふっかける
-- 売買を押したとき（`ShoppingStartManagerRemake.execute`。ワーカースレッド）に判定が済んでいなければ、
-  待機表示を出して待つ。頼んでいない店主（店の中でロードした等）はその場で頼む
+- 売買を押したとき（`ShoppingStartManagerRemake.execute`。ワーカースレッド。ローダの窓口 `shopping` の前の処理）に
+  判定が済んでいなければ、待機表示を出して待つ。頼んでいない店主（店の中でロードした等）はその場で頼む
 - 判定は店主ごとに控え（`state\\shopkeeper_attitude\\<世界×主人公>.json`）、場面・好感度（手配中は手配度も）が変わるか、
   使い回す日数が過ぎるまで使う。日数を過ぎた控えは書くときに消す
 - 値段はローダの関所（`prices.adjust`）へ一時の段として置く。保存の直前には外れる（セーブへ焼き付けない）
 - 判定が無い（LLM が答えない・主が MOD の人物）ときは、手配中は好感度の線、平時は普段どおり
 """
-import os
-import sys
 import threading
 
-from instantale_modloader import arrivals, llm, npcs, prices, ui, wanted
+from instantale_modloader import arrivals, llm, modnpc, npcs, prices, shopping, ui, wanted
 from instantale_modloader import state as loader_state
 
 from . import attitude
@@ -32,10 +30,8 @@ LOG_BASENAME = "shopkeeper_attitude.log"
 STATE_DIRNAME = "shopkeeper_attitude"
 STORE_ATTR = "_instantale_shopkeeper_attitude"
 MARK = "mod_shopkeeper_attitude"
-SHOP_TARGET = "__main__:ShoppingStartManagerRemake.execute"
-#: 店の選択肢の印（`340_shop_lineup` が宿屋と鍛冶屋に足すのも同じ）と、MOD の人物の id の頭。
+#: 店の選択肢の印（`340_shop_lineup` が宿屋と鍛冶屋に足すのも同じ）。
 SHOP_CHOICE = "売買する"
-MOD_NPC_PREFIX = "mod:"
 #: 品の値段の鍵（ローダの関所が渡す。`買価` は店の品、`売価` は売りに出した品）。
 BUY_KEY = "買価"
 SELL_KEY = "売価"
@@ -48,36 +44,21 @@ WAIT_SECONDS = 180.0
 #: 頼みに載せるプロフィールと人生の記録の上限（字）。None は切らない（版2。ゲームの欄と、ゲームがまとめ直す記録。VERIFICATION.md §3.95）。
 PROFILE_LIMIT = None
 LIFE_LOG_LIMIT = None
-LIFE_LOG_MODULE = "scripts.llm.context_manager"
 
 
 def _store():
-    """世代をまたぐ入れ物。プロセスに1つ（TECH.md §3.5）。"""
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"worlds": None}
-        setattr(sys, STORE_ATTR, store)
-    return store
+    """世代をまたぐ入れ物。プロセスに1つ（TECH.md §3.5。足りない鍵の埋め方はローダの `state.process_store`）。"""
+    return loader_state.process_store(STORE_ATTR, {"worlds": None})
 
 
-def life_log_text(app, character, limit):
-    """ゲーム自身の作り方の人生の記録（`context_manager.get_life_log_text`）を、頼みに載せる文にする。読めなければ空。`limit` が None なら切らない。"""
-    module = sys.modules.get(LIFE_LOG_MODULE)
-    build = getattr(module, "get_life_log_text", None)
-    try:
-        value = build(app, character) if callable(build) else None
-    except Exception:
-        value = None
-    if not value:
-        return ""
-    text = str(value)
-    return text if limit is None or len(text) <= limit else text[:limit] + "…"
+#: ゲーム自身の作り方の人生の記録（`context_manager.get_life_log_text`）を頼みに載せる文にする（ローダの語彙）。
+life_log_text = npcs.life_log_text
 
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     screen = ui.Screen(ctx, write, tag="shopkeeper attitude", mark=MARK)
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "341_shopkeeper_attitude"
+    owner = ctx.mod_name or "341_shopkeeper_attitude"
     store = _store()
     if store["worlds"] is None:
         store["worlds"] = loader_state.WorldStore(ctx, STATE_DIRNAME, write=write)
@@ -89,12 +70,8 @@ def apply(ctx):
     wanted.take_shop_pressure(owner, ctx)
 
     # -------------------------------------------------- いまの店
-    def keeper_of(app):
-        """いま居る施設の `(主の id, 主)`。主がいなければ `(None, None)`。"""
-        owner_id = getattr(ui.current_facility(app), "owner", None)
-        if owner_id is None:
-            return None, None
-        return str(owner_id), ui.character_of(app, str(owner_id))
+    # いま居る施設の `(主の id, 主)`。主がいなければ `(None, None)`（ローダの語彙）。
+    keeper_of = ui.facility_owner
 
     def judgeable_shop(app):
         """判定を頼む店なら `(主の id, 主)`。店でない・主が MOD の人物なら None。"""
@@ -102,7 +79,7 @@ def apply(ctx):
         if not isinstance(choices, dict) or SHOP_CHOICE not in choices:
             return None
         keeper_id, keeper = keeper_of(app)
-        if keeper is None or keeper_id.startswith(MOD_NPC_PREFIX):
+        if keeper is None or modnpc.is_mod_npc(keeper_id):
             return None
         return keeper_id, keeper
 
@@ -153,13 +130,11 @@ def apply(ctx):
     def ask(app, mode, keeper_id, keeper):
         """LLM に応じ方を頼み、控える。答えが無ければ None。ワーカースレッドで呼ぶ。"""
         player = getattr(app, "player", None)
-        relationship = getattr(keeper, "relationship", None)
-        row = relationship.get("player") if isinstance(relationship, dict) else None
-        row = row if isinstance(row, dict) else {}
+        row = npcs.player_row(keeper) or {}
         affinity = npcs.affinity_value(keeper)
         lawfulness = lawfulness_here(app)
         text = attitude.prompt(
-            mode, area=getattr(ui.current_area(app), "name", None), player=getattr(player, "name", None),
+            mode, area=ui.area_name(app, ui.current_area(app), limit=None), player=ui.player_name(app),
             player_profile=attitude.clean(getattr(player, "profile", None), PROFILE_LIMIT),
             lawfulness=lawfulness, weight=wanted.weight_of(lawfulness),
             keeper=getattr(keeper, "name", None),
@@ -269,16 +244,14 @@ def apply(ctx):
         if shop is not None:
             start(app, mode, shop[0], shop[1])
 
-    @ctx.wrap(SHOP_TARGET, required=False, safe=True)
-    def shop_start(orig, self, *args, **kwargs):
-        """売買を押した時（ワーカースレッド）。応じ方が決まるのを待ち、1行知らせてから開く。"""
-        try:
-            app = getattr(self, "app", None) or ui.find_app()
-            if app is not None:
-                tell(app)
-        except Exception:
-            ctx.log_exc("shopkeeper attitude: cannot tell the attitude")
-        return orig(self, *args, **kwargs)
+    def shop_start(call):
+        """売買を押した時（ワーカースレッド。ローダの窓口 `shopping.ENTER` の前の処理）。
+        応じ方が決まるのを待ち、1行知らせてから開く（`orig` を待たせてよい窓口）。"""
+        if call.app is not None:
+            tell(call.app)
+
+    # 売買を押した場面はローダの窓口が1枚だけ包む（TECH.md §3.3.21）。
+    shopping.on(owner, ctx, (shopping.ENTER,), before=shop_start, write=write)
 
     def tell(app):
         mode, rate = scene(app)

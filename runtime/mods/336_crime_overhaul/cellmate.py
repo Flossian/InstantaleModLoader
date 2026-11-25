@@ -87,7 +87,7 @@ clean_look = npcs.clean_look
 
 def raised_affinity(before, step, ceiling=None):
     """1年ぶん上げた好感度。読めなければ 0 から。"""
-    base = before if isinstance(before, (int, float)) and not isinstance(before, bool) else 0
+    base = before if frames.is_number(before) else 0
     after = int(base) + max(0, int(step))
     return min(after, int(ceiling)) if ceiling is not None else after
 
@@ -144,8 +144,8 @@ def install(env):
             write("cellmate: dropped the record(s) of {} (not in this world; a previous playthrough)".format(gone))
 
     def is_dead(app, npc_id):
-        config = getattr(ui.character_of(app, npc_id), "config", None)
-        return isinstance(config, dict) and bool(config.get("is_dead"))
+        """死の印はゲームの人物と modnpc の人物で置き場が違う（両方を `npcs.is_dead` が見る。GAME.md §2.22）。"""
+        return npcs.is_dead(ui.character_of(app, npc_id))
 
     def set_mate(app, npc_id, **changes):
         with worlds.lock:
@@ -159,9 +159,9 @@ def install(env):
     area_notes = npcs.area_notes
 
     def taken_names(app):
-        characters = getattr(getattr(app, "world", None), "characters", None)
-        names = [getattr(character, "name", None) for character in (characters or {}).values()]
-        return [name for name in names if isinstance(name, str) and name][-TAKEN_NAMES_MAX:]
+        """既にいる人物の名前（後ろから `TAKEN_NAMES_MAX` 人）。集めるのはローダの `modnpc.names_in_use`
+        （名簿のほか、セーブにだけ居る人物・今の世界に居る MOD の NPC・主人公も数える）。"""
+        return modnpc.names_in_use(app)[-TAKEN_NAMES_MAX:]
 
     exp_level_for = npcs.exp_level
 
@@ -175,7 +175,7 @@ def install(env):
              "personality": (str, ...), "speech_style": (str, ...),
              "look_description": (str, ...), "category": (str, ...), "look": (str, ...)},
             label="cellmate")
-        prompt = PROMPT.format(area=getattr(area, "name", "") or "", notes=clean_text(area_notes(area), 600),
+        prompt = PROMPT.format(area=ui.area_name(app, area, limit=None), notes=clean_text(area_notes(area), 600),
                                difficulty=difficulty, taken="、".join(taken_names(app)) or "なし",
                                categories=", ".join(CATEGORIES))
         data = llm.ask(ctx, MANAGER_NAME, [{"role": "user", "content": prompt}],
@@ -374,8 +374,8 @@ def install(env):
             mate = dict(found.get(npc_id) or {})
         if not mate or not same_person(app, npc_id, mate):
             return None
-        town = getattr(ui.world_areas(app).get(str(mate.get("area"))), "name", None) or "この街"
-        player = getattr(getattr(app, "player", None), "name", None) or "主人公"
+        town = ui.area_name(app, str(mate.get("area")), fallback="この街", limit=None)
+        player = ui.player_name(app, "主人公")
         text = NOTE_JAILED if mate.get("status") in ("jailed", "breaking") else NOTE_FREE
         return text.format(town=town, player=player, crime=mate.get("crime") or "不明",
                            years=int(mate.get("years") or 0))
@@ -472,7 +472,7 @@ def install(env):
         if found is None:
             return
         npc_id, mate = found
-        town = getattr(ui.world_areas(app).get(str(mate.get("area"))), "name", None) or "この街"
+        town = ui.area_name(app, str(mate.get("area")), fallback="この街", limit=None)
         in_party = npc_id in [str(member) for member in ui.party_member_ids(app)]
         if is_dead(app, npc_id):
             # 決行の戦闘で倒れた（主人公は勝つか逃げて外へ出た）。ゲームが退場させている。

@@ -10,7 +10,7 @@
     "en": "In the base game only shop stock ever gets a weapon skill (about 1 in 8); crafted weapons and weapons from free text or events never do. Rolls a chance when a weapon is crafted or obtained, and on a hit has the game's own item skill generator make a skill that fits the item. The chance can be changed in settings and is scaled by the hero's INT and DEX (with gear and other bonuses) (0% when low, double or triple when high, certain when very high). The item details also show the skill's effect and uses. Companions can use the skill of the weapon they wear in battle",
     "ja": "素のゲームでスキル付きの武器が出るのは店の品揃えだけ（8本に1本ほど）で、クラフトやテキスト・イベントで手に入る武器には付かない。武器が作られたとき・手に入ったときに抽選し、当たればゲーム自身のスキル生成で品に合ったスキルを付ける。確率は設定で変えられ、主人公の INT と DEX（装備などの補正込み）で倍率が掛かる（低ければ 0%、高ければ2倍・3倍、とても高ければ必ず付く）。説明欄にはスキルの効果と使用回数も出す。仲間も装備した武器のスキルを戦闘で使う"
   },
-  "version": "3",
+  "version": "4",
   "author": "わさの, R01/Flossian",
   "settings": {
     "CHANCE_CRAFT": {

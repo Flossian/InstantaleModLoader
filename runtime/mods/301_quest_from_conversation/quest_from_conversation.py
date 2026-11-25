@@ -46,8 +46,8 @@ mod が無ければ、前の版の残骸のボタンは「選択肢を元に戻�
 クエストエリアの生成・id の採番・依頼の一覧への登録・セーブまで面倒を見てくれる（自前で
 `index['quest']` を進めたりエリアを作ったりする必要が無い）。
 
-その内側で走る `llm_manager_world_generate:random_quest_generator` を包み、
-`area_description` に**この会話の書き起こしを添える**。
+その内側で走る依頼の生成（`llm_manager_world_generate:random_quest_generator`）には、
+ローダの窓口 `quest_generation` に渡して**この会話の書き起こしを添える**（TECH.md §3.3.30）。
 引数の書き換えだけなので出力スキーマ（QuestStructure）はゲームのものが
 1 バイトも変わらない。
 GAME.md §3「ゲーム自身のヘルパを探す」と同じ手口。
@@ -96,16 +96,13 @@ mod を import はしない。
 依頼人のいない依頼（ゲームが作る依頼の多く）は、依頼の街の住人に噂として伝える（`town_quests_of`）。
 掲示板に出さない依頼（ローダの窓口 `board`）は誰の仕業かを伏せる。VERIFICATION.md §3.115。
 
-版8: 会話中の「行動」メニュー（`toggle_to_action_in_conversation`）に出す経路を外した。
-この版のゲームではその欄が大きさ 0 で画面に出ず（GAME.md §2.6）、8月から一度も呼ばれていなかった。
-`random_quest_generator` と `ConversationStartManager.__init__` の包みは、引数を受けた形のまま `orig` へ渡す
-（名前で受けて位置に直すと、内側の MOD が受ける形が素と変わる。TECH.md の規則の表）。
-同じ版で、依頼から戻った後の会話を直した（VERIFICATION.md §3.115）。
-依頼の間は暦が進まないので、出発前の会話が「たった今の続き」になっていた。
+## 依頼から戻った後の会話
+
+依頼の間は暦が進まないので、出発前の会話が「たった今の続き」になる（VERIFICATION.md §3.115）。
 出発前に話していた相手にだけ、離れていたことを伝える（題は書かない）。
-完了と噂の文に、報酬まで済んでいて手続きは要らないことを足した。
+完了と噂の文には、報酬まで済んでいて手続きは要らないことを書く。
 依頼人と戻って最初に話すときは「自分から切り出す必要は無い」を付けない。
-プロフィールの文だけでは第一声と返事に効かなかったので、第一声は `messages`、
+プロフィールの文だけでは第一声と返事に効かないので、第一声は `messages`、
 返事の決まりは `response_prompt_instruction` にも足す（`modnpc` の `prompt` の口）。
 """
 
@@ -115,7 +112,7 @@ import threading
 import time
 
 from instantale_modloader import (arrivals, board, choices, confinement, frames, loads, modnpc, quest_claims,
-                                  quest_clients, quest_ends, quest_generation, ui)
+                                  quest_clients, quest_ends, quest_generation, talks, ui)
 from instantale_modloader.state import (PLAYTHROUGH_SEP, UNKNOWN_WORLD, WorldStore, key_in_world,
                                         other_playthroughs, playthrough_key, retire_entries,
                                         world_filename, world_key)
@@ -174,7 +171,8 @@ END_TEXT = "<行動: 依頼の話を切り出すため、会話を切り上げ�
 #                  実測できたので、「行動」メニューを経由する必要は無い
 #   "facility"     施設の選択肢に「会話する」と並べて出す
 #
-# 会話中の「行動」メニューに出す経路は版8で外した（この版のゲームでは画面に出ない。GAME.md §2.6）。
+# 会話中の「行動」メニュー（`toggle_to_action_in_conversation`）には出さない
+# （この版のゲームではその欄が大きさ 0 で画面に出ない。GAME.md §2.6）。
 #
 # 会話中だけに出す。この機能の値打ちは「話の流れから依頼になる」ことで、
 # 施設に出すとゲーム本来の「クエスト掲示板」（`DisplayQuestChoice`）と同じ動作の
@@ -191,28 +189,12 @@ KEEP_TRANSCRIPT_MOVES = 3
 # False なら既存の依頼から選ぶだけになる。
 ENABLE_GENERATION = True
 
-# 個別依頼の一覧を誰が組むか。
-#
-#   "game"  ゲーム自身の `DisplayQuestChoice` を開く（既定）
-#   "mod"   自前で `PhaseSpec('QuestChoiceManager', [quest_type, id])` を並べる
-#
-# "mod" は既定では使わない。`QuestChoiceManager` の `quest_type` 引数は、
-# クエスト辞書の `quest_type` フィールド（`'normal_quest'` / `'random_quest'`）
-# とは別の語彙で、セーブのフィールド値をそのまま渡すと `KeyError` になり
-# ゲームが落ちる（GAME.md §2.9）。正しい値が `206_` の総当たりで判明するまで封じる。
-LIST_MODE = "game"
+# 個別依頼の一覧はゲーム自身の `DisplayQuestChoice` が組む。
+# `QuestChoiceManager` の `quest_type` 引数は、クエスト辞書の `quest_type` フィールド
+# （`'normal_quest'` / `'random_quest'`）とは別の語彙で、セーブのフィールド値をそのまま渡すと
+# `KeyError` になりゲームが落ちる（GAME.md §2.9）。自前では組まない。
 
-# "mod" モードで使う quest_type。
-# 実測で確かめた値だけを書くこと。
-# None のままなら "mod" を指定しても "game" に落ちる。
-QUEST_TYPE_FOR_CHOICE = None
-
-# 一覧に並べる既存依頼の上限。読むのは LIST_MODE が "mod" のときだけなので、設定画面には出さない。
-# 実データでは1つの集落につき3件なので通常これに当たることは無い。
-# ページ送りの挙動を実測できていない間は、1ページへ収まる範囲に抑えておく。
-MAX_LISTED = 8
-
-# 生成に使う会話の直近何発言ぶんを渡すか。字数では切らない（版9。長さは発言数で決まる。VERIFICATION.md §3.95）。
+# 生成に使う会話の直近何発言ぶんを渡すか。字数では切らない（長さは発言数で決まる。VERIFICATION.md §3.95）。
 CONVERSATION_TURNS = 12
 
 # 生成が終わってから受注画面に入るまでの余韻（秒）。
@@ -222,9 +204,6 @@ SETTLE = 0.4
 # 版6までの自前のボタンに付けていた印のキー（いまは窓口が組むので付けない）。
 # セーブから戻った前の版の印のボタンを片付けるためだけに残す（`refresh_choice_buttons`）。
 MARK = "mod_action"
-
-# 自前の一覧（`LIST_MODE = "mod"`）の画面の名前（窓口 `choices` の MOD だけの画面）。
-MOD_LIST_SCREEN = "mod list"
 
 # 仲間になっている NPC を依頼人から外すか。
 # 外すと、パーティに居る相手との会話には
@@ -254,7 +233,7 @@ NPC_MEMORY_DIRNAME = "npc_profiles"
 # 増えたら**ここに足すのはこちらの判断**（知らない欄を勝手に載せない）。
 NPC_MEMORY_FIELDS = (("profile", "人物像"), ("about_player", "冒険者への態度"))
 
-# 添える人物像は切らない（版9）。長さは `311_` が書かせるときの目安で決まる。
+# 添える人物像は切らない。長さは `311_` が書かせるときの目安で決まる。
 
 # ------------------------------------ 片付いた依頼を依頼人との会話に伝える
 # 会話のプロンプトに毎回載る4つの欄に、依頼の結末が入る場所は無い（GAME.md §2.25）。
@@ -300,7 +279,7 @@ TELL_TOWN_QUESTS = True
 # 一度に伝える件数。新しいものから数える。上の依頼人の分とは別に数える。
 MAX_TOWN_TOLD = 3
 
-# 依頼の要約は頭の1行を切らずに添える（版9）。題だけでは何があったのかが伝わらない。
+# 依頼の要約は頭の1行を切らずに添える。題だけでは何があったのかが伝わらない。
 
 TOWN_HEADING = "【この街で{player}が片付けたと噂になっている依頼】"
 TOWN_ITEM = "・{title}：{summary}"
@@ -388,15 +367,10 @@ def apply(ctx):
         "board_seen": False,
         # 直前の押下が依頼ボタンだったか。次の画面（受ける / やめとく）の押下では絞り込みを残す。
         "quest_pressed": False,
-        # 会話への注入の結末。同じ結末が続く間はログに書かない。
-        # 会話の LLM は1ターンに何度も回るので、
-        # 毎回書くとこのログが会話で埋まる（`311_` の `note_inject` と同じ手）。
-        # ボタンを出さなかった理由。こちらも同じ理由が続く間は書かない。
-        # `refresh_choice_buttons` は並べ直しのたびに走る。
     }
 
     write = ctx.logger(LOG_BASENAME)
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "301_quest_from_conversation"
+    owner = ctx.mod_name or "301_quest_from_conversation"
 
     # 選択肢・spec の読み取り・画面の塗り替え・会話の閉じ方は
     # `instantale_modloader.ui` に集約してある（`300_` / `302_` と共有）。
@@ -409,61 +383,18 @@ def apply(ctx):
     spec_cls_name = ui.spec_cls_name
     spec_args = ui.spec_args
     say = screen.say
-
-    def button(text, mark=None, cls_name=None, args=()):
-        return screen.button(text, mark=mark, cls_name=cls_name, args=args)
-
-    def apply_buttons(app, entries, tag):
-        """選択肢を差し替えて画面に反映する。必ず次のフレームで行う。
-
-        `refresh_choice_buttons` を直接呼ぶだけでは画面が塗り替わらない（GAME.md
-        §2.3）。
-        要点は3つ:
-
-          * 押下と同じ流れの中で差し替えると、ゲームがその後に描画するので
-            古い内容に戻る → `Clock.schedule_once(..., 0)` で次のフレームに送る
-          * 実際に塗っているのは `InstanTaleHUD.update_button_texts` で、
-            `app.to_display_buttons` は監視されていない → HUD を直接呼ぶ
-          * 選択肢を組むゲーム側の `execute` は別スレッドで走ることがある →
-            Clock 経由なら必ずメインスレッド
-        """
-        screen.apply_buttons(app, entries, tag)
-
-    class OfferPhase(object):
-        """自前のフェーズ。`app.process_choice` に渡してゲームと同じ経路を通す。
-
-        **`app.buttons` を書いて `refresh_choice_buttons()` を直接呼ぶだけでは画面が塗り替わらない**（GAME.md
-        §2.3）。
-        選択肢だけが差し替わって画面は古いままになり、存在しない添字が押せてしまう。
-
-        ゲーム自身は選択肢を変えるとき必ず
-        `process_choice(マネージャ, 文字列)` を通し、
-        その中で `execute` が別スレッドに渡される。
-        描画の面倒はその経路が見ているので、同じ経路に乗せる。
-
-        `PhaseSpec` には決して載せない。
-        載せるとセーブに焼かれて、mod 無しの次回起動で
-        `getattr(__main__, 'OfferPhase')` が失敗する。
-        `process_choice` はインスタンスを受け取るので載せる必要も無い。
-        """
-
-        def __init__(self, app, action):
-            self.app = app
-            self.action = action
-
-        def execute(self, choice_text):
-            # ゲームの別スレッドで走る。例外をゲームの側へ抜けさせない
-            # （`307_` の `RoadPhase` と同じ受け方）。
-            try:
-                return dispatch(self.app, self.action, choice_text)
-            except Exception:
-                ctx.log_exc("quest offer: phase {!r} failed".format(self.action))
-                return None
+    button = screen.button
+    # 選択肢を差し替えて画面に反映する。必ず次のフレームで行う（`ui.Screen.apply_buttons`。GAME.md §2.3）。
+    apply_buttons = screen.apply_buttons
 
     def start_phase(app, action, choice_text):
-        """ゲームの経路で自前のフェーズを起こす。使えなければ直接やる。"""
-        screen.start_phase(app, OfferPhase(app, action), choice_text,
-                           fallback=lambda: dispatch(app, action, choice_text))
+        """ゲームの経路（`process_choice`）で `dispatch` を起こす。使えなければ直接やる。
+
+        **`app.buttons` を書いて `refresh_choice_buttons()` を直接呼ぶだけでは画面が塗り替わらない**（GAME.md
+        §2.3）。ゲーム自身は選択肢を変えるとき必ず `process_choice(マネージャ, 文字列)` を通すので、同じ経路に乗せる。
+        使い捨てのフェーズと例外の受け方（`PhaseSpec` に載せない注意も）はローダの `ui.Screen.run_phase`。
+        """
+        screen.run_phase(app, choice_text, dispatch, action, choice_text, label=action)
 
     def dispatch(app, action, choice_text):
         if action == "offer":
@@ -496,44 +427,9 @@ def apply(ctx):
         found.sort(key=lambda pair: _difficulty_of(pair[1]))
         return found
 
-    def candidate_quests(app):
-        """この土地で受注できる依頼を (id, Quest) で返す。
-
-        判定は `neighboring_settlement_id == 現在エリアの id` と
-        `config['status'] == 'incomplete'`。
-        セーブの実データで、依頼は集落ごとに
-        3 件ずつこのキーで束ねられていることを確認済み。
-        ゲーム自身の `get_quest_difficulties(area, world)` と突き合わせて、
-        食い違ったら記録する（こちらの当て推量が外れた合図）。
-        """
-        world = getattr(app, "world", None)
-        area = current_area(app)
-        found = quests_here(app)
-
-        # ゲーム自身の答えと照合する。
-        # ずれていれば設計の前提が間違っている。
-        functions = sys.modules.get("scripts.functions")
-        expected = getattr(functions, "get_quest_difficulties", None) if functions else None
-        if expected is not None:
-            try:
-                theirs = sorted(expected(area, world))
-                ours = sorted(_difficulty_of(q) for _, q in found)
-                if theirs != ours:
-                    write("WARN difficulty mismatch: game={} mod={} "
-                          "(neighboring_settlement_id filter may be wrong)".format(
-                              theirs, ours))
-            except Exception as exc:
-                write("get_quest_difficulties failed: {}: {}".format(
-                    type(exc).__name__, exc))
-        return found
-
     def _difficulty_of(quest):
         value = getattr(quest, "difficulty", 0)
         return value if isinstance(value, int) else 0
-
-    def quest_label(quest):
-        return "【{}】{}".format(_difficulty_of(quest),
-                                 frames.short(getattr(quest, "quest_title", "依頼"), 40))
 
     # ------------------------------------------------- 会話の書き起こし
     def transcribe(app, npc_id):
@@ -914,9 +810,8 @@ def apply(ctx):
     def open_quest_board(app, choice_text=OFFER_LABEL, client=None):
         """「依頼を受ける」が押されたとき。ゲーム自身の掲示板を開く。
 
-        自前で `PhaseSpec('QuestChoiceManager', [quest_type, id])` を並べる実装はゲームを落とした（冒頭の
-        `LIST_MODE` の説明を参照）。
-        `quest_type` の語彙が実測で確かめられていない以上、
+        自前で `PhaseSpec('QuestChoiceManager', [quest_type, id])` を並べる実装はゲームを落とした
+        （`quest_type` の語彙が違う。GAME.md §2.9）。
         その組み立てはこちらの仕事ではない。
 
         `DisplayQuestChoice` はゲーム自身のクエスト掲示板で、
@@ -940,13 +835,6 @@ def apply(ctx):
                       if partner else None)
             show_busy(app)
             end_conversation_then(app, lambda a: open_quest_board(a, choice_text, client))
-            return
-
-        if LIST_MODE == "mod" and QUEST_TYPE_FOR_CHOICE is None:
-            write("LIST_MODE='mod' but QUEST_TYPE_FOR_CHOICE is unverified; "
-                  "falling back to the game's own board")
-        if LIST_MODE == "mod" and QUEST_TYPE_FOR_CHOICE is not None:
-            show_mod_quest_list(app)
             return
 
         display_cls = cls_of("DisplayQuestChoice")
@@ -982,54 +870,17 @@ def apply(ctx):
             ctx.log_exc("quest offer: opening the quest board failed")
             say(app, "（依頼の一覧を開けなかった）")
 
-    def show_mod_quest_list(app):
-        """自前で一覧を組む。`QUEST_TYPE_FOR_CHOICE` が実測済みのときだけ通る。
-
-        一覧は窓口 `choices` の MOD だけの画面（`mod_list_screen`）。下の施設の選択肢は窓口が残すので、
-        「やめる」で閉じれば施設の選択肢に戻る。依頼を押すとゲームの受注画面へ進み、窓口が一覧を閉じる。
-        """
-        if not mod_list_choices(app):
-            say(app, "いま受けられる依頼は無いようだ。")
-            write("mod list: nothing to show")
-            return
-        choices.open_screen(app, state["owner"], MOD_LIST_SCREEN)
-        write("mod list: opened with quest_type={!r}".format(QUEST_TYPE_FOR_CHOICE))
-
-    def mod_list_choices(app):
-        """自前の一覧の依頼のボタン（ゲームの `QuestChoiceManager` の写し。押すとゲームへ流す）。"""
-        out = []
-        for qid, quest in candidate_quests(app):
-            if len(out) >= MAX_LISTED:
-                break
-            entry = button(quest_label(quest), cls_name="QuestChoiceManager",
-                           args=[QUEST_TYPE_FOR_CHOICE, qid])
-            if entry is not None:
-                out.append(choices.Choice(entry["text"], base=entry))
-        return out
-
-    def mod_list_screen(app, view, _data):
-        """自前の一覧（窓口の MOD だけの画面）。受けられる依頼が無くなったら閉じる（None）。"""
-        quests = mod_list_choices(app)
-        if not quests:
-            return None
-        return quests + [choices.Choice(CANCEL_LABEL,
-                                        on_press=lambda app: choices.close_screen(app, state["owner"]))]
-
     # ======================================================= 会話から生成する
-    def wait_state(app):
-        """待機表示になっているかを見るための一行。生成の前後で記録する。"""
-        return screen.busy_state(app)
+    # 待機表示になっているかを見るための一行。生成の前後で記録する。
+    wait_state = screen.busy_state
 
     # ------------------------------------------------------ 待機表示（「...」）
     # **ゲームがどう待機表示を出しているかは
     # `ui.Screen` が持つ**（点のアニメーション・`is_button_enabled`・送信ボタンの塞ぎ方。
     # GAME.md §2.4）。
     # `305_` も同じ待ち方をするので、二重に持たない（TECH.md §6）。
-    def show_busy(app):
-        screen.busy_on(app)
-
-    def clear_busy(app, restore=True):
-        screen.busy_off(app, restore=restore)
+    show_busy = screen.busy_on
+    clear_busy = screen.busy_off
 
     def generate_from_conversation(app):
         """ゲーム自身の生成経路を、会話の書き起こしを添えて呼ぶ。
@@ -1091,7 +942,8 @@ def apply(ctx):
             # 生成側は client_name を自由に決めてしまうので、
             # ここで会話の相手に上書きする（両方の格納先に）。
             if npc_name:
-                set_quest_value(app, quest_id, "client_name", npc_name)
+                ui.set_quest_value(app, quest_id, "client_name", npc_name,
+                                   on_error=lambda msg: ctx.log_exc("quest offer: " + msg))
             # この依頼はこの NPC 発、と mod 側に控える（セーブには触らない）。
             # 次にこの NPC と話したとき、その依頼だけを出すための根拠になる。
             remember_client(app, quest_id, npc_id_at_start, npc_name)
@@ -1099,7 +951,7 @@ def apply(ctx):
                 quest_id, title, npc_name))
             # 受注画面へは自分で飛ばない。
             # `QuestChoiceManager` を自前で組み立てると
-            # `quest_type` の語彙が合わずに落ちる（冒頭の `LIST_MODE` の説明）。
+            # `quest_type` の語彙が合わずに落ちる（GAME.md §2.9）。
             if in_conversation:
                 # 会話は閉じない。
                 # 待機表示を解いて会話画面へ戻すだけ。
@@ -1270,7 +1122,7 @@ def apply(ctx):
         依頼ボタンは作らず、ゲームが作ったものを間引くだけ。
         `quest_type` の語彙を知らずに済ませるのが設計の要点なので、
         組み立てには絶対に回らない（組み立てると
-        `quest_type` の語彙が合わずに落ちる。冒頭の `LIST_MODE`）。
+        `quest_type` の語彙が合わずに落ちる。GAME.md §2.9）。
         id は spec の `args[1]` から読むだけで取れる。
 
         絞るのは会話から開いたときだけ（`state["filter_npc"]`）。
@@ -1320,15 +1172,10 @@ def apply(ctx):
     quest_of = ui.quest_of
     quest_value = ui.quest_value
 
-    def set_quest_value(app, quest_id, name, value):
-        ui.set_quest_value(app, quest_id, name, value,
-                           on_error=lambda msg: ctx.log_exc("quest offer: " + msg))
-
     # ------------------------- 片付いた依頼を会話のプロフィールに添える
     def player_name_of(app):
         # 文言に混ぜるので、引けないときは空にせず一般名詞に倒す。
-        return frames.short(getattr(getattr(app, "player", None), "name", ""),
-                            40) or "冒険者"
+        return ui.player_name(app, fallback="冒険者", limit=40)
 
     def talking_npc_id(app, npc):
         """会話の相手の id。**`world.characters` との同一性では引かない。**
@@ -1378,8 +1225,7 @@ def apply(ctx):
         観測できているのは `'incomplete'` と `'completed'` の2値だけなので
         （`206_` の census。`out/quest_flow.log`）、達成と放棄は見分けない。
         いつ終わったかも見ない。
-        `QuestEndManager` を包めば終わった日も取れるが、
-        包んだ瞬間にこの mod は依頼の結末を追う mod になる。
+        依頼の終わりは `quest_ends` で控えるが、使うのは依頼から戻った後の会話だけ。
         ここでやるのは事実を1つ運ぶことだけ。
 
         誰の依頼かは掲示板の絞り込みと**同じ** `quest_belongs_to` で判じる。
@@ -1396,8 +1242,7 @@ def apply(ctx):
             quest = quest_of(app, quest_id)
             if quest is None:
                 continue
-            config = quest_value(quest, "config", None)
-            if not isinstance(config, dict) or config.get("status") != "completed":
+            if ui.quest_status(quest) != ui.QUEST_COMPLETED:
                 continue
             if not quest_belongs_to(app, quest_id, npc_id, npc_name, others):
                 continue
@@ -1431,8 +1276,7 @@ def apply(ctx):
             quest = quest_of(app, quest_id)
             if quest is None or str(quest_value(quest, "neighboring_settlement_id", "")) != area_id:
                 continue
-            config = quest_value(quest, "config", None)
-            if not isinstance(config, dict) or config.get("status") != "completed":
+            if ui.quest_status(quest) != ui.QUEST_COMPLETED:
                 continue
             if str(quest_id) in done_by_others or quest_belongs_to(app, quest_id, npc_id, npc_name, others):
                 continue
@@ -1503,8 +1347,7 @@ def apply(ctx):
         others = other_clients(app)
         for quest_id in returns.load(returns.playthrough(app)).get("fresh") or ():
             quest = quest_of(app, quest_id)
-            config = quest_value(quest, "config", None) if quest is not None else None
-            if isinstance(config, dict) and config.get("status") == "completed" \
+            if ui.quest_status(quest) == ui.QUEST_COMPLETED \
                     and quest_belongs_to(app, quest_id, npc_id, npc_name, others):
                 return frames.short(quest_value(quest, "quest_title", "依頼"), 60)
         return None
@@ -1513,7 +1356,8 @@ def apply(ctx):
         """話し終えたら、この相手の分を控えから外す。次からはふつうの会話。"""
         if not npc_id:
             return
-        npc_name = ui.character_name(app, npc_id, fallback="")
+        # 名前は切らない（`quest_notes` と同じ。照合に使う）。
+        npc_name = ui.character_name(app, npc_id, limit=None, fallback="")
         others = other_clients(app)
         key = returns.playthrough(app)
         with returns.lock:
@@ -1555,7 +1399,7 @@ def apply(ctx):
     #: 注入の結末。直前と同じ内容なら書かない（会話は1ターンに何度も回る）。
     note_inject = ctx.logger(LOG_BASENAME, dedup=True)
 
-    #: ボタンを出さなかった理由。同じ理由が続く間は書かない。
+    #: ボタンを出さなかった理由。同じ理由が続く間は書かない（`refresh_choice_buttons` は並べ直しのたびに走る）。
     note_skip = ctx.logger(LOG_BASENAME, dedup=True, tag="no offer:")
 
     def quest_notes(info):
@@ -1619,7 +1463,8 @@ def apply(ctx):
         if app is None or not isinstance(args, dict):
             return
         npc_id = str(info.get("npc_id") or "")
-        npc_name = ui.character_name(app, npc_id, fallback="") if npc_id else ""
+        # 名前は切らない（`quest_notes` と同じ。照合に使う）。
+        npc_name = ui.character_name(app, npc_id, limit=None, fallback="") if npc_id else ""
         if site == "conversation_starter":
             messages = args.get("messages")
             if isinstance(messages, list) and messages and isinstance(messages[-1], dict) \
@@ -1754,7 +1599,7 @@ def apply(ctx):
         write("pressed {!r} ({})".format(text, action))
         # 直接やらずにゲームの経路（process_choice）に乗せる。
         # でないと画面が塗り替わらない。
-        # OfferPhase の説明を参照。
+        # `start_phase` の説明を参照。
         start_phase(app, action, text)
         return None
 
@@ -1785,11 +1630,10 @@ def apply(ctx):
         return False
 
     # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
-    # 会話の依頼の2つは宣言型の口（`offer`）、自前の一覧は MOD だけの画面（`screens`）。
+    # 会話の依頼の2つは宣言型の口（`offer`）。
     # 掲示板の間引きはゲームのボタンを間引くので `refresh` のまま
     state["owner"] = choices.provide(ctx, screen, refresh=refresh_choice_buttons, intercept=look_at_press,
-                                     offer=offer, screens={MOD_LIST_SCREEN: mod_list_screen},
-                                     labels=OUR_LABELS)
+                                     offer=offer, labels=OUR_LABELS)
 
     @ctx.wrap("__main__:ConversationStartManager.__init__", required=False)
     def conversation_start(orig, self, *args, **kwargs):
@@ -1799,25 +1643,24 @@ def apply(ctx):
         state["npc_id"] = str(character_id) if character_id is not None else None
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap("__main__:ConversationEndManager.finish_conversation", required=False)
-    def finish_conversation(orig, self, *args, **kwargs):
-        """会話を閉じる前に書き起こしを控える。
+    def finish_conversation(call):
+        """会話を閉じる前に書き起こしを控える（ローダの窓口 `talks` の `FINISH` の前。TECH.md §3.3.21）。
 
         施設の選択肢から「依頼を受ける」に入る経路では、
         押された時点で既に会話は終わっている。
         `current_conversation_history` が片付けられた後では手遅れなので、
-        必ず元の処理より前に取る。
+        必ず元の処理より前に取る。相手（`call.partner`）も窓口が元の処理の前に読んでいる。
         """
         try:
-            app = getattr(self, "app", None)
+            app = call.app
             if app is not None:
                 remember_talk(app)
-                partner = getattr(app, "in_conversation", None)
-                forget_return_for(app, partner if isinstance(partner, str) and partner else state["npc_id"])
+                forget_return_for(app, call.partner or state["npc_id"])
         except Exception:
             ctx.log_exc("quest offer: cannot remember the talk")
         state["npc_id"] = None
-        return orig(self, *args, **kwargs)
+
+    talks.on(owner, ctx, (talks.FINISH,), before=finish_conversation, write=write)
 
     def quest_end_before(call):
         """依頼の終わり。依頼のデータはこの中で片付くので、元の処理より前に控える（ローダの窓口 `quest_ends`）。"""
@@ -1901,9 +1744,7 @@ def apply(ctx):
     modnpc.install(ctx, write=write)
     modnpc.register(owner, modnpc.ANY, notes=quest_notes, prompt=quest_prompt, priority=NOTES_PRIORITY, write=write)
 
-    ctx.log("quest from conversation: sites={} list={} generation={} "
+    ctx.log("quest from conversation: sites={} generation={} "
             "completed_note={} log={}".format(
                 "/".join(OFFER_SITES),
-                LIST_MODE if (LIST_MODE != "mod" or QUEST_TYPE_FOR_CHOICE is not None)
-                else "mod->game (quest_type unverified)",
                 ENABLE_GENERATION, TELL_COMPLETED_QUESTS, log_path))

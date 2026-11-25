@@ -22,13 +22,13 @@
 """
 import threading
 
-from instantale_modloader import arrivals, durations, npcs, prices, ui, wanted
+from instantale_modloader import arrivals, durations, npcs, prices, shopping, ui, wanted
 
 from . import rules
 
-SHOP_TARGET = "__main__:ShoppingStartManagerRemake.execute"
-#: ゲームの1ヵ月（`elapse_days(months * 30)`。GAME.md §2.17）。
-DAYS_PER_MONTH = 30
+SHOP_TARGET = shopping.TARGETS[shopping.ENTER]   # ローダの窓口 `shopping` が1枚だけ包む
+#: ゲームの1ヵ月（`elapse_days(months * 30)`。GAME.md §2.17。ローダの `durations.DAYS_PER_MONTH`）。
+DAYS_PER_MONTH = durations.DAYS_PER_MONTH
 SHOP_NOTICE_TEXT = "手配書の顔に気づいた店主は、怯えたように値を改めた。（買値 -{pct}%{sell}）"
 SHOP_NOTICE_SELL = "・売値 +{pct}%"
 SHOP_FRIEND_TEXT = "{name}は手配書の顔に気づいたが、いつもどおりの値で応じてくれた。"
@@ -48,8 +48,7 @@ def install(env):
     def keeper_of(app):
         """いま居る施設の主（人物）。主がいなければ None。"""
         facility = env.current_facility(app)
-        owner_id = getattr(facility, "owner", None)
-        return ui.character_of(app, str(owner_id)) if owner_id is not None else None
+        return ui.facility_owner(app, facility)[1] if facility is not None else None
 
     def friendly_keeper(app):
         """委縮しない店の主 `(主, 好感度)`。委縮するなら None。"""
@@ -93,11 +92,10 @@ def install(env):
     prices.install(ctx, write)
     prices.adjust(owner, price_layer, temporary=True, write=write)
 
-    @ctx.wrap(SHOP_TARGET, required=False, safe=True)
-    def shop_start(orig, self, *args, **kwargs):
-        """店に入ったときに委縮の度合いを1行知らせ、率をログに残す。"""
+    def shop_start(call):
+        """店に入ったときに委縮の度合いを1行知らせ、率をログに残す（店に入る前。ローダの窓口 `shopping`）。"""
         try:
-            app = getattr(self, "app", None) or ui.find_app()
+            app = call.app
             if cfg.INTIMIDATION_ENABLED and app is not None:
                 lawfulness = here_lawfulness(app)
                 rate = pressure(app) or 0.0
@@ -125,7 +123,9 @@ def install(env):
                         screen.schedule(lambda: screen.say(app, text))
         except Exception:
             ctx.log_exc("crime incentive: cannot read the shop's fear")
-        return orig(self, *args, **kwargs)
+
+    # `loot` が先に登録しているので、前の包み（`law` が外側）と同じく、こちらの前の処理が先に走る。
+    shopping.on(owner + ":law", ctx, (shopping.ENTER,), before=shop_start, write=write)
 
     # -------------------------------------------------- 時効
     # 離れている土地の手配が、離れていた日数で戻る。日数はゲームが実際に進めた分

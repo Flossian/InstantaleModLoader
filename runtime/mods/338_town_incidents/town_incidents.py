@@ -24,12 +24,11 @@
 import os
 import random
 import re
-import sys
 import threading
 
-from instantale_modloader import (arrivals, choices, durations, hudicons, jobs, llm, loads, modnpc,
-                                  prices, quest_claims, quest_ends, quest_generation, state as loader_state,
-                                  town_events, ui)
+from instantale_modloader import (arrivals, choices, durations, frames, hudicons, jobs, llm, loads, modnpc,
+                                  panels, prices, quest_claims, quest_ends, quest_generation, shopping,
+                                  state as loader_state, town_events, ui)
 
 from . import incidents, window
 
@@ -92,8 +91,7 @@ RUMOR_STAGE = 2                # よその街で噂になる段
 ENDED_SHOWN_DAYS = 360         # 窓に出す「終わったもの」の日数
 SIZES = ("village", "town", "city")
 GUILD_TYPE = "guild"
-COMPLETED = "completed"
-SHOP_TARGET = "__main__:ShoppingStartManagerRemake.execute"
+COMPLETED = ui.QUEST_COMPLETED
 #: ロードの入口（ローダの窓口 `loads`。TECH.md §3.3.21）。
 LOAD_KINDS = (loads.LOAD,)
 BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle", "in_conversation")
@@ -169,15 +167,15 @@ def summary_rule(kind):
 
 
 def _store():
-    """世代をまたぐ入れ物。プロセスに1つ（TECH.md §3.5）。"""
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"worlds": None, "worker": None, "reconcile": False,
-                 "rng": random.Random(), "view": None, "here": None}
-        setattr(sys, STORE_ATTR, store)
-    store.setdefault("urgent", {})
-    # 掲示板で出来事の依頼を作らせている間の錠。押下ごとに別スレッドで `execute` が走るので、2つ目は作らせない
-    store.setdefault("making_quest", threading.Lock())
+    """世代をまたぐ入れ物。プロセスに1つ（TECH.md §3.5。足りない鍵と型の変わった鍵を埋めるのはローダの `state.process_store`）。"""
+    store = loader_state.process_store(STORE_ATTR, {
+        "worlds": None, "worker": None, "rng": None, "view": None, "here": None,
+        "urgent": {},
+        # 掲示板で出来事の依頼を作らせている間の錠。押下ごとに別スレッドで `execute` が走るので、2つ目は作らせない
+        "making_quest": threading.Lock()})
+    # 乱数は型を見ずに残す（検査が決まった値を返す物に差し替える）。無いときだけ作る
+    if store["rng"] is None:
+        store["rng"] = random.Random()
     return store
 
 
@@ -271,25 +269,13 @@ def apply(ctx):
         return loader_state.playthrough_key(app) == key
 
     # ------------------------------------------------------------ 世界を読む
-    def save_areas(app):
-        data = getattr(app, "save_data_dict", None)
-        areas = data.get("areas") if isinstance(data, dict) else None
-        return areas if isinstance(areas, dict) else {}
-
     def size_of(app, area_id):
-        row = save_areas(app).get(str(area_id))
-        size = row.get("size") if isinstance(row, dict) else None
-        return size if isinstance(size, str) else None
+        """土地の規模（小文字）。実行時の `Area.size` は読めないのでセーブ側の表から引く（ローダの `ui.area_size`）。"""
+        return ui.area_size(app, area_id)
 
     def guild_of(area):
-        """その街のギルド（施設）。無ければ None。"""
-        nodes = getattr(area, "nodes", None)
-        values = nodes.values() if isinstance(nodes, dict) else (nodes or [])
-        for node in values:
-            for facility in ui.facilities_of(node).values():
-                if ui.facility_type_of(facility) == GUILD_TYPE:
-                    return facility
-        return None
+        """その街のギルド（施設）。無ければ None（ローダの `ui.find_guild`）。"""
+        return ui.find_guild(area, GUILD_TYPE)[0]
 
     def has_guild(area):
         return guild_of(area) is not None
@@ -337,17 +323,15 @@ def apply(ctx):
         return found
 
     def quest_status(app, quest_id):
-        quest = ui.quest_of(app, str(quest_id)) if quest_id else None
-        if quest is None:
-            return None
-        config = ui.quest_value(quest, "config", None)
-        return config.get("status") if isinstance(config, dict) else None
+        """依頼の状態。依頼が無ければ None（呼ぶ側は「消された」と読む。状態の読みはローダの `ui.quest_status`）。"""
+        return ui.quest_status(ui.quest_of(app, str(quest_id)) if quest_id else None)
 
     def busy(app):
-        for flag in BUSY_FLAGS:
-            if getattr(app, flag, None):
-                return flag
-        return "on a quest" if ui.current_quest_id(app) is not None else None
+        """手が空いていない理由（最初の1つ）。依頼の最中も忙しいとみなす（ローダの `ui.busy_flags`）。
+
+        旗の表は自前の4つのまま（自由入力の最中と会話の中の行動の最中には止めない。前からの動き）。
+        """
+        return (ui.busy_flags(app, flags=BUSY_FLAGS, on_quest=True) or [None])[0]
 
     def say_when_idle(app, lines, tag):
         lines = [line for line in lines if line]
@@ -535,10 +519,23 @@ def apply(ctx):
             bucket.setdefault("cleanup", []).append(str(event["quest"]))
         write("retire: ended #{} ({} is no longer in the table)".format(event.get("id"), event.get("kind")))
 
+    held_back = {"noted": None}
+
     def retire_unknown(bucket, day):
-        """表に無い種類の出来事を片付ける。片付けたら真。"""
+        """表に無い種類の出来事を片付ける。片付けたら真。
+
+        表のどれかが読めなかった起動では片付けない。読めないだけで進行中の出来事と依頼を終わらせると、
+        控えに書かれて、表を直しても戻らない。
+        """
         gone = [event for event in incidents.events_of(bucket)
                 if event.get("status") in (incidents.PENDING, incidents.ACTIVE) and not incidents.known(event)]
+        if gone and incidents.UNREADABLE:
+            noted = tuple(incidents.UNREADABLE)
+            if held_back["noted"] != noted:
+                held_back["noted"] = noted
+                write("WARN retire: kept {} event(s) not in the table, because some table file(s) "
+                      "could not be read: {}".format(len(gone), ", ".join(os.path.basename(p) for p in noted)))
+            return False
         for event in gone:
             retire(bucket, event, day)
         return bool(gone)
@@ -669,13 +666,11 @@ def apply(ctx):
             if event is not None:
                 addition = PROFILE_NOTE.format(name=name_of(event), stage=stage_name(event),
                                                line=incidents.arrive_text(event))
-                if isinstance(kwargs.get("player_profile"), str):
-                    call_kwargs = dict(kwargs)
-                    call_kwargs["player_profile"] = kwargs["player_profile"].rstrip() + "\n\n" + addition
-                elif len(args) >= 3 and isinstance(args[2], str):
-                    merged = list(args)
-                    merged[2] = args[2].rstrip() + "\n\n" + addition
-                    call_args = tuple(merged)
+                # 位置でもキーワードでも来うる（来た側に合わせて差し替える。frames.arg / replace_arg）
+                profile = frames.arg(args, kwargs, "player_profile", 2)
+                if isinstance(profile, str):
+                    call_args, call_kwargs, _done = frames.replace_arg(
+                        args, kwargs, "player_profile", 2, profile.rstrip() + "\n\n" + addition)
         except Exception:
             ctx.log_exc("town incidents: cannot add the situation to the narration")
             call_args, call_kwargs = args, kwargs
@@ -771,7 +766,7 @@ def apply(ctx):
                         busy = False
                         screen.say(app, BOARD_TEXT.format(name=name))
                         reopen = getattr(self, "__class__", None)
-                        choice = args[0] if args else kwargs.get("choice_text", "")
+                        choice = frames.arg(args, kwargs, "choice_text", 0, "")
                         screen.when_idle(app, lambda: app.process_choice(reopen(app), choice),
                                          proceed_on_timeout=True, tag="town incidents board")
                         return None
@@ -812,11 +807,11 @@ def apply(ctx):
     quest_ends.on(OWNER, ctx, after=quest_end_after, write=write)
 
     def after_days(call):
-        """日が進んだ後に見回る。日数の進め方には触らない（ローダの日数の関所 `durations.on_days`）。"""
-        try:
-            tick(call.app)
-        except Exception:
-            ctx.log_exc("town incidents: tick after elapse_days failed")
+        """日が進んだ後に見回る。日数の進め方には触らない（ローダの日数の関所 `durations.on_days`）。
+
+        例外は窓口が記録する（TECH.md §3.3.21）。
+        """
+        tick(call.app)
 
     durations.on_days(OWNER, ctx, after=after_days, write=write)
 
@@ -870,46 +865,44 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 着いた・店に入った
     def area_arrival(call):
-        """街に着いた後（ローダの窓口 `arrivals`。TECH.md §3.3.21）。"""
-        try:
-            app = call.app
-            here = here_id(app)
-            if store.get("here") != here:
-                store["here"] = here
-                prices.refresh("town incidents arrival")
-            lines = []
-            with worlds.lock:
-                key, bucket = ledger(app)
-                event = incidents.live_in(bucket, here)
-                if event is not None and ARRIVAL_NOTICE:
-                    lines.append(incidents.arrive_text(event))
-                    lines.append(guide_line(app, event))
-                for ended in incidents.events_of(bucket, incidents.ENDED):
-                    if str(ended.get("area")) == here and ended.get("end_by") == incidents.END_NATURAL \
-                            and not (ended.get("told") or {}).get("settled"):
-                        ended.setdefault("told", {})["settled"] = True
-                        if ARRIVAL_NOTICE:
-                            lines.append(incidents.text_of(ended, "settled"))
-                save(key, bucket)
-            say_when_idle(app, lines, "arrival")
-        except Exception:
-            ctx.log_exc("town incidents: cannot tell the arrival")
+        """街に着いた後（ローダの窓口 `arrivals`。TECH.md §3.3.21）。例外は窓口が記録する。"""
+        app = call.app
+        here = here_id(app)
+        if store.get("here") != here:
+            store["here"] = here
+            prices.refresh("town incidents arrival")
+        lines = []
+        with worlds.lock:
+            key, bucket = ledger(app)
+            event = incidents.live_in(bucket, here)
+            if event is not None and ARRIVAL_NOTICE:
+                lines.append(incidents.arrive_text(event))
+                lines.append(guide_line(app, event))
+            for ended in incidents.events_of(bucket, incidents.ENDED):
+                if str(ended.get("area")) == here and ended.get("end_by") == incidents.END_NATURAL \
+                        and not (ended.get("told") or {}).get("settled"):
+                    ended.setdefault("told", {})["settled"] = True
+                    if ARRIVAL_NOTICE:
+                        lines.append(incidents.text_of(ended, "settled"))
+            save(key, bucket)
+        say_when_idle(app, lines, "arrival")
 
     arrivals.on(OWNER, ctx, (arrivals.AREA,), after=area_arrival, write=write)
 
-    @ctx.wrap(SHOP_TARGET, required=False, safe=True)
-    def shop_start(orig, self, *args, **kwargs):
-        try:
-            app = getattr(self, "app", None) or ui.find_app()
-            event = live_here(app)
-            if SHOP_NOTICE and event is not None:
-                # いまの段で値段が動いていなければ出さない（強さ 0% のときも）。向きが変わる出来事は段の向きで選ぶ
-                line = incidents.shop_text(event, PRICE_STRENGTH_PERCENT)
-                if line:
-                    screen.schedule(lambda: screen.say(app, line))
-        except Exception:
-            ctx.log_exc("town incidents: cannot tell the shop")
-        return orig(self, *args, **kwargs)
+    def shop_enter(call):
+        """売買を押した（ローダの窓口 `shopping` の `ENTER` の前。ワーカースレッドなので1行は `screen.schedule` で積む）。
+
+        例外は窓口が記録する。
+        """
+        app = call.app
+        event = live_here(app)
+        if SHOP_NOTICE and event is not None:
+            # いまの段で値段が動いていなければ出さない（強さ 0% のときも）。向きが変わる出来事は段の向きで選ぶ
+            line = incidents.shop_text(event, PRICE_STRENGTH_PERCENT)
+            if line:
+                screen.schedule(lambda: screen.say(app, line))
+
+    shopping.on(OWNER, ctx, (shopping.ENTER,), before=shop_enter, write=write)
 
     # ------------------------------------------------------------ 状況を見る窓
     def view_model(app):
@@ -938,31 +931,15 @@ def apply(ctx):
         model["here_name"] = str(getattr(area, "name", "") or "") if area is not None else ""
         return model
 
-    def close_view():
-        view = store.get("view")
-        store["view"] = None
-        if view is not None:
-            try:
-                view.dismiss()
-            except Exception:
-                ctx.log_exc("town incidents: could not close the window")
+    # 画面は1枚だけ持ち、もう一度押したら閉じる（ローダの `panels.Toggle`。置き場は `sys` の入れ物の "view"）。
+    view = panels.Toggle(store, "view", log_exc=lambda text: ctx.log_exc("town incidents: " + text))
 
-    def toggle_view(app):
-        if store.get("view") is not None:
-            close_view()
-            return
-        if app is None:
-            return
-        try:
-            store["view"] = window.open_window(app, view_model(app), write=write,
-                                               on_dismiss=lambda: store.update({"view": None}))
-        except Exception:
-            store["view"] = None
-            ctx.log_exc("town incidents: could not open the window")
+    def open_view(app, on_dismiss):
+        return window.open_window(app, view_model(app), write=write, on_dismiss=on_dismiss)
 
     # 絵のパスは apply() の間に組む（`ctx.mod_dir` はフックの中では読めない）。
     icon_dir = getattr(ctx, "mod_dir", None) or os.path.dirname(os.path.abspath(__file__))
-    hudicons.add(ctx, ICON_KEY, toggle_view, order=ICON_ORDER, label=VIEW_TITLE,
+    hudicons.add(ctx, ICON_KEY, view.on_press(open_view), order=ICON_ORDER, label=VIEW_TITLE,
                  images=tuple(os.path.join(icon_dir, name) for name in ICON_FILES), write=write)
 
     # ------------------------------------------------------------ ロードの突き合わせ
@@ -984,19 +961,17 @@ def apply(ctx):
 
     def on_load(call):
         worlds.forget()
-        store["reconcile"] = True
 
     loads.on(OWNER, ctx, LOAD_KINDS, after=on_load, write=write)
 
-    def refresh_choice_buttons(self, _buttons):
-        if store["reconcile"]:
-            characters = getattr(getattr(self, "world", None), "characters", None)
-            if isinstance(characters, dict) and len(characters) > 1:
-                store["reconcile"] = False
-                try:
-                    reconcile(self)
-                except Exception:
-                    ctx.log_exc("town incidents: reconcile failed")
+    def settled(call):
+        """ロードの後、人物が揃った最初の選択肢の組み直しで1回だけ突き合わせる（ローダの `loads.on_settled`）。
+
+        揃ったかの判断（人物が2人以上・会話の相手が人物に居る）と1回だけの印はローダが持つ。例外は窓口が記録する。
+        """
+        reconcile(call.app)
+
+    loads.on_settled(OWNER, ctx, settled, kinds=LOAD_KINDS, write=write)
 
     def offer(app, view):
         """掲示板で、出来事の依頼のボタンに印を付ける（窓口 `choices` の `offer`。組み直しのたびに呼ばれる）。
@@ -1019,7 +994,7 @@ def apply(ctx):
                 out.append(choices.Choice(text + QUEST_MARK, base=entry, replace=True))
         return out or None
 
-    choices.provide(ctx, screen, refresh=refresh_choice_buttons, offer=offer)
+    choices.provide(ctx, screen, offer=offer)
 
     ctx.log("town incidents: installed ({} kind(s), roll every {}+-{} day(s) at {}%, up to {}, stage "
             "every {} day(s), settles {} day(s) after stage 3, text {}, state {})".format(

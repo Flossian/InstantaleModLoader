@@ -88,6 +88,90 @@ def text_of(obj, name: str = "text"):
     return value if isinstance(value, str) else None
 
 
+def _is_sentinel(value) -> bool:
+    """`attr()` が返す番人か（`MISSING` そのものか、`"<XxxError while reading>"`）。"""
+    if value is MISSING:
+        return True
+    return (isinstance(value, str) and value.startswith("<")
+            and value.endswith(" while reading>"))
+
+
+def field(holder, name, default=None):
+    """辞書でも属性を持つ型でも1項目を読む。無い・読めないときは `default`。
+
+    LLM の返却（pydantic のモデルか辞書か）や、`Item` の実体とセーブの辞書のように、
+    同じ項目が2つの形で届く所で使う。
+    辞書なら `get`。それ以外は `attr()` を通し（`hasattr` を使わない理由はそちら）、
+    `attr()` の番人（`MISSING` と `"<XxxError while reading>"`）は `default` に戻す。
+    番人を値として返さないので、`isinstance(値, str)` で受けても素通りしない（`text_of` と同じ事情）。
+
+    12本の MOD に3通りの書き方で写されていた（素の getattr、`attr()` を通して `MISSING` だけ戻すもの、
+    `attr()` の戻りをそのまま返すもの）。揃えたのは `340_` の `_get` に `910_` の
+    「読めなかった番人も `default` に戻す」を足した形。
+    素の getattr の写し（`336_`）とは、property が投げたときに例外にならず `default` が返る点が違う。
+    """
+    if isinstance(holder, dict):
+        return holder.get(name, default)
+    value = attr(holder, name, default)
+    return default if _is_sentinel(value) else value
+
+
+def set_field(holder, name, value) -> bool:
+    """`field()` と対の書き。辞書なら代入、それ以外は `setattr`。書けたかを返す（例外にしない）。
+
+    pydantic のモデルは型の確かめで投げることがあり、凍結したモデルや `__slots__` の型も投げる。
+    書けなかったことは戻り値で分かるので、呼ぶ側が記録を残す（`145_` の `_write_overview` の写し）。
+    """
+    try:
+        if isinstance(holder, dict):
+            holder[name] = value
+        else:
+            setattr(holder, name, value)
+    except Exception:
+        return False
+    return True
+
+
+def is_number(value) -> bool:
+    """`int` か `float` で、`bool` ではないか。
+
+    Python では `True` が `int` なので、素朴な `isinstance(value, (int, float))` は
+    `True` を 1 として通す（難易度や額に真偽値が入る）。
+    `float` の `nan` / `inf` も数として通す（`guards.is_number` と同じ答え。有限かを見るのは呼ぶ側）。
+    文字列の数（`"3"`）は数ではない。直して使うなら `to_number()`。
+    """
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def to_number(value, default=None):
+    """数か、数として読める文字列を数にする。読めなければ `default`。
+
+    * `bool` は `default`（`True` を 1 にしない）
+    * `int` / `float` はそのまま返す（型も変えない）
+    * 文字列は前後の空白を落として `float()` で読み、整数の値なら `int`、そうでなければ `float`
+      （`"3"` と `"3.0"` は `3`、`"2.5"` は `2.5`、`"+4"` は `4`。先頭の `+` は `float()` が読む）
+    * それ以外の型（`None`・リスト・`Decimal` など）は `default`
+
+    整数の値の文字列を `int` にするのは `142_` の `_number` に揃えた。
+    `int` をそのまま返すので、文字列で来た `"3"` と数で来た `3` が同じ答えになる。
+    いつも `float` が欲しい写し（`129_` の `_num`・`134_` の `num`・`343_` の `_float`）は
+    `float(to_number(v))` にする（あちらは `int` も `float` にしていた）。
+    `nan` / `inf` は文字列から読んでもそのまま返す（`is_number` と同じ扱い）。
+    LLM の答えを範囲に収めた整数にするのは `llm.whole`。
+    """
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float)):
+        return value
+    if not isinstance(value, str):
+        return default
+    try:
+        number = float(value.strip())
+    except ValueError:
+        return default
+    return int(number) if number.is_integer() else number
+
+
 def _arg_index(name, index):
     """`index` を添字に揃える。引数名の並びを渡されたら、その中の位置。無ければ None。"""
     if index is None or isinstance(index, int):
@@ -148,7 +232,7 @@ def replace_arg(args, kwargs, name, index, value, insert=False):
     return tuple(args), kwargs, False
 
 
-def short(value, limit: "int | None" = 200) -> str:
+def short(value, limit: "int | None" = 200, *, collapse: bool = False) -> str:
     """値を「表示・ログに収まる1本の文字列」にする。None は空文字。
 
     名前やログの1項目を切り詰めるための共通形。
@@ -157,13 +241,41 @@ def short(value, limit: "int | None" = 200) -> str:
     （写して回るものはローダの語彙。TECH.md §3.2.3）。
     `repr_value()` とは役割が別。あちらは調査用に「形」を写し取る、
     こちらは表示用に「そのままの文字」を整える。
+
+    `collapse=True` は、切る前に空白（改行・タブ・全角の空白を含む `str.split()` の区切り）を
+    半角の空白1つに畳む。LLM の答えや説明文を1行に収める用。
+    `341_` / `346_` / `143_` / `144_` が `short(" ".join(v.split()), limit)` と同じ処理を写していた。
+    「…」は `limit` 字の後ろに足す（字数に数えない）。
+    「…」を付けない写し（`npcs.clean_text`・`926_`・`902_`）とは答えが違う。
     """
     if value is None:
         return ""
     if not isinstance(value, str):
         value = str(value)
-    value = value.strip()
+    value = " ".join(value.split()) if collapse else value.strip()
     return value if limit is None or len(value) <= limit else value[:limit] + "…"
+
+
+class _KeepMissing(dict):
+    """書式に無い名前が来ても落とさない（`{typo}` はそのまま残る）。`ui.fill_template` もこれで埋める。"""
+
+    def __missing__(self, key):
+        return "{" + str(key) + "}"
+
+
+def safe_format(template, **values) -> str:
+    """書式を埋める。書式に無い名前（`{typo}`）は `{typo}` のまま残し、壊れた書式は素の文字列で返す。
+
+    設定に書かれた書式は打ち間違いがありうるので、`str.format` のように投げさせない。
+    残すのは、打ち間違いを画面で見えるようにするため。
+    `ui.fill_template` から通貨の表記の書き換えを除いたもの（日付・人名など通貨と関係のない書式用）。
+    `133_` / `325_` の `fmt`（`_SafeDict`）と同じ答え。
+    知らない名前を空にする写し（`911_` の `format_text`）とは答えが違う。
+    """
+    try:
+        return str(template).format_map(_KeepMissing(values))
+    except Exception:
+        return str(template)
 
 
 def repr_value(value) -> str:

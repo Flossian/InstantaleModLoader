@@ -162,8 +162,7 @@ def install(env):
         weight = wanted.weight_of(lawfulness)
         if weight <= 0:
             return None
-        name = getattr(area, "name", None)
-        return (name if isinstance(name, str) and name else "この土地",
+        return (ui.area_name(app, area, fallback="この土地", limit=None),
                 entry, weight, price_for(weight, cfg.PARDON_PRICE_PER_POINT))
 
     def at_office(app):
@@ -172,8 +171,8 @@ def install(env):
         return ui.facility_type_of(facility) == OFFICE_FACILITY_TYPE
 
     def busy(app):
-        """ボタンを出す前提が崩れている理由の一覧（無ければ空）。"""
-        return [flag for flag in BUSY_FLAGS if getattr(app, flag, False)]
+        """ボタンを出す前提が崩れている理由の一覧（無ければ空。`ui.busy_flags`）。"""
+        return ui.busy_flags(app, BUSY_FLAGS)
 
     def facility_key(app):
         facility = ui.current_facility(app)
@@ -315,25 +314,14 @@ def install(env):
 
     ACTIONS = {"open": open_confirm, "pay": pay, "cancel": cancel}
 
-    class PardonPhase(object):
-        """自前のフェーズ。**`PhaseSpec` には決して載せない**（セーブに焼かれる）。"""
-
-        def __init__(self, app, action):
-            self.app = app
-            self.action = action
-
-        def execute(self, choice_text):
-            try:
-                ACTIONS[self.action](self.app)
-            except Exception:
-                ctx.log_exc("office pardon: phase failed ({})".format(self.action))
-
     def _press(action, text):
-        """自前のボタンの押下（窓口がボタンに持たせる処理）。ゲームと同じ経路（`process_choice`）で動かす。"""
+        """自前のボタンの押下（窓口がボタンに持たせる処理）。ゲームと同じ経路（`process_choice`）で動かす。
+
+        使い捨てのフェーズはローダの `Screen.run_phase` が作る（`PhaseSpec` には載せない）。
+        """
         def on_press(app):
             write("pressed {!r} ({})".format(text, action))
-            screen.start_phase(app, PardonPhase(app, action), text,
-                               fallback=lambda: ACTIONS[action](app))
+            screen.run_phase(app, text, ACTIONS[action], label=action)
             return None
         return on_press
 

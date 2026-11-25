@@ -192,7 +192,23 @@ saved = list(rules.KINDS)
 rules.reload_kinds(mine)
 check("手元の incidents.json があれば同梱の既定より先に読む", [k["key"] for k in rules.KINDS] == ["only"],
       [k["key"] for k in rules.KINDS])
+with io.open(os.path.join(mine, rules.USER_FILE), "w", encoding="utf-8-sig") as fh:   # 手で直して BOM が付いた形
+    fh.write(json.dumps([{"key": "only", "name": "一つ", "what": "x", "quest": "q",
+                          "stages": [{"name": "一", "tone": "bad", "arrive": "a"}]}], ensure_ascii=False))
+rules.reload_kinds(mine)
+check("BOM の付いた手元の表も読む", [k["key"] for k in rules.KINDS] == ["only"] and not rules.UNREADABLE,
+      ([k["key"] for k in rules.KINDS], rules.UNREADABLE))
+with io.open(os.path.join(mine, rules.USER_FILE), "w", encoding="utf-8") as fh:
+    fh.write("[ broken")
+default_dir = rules.__file__.rsplit(os.sep, 1)[0]
+import shutil as _shutil
+_shutil.copy(os.path.join(default_dir, rules.DEFAULT_FILE), os.path.join(mine, rules.DEFAULT_FILE))
+rules.reload_kinds(mine)
+check("手元の表が読めなければ同梱の表で動かし、読めないファイルを控える",
+      len(rules.KINDS) > 1 and rules.UNREADABLE == [os.path.join(mine, rules.USER_FILE)],
+      (len(rules.KINDS), rules.UNREADABLE))
 rules.use_kinds(saved)
+rules.UNREADABLE[:] = []
 saved = list(rules.KINDS)
 rules.use_kinds(loaded)
 check("止めた出来事は起こす候補から外す", "outlaws" not in [k["key"] for k in rules.KINDS])
@@ -1113,6 +1129,46 @@ described = tool.describe({"events": [dict(e) for e in tool.SAMPLE_EVENTS], "nex
                            "cooldown": {"2": 600}}, {})
 check("様子の文", "まだ数え始めていない" in described and "土地2（600日目まで）" in described
       and "感染症の流行" in described, described)
+
+# ================================================================ 窓口
+print("[窓口] 店の1行・ロードの突き合わせ・画面の開け閉めはローダの窓口に預ける")
+from instantale_modloader import loads as loader_loads, shopping as loader_shopping  # noqa: E402
+module, ctx, app = fresh()
+check("店に入る前の1行は窓口 shopping の ENTER", module.OWNER in loader_shopping.owners(loader_shopping.ENTER),
+      loader_shopping.owners(loader_shopping.ENTER))
+check("ロードの突き合わせは loads.on_settled（人物が揃うのを待つ判断はローダ）",
+      module.OWNER in loader_loads.settled_owners(), loader_loads.settled_owners())
+elapse(ctx, app, 0)
+elapse(ctx, app, 30)
+started = rules.events_of(bucket_of(module, app))
+check("店の確かめに使う出来事が起きた", len(started) == 1, started)
+if started:
+    app.player.current_area = started[0]["area"]
+    expected = rules.shop_text(started[0], module.PRICE_STRENGTH_PERCENT)
+    app.texts[:] = []
+    shop = type("ShoppingStartManagerRemake", (), {"app": app})()
+    opened = ctx.hook(loader_shopping.TARGETS[loader_shopping.ENTER])(lambda self, *a: "opened", shop)
+    check("店の1行は段の値段の向きの文（動いていなければ出さない）、戻り値は素のまま",
+          opened == "opened" and app.texts == ([expected] if expected else []), (opened, app.texts, expected))
+    app.player.current_area = "0"
+module._store()["view"] = None
+opened_views = []
+
+
+class _View:
+    def dismiss(self):
+        opened_views.append("closed")
+
+
+_open_window = module.window.open_window
+module.window.open_window = lambda app_, model, write=None, on_dismiss=None: opened_views.append("open") or _View()
+press_icon = hudicons._store()["icons"][module.ICON_KEY]["on_press"]
+press_icon(app)
+press_icon(app)
+check("アイコンを押すと開き、もう一度押すと閉じる（panels.Toggle）",
+      opened_views == ["open", "closed"] and module._store()["view"] is None, opened_views)
+module.window.open_window = _open_window
+check("エラーなし", not ctx.errors, ctx.errors)
 
 # ================================================================ ローダの部品
 print("[ローダ] ui.remove_quest は5か所から消す")

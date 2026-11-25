@@ -112,18 +112,13 @@ k は審判の power で決まる（weak 1.0 〜 extreme 約 2.45）。
 
 即時回復・逃走・`physical_integrity`・経験値・戦利品はゲームのまま。
 セーブに MOD 独自の鍵は増やさない（敵の HP は戦闘中のセーブに入るが、戦闘の終わりに敵ごと消える）。
-
-## 版21
-
-1手・計算・ダメージ・審判の出力の変換・継続効果のフックは、引数を受け取った形のまま元の関数へ渡す
-（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 """
 
 import math
 import random
 import time
 
-from instantale_modloader import choices, combat, frames, llm, ui
+from instantale_modloader import battles, choices, combat, frames, llm, ui
 
 # 回避の判定の乱数。グローバルの `random` から引くとゲーム自身の乱数列がずれる（TECH.md §6.1）。
 _RNG = random.Random()
@@ -188,7 +183,7 @@ GUARD_BUTTON = True
 # 主人公の通常攻撃の審判に「一撃の重さは修正で表し、追加効果にダメージを重ねない」と頼む。
 # 通常攻撃の定義は `instant_damage weak`（セーブのスキル表）。ローカルのモデルは通常の武器でも
 # 9割の手で `additional_effects` に `instant_damage`（多くは extreme）を重ね、通常攻撃が
-# スキル並みになっていた（クラウドの gpt-6-luna は重ねない。VERIFICATION.md §3.77）。
+# スキル並みになっていた（クラウドのモデルは重ねなかった。VERIFICATION.md §3.77）。
 # 敵の体力と敵の一撃の強さの既定値は重ねない出し方で決めたので、この頼みと組で効く。
 STEADY_BASIC_ATTACK = True
 
@@ -494,7 +489,7 @@ def evasion_outcome(roll):
 
 # 審判に伝える文。
 EVASION_WORDS = {"evade": "身のこなしで完全にかわす（傷を負わない）",
-                 # 「見切って」と書いた版では、審判が完全にかわした描写にした（10-01 の実機。傷は 10 入った）
+                 # 「見切って」と書いた版では、審判が完全にかわした描写にした（傷は入っていた。VERIFICATION.md §3.77）
                  "graze": "当たるが、急所を外して浅い傷で済む（かわしはしない。傷は負う）"}
 
 
@@ -736,7 +731,7 @@ def apply(ctx):
         # 防御ボタンを押してから次のスキル一覧が出るまで。二度目の押下は捨てる
         "guard_pending": False,
         # 防御ボタンの手番の者。その手のダメージは入れない（審判が敵の攻撃を描いて、
-        # そのダメージを主人公の手の結果として出すことがある。自分へ 282・敵へ 568 が実機で出た）
+        # そのダメージを主人公の手の結果として出すことがある。VERIFICATION.md §3.77）
         "guard_turn": None,
         # 1手の終わりに画面へ出す行（地の文の後ろ、`308_` の数字の前に付く）
         "notes": [],
@@ -787,7 +782,7 @@ def apply(ctx):
 
     def actor_holder(app, character_key, character_side):
         """1手の主。敵は `current_enemy_dict` の鍵、味方は名前で引く。"""
-        if character_side == "敵側":
+        if character_side == GAME_ENEMY_SIDE:
             enemies = enemy_dict(app)
             if enemies is not None:
                 return enemies.get(character_key)
@@ -799,9 +794,9 @@ def apply(ctx):
 
     def max_hp_of(holder):
         value = frames.attr(holder, "max_hp", None)
-        if not isinstance(value, (int, float)) or value <= 0:
+        if not frames.is_number(value) or value <= 0:
             value = frames.attr(holder, "current_hp", None)
-        if not isinstance(value, (int, float)) or value <= 0:
+        if not frames.is_number(value) or value <= 0:
             return None
         return float(value)
 
@@ -809,7 +804,7 @@ def apply(ctx):
         """素点の能力側。物理は attack_power、魔法は magic_power（ゲームの素点と同じ。GAME.md §2.10.4）。"""
         name = "magic_power" if category == "magical" else "attack_power"
         value = frames.attr(holder, name, None)
-        return float(value) if isinstance(value, (int, float)) and value > 0 else None
+        return float(value) if frames.is_number(value) and value > 0 else None
 
     def name_of(holder, fallback="?"):
         name = frames.attr(holder, "name", None)
@@ -964,13 +959,12 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 1手の文脈
     def open_action(app, character_key, character_side):
-        side = ENEMY_SIDE if character_side == "敵側" else ALLY_SIDE
+        side = ENEMY_SIDE if character_side == GAME_ENEMY_SIDE else ALLY_SIDE
         attacker = actor_holder(app, character_key, character_side)
         actor_name = name_of(attacker, character_key)
         # 構えは「武装済み」のものだけ、自分の手番が来たら終わる。
-        # 立てたばかり（未武装）の構えはこの手そのもの ―
-        # ここで消すと、構えた手自身に食われて次の敵の手を守れない
-        # （版2までの欠陥。実機で guard begins の3秒後に ended が出た）。
+        # 立てたばかり（未武装）の構えはこの手そのもの。
+        # ここで消すと、構えた手自身に食われて次の敵の手を守れない（VERIFICATION_LOG.md §2.70）。
         guard = state["guards"].get(actor_name)
         if guard is not None and guard.get("armed"):
             del state["guards"][actor_name]
@@ -1025,7 +1019,7 @@ def apply(ctx):
             first = effect[0]
             if isinstance(first, dict):
                 for target, raw in first.items():
-                    if isinstance(raw, (int, float)):
+                    if frames.is_number(raw):
                         plan[str(target)] = raw
         action["plan"] = plan
 
@@ -1062,22 +1056,19 @@ def apply(ctx):
         return None, None
 
     # ================================================================ 圧縮
-    @ctx.wrap("__main__:BattlePhaseManager.handle_battle_situation",
-              required=False, safe=True)
-    def handle_battle_situation(orig, self, *args, **kwargs):
-        app = getattr(self, "app", None) or ui.find_app()
-        try:
-            # (character_key, character_side, battle_action)。受け取った形のまま渡し、ここでは読むだけ。
-            open_action(app, frames.arg(args, kwargs, "character_key", 0),
-                        frames.arg(args, kwargs, "character_side", 1))
-        except Exception:
-            ctx.log_exc("battle tactics: cannot open the action")
-        # 本体が投げても1手は必ず閉じる。閉じないと古い `state["action"]` が残って
+    # 1手・1手の効果・戦闘の始まりはローダの窓口 `battles` に前後の処理として預ける（TECH.md §3.3.21）。
+    # 前後の処理の例外は窓口が握って modloader.log と write に残し、ほかの処理と orig は続く。
+    def action_before(call):
+        # 1手の主は窓口が引数（名前でも位置でも）から読んだ値。ここでは読むだけ。
+        open_action(call.app, call.character_key, call.character_side)
+
+    def action_after(call):
+        # 本体が投げても1手は必ず閉じる（always=True）。閉じないと古い `state["action"]` が残って
         # 手の外で呼ばれた `get_instant_damage` まで圧縮し、立てた構えも武装されない。
-        try:
-            return orig(self, *args, **kwargs)
-        finally:
-            close_action()
+        close_action()
+
+    battles.on(OWNER, ctx, (battles.ACTION,), before=action_before, after=action_after, always=True,
+               write=write)
 
     @ctx.wrap("__main__:BattlePhaseManager.calculate_battle_effect",
               required=False, safe=True)
@@ -1106,7 +1097,7 @@ def apply(ctx):
                 return result
             attack = frames.arg(args, kwargs, "attack", 0)
             defense = frames.arg(args, kwargs, "defense", 1)
-            if not isinstance(attack, (int, float)):
+            if not frames.is_number(attack):
                 return result
             app = action["app"]
             target, holder = find_defender(app, attack, defense)
@@ -1239,16 +1230,11 @@ def apply(ctx):
             ctx.log_exc("battle tactics: cannot restore the referee's effects")
         return result
 
-    @ctx.wrap("__main__:BattlePhaseManager.resolve_battle_effect",
-              required=False, safe=True)
-    def resolve_battle_effect(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
+    def effect_after(call):
         if RESTORE_EFFECTS:
-            try:
-                describe_restored_statuses(getattr(self, "app", None) or ui.find_app())
-            except Exception:
-                ctx.log_exc("battle tactics: cannot describe the restored statuses")
-        return result
+            describe_restored_statuses(call.app)
+
+    battles.on(OWNER, ctx, (battles.EFFECT,), after=effect_after, write=write)
 
     def shake_verdict():
         """画面の揺れを止めるか。(止めるか, どこで判断したか)。
@@ -1303,7 +1289,7 @@ def apply(ctx):
                         hp = frames.attr(character, "current_hp", None)
                         # 倒れた者は動かさない。下の max(1, ...) や回復が体力0を1以上へ戻してしまう
                         # （ローダの毒刃・再生も同じく除外する）
-                        if not isinstance(hp, (int, float)) or hp <= 0:
+                        if not frames.is_number(hp) or hp <= 0:
                             continue
                         if tick_kind == "instant_damage":
                             # 継続ダメージでは死なない。HP 1 で止める。
@@ -1384,7 +1370,7 @@ def apply(ctx):
         alive, fallen = [], []
         for key, holder in list(enemies.items()):
             hp = frames.attr(holder, "current_hp", None)
-            down = isinstance(hp, (int, float)) and hp <= 0
+            down = frames.is_number(hp) and hp <= 0
             (fallen if down else alive).append((str(key), name_of(holder, key)))
         actor_name = actor_name or name_of(actor)
         narration = read_field(result, "narration", "")
@@ -1414,15 +1400,12 @@ def apply(ctx):
         `enemies_index` を渡した審判は、戻りの効果の対象を効果の向きに合う側へ揃える
         （`keep_targets_on_side`。スキルは `skill_index` の引数、仲間の手は戻りの `skill` で引く）。
         """
-        def pick(args, kwargs, index, name):
-            return args[index] if len(args) > index else kwargs.get(name)
-
         @ctx.wrap("scripts.llm.llm_manager_battle:{}".format(target),
                   required=False, safe=True)
         def referee(orig, *args, **kwargs):
-            actor = pick(args, kwargs, actor_index, "actor")
+            actor = frames.arg(args, kwargs, "actor", actor_index)
             if name_index is not None:
-                marker = NPC_TURN_MARKER.format(pick(args, kwargs, name_index, "actor_name"))
+                marker = NPC_TURN_MARKER.format(frames.arg(args, kwargs, "actor_name", name_index))
             else:
                 marker = PLAYER_TURN_MARKER.format(name_of(actor))
             try:
@@ -1438,19 +1421,19 @@ def apply(ctx):
                     if name_index is not None:
                         skill = read_field(result, "skill")          # 仲間の手: 戻りの選んだスキル
                     elif skill_index is not None:
-                        skill = pick(args, kwargs, skill_index, "skill")
+                        skill = frames.arg(args, kwargs, "skill", skill_index)
                     else:
                         skill = BASIC_ATTACK_SKILL                    # 主人公の通常攻撃
                     keep_targets_on_side(
                         result, actor,
-                        pick(args, kwargs, name_index, "actor_name") if name_index is not None else None,
-                        pick(args, kwargs, enemies_index, "current_enemy_dict"),
-                        pick(args, kwargs, side_index, "side") if side_index is not None else None,
+                        frames.arg(args, kwargs, "actor_name", name_index) if name_index is not None else None,
+                        frames.arg(args, kwargs, "current_enemy_dict", enemies_index),
+                        frames.arg(args, kwargs, "side", side_index) if side_index is not None else None,
                         skill)
                 except Exception:
                     ctx.log_exc("battle tactics: cannot check the targets")
             if command_index is not None:
-                command = pick(args, kwargs, command_index, "command")
+                command = frames.arg(args, kwargs, "command", command_index)
                 if isinstance(command, str) and command.strip() == GUARD_COMMAND and actor is not None:
                     state["guard_turn"] = actor
                 try:
@@ -1587,11 +1570,9 @@ def apply(ctx):
                     labels=(GUARD_BUTTON_LABEL,))
 
     # ---------------------------------------------------------------- 節目
-    @ctx.wrap("__main__:BattleStartManager.start_battle", required=False, safe=True)
-    def start_battle(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
+    def start_after(call):
+        app = call.app
         try:
-            app = getattr(self, "app", None) or ui.find_app()
             state["guards"] = {}
             state["input_spec_logged"] = False
             state["skill_screen"] = False
@@ -1605,11 +1586,14 @@ def apply(ctx):
                 del state["recipes"][key]
         except Exception:
             ctx.log_exc("battle tactics: cannot reset at the battle start")
+        # 片付けに失敗しても伸ばしは行う（2つを別々に握る）。
         try:
-            stretch_enemy_hp(getattr(self, "app", None) or ui.find_app())
+            stretch_enemy_hp(app)
         except Exception:
             ctx.log_exc("battle tactics: cannot stretch the enemies' HP")
-        return result
+
+    # 敵が揃った後（orig が返った回だけ）。`308_` の台帳の取り直しより後に走る（登録の古い順）。
+    battles.on(OWNER, ctx, (battles.START,), after=start_after, write=write)
 
     def stretch_enemy_hp(app):
         """敵の HP を「敵の体力」の率で伸ばす。HP は3つ組（current / max / original_max）で動かす。
@@ -1622,7 +1606,7 @@ def apply(ctx):
             constitution = scores.get("constitution") if isinstance(scores, dict) else None
             level = frames.attr(holder, "experience_level", None)
             original = frames.attr(holder, "original_max_hp", None)
-            reference = original if isinstance(original, (int, float)) else frames.attr(holder, "max_hp", None)
+            reference = original if frames.is_number(original) else frames.attr(holder, "max_hp", None)
             percent = combat.enemy_percent(combat.ENEMY_HP, app, holder, ENEMY_HP)
             target = scaled_hp(reference, constitution, level, percent)
             if target is None:
@@ -1630,7 +1614,7 @@ def apply(ctx):
             ratio = target / float(reference)
             for field in ("original_max_hp", "max_hp", "current_hp"):
                 value = frames.attr(holder, field, None)
-                if isinstance(value, (int, float)):
+                if frames.is_number(value):
                     setattr(holder, field, max(1, int(round(value * ratio))))
             write("enemy hp: {} {} -> {} (x{:g}%)".format(
                 name_of(holder, key), int(reference), frames.attr(holder, "max_hp", "?"), percent))

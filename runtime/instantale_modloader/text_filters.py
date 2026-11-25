@@ -24,7 +24,7 @@ MOD ごとに写されていた。包むのはローダの1枚にし、MOD は1�
 import sys
 import threading
 
-from . import alive, frames, gates, log, log_exc
+from . import alive, frames, gates, log, log_exc, state, window_put
 
 TARGET = "__main__:InstantaleApp.add_text"
 #: `fn` がこれを返したら、その行を出さない。
@@ -36,13 +36,7 @@ gates.track_install_attr(STORE_ATTR)
 
 
 def _store():
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"filters": {}, "seq": 0, "installed": None}
-        setattr(sys, STORE_ATTR, store)
-    for key, empty in (("filters", {}), ("seq", 0), ("installed", None)):
-        store.setdefault(key, empty)
-    return store
+    return state.process_store(STORE_ATTR, {"filters": {}, "seq": 0, "installed": None})
 
 
 def on(owner, ctx, fn, write=None):
@@ -52,8 +46,7 @@ def on(owner, ctx, fn, write=None):
     with _LOCK:
         store = _store()
         store["seq"] += 1
-        store["filters"].pop(str(owner), None)
-        store["filters"][str(owner)] = {"ctx": ctx, "fn": fn, "write": write, "seq": store["seq"]}
+        window_put(store["filters"], owner, {"ctx": ctx, "fn": fn, "write": write, "seq": store["seq"]})
     install(ctx, write)
 
 

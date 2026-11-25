@@ -106,6 +106,7 @@ class FakeCtx:
     def __init__(self, out_dir):
         self.out_dir = out_dir
         self.mod_dir = MOD_DIR
+        self.mod_name = os.path.basename(MOD_DIR)
         self.generation = None
         self.hooks = {}
         self.errors = []
@@ -181,6 +182,11 @@ def load_mod(path=MOD, name="balance_item_price_mod"):
     return module
 
 
+def new_injection():
+    """手で注入し直した形。ローダごと読み直されるので、`ctx.logger(span="injection")` の覚えが空に戻る。"""
+    ml._LOGGER_SPANS.clear()
+
+
 def fresh_mod(**settings):
     """mod を読み直して当て直す（設定は既定に戻してから上書きする）。
 
@@ -195,6 +201,7 @@ def fresh_mod(**settings):
         setattr(module, key, value)
     if hasattr(sys, module.STORE_ATTR):
         delattr(sys, module.STORE_ATTR)
+    new_injection()
     for attr in (prices._ITEM_ATTR, prices._ITEM_GATE_ATTR):
         if hasattr(sys, attr):
             delattr(sys, attr)
@@ -528,7 +535,7 @@ def main():
     check("当て直しても同じ値段", again == first, (first, again))
 
     # -- 繰り返し（版3）------------------------------------------------------
-    # 設定の書き出しは同じ注入・同じ中身なら1回。値段が読めない品の `skip` は品ごとに1プロセス1回。
+    # 設定の書き出しは同じ注入・同じ中身なら1回。値段が読めない品の `skip` は品ごとに注入の間に1回。
     log_path = os.path.join(OUT_DIR, "item_price.log")
     start = os.path.getsize(log_path) if os.path.isfile(log_path) else 0
 
@@ -559,9 +566,10 @@ def main():
     check("繰り返し: 中身が変われば書く",
           len(installed) == 2 and "scale=2" in installed[-1], installed)
 
-    # 注入のときにログが世代送りされた形。新しいログに設定と skip を書き直す。
+    # 注入し直した形（世代送りは注入のときに起きる）。新しいログに設定と skip を書き直す。
     os.replace(log_path, log_path + ".1")
     start = 0
+    new_injection()
     reapply(PRICE_SCALE=2.0)
     buy_price(ctx, Item("謎の品", "weapon", {"item_detail": "small_weapon", "買価": 0},
                               None, "common"))
@@ -571,6 +579,20 @@ def main():
     check("繰り返し: 世代送りされたら新しいログに skip を書く",
           sum(1 for line in lines if line.startswith("skip ")) == 1, lines)
     os.remove(log_path + ".1")
+
+    # 付け直しの記録は LOG_LIMIT 行で打ち切り、打ち切りの1行を1回だけ書く（skip の行も枠を使う）。
+    start = os.path.getsize(log_path) if os.path.isfile(log_path) else 0
+    module, ctx = fresh_mod(LOG_LIMIT=2)
+    for index in range(4):
+        buy_price(ctx, Item("謎の品{}".format(index), "weapon",
+                            {"item_detail": "small_weapon", "買価": 0}, None, "common"))
+    lines = new_lines()
+    check("上限: skip は LOG_LIMIT 行まで",
+          sum(1 for line in lines if line.startswith("skip ")) == 2, lines)
+    check("上限: 打ち切りの1行は1回だけ",
+          sum(1 for line in lines if "以降は件数だけ数える" in line) == 1, lines)
+    check("上限: 数は打ち切りの後も数える", getattr(sys, module.STORE_ATTR)["skipped"] == 4,
+          getattr(sys, module.STORE_ATTR)["skipped"])
 
     module, ctx = fresh_mod()
     check("例外を握り潰していない", not ctx.errors, ctx.errors)

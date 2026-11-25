@@ -69,25 +69,13 @@ MOD を外せば街は素のまま（建物も、そこへ繋がる道も残ら�
 落ちたときの逃げ場はそちら（`ids.claim`）。
 """
 
-import contextlib
 import copy
 import os
 import sys
 
-from . import log_exc, patch, state, ui
+from . import _layered, log_exc, patch, state, ui
 
 
-#: 前に書いた定型の行の中身（種類 -> 中身）。同じ中身なら繰り返さない（`_changed`）。
-#: 注入し直すとこのモジュールごと読み直されるので空に戻り、新しいログの頭には必ず出る。
-_LAST_WRITTEN = {}
-
-
-def _changed(kind, content) -> bool:
-    """`kind` の行の中身が前に書いたものと違えば控えて True。同じなら False。"""
-    if _LAST_WRITTEN.get(kind) == content:
-        return False
-    _LAST_WRITTEN[kind] = content
-    return True
 # 保存の間だけ成り代わる辞書。名簿と同じく、反復では隠し id では引ける（`veil_plain`）。
 from .modnpc import _RosterView
 
@@ -167,36 +155,49 @@ def node_id_of(node):
 # --------------------------------------------------------------------------
 # 登録簿
 # --------------------------------------------------------------------------
-def registry():
-    """`{facility_id: 記録}`。書き換えてよいのはこのモジュールだけ。"""
-    reg = getattr(sys, REGISTRY_ATTR, None)
-    if not isinstance(reg, dict):
-        reg = {}
-        setattr(sys, REGISTRY_ATTR, reg)
-    return reg
+#: 控えの置き場所（`sys` の属性。注入をまたぐ）とフォルダ名。控えの読み書きは下の「控え」の節。
+STORE_ATTR = "_instantale_modfacility_store"
+STATE_DIRNAME = "modfacility"
+#: 建て直しの間だけ立つ「いまの周回の鍵」（世界×主人公。`state.playthrough_key`）。
+#: `World.__init__` の中では `app.world_dict` も `app.player` もまだ前の周回を指していることが
+#: あるので、鍵を引数の `save_data_dict` から決めて持ち回る。
+_KEY_OVERRIDE_ATTR = "_instantale_modfacility_key_override"
+
+#: 繋ぎ方は `modnpc` / `modfacility` で同じなので `state` に1つ（違うのは上の3つの名前だけ）。
+_stores = state.SysWorldStore(STORE_ATTR, STATE_DIRNAME, _KEY_OVERRIDE_ATTR)
 
 
-def _record(facility_id):
-    """その id の記録。無ければ作る。"""
-    reg = registry()
-    record = reg.get(facility_id)
-    if not isinstance(record, dict):
-        record = reg[facility_id] = {
-            "id": facility_id,
-            "layers": [],       # 積んだ順。同じ持ち主は1つだけ
-            "facility": None,   # 実体（`Facility`）
-            "built_in": None,   # その実体を組んだ世代（注入し直しで組み直すため）
-            "snapshot": None,   # 控えから読んだ素データの写し（次の spawn の材料）
-            "placed": None,     # (area_id, node_id, hub_id)
-            "logged": {},       # 持ち主 -> (世代, 層の数)。`registered` の行を書いた印
-        }
-    return record
+def _new_record(facility_id):
+    """その id の記録の初めの形。"""
+    return {
+        "id": facility_id,
+        "layers": [],       # 積んだ順。同じ持ち主は1つだけ
+        "facility": None,   # 実体（`Facility`）
+        "built_in": None,   # その実体を組んだ世代（注入し直しで組み直すため）
+        "snapshot": None,   # 控えから読んだ素データの写し（次の spawn の材料）
+        "placed": None,     # (area_id, node_id, hub_id)
+        "logged": {},       # 持ち主 -> (世代, 層の数)。`registered` の行を書いた印
+    }
 
 
-def layers(facility_id):
-    """その id に積まれている層。積んだ順。"""
-    record = registry().get(str(facility_id))
-    return list(record["layers"]) if isinstance(record, dict) else []
+#: 登録簿・控えの1件の読み書き・場面の通知・関所の確かめの本体（`modnpc` と同じ形。`_layered`）。
+#: `save_target` は下の `SAVE_TARGET` と同じ値（ここではまだ定義されていない）。
+_reg = _layered.LayeredRegistry(
+    "modfacility", REGISTRY_ATTR, INSTALLED_ATTR, _stores,
+    id_key="facility_id", obj_key="facility",
+    gate_mark="__instantale_modfacility_gate__", save_target="__main__:InstantaleApp.save_game",
+    off_text="off the town", new_record=_new_record)
+
+#: 前に書いた定型の行の中身（種類 -> 中身）。同じ中身なら繰り返さない（`_changed`）。
+#: 注入し直すとこのモジュールごと読み直されるので空に戻り、新しいログの頭には必ず出る。
+_LAST_WRITTEN = _reg.last_written
+_changed = _reg.changed
+
+#: `{facility_id: 記録}`。書き換えてよいのはこのモジュールだけ。
+registry = _reg.registry
+_record = _reg.record                # その id の記録。無ければ作る
+#: その id に積まれている層。積んだ順。
+layers = _reg.layers
 
 
 def layers_for(facility_id):
@@ -211,14 +212,8 @@ def has_layers(facility_id):
     return bool(layers(str(facility_id)))
 
 
-def entries(owner=None):
-    """登録されている id。`owner` を渡すとその MOD の分だけ。"""
-    out = []
-    for facility_id, record in registry().items():
-        if owner is None or any(layer["owner"] == owner
-                                for layer in record["layers"]):
-            out.append(facility_id)
-    return sorted(out)
+#: 登録されている id。`owner` を渡すとその MOD の分だけ。
+entries = _reg.entries
 
 
 def register(owner, facility_id=None, *, key=None, fields=None, choices=None,
@@ -295,27 +290,7 @@ def unregister(owner, facility_id=None, app=None, write=None):
     `facility_id` を省くとその MOD の層を全部外す。
     層が1つも残らなくなった id は、`app` を渡してあれば街から壊してから記録ごと捨てる。
     """
-    dropped = []
-    for target in ([str(facility_id)] if facility_id is not None else entries(owner)):
-        record = registry().get(target)
-        if not isinstance(record, dict):
-            continue
-        record["layers"] = [layer for layer in record["layers"]
-                            if layer["owner"] != owner]
-        dropped.append(target)
-        if not record["layers"] and app is not None:
-            try:
-                despawn(app, target, write=write)
-            except Exception:
-                log_exc("modfacility: cannot take {} off the town".format(target))
-        if app is not None:
-            _drop_persisted(app, owner, target)   # `despawn` の後
-        if record["layers"]:
-            continue
-        registry().pop(target, None)
-    if write and dropped:
-        write("modfacility: {} unregistered {}".format(owner, ", ".join(dropped)))
-    return dropped
+    return _reg.unregister(owner, facility_id, app, write, despawn, _drop_persisted)
 
 
 def purge(app=None, write=None):
@@ -324,15 +299,7 @@ def purge(app=None, write=None):
     ローダの `unload` はパッチを剥がすだけで、世界に書いた値は戻さない
     （TECH.md §3.10）。片付けたい MOD はこれを自分で呼ぶ。
     """
-    for facility_id in list(registry()):
-        if app is not None:
-            try:
-                despawn(app, facility_id, write=write)
-            except Exception:
-                log_exc("modfacility: cannot take {} off the town".format(facility_id))
-    registry().clear()
-    if write:
-        write("modfacility: the registry is empty")
+    _reg.purge(app, write, despawn)
 
 
 def forget(write=None):
@@ -1121,104 +1088,24 @@ def strip_plain_from(data):
 # --------------------------------------------------------------------------
 # 控え
 # --------------------------------------------------------------------------
-STORE_ATTR = "_instantale_modfacility_store"
-STATE_DIRNAME = "modfacility"
-#: 建て直しの間だけ立つ「いまの周回の鍵」（世界×主人公。`state.playthrough_key`）。
-#: `World.__init__` の中では `app.world_dict` も `app.player` もまだ前の周回を指していることが
-#: あるので、鍵を引数の `save_data_dict` から決めて持ち回る。
-_KEY_OVERRIDE_ATTR = "_instantale_modfacility_key_override"
-
-
-#: 繋ぎ方は `modnpc` / `modfacility` で同じなので `state` に1つ（違うのは上の3つの名前だけ）。
-_stores = state.SysWorldStore(STORE_ATTR, STATE_DIRNAME, _KEY_OVERRIDE_ATTR)
+# 置き場所の名前（`STORE_ATTR` / `STATE_DIRNAME` / `_KEY_OVERRIDE_ATTR`）と `_stores` は「登録簿」の節。
 bind_store = _stores.bind           # 控えを今の世代の `ctx` に繋ぐ（`install` が毎回呼ぶ）
 store = _stores.store               # 控え。`install` がまだなら None（控えずに動く）
 _current_key = _stores.current_key
 _bucket = _stores.bucket            # `(周回の鍵, 控え)` か `(None, None)`
 _jsonable = state.jsonable
 
+#: `with modfacility.keyed(key):` の間、控えをその周回の鍵で読み書きする（`modnpc.keyed` と対で使う）。
+keyed = _reg.keyed
 
-@contextlib.contextmanager
-def keyed(key):
-    """`with modfacility.keyed(key):` の間、控えをその周回の鍵で読み書きする。
-
-    `World.__init__` を MOD が直に包み、orig の後で `spawn` を呼ぶと、
-    ローダの関所（`world_init`）が立てた鍵はもう消えていて、控えは `app` から決めた鍵
-    （前の周回のことがある）へ書かれる。鍵を引数の `save_data_dict` から決めて
-    （`state.playthrough_key_of_dict`）ここで立てれば、読んでいる周回へ書ける。
-    抜けるときは入る前の値へ戻す（入れ子にしても外側の鍵を消さない）。
-    鍵が空なら何も立てない。`modnpc.keyed` と対で使う。
-    """
-    missing = object()
-    previous = getattr(sys, _KEY_OVERRIDE_ATTR, missing)
-    if isinstance(key, str) and key:
-        setattr(sys, _KEY_OVERRIDE_ATTR, key)
-    try:
-        yield key
-    finally:
-        if previous is missing:
-            try:
-                delattr(sys, _KEY_OVERRIDE_ATTR)
-            except AttributeError:
-                pass
-        else:
-            setattr(sys, _KEY_OVERRIDE_ATTR, previous)
-
-
-def _persist(app, owner, facility_id, **changes):
-    """1軒ぶんの控えを書く。`snapshot=`（素データの写し）／`spawned=`／`place=`。
-
-    控えの形は
-    `{持ち主: {id: {"snapshot": {...}, "spawned": bool, "place": [エリア, ノード, 繋ぎ先]}}}`。
-    """
-    if not owner:
-        return False
-    key, bucket = _bucket(app)
-    if key is None:
-        return False
-    _put_entry(bucket, owner, facility_id, changes)
-    return store().save(key, bucket)
-
-
-def _put_entry(bucket, owner, facility_id, changes):
-    """控え `bucket` の1軒ぶんを書き換える（書き出さない）。"""
-    entry = bucket.setdefault(owner, {}).setdefault(
-        str(facility_id), {"snapshot": None, "spawned": False, "place": None})
-    if "snapshot" in changes:
-        entry["snapshot"] = copy.deepcopy(changes["snapshot"])
-    if "spawned" in changes:
-        entry["spawned"] = bool(changes["spawned"])
-    if "place" in changes:
-        entry["place"] = list(changes["place"]) if changes["place"] else None
-
-
-def _drop_persisted(app, owner, facility_id):
-    key, bucket = _bucket(app)
-    if key is None:
-        return False
-    owned = bucket.get(owner)
-    if not isinstance(owned, dict) or str(facility_id) not in owned:
-        return False
-    owned.pop(str(facility_id), None)
-    if not owned:
-        bucket.pop(owner, None)
-    return store().save(key, bucket)
-
-
-def _persisted_entry(app, owner, facility_id):
-    key, bucket = _bucket(app)
-    if key is None:
-        return None
-    owned = bucket.get(owner)
-    entry = owned.get(str(facility_id)) if isinstance(owned, dict) else None
-    return entry if isinstance(entry, dict) else None
-
-
-def _layer_of(owner, facility_id):
-    for layer in layers(str(facility_id)):
-        if layer["owner"] == owner:
-            return layer
-    return None
+# 1軒ぶんの控えの読み書き。控えの形は
+# `{持ち主: {id: {"snapshot": {...}, "spawned": bool, "place": [エリア, ノード, 繋ぎ先]}}}`。
+# `snapshot` は素データの写し。
+_persist = _reg.persist
+_put_entry = _reg.put_entry
+_drop_persisted = _reg.drop_persisted
+_persisted_entry = _reg.persisted_entry
+_layer_of = _reg.layer_of
 
 
 #: 写しに入れない項目。置き場所は `place` の控えが持ち、接続は建て直しで張り直す。
@@ -1482,33 +1369,15 @@ def fire(site, app, facility_id, *, facility=None, args=None, world=None,
 
     フックの例外は飲む（1本の MOD の失敗で関所を止めない）。
     飲んだことはローダのログに残す。
+    `info` は `{"site", "app", "facility_id", "facility", "args", "world", "owner"}`。
     """
-    results = []
-    for layer in layers_for(facility_id):
-        fn = (layer.get("on") or {}).get(site)
-        if not callable(fn):
-            continue
-        info = {"site": site, "app": app, "facility_id": str(facility_id),
-                "facility": facility, "args": args, "world": world,
-                "owner": layer["owner"]}
-        try:
-            results.append((layer["owner"], fn(info)))
-        except Exception:
-            log_exc("modfacility: {} hook of {} on {} failed".format(
-                site, layer["owner"], facility_id))
-            if write:
-                write("WARN modfacility: {} hook of {} on {} failed".format(
-                    site, layer["owner"], facility_id))
-    return results
+    return _reg.fire(site, app, facility_id, layers_for(facility_id), facility,
+                     args=args, world=world, write=write)
 
 
 def fire_all(site, app, *, args=None, world=None, write=None):
     """登録されている全部の施設に同じ場面を通知する。`on["world"]` 用。"""
-    results = []
-    for facility_id in list(registry()):
-        results.extend(fire(site, app, facility_id, args=args, world=world,
-                            write=write))
-    return results
+    return _reg.fire_all(fire, site, app, args=args, world=world, write=write)
 
 
 # --------------------------------------------------------------------------
@@ -1983,19 +1852,16 @@ PRESS_DO = "do"
 
 def _state():
     """塗り直しと押下の控え。注入をまたぐ（`sys` に置く）。"""
-    found = getattr(sys, _STATE_ATTR, None)
-    if not isinstance(found, dict):
-        found = {"retry": False, "acting": False,
-                 # こちらが起こした「建物へ入る」移動の控え。
-                 # ゲームは自分で足した施設をよく知らないので、
-                 # 移動の後に `player.location` が書き換わらないことがある。
-                 "entered": None,
-                 # 最後に書いた居場所（変わったときだけ1行書くため）。
-                 "where": None,
-                 # 最後に書いた「足さなかった理由」（同上）。
-                 "blocked": None}
-        setattr(sys, _STATE_ATTR, found)
-    return found
+    return state.process_store(_STATE_ATTR, {
+        "retry": False, "acting": False,
+        # こちらが起こした「建物へ入る」移動の控え。
+        # ゲームは自分で足した施設をよく知らないので、
+        # 移動の後に `player.location` が書き換わらないことがある。
+        "entered": None,
+        # 最後に書いた居場所（変わったときだけ1行書くため）。
+        "where": None,
+        # 最後に書いた「足さなかった理由」（同上）。
+        "blocked": None})
 
 
 def screen_of():
@@ -2100,8 +1966,8 @@ def is_facility_screen(buttons):
 BUSY_FLAGS = ui.BUSY_FLAGS
 
 
-#: 戦闘の旗。ゲームはこれを下ろし忘れる経路を持っている（`107_` の表）。
-BATTLE_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle")
+#: 戦闘の旗。ゲームはこれを下ろし忘れる経路を持っている（`107_` の表）。表はローダの1か所（`ui.BATTLE_FLAGS`）。
+BATTLE_FLAGS = ui.BATTLE_FLAGS
 
 
 def game_is_busy(app):
@@ -2110,8 +1976,9 @@ def game_is_busy(app):
     ゲームは会話の最中も施設の入口（`売買する` など）を選択肢に残す。
     画面の中身だけでは見分けられないので旗で見る（実機。
     自分の店で主人と話している最中に `売上を受け取る` と `出る` が並んだ）。
+    読み方は `ui.busy_flags` と同じ（旗を表の順に真偽で読む）。
     """
-    return [flag for flag in BUSY_FLAGS if getattr(app, flag, False)]
+    return ui.busy_flags(app, BUSY_FLAGS)
 
 
 def battle_leftovers(app, busy):
@@ -2683,10 +2550,8 @@ BG_ID_TARGET = "__main__:InstantaleApp.change_background_image_from_location_id"
 PHASE_END_TARGETS = ("__main__:VacationEndManager.execute",)
 
 
-def installed():
-    """関所の状態。`{"generation", "owner", "targets"}` か、立っていなければ None。"""
-    done = getattr(sys, INSTALLED_ATTR, None)
-    return done if isinstance(done, dict) else None
+#: 関所の状態。`{"generation", "owner", "targets"}` か、立っていなければ None。
+installed = _reg.installed
 
 
 def gate_is_live():
@@ -2697,19 +2562,7 @@ def gate_is_live():
     前の世代の建物が街に残ったまま関所だけが無いことがある。
     `spawn` はここが真でなければ建てない（`modnpc` が実機で踏んだのと同じ理由）。
     """
-    try:
-        _owner, _name, current = patch.resolve(SAVE_TARGET)
-    except (LookupError, AttributeError):
-        return False
-    for _ in range(32):
-        if current is None:
-            return False
-        if getattr(current, "__wrapper_of__", None) == SAVE_TARGET \
-                and getattr(current, "__instantale_modfacility_gate__", False) \
-                and getattr(current, patch.GENERATION_MARK, None) == patch._generation:
-            return True
-        current = getattr(current, "__original__", None)
-    return False
+    return _reg.gate_is_live()
 
 
 def install(ctx, write=None):

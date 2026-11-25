@@ -10,7 +10,7 @@
     "en": "Adds a button at the top-left of the player's portrait on the character sheet. Pressing it redraws the portrait. The player keeps only a Japanese appearance text, so the LLM turns it into short English tags first (kept until the text changes; Shift+click rebuilds them). With 408 the equipment is drawn in, and with 138 the new portrait and face show up right away",
     "ja": "人物欄の主人公の立ち絵の左上にボタンを足し、押すと立ち絵を描き直す。主人公は日本語の外見文しか持たないので、LLM で英語の短いタグにしてから描く（外見文が変わるまで記録を使う。Shift を押しながら押すとタグを作り直す）。408 があれば装備も描き込まれ、138 があれば描き直した立ち絵と顔がその場で画面に出る"
   },
-  "version": "4",
+  "version": "5",
   "author": "R01/Flossian, MoririnJP",
   "state": ["player_portrait"],
   "after": [

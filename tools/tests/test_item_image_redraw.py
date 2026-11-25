@@ -202,6 +202,8 @@ OUT = tempfile.mkdtemp()
 class FakeCtx:
     def __init__(self):
         self.mod_dir = FAKE_MOD
+        # 窓口に名乗る持ち主の名前（本物は apply() の間だけフォルダ名）。
+        self.mod_name = os.path.basename(self.mod_dir)
         self.hooks = {}
         self._mod = None
 

@@ -357,6 +357,8 @@ class FakeCtx:
         self.hooks = {}
         self.errors = []
         self.logs = []
+        # 窓口に名乗る持ち主（本物は apply() の間だけ MOD のフォルダ名）
+        self.mod_name = os.path.basename(os.path.dirname(MOD))
 
     def out_path(self, *parts):
         path = os.path.join(self.out_dir, *parts)
@@ -452,6 +454,9 @@ def fresh_mod(restock_days=30, first_visit=False, keep_state=False,
     log_path = os.path.join(OUT_DIR, module.LOG_BASENAME)
     if os.path.exists(log_path):
         os.remove(log_path)
+    # 窓口（shopping / twin_windows）の関所は1つの世代に1枚なので、偽の ctx を作り直すたびに忘れさせる
+    from instantale_modloader import gates
+    gates.reset_all()
     ctx = FakeCtx(OUT_DIR, STATE_DIR)
     module.apply(ctx)
     return module, ctx

@@ -45,7 +45,7 @@
 import sys
 import threading
 
-from instantale_modloader import quest_bands, text_filters, ui
+from instantale_modloader import frames, quest_bands, text_filters, ui
 
 LOG_BASENAME = "ui_area_difficulty.log"
 
@@ -126,23 +126,8 @@ SLOT_RANGES = {
 }
 
 
-class _SafeDict(dict):
-    """テンプレートに無い変数名が来ても落とさない（`{typo}` はそのまま残る）。"""
-
-    def __missing__(self, key):
-        return "{" + str(key) + "}"
-
-
-def fmt(template, **values):
-    """設定のテンプレートを埋める。壊れたテンプレートでも素の文字列で返す。"""
-    try:
-        return str(template).format_map(_SafeDict(values))
-    except Exception:
-        return str(template)
-
-
-def _number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+# 設定のテンプレートはローダの `frames.safe_format` で埋める（無い変数名 `{typo}` は残し、壊れた書式は素の文字列）。
+# 数かどうかは `frames.is_number`（真偽値を数に数えない）。
 
 
 def difficulties_by_scan(world, area_id):
@@ -156,14 +141,14 @@ def difficulties_by_scan(world, area_id):
         if owner is None or str(owner) != str(area_id):
             continue
         value = ui.quest_value(quest, QUEST_DIFFICULTY_KEY, None)
-        if _number(value):
+        if frames.is_number(value):
             found.append(value)
     return found
 
 
 def band_values(values, offset):
     """難易度の一覧からテンプレートに渡す変数一式。空なら None。"""
-    numbers = [v for v in values if _number(v)]
+    numbers = [v for v in values if frames.is_number(v)]
     if not numbers:
         return None
     low = int(round(min(numbers)))
@@ -197,9 +182,9 @@ def band_text(values):
     if values is None:
         return BAND_UNKNOWN or None
     if values.get("estimated"):
-        return fmt(BAND_ESTIMATE, **values)
+        return frames.safe_format(BAND_ESTIMATE, **values)
     template = BAND_SINGLE if values["min"] == values["max"] else BAND
-    return fmt(template, **values)
+    return frames.safe_format(template, **values)
 
 
 def apply(ctx):
@@ -235,7 +220,7 @@ def apply(ctx):
         if fn is not None:
             try:
                 values = fn(area, world)
-                return [v for v in (values or []) if _number(v)]
+                return [v for v in (values or []) if frames.is_number(v)]
             except Exception as exc:
                 write("WARN get_quest_difficulties failed on {!r}: {}: {}".format(
                     getattr(area, "name", None), type(exc).__name__, exc))
@@ -266,7 +251,7 @@ def apply(ctx):
         values, band = values_of(app, area)
         if band is None or not values["name"]:
             return None, values
-        label = fmt(LABEL, **values)
+        label = frames.safe_format(LABEL, **values)
         values["label"] = label
         return label, values
 
@@ -348,27 +333,30 @@ def apply(ctx):
 
     # ============================================================ 確認画面
     @ctx.wrap("__main__:AreaMoveCofirmation.__init__", required=False, safe=True)
-    def confirmation_init(orig, self, app, target_area_id, *args, **kwargs):
+    def confirmation_init(orig, self, *args, **kwargs):
         """`execute` には行き先が来ないので、ここで自分に控える。
 
         自分専用の属性名で持つだけで、ゲームのデータには何も書かない
         （`314_` の `AreaMoveManager.__init__` と同じ）。
+        `AreaMoveCofirmation.__init__(self, app, target_area_id)`。位置は self を除いて数える。
         """
-        result = orig(self, app, target_area_id, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         try:
-            self._mod_ui_area_difficulty = str(target_area_id)
+            self._mod_ui_area_difficulty = str(frames.arg(args, kwargs, "target_area_id", 1))
         except Exception:
             pass
         return result
 
     @ctx.wrap("__main__:AreaMoveCofirmation.execute", required=False)
-    def confirmation_execute(orig, self, choice_text=None, *args, **kwargs):
+    def confirmation_execute(orig, self, *args, **kwargs):
         """確認画面の間だけ窓を開ける。
 
         押された文字列が自分の書いたラベルなら、素の名前に戻してから渡す。
         窓の間に土地の名前を含む文言が通れば、そこへ帯を添える。
         通らなければ、`orig` の後に1行足す（`CONFIRM_TEXT`）。
+        `AreaMoveCofirmation.execute(self, choice_text)`。位置は self を除いて数える。
         """
+        choice_text = frames.arg(args, kwargs, "choice_text", 0)
         app = getattr(self, "app", None) or ui.find_app()
         window = None
         try:
@@ -384,7 +372,7 @@ def apply(ctx):
                              or name in choice_text):
                     write("choice text {!r} -> {!r} (our label, restored)".format(
                         choice_text, name))
-                    choice_text = name
+                    args, kwargs, _ = frames.replace_arg(args, kwargs, "choice_text", 0, name)
                 label, values = label_of(app, area)
                 if label is not None:
                     window = {"name": name, "label": label, "values": values,
@@ -394,12 +382,12 @@ def apply(ctx):
             ctx.log_exc("area difficulty label: cannot open the confirmation window")
             window = None
         try:
-            return orig(self, choice_text, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         finally:
             state["confirm"].pop(threading.get_ident(), None)
             if window is not None and CONFIRM_TEXT and not window["seen"]:
                 try:
-                    line = fmt(CONFIRM_TEXT, **window["values"])
+                    line = frames.safe_format(CONFIRM_TEXT, **window["values"])
                     write("confirm: no line carried {!r}; adding {!r}".format(
                         window["name"], line))
                     screen.say(app, line)
@@ -423,27 +411,8 @@ def apply(ctx):
             write("confirm text passing through: {!r}".format(context))
         return None
 
-    text_filters.on("133_ui_area_difficulty", ctx, confirm_text, write=write)
+    text_filters.on(ctx.mod_name or "133_ui_area_difficulty", ctx, confirm_text, write=write)
 
-    # ------------------------------------------------------------ 自己検証
-    # 実経路は一覧を開くまで通らない。
-    # 帯の組み立てだけは作ったデータで先に確かめておく（`314_` と同じ方針）。
-    ranged = band_text(band_values([20, 29, 25], 1))
-    single = band_text(band_values([7], 1))
-    empty = band_text(band_values([], 1))
-    guess = band_text(estimate_values("8", 1))
-    survives = fmt("{name}と{typo}", name="砦")
-    # 期待値も設定の表記から組む（固定の文字列で比べると、帯の表記を変えた人に毎回 ERROR が出た）
-    if ranged == fmt(BAND, lv_min=21, lv_max=30, min=20, max=29, count=3) \
-            and single == fmt(BAND_SINGLE, lv_min=8, lv_max=8, min=7, max=7, count=1) \
-            and empty == (BAND_UNKNOWN or None) \
-            and guess == fmt(BAND_ESTIMATE, lv_min=68, lv_max=77, min=67, max=76,
-                             count=0) \
-            and survives == "砦と{typo}":
-        ctx.log("verified: builds the band from difficulties and formats templates")
-    else:
-        ctx.log("VERIFY FAILED: ranged={!r} single={!r} empty={!r} survives={!r}".format(
-            ranged, single, empty, survives), level="ERROR")
-
+    # 帯の組み立ての確かめは固定の入力なので tools/tests/test_ui_area_difficulty.py にある（TECH.md §6.1）。
     ctx.log("area difficulty label: show={} offset={} label={!r} log={}".format(
         SHOW, LEVEL_OFFSET, LABEL, log_path))

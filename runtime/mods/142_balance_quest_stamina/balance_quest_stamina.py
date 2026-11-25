@@ -37,13 +37,11 @@
 
     out\\quest_stamina.log    1件のクリアごとに、差・基本・被弾・引いた量・前後のスタミナ
 """
-import sys
 import threading
 
 from instantale_modloader import frames, quest_ends, saving, ui
 
 LOG_BASENAME = "quest_stamina.log"
-INSTALLED_MARK = "_instantale_balance_quest_stamina_installed"
 
 #: 適正（難易度＝レベル）の依頼で引く割合（上限に対する %）。
 FAIR_PERCENT = 33
@@ -75,16 +73,8 @@ QUEST_END = quest_ends.TARGET   # ローダの窓口 `quest_ends` が1枚だけ�
 SAVE_GAME = saving.TARGET   # ローダの窓口 `saving` が1枚だけ包む
 
 
-def _number(value):
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return value
-    try:
-        number = float(str(value).strip())
-    except Exception:
-        return None
-    return int(number) if number.is_integer() else number
+# 数か数の文字列を数に（整数の値の文字列は int。ローダの frames.to_number。TECH.md §3.2.3）
+_number = frames.to_number
 
 
 def is_game_rule():
@@ -270,12 +260,9 @@ def apply(ctx):
                       row["max_pi"], row["pi"], value, now))
         return changed
 
-    # 設定の行は、前に書いた中身と違うときだけ書く（遅れて当て直す boot で同じ行を並べない。
-    # 設定を変えて注入し直したときは書く）。印は `sys` に置いて注入をまたぐ
-    line = ("installed: easy {}% / fair {}% / hard {}% over {} level(s), damage +{}% at {}% hp lost, "
-            "party {}".format(EASY_PERCENT, FAIR_PERCENT, HARD_PERCENT, LEVEL_GAP, DAMAGE_PERCENT,
-                              DAMAGE_FULL_AT, PARTY_TOO))
-    if getattr(sys, INSTALLED_MARK, None) == line:
-        return
-    setattr(sys, INSTALLED_MARK, line)
-    write(line)
+    # 設定の行は、この注入の中で前に書いた中身と違うときだけ書く（遅れて当て直す boot で同じ行を並べない。
+    # 注入し直すと新しいログの頭にもう一度書く）。覚えはローダの ctx.logger の span="injection"
+    note = ctx.logger(LOG_BASENAME, span="injection", unrepeated=True)
+    note("installed: easy {}% / fair {}% / hard {}% over {} level(s), damage +{}% at {}% hp lost, "
+         "party {}".format(EASY_PERCENT, FAIR_PERCENT, HARD_PERCENT, LEVEL_GAP, DAMAGE_PERCENT,
+                           DAMAGE_FULL_AT, PARTY_TOO))

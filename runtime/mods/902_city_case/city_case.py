@@ -71,11 +71,10 @@ import datetime
 import importlib
 import itertools
 import random
-import sys
 import threading
 import time
 
-from instantale_modloader import choices, frames, ui
+from instantale_modloader import choices, frames, talks, ui
 from instantale_modloader import state as loader_state
 
 from . import case as case_mod
@@ -459,11 +458,7 @@ def _stores():
     中で作ると注入し直すたびにキャッシュと錠が別物になり、
     LLM を待っている前の世代のスレッドが書いた内容が新しい世代から見えない。
     """
-    shelf = getattr(sys, STORE_ATTR, None)
-    if not isinstance(shelf, dict):
-        shelf = {"cases": None, "casts": None}
-        setattr(sys, STORE_ATTR, shelf)
-    return shelf
+    return loader_state.process_store(STORE_ATTR, {"cases": None, "casts": None})
 
 
 def apply(ctx):
@@ -1978,7 +1973,7 @@ def apply(ctx):
         施設の選択肢が現に出ているなら、旗のほうが古い。
         挿す先はその選択肢そのものなので、別の画面へ紛れ込む心配も無い。
         """
-        flags = [flag for flag in BUSY_FLAGS if getattr(app, flag, False)]
+        flags = ui.busy_flags(app, BUSY_FLAGS)
         if flags and ui.is_facility_screen(buttons):
             if state.get("ignored") != tuple(flags):
                 state["ignored"] = tuple(flags)
@@ -2285,21 +2280,22 @@ def apply(ctx):
     choices.provide(ctx, screen, refresh=settle_state, claim=claim, offer=offer, labels=OUR_LABELS)
 
     @ctx.wrap("scripts.llm.llm_manager:conversation_starter", required=False)
-    def conversation_starter(orig, messages, *args, **kwargs):
+    def conversation_starter(orig, *args, **kwargs):
         """聞き込みの会話にだけ、相手が知っていることを差し込む。
 
         **渡す messages のコピーだけ**を書き換える（GAME.md §2.5）。
         ゲームが保持している会話履歴には触らない。
+        引数は位置でもキーワードでも読む（`frames.arg`）。`messages` が先頭、`character_instance` が4番目。
         """
+        messages = frames.arg(args, kwargs, "messages", 0)
         if not isinstance(messages, list) or not messages:
-            return orig(messages, *args, **kwargs)
+            return orig(*args, **kwargs)
         app = state.get("app") or ui.find_app()
-        # `character_instance` は署名の 4 番目（messages を除いて index 2）。
-        character = args[2] if len(args) > 2 else None
+        character = frames.arg(args, kwargs, "character_instance", 3)
         line, clue_id = (conversation_note(app, character)
                          if app is not None else (None, None))
         if line is None:
-            return orig(messages, *args, **kwargs)
+            return orig(*args, **kwargs)
         # 第一声では事実そのものを言わせない。
         # 以前はここで事実を差し込み、印まで立てていた。
         # すると**会話に入って即座に抜けるだけで手がかりが手に入る**（実機）。
@@ -2314,7 +2310,7 @@ def apply(ctx):
         try:
             last = messages[-1]
             if not isinstance(last, dict) or "content" not in last:
-                return orig(messages, *args, **kwargs)
+                return orig(*args, **kwargs)
             copy = list(messages[:-1])
             replacement = dict(last)
             # 手がかりの id が無いのは容疑者（`conversation_note`）。
@@ -2322,10 +2318,10 @@ def apply(ctx):
             replacement["content"] = "{}\n{}".format(
                 last["content"], tease.format(crime=crime(current(app))))
             copy.append(replacement)
-            messages = copy
+            args, kwargs, _ = frames.replace_arg(args, kwargs, "messages", 0, copy)
         except Exception:
             ctx.log_exc("city case: cannot brief the witness")
-        return orig(messages, *args, **kwargs)
+        return orig(*args, **kwargs)
 
     def npc_id_of(character):
         return (ui.element_id(frames.attr(character, "id"))
@@ -2392,10 +2388,11 @@ def apply(ctx):
         会話の受け答えを組むときにここが読まれるので、
         開始のひとことだけでなくプレイヤーが直接尋ねたときにも効く。
 
-        位置引数の番号は版で動きうるので、キーワードを先に見る。
+        位置引数の番号は版で動きうるので、キーワードを先に見る（`frames.arg` / `frames.replace_arg`）。
+        相手（`character_instance`）もキーワードで来うる。位置でしか読まないと聞き込みの文が入らない。
         """
         app = state.get("app") or ui.find_app()
-        character = args[character_at] if len(args) > character_at else None
+        character = frames.arg(args, kwargs, "character_instance", character_at)
         line, clue_id = (conversation_note(app, character)
                          if app is not None else (None, None))
         if line is None:
@@ -2415,16 +2412,12 @@ def apply(ctx):
         # 会話が閉じたときに画面へ出す（判定は会話の中身ではなく「聞きに行った」行動）。
         state["asking"] = {"clue": clue_id, "npc": str(npc_id_of(character)),
                            "at": time.monotonic()}
-        if name in kwargs:
-            kwargs = dict(kwargs)
-            kwargs[name] = _with_line(kwargs[name], line)
-            write("    briefed {} via keyword {}".format(where, name))
+        via = "keyword {}".format(name) if name in kwargs else "arg[{}]".format(index)
+        args, kwargs, wrote = frames.replace_arg(
+            args, kwargs, name, index, _with_line(frames.arg(args, kwargs, name, index), line))
+        if wrote:
+            write("    briefed {} via {}".format(where, via))
             return args, kwargs
-        if len(args) > index:
-            args = list(args)
-            args[index] = _with_line(args[index], line)
-            write("    briefed {} via arg[{}]".format(where, index))
-            return tuple(args), kwargs
         # 届かなかった。
         # 引数の並びが版で動いたか、この関数は知識の枠を持っていない。
         # どちらなのかを次の1回で分かるようにする。
@@ -2499,18 +2492,17 @@ def apply(ctx):
         for _name in CONVERSATION_ENTRIES:
             watch(_name)
 
-    @ctx.wrap("__main__:ConversationEndManager.execute", required=False)
-    def conversation_end(orig, self, *args, **kwargs):
-        """会話が閉じたら、分かったことを出す。
+    def conversation_end(call):
+        """会話が閉じたら、分かったことを出す（「会話を終了する」の後。ローダの窓口 `talks` の END）。
 
         判定は会話の中身ではなく「聞きに行った」という行動で済んでいるので、
         ここでは**残っている announcement を流すだけ**。
+        相手はマネージャの属性から読む（`partner_of`。窓口の `call.partner` は読む所が違う）。
         """
-        result = orig(self, *args, **kwargs)
         try:
             if state.get("asking"):
-                app = getattr(self, "app", None) or ui.find_app()
-                partner = partner_of(self)
+                app = call.app
+                partner = partner_of(call.obj)
                 # 会話の後始末（テキストの流し込み・要約）と噛み合わないよう、
                 # 手が空いてから出す。
                 # **要約の流し込み中に `add_text` するとこちらの出力が押し流される**（`300_` の実測。
@@ -2526,7 +2518,8 @@ def apply(ctx):
                     finish_asking(app, partner)
         except Exception:
             ctx.log_exc("city case: cannot close the interview")
-        return result
+
+    talks.on(ctx.mod_name or "902_city_case", ctx, (talks.END,), after=conversation_end, write=write)
 
     ctx.log("city case: start at {} reward={} arrest={} suspects={} log={}"
             .format(START_FACILITY_TYPE, REWARD_GOLD, ARREST_CULPRIT,

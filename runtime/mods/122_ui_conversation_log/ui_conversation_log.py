@@ -91,11 +91,12 @@ VERIFICATION.md §3.21）。
 
 import datetime
 import json
-import os
 import sys
 import weakref
 
-from instantale_modloader import frames, loads, ui
+# `hud` は MOD の中で HUD の部品を指す名前に使っているので、窓口は hud_window の名で引く。
+from instantale_modloader import frames, loads, panels, ui
+from instantale_modloader import hud as hud_window
 from instantale_modloader.state import world_filename, world_key
 
 # ---------------------------------------------------------------- 設定
@@ -145,6 +146,9 @@ FONT_SCALE = 1.0
 LABEL_OPEN = "記録"
 
 # ---------------------------------------------------------------- 実装
+# `out/conversation_log.log` に出す診断。
+# 本文そのものは `state/` の側に残るので、
+# こちらは「どこへ置いたか」「拾えたか」だけ。
 LOG_BASENAME = "conversation_log.log"
 
 # 世界ごとの控えを置くフォルダ（`state/` の下）。
@@ -206,10 +210,6 @@ VIEW_GAP = 8
 # 窓を開くときに組む文字数の上限。
 # あふれるのは古いほう。
 VIEW_MAX_CHARS = 200000
-
-# `out/conversation_log.log` に出す診断。
-# 本文そのものは `state/` の側に残るので、
-# こちらは「どこへ置いたか」「拾えたか」だけ。
 
 # `113_ui_text_expand` が HUD に控えているボタン。
 # 名指しで引くのはここだけで、見つからなければ
@@ -296,15 +296,22 @@ def apply(ctx):
         store = {
             "buckets": {},    # 世界名 -> 控えた本文（新しいものが後ろ）
             "lines": {},      # 世界名 -> ファイルに在る行数（畳み直しの判断に使う）
-            "view": None,     # 開いている窓（Kivy のウィジェット一式）
+            "view": None,     # 開いている窓（ModalView。`panels.Toggle` が持つ）
+            "opened": None,   # 開いている窓の中の部品（本文の列・ScrollView・世界）
             "world": None,    # 直前に本文を控えた世界（窓に出す相手）
             "hud": None,
             "anchor": None,
         }
         setattr(sys, STATE_STORE_ATTR, store)
+    if isinstance(store.get("view"), dict):
+        # 窓を部品ごと辞書に包んで "view" に置いていた前の注入の控え。窓と部品に分け直す。
+        store["opened"] = store["view"]
+        store["view"] = store["opened"].get("view")
     # この注入が結んだ手の印。`store` は注入をまたいで残るので印にならない。
     # 塗り直し（本文の1文字ごと）のたびに結び直さず、前の注入の手だけを付け替えるのに使う。
     injection = object()
+    # 窓口（`loads` / `hud`）に名乗る持ち主の名前。
+    owner = ctx.mod_name or "122_ui_conversation_log"
     note = ctx.logger(LOG_BASENAME)
     warn_once = ctx.warner("conversation log")
 
@@ -714,24 +721,23 @@ def apply(ctx):
             key = world_key(app) if app is not None else "_"
         return key, load_bucket(key)
 
+    # 読む窓は1枚だけ持ち、もう一度押したら閉じる（ローダの `panels.Toggle`）。
+    # 窓そのものは store["view"]、中の部品は store["opened"] に置く。
+    view_toggle = panels.Toggle(store, "view",
+                                log_exc=lambda text: ctx.log_exc("conversation log: " + text))
+
     def toggle_view(hud):
-        if store.get("view") is not None:
-            close_view()
-            return
-        open_view(hud)
+        # `Toggle` は第1引数が None なら開かない。窓を開く相手はアプリではなく HUD なので HUD を渡す。
+        view_toggle.toggle(hud, open_view)
 
     def close_view():
-        view = store.get("view")
-        store["view"] = None
-        if not isinstance(view, dict):
-            return
-        try:
-            view["view"].dismiss()
-        except Exception:
-            ctx.log_exc("conversation log: could not close the window")
+        view_toggle.close()
 
-    def open_view(hud):
-        """読む窓を1枚開く。ゲームのウィジェットは1つも動かさない。"""
+    def open_view(hud, on_dismiss):
+        """読む窓を1枚開いて返す。ゲームのウィジェットは1つも動かさない。
+
+        開けなければ None。`view.open()` が投げたら `panels.Toggle` が記録して入れ物を空に戻す。
+        """
         try:
             from kivy.uix.modalview import ModalView
             from kivy.uix.boxlayout import BoxLayout
@@ -817,25 +823,27 @@ def apply(ctx):
         root.add_widget(header)
         root.add_widget(scroll)
         view.add_widget(root)
-        view.bind(on_dismiss=lambda *_args: store.update({"view": None}))
         opened = {"view": view, "column": column, "scroll": scroll, "key": key,
                   "font_name": font_name, "font_size": font_size, "chunks": [],
                   "empty": not entries}
-        store["view"] = opened
+
+        def dismissed(*args):
+            on_dismiss(*args)
+            if store.get("opened") is opened:
+                store["opened"] = None
+
+        view.bind(on_dismiss=dismissed)
         chunks = view_blocks(entries)
         for chunk in chunks:
             add_chunk(opened, chunk)
-        try:
-            view.open()
-        except Exception:
-            store["view"] = None
-            ctx.log_exc("conversation log: could not open the window")
-            return
+        view.open()
+        store["opened"] = opened
         # 開いた直後はいちばん下（＝最新）を出す。
         # 中身の高さが決まるのは次のフレームなので、そこで寄せる。
         schedule(lambda: soft_set(scroll, "scroll_y", 0))
         note("opened the window with {} entr(y/ies) for {!r} in {} label(s)".format(
             len(entries), key, len(chunks)))
+        return view
 
     def add_chunk(opened, text):
         """本文の塊を1枚の Label にして窓の下へ足す。
@@ -875,8 +883,9 @@ def apply(ctx):
         下まで読んでいた（`scroll_y` が 0 付近）ときだけ下へ追う。
         途中を読んでいる人の位置を動かすと、本文が来るたびに読みかけの行が飛ぶ。
         """
-        opened = store.get("view")
-        if not isinstance(opened, dict) or opened.get("key") != key:
+        opened = store.get("opened")
+        if (not isinstance(opened, dict) or store.get("view") is None
+                or opened.get("view") is not store.get("view") or opened.get("key") != key):
             return
         entries = store["buckets"].get(key) or []
         block = entry_block(entries[-1]) if entries else ""
@@ -912,8 +921,8 @@ def apply(ctx):
         # 113 は窓が変わると枠を組み直し、次のフレームでボタンを置き直す。
         # その場で並べると古い座標の隣に付くので、こちらも次のフレームに回し、
         # レイアウトが1フレームで終わらないビルドのためにもう一度当てる。
-        schedule(lambda: guarded(lambda: upkeep(hud)))
-        schedule(lambda: guarded(lambda: upkeep(hud)), RESETTLE_DELAY)
+        schedule(lambda: upkeep(hud))
+        schedule(lambda: upkeep(hud), RESETTLE_DELAY)
 
     #: 窓の大きさが変わったら塗り直す。結ぶのは1本だけ（ローダの語彙）。
     watch_window = ui.window_watcher(ctx, on_window_resize, WINDOW_ATTR, "conversation log")
@@ -928,25 +937,18 @@ def apply(ctx):
     # `index == -1` が「新しい本文」の合図で、`context` がその全文（GAME.md §2.3）。
     # 控えてからゲームに渡す。
     # 打ち出しの側で何が起きても、流れた本文は残る。
+    # `add_text_display(self, dt, context, index=-1)`。位置は self を除いて数える。
     @ctx.wrap("__main__:InstantaleApp.add_text_display", required=False, safe=True)
-    def add_text_display(orig, self, dt, context, index=-1):
-        if index == -1:
+    def add_text_display(orig, self, *args, **kwargs):
+        if frames.arg(args, kwargs, "index", 2, -1) == -1:
+            context = frames.arg(args, kwargs, "context", 1)
             guarded(lambda: record(self, context))
-        return orig(self, dt, context, index)
+        return orig(self, *args, **kwargs)
 
     # ボタンを保つ。
-    # どちらも塗り直しの合図で、ゲームに先に仕事をさせてから触る。
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_display_text", safe=True)
-    def update_display_text(orig, self, instance=None, value=None, *args, **kwargs):
-        result = orig(self, instance, value, *args, **kwargs)
-        upkeep(self)
-        return result
-
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_button_texts", safe=True)
-    def update_button_texts(orig, self, instance=None, value=None, *args, **kwargs):
-        result = orig(self, instance, value, *args, **kwargs)
-        upkeep(self)
-        return result
+    # 本文と選択肢の塗り直しが合図で、ゲームに先に仕事をさせてから触る（ローダの窓口 `hud` の after）。
+    hud_window.on(owner, ctx, (hud_window.TEXT, hud_window.BUTTONS),
+                  after=lambda call: upkeep(call.obj), write=note)
 
     # 新しい主人公を始めたら、その世界の控えをメモリからも捨てる。ファイルはローダが退避する（TECH.md §5.4）。
     # 捨てないと、窓に前の主人公の本文が出続け、畳み直し（`compact`）でファイルへ書き戻される。
@@ -959,7 +961,6 @@ def apply(ctx):
         if dropped:
             note("new game in {!r}: dropped {} entr(y/ies) of the previous playthrough".format(world, dropped))
 
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "122_ui_conversation_log"
     loads.on(owner, ctx, (loads.NEW_GAME,), before=new_game_before, write=note)
 
     ctx.log("conversation log: keeping the last {} message(s) in {} ({} button, "

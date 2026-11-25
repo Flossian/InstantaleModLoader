@@ -10,6 +10,6 @@
     "en": "In conversation, the AI also picks the partner's expression (smiling, angry, sad, surprised, as usual, or an expression added in 343) after writing each reply, and the portrait switches to that expression. The expression portraits are drawn by 343, which draws them only while this mod is installed: right after the portrait during bulk generation, otherwise in the background after the portrait is shown. Characters without them keep the game's portrait. The first line of a conversation is always the usual face",
     "ja": "会話の返事を書いた後に、AI が相手の表情（笑う・怒る・悲しむ・驚く・ふだんと、343 で足した表情。見本の照れる顔が最初から入っている）も選び、立ち絵がその表情に変わる。表情の立ち絵は 343 が描く。343 はこの MOD が入っているときだけ描き、一括生成では立ち絵に続けて、ほかの場面では立ち絵を出した後に裏で描く。表情の立ち絵の無い人物はゲームの立ち絵のまま。会話の第一声はいつもふだんの顔"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian"
 }

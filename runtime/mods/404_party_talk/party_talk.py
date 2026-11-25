@@ -36,8 +36,8 @@ MOD 専用プロンプトで LLM を1回だけ呼ぶ。返答のうちアンカ�
   1度だけ写す（canvas はウィジェットに追従して動くため）。会話が終わる・タイトルへ戻る・
   戦闘に入るときに枠を外して相手枠の位置を戻す。片付けは終了ボタンの直後に予約する
   （`finish_conversation` の中で要約の LLM が回り、その後では仲間の絵だけ残る）。
-- 選択肢を出す画面は `320_` と同じ手で見分ける（`DisplayTalkChoice.execute` の旗 ＋
-  「やめる」の形。別の画面の spec が見えたら旗を下ろす）。相手が 0 人の一覧にも出す。
+- 選択肢を出す画面は、ローダの窓口 `choices` の一覧の種類（`view.listing`。`DisplayTalkChoice.execute` の印 ＋
+  別の画面の spec が見えたら下ろす）と「やめる」の形で見分ける。相手が 0 人の一覧にも出す。
   根のメニューの目印は出口（`MovePhaseManager`。`309_` と同じ）。`in_shopping` は店を出ても
   真のまま残るので見ない（`300_` の註）。
 - パーティー会話の間は `348_`（ここで別れる）と `402_`（アイテムの受け渡し）の選択肢を落とす。
@@ -57,7 +57,7 @@ import random
 import sys
 import typing
 
-from instantale_modloader import choices, expressions, frames, llm, ui
+from instantale_modloader import choices, expressions, frames, llm, loads, talks, ui
 from instantale_modloader.state import WorldStore, world_key
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
@@ -115,15 +115,14 @@ PORTRAIT_COPY_ATTRS = ("size_hint", "size_hint_x", "size_hint_y",
 ROOT_MENU_SPEC = "MovePhaseManager"
 # 選択肢を足さない状態。表はローダが持つ（`in_shopping` は入っていない。
 # 店を出た後も真のまま残り、入れると店に寄った後ずっと出なくなる。`ui.BUSY_FLAGS` の註）。
+# 立っている旗はローダの `ui.busy_flags` で読む。
 BUSY_FLAGS = ui.BUSY_FLAGS
-# そのうち戦闘の旗（GAME.md §2.6）。`safe_normal` はこれと会話中・クエスト中だけを見る。
-BATTLE_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle")
 # 会話の状態を置く `sys` の属性名（TECH.md §3.4。apply() が走り直しても続きが分かる）。
 STORE = "__instantale_party_talk__"
 # プロンプト全体の上限。超えたときだけ人物の塊から削る安全弁。
-# 版12 で 30000 から 20000 に下げた。30000字は約 15,800 トークンで、同梱の llama-server の窓（16,384）を守れなかった。
-# 20000字は約 10,500 トークン（1.9字で1トークン。VERIFICATION.md §3.95 の数え）で、出力と会話の余りを残す。
-# 版12 で人物1人ぶん・対話ログ・属性1項目・世界観の上限は外した（長さは参加人数と HISTORY_TURNS で決まる。VERIFICATION.md §3.95）。
+# 20000字は約 10,500 トークン（1.9字で1トークン。VERIFICATION.md §3.95 の数え）で、
+# 同梱の llama-server の窓（16,384）に出力と会話の余りを残す（VERIFICATION.md §3.128）。
+# 人物1人ぶん・対話ログ・属性1項目・世界観には上限を置かない（長さは参加人数と HISTORY_TURNS で決まる。VERIFICATION.md §3.95）。
 PROMPT_CHARS = 20000
 
 # プロンプトへ載せる人物の属性。実行時オブジェクトから読む（順は表示順）。
@@ -133,9 +132,7 @@ RAW_FIELDS = ("name", "category", "description", "personality", "profile",
 # 選択肢を出すのは「会話する」（`DisplayTalkChoice`）を押した先の相手一覧の中だけ。
 # 一覧は `ConversationStartManager` × 人数 + 「やめる」（`JustSetButtonToNormalPhase`）で、
 # ギルドの冒険者一覧（`DisplayAdventurerTalkChoice`）と同じ形なので spec だけでは見分けられない。
-# `320_` と同じく `DisplayTalkChoice.execute` を包んで旗を立て、別の画面の目印が見えたら下ろす。
-OTHER_SCREEN_SPECS = ("ConversationEndManager", "MovePhaseManager", "DisplayTalkChoice",
-                      "DisplayAdventurerTalkChoice", "DisplayQuestChoice", "QuestChoiceManager")
+# どちらの一覧かはローダの窓口 `choices` が見分ける（`view.listing`。別の画面の目印の表も窓口の `LISTING_OTHER_SPECS`）。
 
 RULES = """【全体の指示】あなたはRPGの会話イベントにおける、現在この場にいるパーティーメンバーのNPCたちとしての振る舞いを再現します。対話ログはuser/assistantの入出力として記録されています。user roleがプレイヤーキャラの発言で、assistant roleがあなたの演じるNPCたちの発言です。現在の文脈に合わせ、相応しい次の発言を生成して下さい。personalityや感情の記述にかなり強く従って下さい。嫌いなら口を聞くことも嫌がるでしょうし、恐れていたり軽蔑していたらそれは口調に現れるはず。不自然に友好的になることも、プレイヤーキャラに興味を持ったり質問をすることもありません。AIアシスタントとしてのあなたの性格はさておき、ただキャラのロールプレイとして振舞ってください。
 「」や発言者名は不要です。行動描写は（）の中に記述する。
@@ -225,7 +222,6 @@ def apply(ctx):
         setattr(sys, STORE, st)
     st.setdefault("frames", {})
     st.setdefault("expressions", {})   # 参加者ごとのいまの表情（id -> 表情。表情を見せる MOD があるときだけ）
-    st.setdefault("talk_list", False)   # 「会話する」の相手一覧を開いている（DisplayTalkChoice の旗）
 
     # ------------------------------------------------------------ 構造化応答
     # create_model は llm_manager が読み込まれてからでないと作れないので、要る時に作って控える。
@@ -295,16 +291,8 @@ def apply(ctx):
         return out[:max(1, int(MAX_PARTICIPANTS))]
 
     def player_name(app):
-        """プレイヤーの名前。属性名が版で揺れるので候補を順に見る。"""
-        player = getattr(app, "player", None)
-        for owner in (player, app):
-            if owner is None:
-                continue
-            for attr in ("name", "character_name", "player_name"):
-                value = getattr(owner, attr, None)
-                if isinstance(value, str) and value.strip():
-                    return value.strip()
-        return "プレイヤーキャラクター"
+        """プレイヤーの名前。読めなければ「プレイヤーキャラクター」（ローダの `ui.player_name`）。"""
+        return ui.player_name(app, fallback="プレイヤーキャラクター")
 
     def base_info(npc):
         """ゲーム側の人物設定を「項目: 値」で並べる。"""
@@ -962,23 +950,23 @@ def apply(ctx):
         """選択肢を出してよい平時か。会話中・依頼中・戦闘中・パーティー会話中は False。"""
         if st["active"] or getattr(app, "in_conversation", None) or getattr(app, "current_quest_data", None):
             return False
-        return not any(getattr(app, flag, False) for flag in BATTLE_FLAGS)
+        return not ui.battle_flags(app)
 
     def enough_members(app):
         """仲間が `MIN_MEMBERS` 人以上か。1人なら本体の会話と変わらないので出さない。"""
         return len(party_ids(app)) >= MIN_MEMBERS
 
-    def talk_list_slot(buttons):
-        """「会話する」の相手一覧なら、差し込む位置。違えば None。"""
-        if not st["talk_list"]:
-            return None
-        names = [ui.spec_cls_name(entry) for entry in buttons]
-        if any(name in OTHER_SCREEN_SPECS for name in names):
-            st["talk_list"] = False
+    def talk_list_slot(view):
+        """「会話する」の相手一覧なら、差し込む位置。違えば None。
+
+        どの一覧かはローダの窓口 `choices` が見分ける（`view.listing`。ギルドの冒険者一覧は同じ形でも
+        `LISTING_ADVENTURER`、別の画面の spec が並べば None）。
+        """
+        if view.listing != choices.LISTING_TALK:
             return None
         # 相手が居なければ一覧は「やめる」1つだけ（ギルドの「会話する」など。実機で確認）。
         # 人数は問わず、「やめる」が在れば一覧とみなす。
-        return screen.back_button_index(buttons)
+        return screen.back_button_index(view.buttons)
 
     def wants_own_talk_choice(app, buttons):
         """NPC 不在で本体の「会話する」が無い根のメニューか。
@@ -991,7 +979,7 @@ def apply(ctx):
             return False
         if "ConversationEndManager" in names or "ConversationStartManager" in names:
             return False
-        busy = [flag for flag in BUSY_FLAGS if getattr(app, flag, False)]
+        busy = ui.busy_flags(app, BUSY_FLAGS)
         if busy:
             if st.get("busy_noted") != busy:
                 st["busy_noted"] = busy
@@ -1048,24 +1036,13 @@ def apply(ctx):
 
     # ------------------------------------------------------------ フック
     # 役割ごとに:
-    #   DisplayTalkChoice / DisplayAdventurerTalkChoice.execute  相手一覧を開いた合図（旗）
-    #   refresh_choice_buttons   選択肢を差す／終了の文言を変える／立ち絵を並べる
-    #   on_button_press          自前の選択肢が押されたとき
-    #   conversation_facilitator（2本）  NPC の返答を作る LLM 呼び出しの横取り
-    #   conversation_continued   アンカーの返答が出た後に仲間の台詞を出す
-    #   start_battle_with_in_conversation / ConversationEndManager / return_to_title  終わり
+    #   窓口 choices             相手一覧の見分け（view.listing）・選択肢を差す／終了の文言を変える／立ち絵を並べる
+    #   conversation_facilitator（2本）  NPC の返答を作る LLM 呼び出しの横取り（呼び出しごと置き換えるので自分で包む）
+    #   窓口 talks の TURN       アンカーの返答が出た後に仲間の台詞を出す
+    #   start_battle_with_in_conversation / 窓口 talks の END・FINISH / 窓口 loads の TITLE  終わり
 
-    @ctx.wrap("__main__:DisplayTalkChoice.execute", required=False, safe=True)
-    def talk_list_execute(orig, self, choice_text, *args, **kwargs):
-        """本体の「会話する」が押された。次の描き直しは相手一覧だと分かる。"""
-        st["talk_list"] = True
-        return orig(self, choice_text, *args, **kwargs)
-
-    @ctx.wrap("__main__:DisplayAdventurerTalkChoice.execute", required=False, safe=True)
-    def adventurer_list_execute(orig, self, choice_text, *args, **kwargs):
-        # ギルドの冒険者一覧は同じ形だが、ここには出さない。
-        st["talk_list"] = False
-        return orig(self, choice_text, *args, **kwargs)
+    # 相手一覧の印（`view.listing`）は全 MOD の適用の後に `boot()` も立てる。同じ世代では1回だけ。
+    choices.install_listing(ctx, write)
 
     def refresh(self, buttons):
         """組み直しの前（窓口 `choices` の `refresh`）。ボタンは足さず、ゲームの一覧と状態だけ整える。
@@ -1097,7 +1074,7 @@ def apply(ctx):
         """相手一覧に「パーティーメンバーと話す」、NPC 不在の根のメニューに自前の「会話する」（窓口の `offer`）。"""
         if st["active"] or not safe_normal(app) or not enough_members(app):
             return None
-        at = talk_list_slot(view.buttons)
+        at = talk_list_slot(view)
         if at is not None:
             return [choices.Choice(START_LABEL, place=choices.at(at), marks={MARK_KEY: START_MARK},
                                    on_press=press_start)]
@@ -1154,23 +1131,28 @@ def apply(ctx):
     def facilitator_after_retrieval(orig, *args, **kwargs):
         return intercept(orig, "retrieval facilitator", args, kwargs)
 
-    @ctx.wrap("__main__:ConversationPhaseManager.conversation_continued", required=False, safe=True)
-    def continued(orig, self, choice_text, *args, **kwargs):
-        """プレイヤーの1手の処理（ワーカースレッド）。本体がアンカーの返答を表示した後に仲間の台詞を出す。
+    # 会話の節目はローダの窓口 `talks`、タイトルへ戻るのは窓口 `loads` の `TITLE`（TECH.md §3.3.21）。
+    # 窓口に名乗る持ち主名。`ctx.mod_name` は apply() の間だけ引ける。
+    owner_name = ctx.mod_name or "404_party_talk"
 
-        `orig` の中で facilitator（横取り済み）が呼ばれ、pending が積まれる。
+    def turn_before(_call):
+        return bool(st["active"])
+
+    def turn_after(call):
+        """プレイヤーの1手の処理（ワーカースレッド）の後。本体がアンカーの返答を表示した後に仲間の台詞を出す。
+
+        元の処理の中で facilitator（横取り済み）が呼ばれ、pending が積まれる。
         戻ってから `flush_extras` で順に表示し、立ち絵の並べ直しを予約する。
-        `orig` の中で会話が終わった（active が落ちた）なら出さない。
+        元の処理の中で会話が終わった（active が落ちた）なら出さない。
         """
-        active = bool(st["active"])
-        result = orig(self, choice_text, *args, **kwargs)
-        if active and st["active"]:
+        if call.memo and st["active"]:
             try:
-                flush_extras(getattr(self, "app", None))
+                flush_extras(call.app)
             except Exception:
                 ctx.log_exc("party talk: cannot flush extra responses")
-            schedule_layout(getattr(self, "app", None))
-        return result
+            schedule_layout(call.app)
+
+    talks.on(owner_name, ctx, (talks.TURN,), before=turn_before, after=turn_after, write=write)
 
     @ctx.wrap("__main__:InstantaleApp.start_battle_with_in_conversation", required=False, safe=True)
     def battle(orig, self, *args, **kwargs):
@@ -1178,8 +1160,7 @@ def apply(ctx):
         clear("start_battle_with_in_conversation")
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap("__main__:ConversationEndManager.execute", required=False, safe=True)
-    def end_execute(orig, self, *args, **kwargs):
+    def end_before(call):
         """「話し合いを終了する」を押した直後。
 
         枠の片付けはここで先に予約する。`finish_conversation` の中で要約の LLM が回り
@@ -1187,26 +1168,28 @@ def apply(ctx):
         会話の状態そのものは `finish_conversation` が返ってから畳む。
         """
         if st["active"]:
-            app = getattr(self, "app", None) or ui.find_app()
+            app = call.app
             screen.schedule(lambda: remove_portraits(app), 0)
-        return orig(self, *args, **kwargs)
 
-    @ctx.wrap("__main__:ConversationEndManager.finish_conversation", required=False)
-    def finish(orig, self, *args, **kwargs):
+    talks.on(owner_name, ctx, (talks.END,), before=end_before, write=write)
+
+    def finish_before(_call):
+        return st["active"]
+
+    def finish_after(call):
         """会話の終了処理（要約・ライフログ）が終わったら状態を畳む。"""
-        # 要約の LLM が例外を投げても畳む。畳み損ねると次の会話も横取りし続ける。
-        was = st["active"]
-        try:
-            return orig(self, *args, **kwargs)
-        finally:
-            if was:
-                clear("ConversationEndManager")
+        # 要約の LLM が例外を投げても畳む（always）。畳み損ねると次の会話も横取りし続ける。
+        if call.memo:
+            clear("ConversationEndManager")
 
-    @ctx.wrap("__main__:InstantaleApp.return_to_title", required=False)
-    def title(orig, self, *args, **kwargs):
+    talks.on(owner_name, ctx, (talks.FINISH,), before=finish_before, after=finish_after, always=True,
+             write=write)
+
+    def title_before(_call):
         """タイトルへ戻るとき。会話の途中でも畳む。"""
         clear("return_to_title")
-        return orig(self, *args, **kwargs)
+
+    loads.on(owner_name, ctx, (loads.TITLE,), before=title_before, write=write)
 
     ctx.log("party talk: installed (side_by_side={} start={!r} end={!r}); log -> {}".format(
         SIDE_BY_SIDE, START_LABEL, END_LABEL, ctx.out_path("party_talk.log")))

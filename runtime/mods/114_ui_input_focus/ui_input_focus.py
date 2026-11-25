@@ -69,6 +69,8 @@ import time
 import weakref
 
 from instantale_modloader import frames, ui
+# `hud` は下でウィジェットの引数名に使っているので別名で読む。
+from instantale_modloader import hud as hud_window
 
 LOG_BASENAME = "input_focus.log"
 
@@ -139,22 +141,14 @@ def apply(ctx):
                 return False
         return isinstance(frames.attr(widget, "text"), str)
 
-    def descend(widget, depth, found):
-        if depth and is_input(widget):
-            found.append(widget)
-        if depth >= MAX_DEPTH:
-            return
-        children = frames.attr(widget, "children")
-        if not isinstance(children, (list, tuple)):
-            return
-        for child in reversed(list(children)):
-            descend(child, depth + 1, found)
-
     def all_inputs(hud):
         """画面に出ている入力欄すべて。「他へ打っている最中か」を見るのにも使う。"""
         found = []
         try:
-            descend(hud, 0, found)
+            # 兄弟は古い順。根の HUD そのものは候補にしない。
+            for widget in ui.walk_widgets(hud, MAX_DEPTH, oldest_first=True):
+                if widget is not hud and is_input(widget):
+                    found.append(widget)
         except Exception:
             ctx.log_exc("input focus: walking the widget tree failed")
         # 属性で持たれているだけで木に出ない相手も拾う（ビルド差の受け皿）。
@@ -389,17 +383,9 @@ def apply(ctx):
     # -- フック --------------------------------------------------------------
     # 本文が変わったとき（送信の直後に必ず来る）と、選択肢が塗り直されたとき。
     # どちらもゲームに先に仕事をさせてから、こちらの後始末をする。
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_display_text", safe=True)
-    def update_display_text(orig, self, instance=None, value=None, *args, **kwargs):
-        result = orig(self, instance, value, *args, **kwargs)
-        upkeep(self)
-        return result
-
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_button_texts", safe=True)
-    def update_button_texts(orig, self, instance=None, value=None, *args, **kwargs):
-        result = orig(self, instance, value, *args, **kwargs)
-        upkeep(self)
-        return result
+    # 包むのはローダの窓口 hud の1枚で、ここは後の処理だけを渡す（TECH.md §3.3.21）。
+    hud_window.on(ctx.mod_name or "114_ui_input_focus", ctx, (hud_window.TEXT, hud_window.BUTTONS),
+                  after=lambda call: upkeep(call.obj), write=note)
 
     ctx.log("input focus: keeping the free-input box focused "
             "(on blur={}, after send={}, delay={}s); "

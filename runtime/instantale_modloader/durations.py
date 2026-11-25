@@ -39,7 +39,7 @@ MOD ごとに `elapse_days` を包むのをやめ、ローダが1枚だけ包ん
 import re
 import sys
 
-from . import arrivals, gates, log_exc
+from . import _kinds, arrivals, frames, gates, log_exc, state
 
 #: 街を移ったときにゲームが `life_log` へ書く記録（exe の定数。徒歩 3ヵ月・馬車 14日間に決め打ち）。
 #: 日数の範囲（`day_start` / `day_end`）は実際の値で入るので、文だけを範囲に合わせる（VERIFICATION.md §3.126）。
@@ -95,14 +95,9 @@ INN_STAY_AGE_BONUS = ((50, 3), (40, 2), (30, 1))
 
 _ATTR = "_instantale_durations"
 
-
-def _registry():
-    """`{種類: (持ち主, 関数)}`。`sys` に置いて注入し直しをまたぐ。"""
-    found = getattr(sys, _ATTR, None)
-    if not isinstance(found, dict):
-        found = {}
-        setattr(sys, _ATTR, found)
-    return found
+#: `{種類: (持ち主, 関数)}` の登録簿（`_kinds`。`combat` / `equipment` と同じ形）。
+_by_kind = _kinds.KindRegistry(_ATTR, "durations")
+_registry = _by_kind.table
 
 
 def declare(kind, fn, owner="", write=None):
@@ -111,16 +106,7 @@ def declare(kind, fn, owner="", write=None):
     `fn(app)` は答えの辞書か、**「ゲームのままでよい」なら None** を返す
     （None のときはここの既定へ落ちる）。
     """
-    if not callable(fn):
-        raise TypeError("declare() needs a callable, got {!r}".format(type(fn)))
-    registry = _registry()
-    previous = registry.get(str(kind))
-    registry[str(kind)] = (str(owner or ""), fn)
-    before = previous[0] if previous else None
-    if write and before and before != str(owner or ""):
-        write("durations: {!r} is now decided by {!r} (was {!r})".format(
-            kind, owner, before))
-    return before
+    return _by_kind.declare(kind, fn, owner, write)
 
 
 #: `forget(owner)` のときに一緒に呼ぶ片付け。`prices` が自分のぶんを足す。
@@ -140,10 +126,7 @@ def forget(owner, write=None):
 
     日数送りの望み（`claim_days`）も、`on_forget` で足された片付けも一緒に外す。
     """
-    registry = _registry()
-    gone = [kind for kind, (who, _fn) in registry.items() if who == str(owner)]
-    for kind in gone:
-        registry.pop(kind, None)
+    gone = _by_kind.drop(owner)
     if _claims().pop(str(owner), None) is not None:
         gone.append("days")
     if _quest_travels().pop(str(owner), None) is not None:
@@ -164,16 +147,14 @@ def owners():
     ローダの `boot()` が、今回適用されなかった MOD のぶんを `forget` するのに使う
     （登録簿は注入をまたいで残るので、切った MOD の旧い関数に聞き続けないように）。
     """
-    names = {who for who, _fn in _registry().values()}
+    names = _by_kind.owners()
     names.update(_claims())
     names.update(_quest_travels())
     return sorted(names)
 
 
-def source_of(kind):
-    """その種類を決めている MOD の名前。誰も置いていなければ `""`（ゲームの式）。"""
-    entry = _registry().get(str(kind))
-    return entry[0] if entry else ""
+#: その種類を決めている MOD の名前。誰も置いていなければ `""`（ゲームの式）。
+source_of = _by_kind.source_of
 
 
 def ask(kind, app, write=None, **context):
@@ -346,12 +327,12 @@ _QUEST_TRAVEL_ATTR = "_instantale_durations_quest_travels"
 
 
 def _quest_travels():
-    """`{持ち主: fn}`。`sys` に置いて注入し直しをまたぐ。"""
-    found = getattr(sys, _QUEST_TRAVEL_ATTR, None)
-    if not isinstance(found, dict):
-        found = {}
-        setattr(sys, _QUEST_TRAVEL_ATTR, found)
-    return found
+    """`{持ち主: fn}`。`sys` に置いて注入し直しをまたぐ。
+
+    `_kinds.OwnerRegistry` にしないのは、鍵が `str(owner)` で None の持ち主が `"None"` になるため
+    （あちらは `str(owner or "")`）。
+    """
+    return state.process_store(_QUEST_TRAVEL_ATTR, {})
 
 
 def declare_quest_travel(owner, fn):
@@ -460,17 +441,12 @@ def _measure(call):
         except (TypeError, ValueError):
             pass
     granted = call.granted
-    number = isinstance(granted, (int, float)) and not isinstance(granted, bool)
-    call.moved = max(0, int(granted)) if number else 0
+    call.moved = max(0, int(granted)) if frames.is_number(granted) else 0
 
 
 def _claims():
     """`{持ち主: {"wish", "note", "write", "seq"}}`。`sys` に置いて注入し直しをまたぐ。"""
-    found = getattr(sys, _CLAIMS_ATTR, None)
-    if not isinstance(found, dict):
-        found = {}
-        setattr(sys, _CLAIMS_ATTR, found)
-    return found
+    return state.process_store(_CLAIMS_ATTR, {})
 
 
 def claim_days(owner, wish, note=None, write=None):
@@ -666,8 +642,7 @@ def install(ctx, write=None):
         def invoke():
             granted = days
             try:
-                if _claims() and isinstance(days, (int, float)) \
-                        and not isinstance(days, bool) and int(days) > 0:
+                if _claims() and frames.is_number(days) and int(days) > 0:
                     granted = resolve_days(self, int(days), write=write)
             except Exception:
                 log_exc("durations: cannot decide the days")

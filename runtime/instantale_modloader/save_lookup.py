@@ -40,7 +40,7 @@ import contextlib
 import sys
 import threading
 
-from . import alive
+from . import alive, state
 
 STORE_ATTR = "_instantale_save_lookup"
 ATTR = "world_dict"
@@ -54,12 +54,8 @@ WORLD_FILE_PREFIX = "world_data"
 
 
 def _store():
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"covers": {}, "depth": 0, "real": None, "swapped": None,
-                 "lock": threading.RLock(), "guarded": 0, "errors": []}
-        setattr(sys, STORE_ATTR, store)
-    return store
+    return state.process_store(STORE_ATTR, {"covers": {}, "depth": 0, "real": None, "swapped": None,
+                                            "lock": threading.RLock(), "guarded": 0, "errors": []})
 
 
 # ---------------------------------------------------------------- 名乗りと問い合わせ

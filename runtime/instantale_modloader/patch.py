@@ -46,6 +46,7 @@ from typing import Any, Callable
 
 from . import GAME_TOPLEVEL, log, log_exc, log_unrepeated
 from . import patch_registry as _registry
+from . import state as _state
 
 # 元に戻すための記録。
 # (ラベル, 持ち主, 属性名, 元の値, 元々存在したか) sys に置いているのは
@@ -57,11 +58,7 @@ _UNDO_ATTR = "__instantale_undo__"
 
 
 def _undo_log() -> list[tuple[str, Any, str, Any, bool]]:
-    entries = getattr(sys, _UNDO_ATTR, None)
-    if not isinstance(entries, list):
-        entries = []
-        setattr(sys, _UNDO_ATTR, entries)
-    return entries
+    return _state._process_value(_UNDO_ATTR, list)
 
 # こちらが仕掛けたものに付ける目印。
 # 再注入したときに「自分が前回付けたもの」を見分けるために使う。
@@ -1165,11 +1162,7 @@ _GATE_WRITERS_ATTR = "__instantale_gate_writers__"
 
 
 def _gate_writers() -> dict:
-    found = getattr(sys, _GATE_WRITERS_ATTR, None)
-    if not isinstance(found, dict):
-        found = {}
-        setattr(sys, _GATE_WRITERS_ATTR, found)
-    return found
+    return _state.process_store(_GATE_WRITERS_ATTR, {})
 
 
 def note_gate_writer(name: str, write) -> None:

@@ -103,15 +103,13 @@ PROMPTS_NAME = "prompts.json"
 
 
 def shared():
-    """当て直しをまたぐ置き場。`{"depth": 一括生成の数, "steps": 工程の引数, "backfill": 差分だけ描く関数}`。"""
-    got = getattr(sys, SHARED_ATTR, None)
-    if not isinstance(got, dict):
-        got = {}
-        setattr(sys, SHARED_ATTR, got)
-    got.setdefault("depth", 0)
-    got.setdefault("steps", {})
-    got.setdefault("backfill", None)
-    return got
+    """当て直しをまたぐ置き場。`{"depth": 一括生成の数, "steps": 工程の引数, "backfill": 差分だけ描く関数}`。
+
+    置き方はローダの `state.process_store`（足りない鍵と型の変わった鍵を埋める）。
+    ゲームの中でだけ呼ぶので、道具画面のためにここで import する。
+    """
+    from instantale_modloader import state
+    return state.process_store(SHARED_ATTR, {"depth": 0, "steps": {}, "backfill": None})
 
 
 def _scalar(value):
@@ -150,7 +148,7 @@ def steps_from(template, names):
 def load_template(path):
     """呼び方の控え。無い・壊れているなら None。"""
     try:
-        with io.open(path, encoding="utf-8") as fh:
+        with io.open(path, encoding="utf-8-sig") as fh:
             got = json.load(fh)
     except (OSError, ValueError):
         return None
@@ -264,18 +262,10 @@ def load_added(path):
 
 
 def save_added(path, rows):
-    """追加の表情を書く（隣に書いてから差し替える）。書けたか。"""
-    body = json.dumps({"expressions": normalize_added(rows)}, ensure_ascii=False, indent=1)
-    folder = os.path.dirname(path)
-    try:
-        os.makedirs(folder, exist_ok=True)
-        handle, temp = tempfile.mkstemp(prefix=os.path.basename(path) + ".", suffix=".tmp", dir=folder)
-        with io.open(handle, "w", encoding="utf-8", newline="\n") as fh:
-            fh.write(body + "\n")
-        os.replace(temp, path)
-        return True
-    except OSError:
+    """追加の表情を書く（隣に書いてから差し替える）。書けたか。在るのに読めないファイルは上書きしない。"""
+    if rules.json_unreadable(path):
         return False
+    return rules.write_json(path, {"expressions": normalize_added(rows)})
 
 
 def wanted_rows(conf):

@@ -281,6 +281,9 @@ class FakeCtx(object):
     STATE_DIR = os.path.normpath(
         os.path.join(HERE, os.pardir, os.pardir, "out", "test", "state"))
 
+    #: 本物の ctx.mod_name と同じく MOD のフォルダ名（窓口 `hud` に名乗る持ち主名）。
+    mod_name = os.path.basename(os.path.dirname(MOD))
+
     def __init__(self):
         self.hooks = {}
         self.messages = []
@@ -334,7 +337,14 @@ def install(mod, ctx, hud, app):
     import instantale_modloader.ui as ui_mod
     ui_mod.find_app = lambda: app
 
+    # 人物欄の開け閉めはローダの窓口 `hud` の SHEET が包む。偽の ctx は世代を持たないので、
+    # 前の install の包みを済んだものと見て立て直さないよう、窓口の控えを空にしてから当てる。
+    from instantale_modloader import hud as hud_window
+    hud_window.reset()
     mod.apply(ctx)
+    check("窓口 hud の SHEET に登録する",
+          FakeCtx.mod_name in hud_window.owners(hud_window.SHEET),
+          hud_window.owners(hud_window.SHEET))
     hook = ctx.hooks[
         "scripts.hud.new_hud:InstanTaleHUD.toggle_character_sheet_visibility"]
 
@@ -833,8 +843,9 @@ def run():
 
     print("\n[上限] 行数の上限を超えない")
     many = {str(i): FakeArea(str(i), "土地{}".format(i), "") for i in range(60)}
-    history = {str(i): {"lawfulness": 10} for i in range(60)}
-    entries = sheet.wanted_entries(many, {}, history, max_lines=mod.MAX_WANTED_LINES)
+    # 手配度は入口が `ui.lawfulness_by_area` で引いた `{エリアid(str): 手配度}` で渡る。
+    lawfulness = {str(i): 10 for i in range(60)}
+    entries = sheet.wanted_entries(many, {}, lawfulness, max_lines=mod.MAX_WANTED_LINES)
     check("上限まで", len(entries) == mod.MAX_WANTED_LINES, len(entries))
 
     print("\n[出自と手配度の説明] 箱に収まらないときの全文")
@@ -848,7 +859,7 @@ def run():
           and sheet.background_details("出自:") == [{"name": "", "effects": [], "text": "出自:"}])
     check("出自: 名前の無い件は本文から書き始める",
           sheet.detail_pieces(sheet.background_details("本文だけ")) == [("本文だけ", "text")])
-    every = sheet.wanted_entries(many, {}, history, max_lines=None)
+    every = sheet.wanted_entries(many, {}, lawfulness, max_lines=None)
     check("手配度: 上限なしで全件", len(every) == 60, len(every))
     rows = sheet.wanted_details([("灰の街", 10), ("砦", -3)])
     pieces = sheet.detail_pieces(rows, {"always"})

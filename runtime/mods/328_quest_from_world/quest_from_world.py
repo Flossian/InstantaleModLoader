@@ -11,11 +11,7 @@
 生成はローダの窓口 `quest_generation` が1枚だけ包み、この MOD は生成ごとの書き換え（`on`）を渡す（TECH.md §3.3.30）。
 窓口は生成ごとの書き換えを、301/307/325/336/338 が置く1回だけの指示より先に当てる。
 当たった回でも、会話・道のり・裏の仕事などの指示は伏せた後の `area_description` の末尾へ足されるので消えない。
-
-版4: フックは引数を受け取った形のまま元の関数へ渡し、3欄は来た側に合わせて差し替える
-（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 """
-import os
 import random
 
 from instantale_modloader import quest_generation
@@ -42,7 +38,7 @@ def roll(chance_percent, rnd=_rng.random):
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
 
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "328_quest_from_world"
+    owner = ctx.mod_name or "328_quest_from_world"
 
     def rewrite(request):
         """確率で当たった回だけ、街の3欄を伏せる（ローダの窓口の生成ごとの書き換え）。"""

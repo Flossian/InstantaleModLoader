@@ -21,13 +21,12 @@ TAESD / VAE を渡さない指定。パイプラインが建つ瞬間にしか�
 `ctx` の値は `apply()` の間しか当てにならないので、
 場所（`runtime_dir`・自分のフォルダ名・`state_dir`）は組むときに控える。
 """
-import io
-import json
 import os
 import threading
 
 from instantale_modloader import config as loader_config
 from instantale_modloader import frames
+from instantale_modloader import read_json
 
 from . import faces
 from . import img2img
@@ -107,7 +106,7 @@ class Live(object):
         self._state_dir = ctx.state_dir
         self._runtime_dir = frames.attr(ctx, "runtime_dir", None)
         mod_dir = frames.attr(ctx, "mod_dir", None)
-        self._mod_name = os.path.basename(mod_dir) if mod_dir else None
+        self._mod_name = ctx.mod_name or None
         self._decls = self._read_decls(mod_dir)
         self._settings_path = (loader_config.store_path(self._runtime_dir)
                                if self._runtime_dir else None)
@@ -127,14 +126,11 @@ class Live(object):
 
     @staticmethod
     def _read_decls(mod_dir):
+        # 読めない mod.json は宣言なし（読み直しを切る）。理由はローダの `read_json` が記録する
         if not mod_dir:
             return {}
-        try:
-            with io.open(os.path.join(mod_dir, "mod.json"), encoding="utf-8") as fh:
-                raw = json.load(fh).get("settings")
-        except Exception:
-            return {}
-        return loader_config.normalize_decls(raw)
+        data = read_json(os.path.join(mod_dir, "mod.json"), None)
+        return loader_config.normalize_decls(data.get("settings") if isinstance(data, dict) else None)
 
     def _apply(self, values):
         got = derive(values)

@@ -7,7 +7,7 @@ r"""機能追加: 家を借りる・買う。役場で契約すると、その�
 
     [役場]  労働の募集をみる / 市民権の発行 / 家を借りる・買う / 出る
                                     ↓
-            借りる(1,600G・120日) / 建売を買い取る(30,000G) / やめる
+            借りる(1,600G・480日) / 建売を買い取る(30,000G) / やめる
                                     ↓
             街の入口に建物が1軒増える
 
@@ -53,9 +53,9 @@ GAME.md §2.28 の「遊んでいる最中に生まれた施設で売買を選�
 
 控えは2つに分かれる。
 
-    state\real_estate\<世界名>.json    契約（いつまで・いくら・管理人・保管庫の中身）
-    state\modfacility\<世界名>.json    建物そのもの（素データと置き場所）
-    state\modnpc\<世界名>.json         管理人の実体（会話の記憶・置き場所）
+    state\real_estate\<世界名×主人公名>.json    契約（いつまで・いくら・管理人・保管庫の中身）
+    state\modfacility\<世界名×主人公名>.json    建物そのもの（素データと置き場所）
+    state\modnpc\<世界名×主人公名>.json         管理人の実体（会話の記憶・置き場所）
 
 施設 id はローダの名前空間（`mod:330_real_estate:<土地 id>`）で、
 ゲームの採番台帳（`index['facility']`）を進めない。
@@ -70,7 +70,7 @@ GAME.md §2.28 の「遊んでいる最中に生まれた施設で売買を選�
 **実体はローダの `modnpc` に預ける**（TECH.md §5.7）。
 名簿に居る人物はゲームの保存が居場所の `.id` を読むので、保存の直前に引き上げる仕掛けが要る。
 それを持っているのはローダのほうで、こちらで同じものを作らない
-（自前で名簿へ足した版33 は、滞在が始まった直後の保存で落ちた。VERIFICATION.md §3.62）。
+（自前で名簿へ足すと、滞在が始まった直後の保存で落ちる。VERIFICATION.md §3.62）。
 
 **「会話する」の一覧には出さない**（`place(listed=False)`）。
 自分の家に他人が住んでいるように見えるため。
@@ -80,7 +80,7 @@ GAME.md §2.28 の「遊んでいる最中に生まれた施設で売買を選�
 主を据えるのは、ゲームの宿泊が**主を世界の名簿から引く**ため
 （主のいない施設で起こすと `KeyError: None` で落ちる。同 §3.62）。
 据えたままにしてよく、外すのは契約が切れたときだけ（`seat_keeper` / `drop_keeper`）。
-版31 までは役場の役人を借りていたが、宿の主人を見る MOD がその役人を宿の主人と読んだ（同 §3.62）。
+役場の役人を主に借りると、宿の主人を見る MOD がその役人を宿の主人と読む（同 §3.62）。
 役人を借りる道は、管理人が組めなかったときの逃げ道として残してある。
 
 契約が切れる・解約する・建物を壊すときは、控えからその人も落とす。
@@ -112,9 +112,9 @@ GAME.md §2.28 の「遊んでいる最中に生まれた施設で売買を選�
 窓口は月数と日数の両方を返すので、賃貸の1期もそこから数える
 （月数×30 とは限らない。315 の週単位は月数1のまま7日しか進めない）。
 
-版39 までは宿屋の部屋の選択肢から観測した月数のほうを答えにしていた。
-観測は**部屋の一覧を出したときにしか更新されない**ので、設定を変えても古いままで、
-`3ヵ月` に戻した後も1ヵ月で滞在していた（実機。VERIFICATION.md §3.62 #11）。
+宿屋の部屋の選択肢から観測した月数は答えにしない。
+観測は**部屋の一覧を出したときにしか更新されない**ので、設定を変えても古いまま残る
+（VERIFICATION.md §3.62 #11）。
 `1ヵ月` と `1週間` はどちらもゲームに渡る月数が 1 なので、
 「月数が変わったら測り直す」という見張り方でも見分けられない。
 
@@ -149,20 +149,18 @@ MOD が自分で起こす滞在（`331_facility_investment` の「無料で泊�
 
 ボタンはセーブに焼かれうる（GAME.md §2.2）。無害な既存クラスを持たせ、
 押下は `on_button_press` を包んで印（`mod_real_estate`）で横取りする。
-
-## 版46
-
-滞在の各段の `execute` と `InventoryItem.change_inventory` のフックは、引数を受け取った形のまま元の関数へ渡す
-（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。使っていない import（`copy`・`npcs`）を外した。
 """
 
 import datetime
 import sys
 
 from instantale_modloader import (choices, confinement, durations, frames, holdings, llm, loads, modfacility,
-                                  modnpc, prices, saving, ui)
+                                  modnpc, prices, saving, stays, twin_windows, ui)
+# 関数の中で `items` を控えの辞書の名前に使っているので、別名で読む。
+from instantale_modloader import items as loader_items
 from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, playthrough_key,
                                         playthrough_key_of_dict)
+from instantale_modloader.state import ordered as ordered_keys
 
 from . import landlord, storage
 
@@ -201,9 +199,10 @@ END_CLS = "VacationEndManager"
 #: 滞在の活動。1つ終えたらその滞在は終わり（1泊＝活動1回。GAME.md §2.17）。
 #: 社交だけは2段（`VacationSocializeManager` → `...ResolveManager`）なので、
 #: 締めるのは後段だけにする。前段で締めると相手との場面が来ない。
-ACTIVITY_CLASSES = ("VacationRestManager", "VacationTrainManager",
-                    "VacationLaborManager", "VacationBeggingManager",
-                    "VacationSocializeResolveManager")
+#: クラス名 → ログに書く活動の名前。
+ACTIVITY_CLASSES = {"VacationRestManager": "rest", "VacationTrainManager": "train",
+                    "VacationLaborManager": "labor", "VacationBeggingManager": "begging",
+                    "VacationSocializeResolveManager": "socialize"}
 
 #: 社交の入口。
 SOCIALIZE_CLS = "VacationSocializeManager"
@@ -345,27 +344,9 @@ KEEPER_MANAGER = "mod_real_estate_keeper"
 #: 待つ秒数。契約を結ぶ操作の中で1回だけ呼ぶ。返らなければ表の人で立てる。
 KEEPER_TIMEOUT = 90
 
-#: ゲームの1ヵ月（`elapse_days(months * 30)`。GAME.md §2.17 の実測）。
-DAYS_PER_MONTH = 30
 
-
-def game_stay(app):
-    """いまの宿屋の宿泊1回の長さ。ローダの窓口に聞く（`durations.inn_stay`）。
-
-    素のゲームは3ヵ月から年齢で伸びる式で、変える MOD
-    （`315_vacation_custom` など）が入っていればその答えになる。
-    **この MOD は式を持たないし、変える MOD の名前も知らない**（TECH.md §3.3.2）。
-    返るのは必ず辞書 `{"months", "days", "length", "source"}`。
-    """
-    return durations.inn_stay(app)
-
-
-def _fmt(template, **values):
-    """文言の穴を埋める。埋められない穴はそのまま残す（文言は設定から来うる）。"""
-    try:
-        return template.format(**values)
-    except (KeyError, IndexError, ValueError):
-        return template
+#: 文言の穴を埋める。埋められない穴はそのまま残す（文言は設定から来うる）。ローダの `frames.safe_format`。
+_fmt = frames.safe_format
 
 
 def _price_of(kind):
@@ -391,13 +372,17 @@ def _is_lease(record):
     return record.get("kind") == "rent"
 
 
+#: 前に書いていて、いまは誰も読まない控えの項目。書くときに落とす（MOD が足したものは MOD が片付ける）。
+RETIRED_KEYS = ("stay_days", "stay_days_for")
+
+
 def ordered_bucket(bucket):
     """控えの項目の並び。読んだときに契約から目に入る順にする。"""
     if not isinstance(bucket, dict):
         return bucket
-    order = ("contracts", "seized", "shared", "stay_months")
-    ordered = {key: bucket[key] for key in order if key in bucket}
-    ordered.update({k: v for k, v in bucket.items() if k not in ordered})
+    ordered = ordered_keys(bucket, ("contracts", "seized", "shared", "stay_months"))
+    for key in RETIRED_KEYS:
+        ordered.pop(key, None)
     return ordered
 
 
@@ -427,8 +412,6 @@ def apply(ctx):
                 "inn_stay": False,
                 # 滞在のあいだ主を据える前の値（戻すために控える）。
                 "owner_was": None,
-                # 手が空くのを待っているボタンの足し直し（見張りは同時に1つ）。
-                "retry": False,
                 # 滞在を締める `VacationEndManager` を起こした（二度は起こさない）。
                 "ending": False,
                 # 活動の後の選択肢を待機表示で覆っている（締め終えたら解く）。
@@ -454,18 +437,11 @@ def apply(ctx):
     modnpc.install(ctx, write=write)
 
     # ------------------------------------------------------------ 補助
-    def warn_once(token, text):
-        """同じ理由の WARN は1度だけ書く。
-
-        当て直しは選択肢が組まれるたびに走るので、素直に書くと
-        「立てられない」理由が1手ごとに1行ずつ積もる（ログが読めなくなる）。
-        直った（＝建った）ら覚えを落とすので、次に同じことが起きればまた出る。
-        """
-        if token in state["warned"]:
-            return False
-        state["warned"].add(token)
-        write(text)
-        return True
+    # 同じ理由の WARN は1度だけ書く（`ctx.once`。覚えは注入をまたいで `state["warned"]` に置く）。
+    # 当て直しは選択肢が組まれるたびに走るので、素直に書くと
+    # 「立てられない」理由が1手ごとに1行ずつ積もる（ログが読めなくなる）。
+    # 直った（＝建った）ら `warn_once.forget` で覚えを落とすので、次に同じことが起きればまた出る。
+    warn_once = ctx.once(write, store=state["warned"])
 
     # ------------------------------------------------------------ 控え
     def current_key(app):
@@ -629,10 +605,8 @@ def apply(ctx):
     def game_stay_here(app):
         """いまの宿泊の長さ。**これが答え**。誰が決めたかを1度だけログに残す。
 
-        版39 まではここを「まだ宿屋を見ていない世界の落ちどころ」にして、
-        宿屋の部屋の選択肢から観測した値のほうを答えにしていた。
-        観測は設定を変えても更新されない（書き直すのは部屋の一覧を出したときだけ）ので、
-        `3ヵ月` に戻した後も1ヵ月のまま滞在していた（実機。§3.62 #11）。
+        宿屋の部屋の選択肢から観測した値は答えにしない。
+        観測は設定を変えても更新されない（書き直すのは部屋の一覧を出したときだけ。§3.62 #11）。
         月数と日数の両方を持っているのも窓口だけ
         （`1ヵ月` と `1週間` はどちらも月数が 1 で、月数では見分けられない）。
         """
@@ -662,51 +636,15 @@ def apply(ctx):
                           seen, months))
         return months
 
-    def remember_stay_days(app, days, months=None, why="the inn"):
-        """滞在1回で**実際に進んだ日数**を控える。
-
-        月数×30 とは限らない。`315_vacation_custom` の週単位は
-        ゲームに渡す月数を1にしたまま、日数だけを設定の値へ縮める
-        （宿は `宿泊する(1週間)` で7日だった。VERIFICATION.md §3.62）。
-        賃貸の1期はこの日数を数えるので、月数ではなくこちらで数える。
-
-        **どの月数で測ったか**を一緒に控える。
-        月数が変わったら（宿屋の部屋を見て覚え直した・設定を変えた）、
-        前に測った日数はもうその答えではない。
-        """
-        try:
-            value = int(days)
-        except (TypeError, ValueError):
-            return False
-        if value < 1:
-            return False
-        try:
-            tag = int(str(months))
-        except (TypeError, ValueError):
-            tag = None
-        key = current_key(app)
-        bucket = bucket_of(key)
-        if bucket.get("stay_days") == value and bucket.get("stay_days_for") == tag:
-            return True
-        bucket["stay_days"] = value
-        bucket["stay_days_for"] = tag
-        worlds.save(key)
-        write("stay length: {} moved the calendar {} day(s) (months={})".format(
-            why, value, tag))
-        return True
-
     def stay_days(app):
         """滞在1回で進む日数。ローダの窓口の答え（`days` が無ければ月数×30）。
 
-        版39 までは実際に進んだ日数の控えを先に見ていた。
-        `315_vacation_custom` の週単位も `1ヵ月` もゲームに渡る月数は 1 なので、
-        「測ったときの月数が今と違えば使わない」（`stay_days_for`）では
-        この2つを見分けられず、`1週間` に変えた後も30日で数えていた
-        （実機。§3.62 #11）。
+        月数×30 とは限らない。`315_vacation_custom` の週単位は月数を 1 にしたまま
+        日数だけを縮めるので、月数からは数えられない（§3.62 #11）。
         窓口は月数と日数の両方を持っている。
         """
         plan = game_stay_here(app)
-        return plan["days"] if plan.get("days") else plan["months"] * DAYS_PER_MONTH
+        return plan["days"] if plan.get("days") else plan["months"] * durations.DAYS_PER_MONTH
 
     def lease_days(app):
         """賃貸の1期の長さ（日）。**滞在 `RENT_STAYS` 回ぶん**。
@@ -958,7 +896,7 @@ def apply(ctx):
         modnpc.place(app, keeper_id, str(record.get("area")),
                      str(record.get("facility")),
                      owner=True, listed=False, world=world, write=write)
-        state["warned"].discard(("keeper", keeper_id))
+        warn_once.forget(("keeper", keeper_id))
         return keeper_id
 
     def drop_keeper(app, record):
@@ -972,7 +910,7 @@ def apply(ctx):
         keeper_id = str(keeper.get("id"))
         modnpc.unregister(OWNER, keeper_id, app=app, write=write)
         keepers_registered.discard(keeper_id)
-        state["warned"].discard(("keeper", keeper_id))
+        warn_once.forget(("keeper", keeper_id))
         record.pop("keeper", None)
         write("keeper: {!r} is no longer the keeper of {!r}".format(
             keeper.get("name"), record.get("name")))
@@ -1016,26 +954,17 @@ def apply(ctx):
         if not facility_id:
             return ""
 
-        def choices(info):
-            found = home_choices(info["app"], info["facility_id"])
-            return [] if found is None else found
-
-        def no_exit(info):
-            # 滞在の最中は出口も出さない（活動の選択肢に混ぜない）。
-            return [] if home_choices(info["app"], info["facility_id"]) is None \
-                else info["args"]["choices"]
-
         modfacility.register(
             OWNER, facility_id=facility_id,
             fields={"name": record.get("name") or "",
                     "description": _description_of(record.get("kind"))},
-            choices=choices, exit_label=LEAVE_LABEL,
+            choices=lambda info: home_choices(info["app"], info["facility_id"]),
+            exit_label=LEAVE_LABEL,
             keep_inside=lambda info: keeps_inside(info["app"], info["facility_id"]),
             # 家では `会話する` を出さない（`modfacility` の `hide`。TECH.md §5.8）。
             hide=HIDDEN_HOME_CLASSES,
             # 絵は描かない。ゲームが名前で引いて生成する（`modfacility は絵に触らない`。TECH.md §5.8）。
-            on={"choices": no_exit,
-                "leave": lambda info: end_stay(info["app"], "left the building")},
+            on={"leave": lambda info: end_stay(info["app"], "left the building")},
             write=write)
         return facility_id
 
@@ -1084,8 +1013,7 @@ def apply(ctx):
                           "WARN {}: {!r} is not standing in area {!r}".format(
                               why, record.get("name"), area_id))
                 continue
-            state["warned"].discard(("hub", key, area_id))
-            state["warned"].discard(("area", key, area_id))
+            warn_once.forget(("hub", key, area_id), ("area", key, area_id))
             if not standing:
                 built += 1
         if built:
@@ -1295,7 +1223,7 @@ def apply(ctx):
         confined, by = confinement.why(app)
         if confined:
             # 牢の中などで閉じ込められている間は家賃を引き続けず、借りている家の契約をその場で打ち切る
-            # （2026-10-21。服役の年ごとに家賃が引かれていた）。建売は残す。
+            # （VERIFICATION.md §3.62 #15）。建売は残す。
             for record in list(contracts_of(current_key(app))):
                 if _is_lease(record) and not record.get("lapsed"):
                     write("rent: ended {!r} while confined ({}; {})".format(record.get("name"), confined, by))
@@ -1446,7 +1374,7 @@ def apply(ctx):
             back(app, "cannot pay the fee")
             return
         player = getattr(app, "player", None)
-        inv = storage.inventory_dict(player)
+        inv = loader_items.inventory_of(player)
         if inv is None:
             write("WARN reclaim: cannot read the player's inventory")
             back(app, "no inventory")
@@ -1661,7 +1589,7 @@ def apply(ctx):
             write("storage: no contract here")
             return
         player = getattr(app, "player", None)
-        if storage.inventory_dict(player) is None:
+        if loader_items.inventory_of(player) is None:
             write("WARN storage: cannot read the player's inventory")
             return
         gather_into_shared(app)
@@ -1759,7 +1687,7 @@ def apply(ctx):
         同じ品が写り（保存のたびに持ち物まで控える。TECH.md §5.7）、
         次に開いたときに控えと写しで二重になる。
         """
-        inv = storage.inventory_dict(holder) if holder is not None else None
+        inv = loader_items.inventory_of(holder) if holder is not None else None
         if not isinstance(inv, dict) or not inv:
             return 0
         count = len(inv)
@@ -1802,8 +1730,8 @@ def apply(ctx):
         if item is None:
             write("WARN storage sync: the widget has no item_instance")
             return
-        old_inv = storage.inventory_dict(old_owner)
-        new_inv = storage.inventory_dict(new_owner)
+        old_inv = loader_items.inventory_of(old_owner)
+        new_inv = loader_items.inventory_of(new_owner)
         if not isinstance(old_inv, dict) or not isinstance(new_inv, dict):
             write("WARN storage sync: unreadable inventory")
             return
@@ -1860,17 +1788,17 @@ def apply(ctx):
         """控えに書き出せない品を主人公の持ち物へ戻す。戻した点数を返す。
 
         預けた品は控えが正で、閉じるときに管理人の手元を空にする。
-        控えに入らない品（属性が JSON にならないもの。`storage.item_to_dict`）を
+        控えに入らない品（属性が JSON にならないもの。ローダの `items.to_dict`）を
         そのまま空にすると世界から消えるので、手元を空にする前に持ち主へ返す。
         """
         player = getattr(app, "player", None)
-        src = storage.inventory_dict(holder) if holder is not None else None
-        dst = storage.inventory_dict(player) if player is not None else None
+        src = loader_items.inventory_of(holder) if holder is not None else None
+        dst = loader_items.inventory_of(player) if player is not None else None
         if not isinstance(src, dict) or not isinstance(dst, dict):
             return 0
         moved = 0
         for key, item in list(src.items()):
-            if storage.item_to_dict(item) is not None:
+            if loader_items.to_dict(item) is not None:
                 continue
             src.pop(key, None)
             new_key = storage.free_key(dst, key)
@@ -1923,7 +1851,7 @@ def apply(ctx):
         ゲームは活動の後に `まだ宿泊する` と `宿泊を終える` を並べ、
         `327_inn_quality` は残りの回数があれば活動を先頭に足し直す。
         こちらは1泊＝活動1回なので手が空いたら締めるが、手が空くまで
-        （`when_idle` の待ち）その選択肢が見えていた（実機 2026-09-25）。
+        （`when_idle` の待ち）その選択肢が見える（VERIFICATION.md §3.62 #12）。
 
         選択肢そのもの（`app.buttons`）には触らない。覆うのは表示だけで
         （`screen.busy_on`。GAME.md §2.4）、締められなかったときは覆いを解けば
@@ -1953,7 +1881,7 @@ def apply(ctx):
         write("stay menu: covered {} until the stay ends (one activity per stay)".format(
             [entry.get("text") for entry in buttons if isinstance(entry, dict)]))
         # その場で覆う（ワーカースレッドのまま）。ゲームは組んだ次のフレームで塗るので、
-        # Clock へ回すと1フレームだけ選択肢が見える（実機 2026-09-25）。
+        # Clock へ回すと1フレームだけ選択肢が見える（§3.62 #12）。
         # `busy_on` が直に触るのは旗と一覧だけで、画面に触る手は向こうが Clock へ回す。
         screen.busy_on(app)
         return True
@@ -1979,24 +1907,7 @@ def apply(ctx):
         return [choices.Choice(OFFICE_LABEL, place=choices.at(max(len(view.buttons) - 1, 0)),
                                on_press=_press("office", None, OFFICE_LABEL))]
 
-    # ------------------------------------------------------------ 自前のフェーズ
-    class EstatePhase(object):
-        """自前のフェーズ。**`PhaseSpec` には決して載せない**（セーブに焼かれる）。"""
-
-        def __init__(self, app, action, kind):
-            self.app = app
-            self.action = action
-            self.kind = kind
-
-        def execute(self, choice_text):
-            state["acting"] = True
-            try:
-                run_action(self.app, self.action, self.kind)
-            except Exception:
-                ctx.log_exc("real estate: phase {!r} failed".format(self.action))
-            finally:
-                state["acting"] = False
-
+    # ------------------------------------------------------------ 押下の処理
     def run_action(app, action, kind):
         if action == "office":
             show_office(app)
@@ -2094,8 +2005,10 @@ def apply(ctx):
                 write("ignored {!r}: the previous press is still running".format(text))
                 return None
             write("pressed {!r} ({} kind={})".format(text, action, kind))
-            screen.start_phase(app, EstatePhase(app, action, kind), text,
-                               fallback=lambda: run_action(app, action, kind))
+            # 使い捨てのフェーズはローダが作る（`PhaseSpec` に載せない注意もそちら）。
+            # 処理の間は `state["acting"]` を立て、連打の2発目を上で捨てる
+            screen.run_phase(app, text, run_action, action, kind, label=action,
+                             acting=(state, "acting"))
             return None
         return on_press
 
@@ -2116,7 +2029,7 @@ def apply(ctx):
                 state["covered"] = False
                 state["storage"] = None
                 state["pending_demolish"] = []
-                state["warned"] = set()
+                warn_once.forget()          # 覚えの集合は `state["warned"]` のまま空にする
                 state["key_override"] = key
                 # 管理人の層はロードのたびに積み直す。周回（世界×主人公）が変わると
                 # 同じ id（`keeper-<土地>`）に別の人が立つ。
@@ -2164,7 +2077,7 @@ def apply(ctx):
         中身は先に控えへ写し、保存の間だけ手元から外す。
         """
         holder = storage_holder()
-        inv = storage.inventory_dict(holder) if holder is not None else None
+        inv = loader_items.inventory_of(holder) if holder is not None else None
         if not isinstance(inv, dict) or not inv:
             return None
         write_down(app, "save")
@@ -2225,8 +2138,7 @@ def apply(ctx):
 
     # ------------------------------------------------------ 滞在の描写
     def player_name(app):
-        name = getattr(getattr(app, "player", None), "name", "")
-        return name.strip() if isinstance(name, str) and name.strip() else "プレイヤー"
+        return ui.player_name(app, "プレイヤー")
 
     def stay_place(app):
         """描写に添える `(いま居る場所, この街の自分の家, 自分の家か)`。
@@ -2295,8 +2207,6 @@ def apply(ctx):
         home = staying_home(app) if app is not None else None
         if home is None:
             # 宿屋（か、よその MOD の宿）の宿泊。
-            # **実際に何日進んだか**をここで測る（月数×30 とは限らない）。
-            day_before = ui.game_day(app) if app is not None else None
             # 宿代は暦が進んだ後に引かれる（GAME.md §2.17）。
             # 家賃はその引き落としが済むまで見送り、抜けてから払う（`check_leases`）。
             state["inn_stay"] = True
@@ -2309,18 +2219,9 @@ def apply(ctx):
                         check_leases(app, "after the inn stay", idle=True)
                     except Exception:
                         ctx.log_exc("real estate: cannot settle the rent after the inn stay")
-            try:
-                day_after = ui.game_day(app) if app is not None else None
-                if isinstance(day_before, int) and isinstance(day_after, int) \
-                        and not inside_mod_building(app):
-                    remember_stay_days(app, day_after - day_before,
-                                       getattr(self, "months", None))
-            except Exception:
-                ctx.log_exc("real estate: cannot measure the stay")
             return result
         quality = getattr(self, "quality", None) or STAY_QUALITY
         before = ui.gold_of(app)
-        day_before = ui.game_day(app)
         prepaid = prepay_room(app, quality, before)
         try:
             result = orig(self, *args, **kwargs)
@@ -2337,16 +2238,6 @@ def apply(ctx):
             recover(app, "stay failed")
             return None
         settle_room(app, before, prepaid, "stay")
-        try:
-            # 自分の家の滞在でも日数は測れる。
-            # **渡した月数はゲームの宿屋と同じ**なので、他 MOD の日数の細工も
-            # そのまま乗る（宿屋へ行かなくても、1期の長さがここで決まる）。
-            day_after = ui.game_day(app)
-            if isinstance(day_before, int) and isinstance(day_after, int):
-                remember_stay_days(app, day_after - day_before,
-                                   getattr(self, "months", None), why="the home stay")
-        except Exception:
-            ctx.log_exc("real estate: cannot measure the home stay")
         return result
 
     def describe_building(app, home):
@@ -2460,131 +2351,91 @@ def apply(ctx):
         screen.say(app, "落ち着かない。今日は出直したほうがよさそうだ。")
         write("{}: gave the controls back".format(why))
 
-    @ctx.wrap("__main__:VacationRestManager.execute", required=False)
-    def vacation_rest(orig, self, *args, **kwargs):
-        """休養。自分の家ではこれで滞在を締める。"""
-        result = orig(self, *args, **kwargs)
-        app = getattr(self, "app", None) or ui.find_app()
-        if app is not None:
-            close_stay_after_activity(app, "rest")
-        return result
+    def install_closer(cls_name, why):
+        """活動の `execute` の後で、自分の家の滞在を締める（社交は後段だけ。`ACTIVITY_CLASSES`）。"""
+        @ctx.wrap("__main__:{}.execute".format(cls_name), required=False)
+        def close_after_activity(orig, self, *args, **kwargs):
+            result = orig(self, *args, **kwargs)
+            app = getattr(self, "app", None) or ui.find_app()
+            if app is not None:
+                close_stay_after_activity(app, why)
+            return result
 
-    @ctx.wrap("__main__:VacationTrainManager.execute", required=False)
-    def vacation_train(orig, self, *args, **kwargs):
-        """訓練。同上。"""
-        result = orig(self, *args, **kwargs)
-        app = getattr(self, "app", None) or ui.find_app()
-        if app is not None:
-            close_stay_after_activity(app, "train")
-        return result
+    for cls_name, why in ACTIVITY_CLASSES.items():
+        install_closer(cls_name, why)
 
-    @ctx.wrap("__main__:VacationLaborManager.execute", required=False)
-    def vacation_labor(orig, self, *args, **kwargs):
-        """労働。同上。"""
-        result = orig(self, *args, **kwargs)
-        app = getattr(self, "app", None) or ui.find_app()
-        if app is not None:
-            close_stay_after_activity(app, "labor")
-        return result
-
-    @ctx.wrap("__main__:VacationBeggingManager.execute", required=False)
-    def vacation_begging(orig, self, *args, **kwargs):
-        """物乞い。同上。"""
-        result = orig(self, *args, **kwargs)
-        app = getattr(self, "app", None) or ui.find_app()
-        if app is not None:
-            close_stay_after_activity(app, "begging")
-        return result
-
-    @ctx.wrap("__main__:VacationSocializeResolveManager.execute", required=False)
-    def vacation_socialize(orig, self, *args, **kwargs):
-        """社交の後段。前段（相手を選ぶ側）では締めない。"""
-        result = orig(self, *args, **kwargs)
-        app = getattr(self, "app", None) or ui.find_app()
-        if app is not None:
-            close_stay_after_activity(app, "socialize")
-        return result
-
-    @ctx.wrap("__main__:VacationEndManager.execute", required=False)
-    def vacation_end(orig, self, *args, **kwargs):
-        """滞在が終わったら、据えた主を戻して滞在の印を落とす。"""
-        app = getattr(self, "app", None) or ui.find_app()
+    # 宿泊の終わりと2列の画面（保管庫）を包むのはローダの窓口（`stays` と `twin_windows`）。
+    # こちらは前後の処理だけを預ける（TECH.md §3.3.21）。
+    def end_before(call):
+        """滞在が終わる前（`VacationEndManager.execute` の `orig` の前）。据えた主を戻して滞在の印を落とす。"""
         state["ending"] = False
         try:
-            if app is not None:
-                end_stay(app, "the game ended the stay")
+            if call.app is not None:
+                end_stay(call.app, "the game ended the stay")
         except Exception:
             ctx.log_exc("real estate: cannot finish the stay")
             state["free_stay"] = None
-        try:
-            return orig(self, *args, **kwargs)
-        finally:
-            # 建物の選択肢が組み直された後で解く（先に解くと活動の後の選択肢が見える）。
-            if app is not None:
-                uncover(app, "the stay ended")
 
-    @ctx.wrap("scripts.hud.new_hud:InventoryItem.change_inventory", required=False)
-    def change_inventory(orig, self, *args, **kwargs):
-        """保管庫の窓の中の移動だけを見る。店の売買と受け渡しは素通し。"""
-        holder = storage_holder()
-        if holder is None:
-            return orig(self, *args, **kwargs)
-        old_owner = _owner_of_grid(getattr(self, "inventory", None))
-        result = orig(self, *args, **kwargs)
-        try:
-            new_owner = _owner_of_grid(frames.arg(args, kwargs, "new_inventory", 0))
-            app = ui.find_app()
-            pair = (old_owner, new_owner)
-            if app is not None and old_owner is not new_owner \
-                    and holder in pair and getattr(app, "player", None) in pair:
-                sync_storage(app, self, old_owner, new_owner)
-        except Exception:
-            ctx.log_exc("real estate: cannot sync the storage")
-        return result
+    def end_after(call):
+        """滞在が終わった後（`always=True` で、`orig` が投げても来る）。
+        建物の選択肢が組み直された後で解く（先に解くと活動の後の選択肢が見える）。
+        """
+        if call.app is not None:
+            uncover(call.app, "the stay ended")
+
+    stays.on(OWNER, ctx, (stays.END,), before=end_before, after=end_after, always=True, write=write)
 
     def _owner_of_grid(grid):
         """`InventoryGrid` の持ち主。読めなければ None。"""
         return getattr(grid, "obtainer", None) if grid is not None else None
 
-    @ctx.wrap("__main__:InstantaleApp.close_shopping_window_process", required=False,
-              safe=True)
-    def close_shopping_window(orig, self, *args, **kwargs):
-        """窓が閉じたら控えを書いて持ち主を捨てる。"""
+    def move_before(call):
+        """保管庫の窓の中の移動だけを見る（店の売買と受け渡しは素通し）。移動の前の持ち主を控える。"""
+        holder = storage_holder()
+        if holder is None:
+            return None
+        return holder, _owner_of_grid(call.old_inventory)
+
+    def move_after(call):
+        """品が動いた後。保管庫とプレイヤーの間の移動なら控えを揃える。"""
+        if call.memo is None:
+            return
+        holder, old_owner = call.memo
         try:
-            close_storage(self, "window closed")
+            new_owner = _owner_of_grid(call.new_inventory)
+            app = call.app
+            pair = (old_owner, new_owner)
+            if app is not None and old_owner is not new_owner \
+                    and holder in pair and getattr(app, "player", None) in pair:
+                sync_storage(app, call.widget, old_owner, new_owner)
+        except Exception:
+            ctx.log_exc("real estate: cannot sync the storage")
+
+    def close_before(call):
+        """窓が閉じる前（ボタンで閉じた）。控えを書いて持ち主を捨てる。"""
+        try:
+            close_storage(call.obj, "window closed")
         except Exception:
             ctx.log_exc("real estate: cannot close the storage")
-        return orig(self, *args, **kwargs)
 
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.turnoff_window_visibility", required=False,
-              safe=True)
-    def turnoff_window_visibility(orig, self, *args, **kwargs):
-        """外側を押して窓を消したときも、閉じたときの後始末をする。
+    def close_if_hidden(call):
+        """外側を押して窓が消えた後（窓口の `HIDDEN`。次のフレームで2列の画面が消えていれば来る）。
 
-        外側を押して閉じる経路は `close_shopping_window_process` を通らない
-        （`_on_backdrop_touch` → `turnoff_window_visibility` → `on_backdrop_callback`。GAME.md §2.13.1.3）。
-        上の包みだけでは、保管庫を閉じても `close_storage` が一度も走らなかった（実機）。
-        消した直後はまだ表示の辞書が書き換わっていないことがあるので、次のフレームで見る。
+        外側を押して閉じる経路は `close_shopping_window_process` を通らない（GAME.md §2.13.1.3）。
+        閉じる処理を `CLOSE` だけに置くと、保管庫を閉じても `close_storage` が一度も走らない。
+        開いている途中（押してから窓が出るまで）は「閉じた」と取り違えないので何もしない。
         """
-        result = orig(self, *args, **kwargs)
-        if state.get("storage") is not None:
-            app = ui.find_app()
-            if app is not None:
-                screen.schedule(lambda: close_if_hidden(app), 0)
-        return result
-
-    def close_if_hidden(app):
-        """保管庫の窓が消えていれば閉じたときの後始末をする。開いている途中・まだ見えているなら何もしない。"""
         open_window = state.get("storage")
-        if not isinstance(open_window, dict) or open_window.get("opening"):
-            return
-        data = getattr(ui.find_hud(app), "visible_twin_inventory_data", None)
-        if isinstance(data, dict) and data.get("TorF"):
+        if not isinstance(open_window, dict) or open_window.get("opening") or call.app is None:
             return
         try:
-            close_storage(app, "window turned off")
+            close_storage(call.app, "window turned off")
         except Exception:
             ctx.log_exc("real estate: cannot close the storage")
+
+    twin_windows.on(OWNER, ctx, (twin_windows.MOVE,), before=move_before, after=move_after, write=write)
+    twin_windows.on(OWNER, ctx, (twin_windows.CLOSE,), before=close_before, write=write)
+    twin_windows.on(OWNER, ctx, (twin_windows.HIDDEN,), after=close_if_hidden, write=write)
 
     # ------------------------------------------------------ 家と施設の窓
     def holdings_side(app):

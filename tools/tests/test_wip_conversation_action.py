@@ -29,6 +29,7 @@ if RUNTIME_DIR not in sys.path:
 
 import instantale_modloader as ml            # noqa: E402
 from instantale_modloader import llm         # noqa: E402
+from instantale_modloader import loads, talks  # noqa: E402
 
 
 def find_mod(suffix):
@@ -124,6 +125,8 @@ class Ctx(object):
         self.notes = []
 
     _mod = None
+    # 窓口に名乗る持ち主の名前（本物は apply() の間だけフォルダ名）。偽物は mod_dir を持たないので None。
+    mod_name = None
 
     def out_path(self, *parts):
         return self._under(self.out_dir, parts)
@@ -211,6 +214,10 @@ llm.create_structure = lambda ctx, name, fields, label="llm": (
 def fresh():
     ctx = Ctx(tempfile.mkdtemp(prefix="conversation_action_test_"))
     main.APP = InstantaleApp()
+    # 会話の終了とタイトルへ戻るときの片付けはローダの窓口（talks / loads）が1つの世代に1枚だけ包む。
+    # 偽の ctx は世代を持たないので、当て直すたびに包みの印を忘れさせて、新しい ctx の上に包み直させる
+    talks.reset()
+    loads.reset()
     MOD.apply(ctx)
     return ctx
 

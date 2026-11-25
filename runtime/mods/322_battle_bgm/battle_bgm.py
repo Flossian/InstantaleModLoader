@@ -48,7 +48,7 @@
     それ以外            → normal
 
 ボス戦は曲が鳴る時点で `in_boss_battle=1`、闘技場は `in_colosseum_battle=1` が立っている
-（実機ログ2世代。DOC.md §3.2 / §3.3）。
+（VERIFICATION_LOG.md §2.79）。
 フラグに加えて `ColosseumMatchStart.execute` / `QuestEncounterFinalBoss.execute` を通った印（`pending`）も見る。
 実機では3つの合図（フラグ・印・`enemy_type`）が毎回同じ答えを出したので、
 どれか1つが欠けても判定は変わらない。
@@ -57,10 +57,10 @@
 依頼中の戦闘の `'in_quest'`（通常もボスも同じ語）、闘技場の `'colosseum'`。7戦ぶん）。
 どの合図で決めたかは毎回ログに残すので、実機で確かめるときはそこを読む。
 
-`in_boss_battle` はボス戦の後の戦闘で 0 に戻っていた（1回観測。GAME.md §2.10 の
-「未観測」はこの1回で更新できる）。`in_colosseum_battle` の 1→0 は未観測。
+`in_boss_battle` はボス戦の後の戦闘で 0 に戻っていた。`in_colosseum_battle` は
+勝ったときだけ 0 に戻り、撤退では立ったまま残る（GAME.md §2.10）。
 立ったままなら以後の戦闘が全部その種類の扱いになるので、その症状が出たら
-ログの `flags=` と `pending=` を突き合わせる（DOC.md §3）。
+ログの `flags=` と `pending=` を突き合わせる。
 
 鳴らし方
 --------
@@ -70,19 +70,20 @@
 どちらも `/musics/battle/` を含むので、`106_` の戦闘曲判定はそのまま効く。
 鳴らせなかった（例外）ときはログに残して素の曲を鳴らし直すので、
 曲の置き間違いでゲームが黙ることはない。
-絶対パスがそのまま通ることは実機で確認済み（DOC.md §3.1）。
+絶対パスがそのまま通ることは実機で確認済み（VERIFICATION_LOG.md §2.79）。
 
 乱数は MOD 専用の `random.Random`（ゲームの乱数列をずらさない。GAME.md §2.11）。
 
-版4: `play_music_from_src` と `BattleStartManager.__init__` のフックは、引数を受け取った形のまま元の関数へ渡す
+`play_music_from_src` のフックは、引数を受け取った形のまま元の関数へ渡す
 （名前付きで受けて位置引数に直さない。TECH.md の規則の表）。曲の差し替えは来た側に合わせる。
+戦闘の組み立て（`enemy_type` を控える所）はローダの窓口 `battles` の BUILD が包む（TECH.md §3.3.21）。
 """
 
 import os
 import random
 import time
 
-from instantale_modloader import arrivals, frames, sounds
+from instantale_modloader import arrivals, battles, frames, sounds, ui
 
 # GUI から変えられる値。mod.json の "settings" と同じ名前・同じ既定値。
 DEFAULT_WEIGHT = 100     # 設定画面で「使う」に入れたときの重み（本体は読まない。宣言と既定値を揃えるためにある）
@@ -294,8 +295,9 @@ def apply(ctx):
         return playlist, found
 
     def flags_of(app):
-        return dict((k, bool(getattr(app, k, False)))
-                    for k in ("in_battle", "in_boss_battle", "in_colosseum_battle"))
+        # 戦闘の旗の並びと読み方はローダの `ui.BATTLE_FLAGS` / `ui.battle_flags`
+        raised = ui.battle_flags(app)
+        return dict((k, k in raised) for k in ui.BATTLE_FLAGS)
 
     def current_pending():
         if state["pending"] and time.monotonic() - state["pending_at"] <= PENDING_TTL:
@@ -375,10 +377,13 @@ def apply(ctx):
             state["pending"] = None
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap("__main__:BattleStartManager.__init__", required=False, safe=True)
-    def battle_start_init(orig, self, *args, **kwargs):
-        state["enemy_type"] = frames.arg(args, kwargs, "enemy_type", 1)   # (app, enemy_type, enemy_content)
-        return orig(self, *args, **kwargs)
+    owner = ctx.mod_name or "322_battle_bgm"
+
+    def battle_built(call):
+        """戦闘の組み立ての前に `enemy_type` を控える（ローダの窓口 `battles` の BUILD。引数は窓口が読む）。"""
+        state["enemy_type"] = call.enemy_type
+
+    battles.on(owner, ctx, (battles.BUILD,), before=battle_built, write=write)
 
     def drop_marks(call):
         """施設に着いた・街を移った。印の付いた戦闘は始まらなかったので印を捨てる。
@@ -393,7 +398,6 @@ def apply(ctx):
         state["pending"] = None
         state["enemy_type"] = None
 
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "322_battle_bgm"
     arrivals.on(owner, ctx, (arrivals.FACILITY, arrivals.AREA), after=drop_marks, write=write)
 
     # ------------------------------------------------------- 起動時の同期

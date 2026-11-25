@@ -10,7 +10,7 @@
     "en": "A quest clear takes half of your maximum stamina no matter how easy the quest was, and you cannot take a quest at half stamina or below, so every clear sends you back to the inn. This decides the cost from how far the quest's difficulty is from your level (easy quests cost little, fair ones about a third, harder ones half or more) and adds more the more HP you lost during the quest. Party members follow the same rule with their own level and damage",
     "ja": "依頼をクリアすると、易しい依頼でもスタミナが上限の半分減る。スタミナが半分以下だと依頼を受けられないので、1件ごとに宿で休むしかない。減る量を、依頼の難易度とレベルの差（易しい依頼は少し、適正は約3分の1、上位は半分以上）で決め、依頼の間に HP を多く失うほど上乗せする。同行者も本人のレベルと被弾で同じように決める"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "settings": {
     "FAIR_PERCENT": {

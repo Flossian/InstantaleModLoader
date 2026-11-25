@@ -4,7 +4,7 @@
     python runtime/mods/322_battle_bgm/tool.py           窓を開く
     python runtime/mods/322_battle_bgm/tool.py --dump    窓を開かず、いま読める一覧を標準出力に出す
 
-`323_` の §4 が決めた契約で動く。
+TECH.md §3.12 の契約で動く。
 ローダの設定画面（`tools/gui.py`）が `mod.json` の `"tool"` を見てこのファイルを
 サブプロセスで起動し、場所は環境変数で渡す。直接起動したときは自分で探す（`locate()`）。
 
@@ -51,8 +51,11 @@ MOD_DIR = os.path.dirname(os.path.abspath(__file__))
 _IML_ROOT = os.environ.get("IML_ROOT") or ""
 for _tools in ([os.path.join(_IML_ROOT, "tools")] if _IML_ROOT else []) + [
         os.path.normpath(os.path.join(MOD_DIR, os.pardir, os.pardir, os.pardir, "tools"))]:
-    if os.path.isfile(os.path.join(_tools, "modtool.py")) and _tools not in sys.path:
-        sys.path.insert(0, _tools)
+    # 見つかった最初の候補で止める（両方を先頭へ足すと、後の3つ上が IML_ROOT より先になる）
+    if os.path.isfile(os.path.join(_tools, "modtool.py")):
+        if _tools not in sys.path:
+            sys.path.insert(0, _tools)
+        break
 
 import modtool  # noqa: E402
 
@@ -116,7 +119,8 @@ load_playlist = modtool.read_json
 
 
 def weight_of(entry, category):
-    value = (entry or {}).get(category, 0)
+    # 手で書いた行が辞書でなければ 0（ゲーム側の `weight_of` と同じ）。
+    value = entry.get(category, 0) if isinstance(entry, dict) else 0
     # 本体（`sounds.coerce_weight`）と同じく、小数と `true`（=100）も受ける。
     # 整数に切り捨てていたころは、保存で 0.5 を 0（＝使わない）に、`true` を 1 に書き換えた
     if isinstance(value, bool):

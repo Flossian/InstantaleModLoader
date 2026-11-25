@@ -54,7 +54,7 @@ VERIFICATION_LOG.md §2.37。
 説得力1段は確率10%にあたる。
 4% のような刻みを出すには **`credibility` に端数を渡す**しかない（`5.4` → 74%）。
 スキーマ上は整数だが、代入時に検証が走らない型なら通る。
-実機では未確認なので、次のように守ってある:
+この経路は実機で通った（DOC.md）。受け付けない型に備えて、次のように守ってある:
 
 - 書いた後に読み直して、端数がそのまま入ったかを確かめる
 - 入らなければ整数に丸めて入れ直す（刻みは 10% に落ちるが、加点は効く）
@@ -240,19 +240,10 @@ FREE_ACTION_MODE = "llm"
 SCORE_SOURCE = "raw"
 
 
-def _get(container, name, default=None):
-    """dict でも属性でも読む。`305_mini_quest` の `_get` と同じ方針。
-
-    `quest_referee*` の戻り値の形は特定できていない。
-    両方で通し、
-    どちらでもなければ何もしない（推測して壊すより素通しするほうがよい）。
-    """
-    if container is None:
-        return default
-    if isinstance(container, dict):
-        return container.get(name, default)
-    value = getattr(container, name, None)
-    return default if value is None else value
+#: dict でも属性でも読む（ローダの `frames.field`）。
+#: `quest_referee*` の戻り値の形は特定できていないので両方で通し、
+#: どちらでもなければ None で素通しする（推測して壊すより素通しするほうがよい）。
+_get = frames.field
 
 
 def _set(container, name, value):
@@ -280,24 +271,16 @@ def score_of(character, attribute, source=None):
     キャラクタシートは `attribute_<名前>`）。
     名前を推測して1つだけ見ると、読めなかったのか 0 だったのかが区別できなくなるので、
     順に当たる。
-    最初はローダの能力値の窓口（装備や一時の強化の補正を足した値。TECH.md §3.3.27）に聞く。
+    最初はローダの能力値の窓口（装備や一時の強化の補正を足した値。TECH.md §3.3.27）に聞き、
+    無ければ素の値（ローダの `ui.ability_score`。上の順に当たる）。真偽値は能力値とみなさない。
     """
     if character is None or attribute not in ABILITIES:
         return None
-    raw = None
     boosted = abilities.scores(ui.find_app(), character)
-    if isinstance(boosted, dict) and boosted.get(attribute) is not None:
-        raw = boosted.get(attribute)
-    for name in ("ability_scores", "original_ability_scores"):
-        if raw is not None:
-            break
-        table = getattr(character, name, None)
-        if isinstance(table, dict) and table.get(attribute) is not None:
-            raw = table.get(attribute)
-            break
+    raw = boosted.get(attribute) if isinstance(boosted, dict) else None
     if raw is None:
-        raw = getattr(character, "attribute_" + attribute, None)
-    if not isinstance(raw, (int, float)):
+        raw = ui.ability_score(character, attribute)
+    if not frames.is_number(raw):
         return None
     if (source or SCORE_SOURCE) != "condition":
         return raw
@@ -310,7 +293,7 @@ def score_of(character, attribute, source=None):
         converted = calculate(raw)
     except Exception:
         return raw
-    return converted if isinstance(converted, (int, float)) else raw
+    return converted if frames.is_number(converted) else raw
 
 
 def ability_percent(score, pivot=None, step=None, per_step=None,
@@ -326,7 +309,7 @@ def ability_percent(score, pivot=None, step=None, per_step=None,
 
     上限にちょうど届くのが 28 なのは、能力値の上端が 30 だから。
     """
-    if not isinstance(score, (int, float)):
+    if not frames.is_number(score):
         return 0
     pivot = PIVOT if pivot is None else pivot
     step = STEP if step is None else step
@@ -424,8 +407,7 @@ def apply(ctx):
     # 現れた時点でローダが当て直す（`209_` の形）。
 
     log_path = ctx.out_path(LOG_BASENAME)
-    state = {"rolls": 0, "unreadable": 0, "coarse": False,
-             "free_rolls": 0, "inferred": {}, "no_llm": False}
+    state = {"unreadable": 0, "coarse": False, "inferred": {}, "no_llm": False}
 
     write = ctx.logger(LOG_BASENAME)
 
@@ -527,12 +509,11 @@ def apply(ctx):
             return
         for step in rolls:
             before = _get(step, "chance_percent")
-            if not isinstance(before, (int, float)):
+            if not frames.is_number(before):
                 continue
             after = clamp_percent(before + total)
             if after == before or not _set(step, "chance_percent", after):
                 continue
-            state["free_rolls"] += 1
             write("{}: 能力値補正 {}={} -> {:+d}%(能力値) {:+d}%(底上げ) | "
                   "確率 {}% -> {}%".format(
                       site, attribute or "推定できず", score, bonus, FLAT_BONUS,
@@ -574,7 +555,7 @@ def apply(ctx):
                 return result           # 確定成功・確定失敗には触らない
             credibility = _get(result_type, "credibility")
             attribute = _get(result_type, "reference_attribute")
-            if not isinstance(credibility, (int, float)):
+            if not frames.is_number(credibility):
                 return result
 
             player = frames.arg(args, kwargs, "player", EVAL_ARGS)
@@ -597,7 +578,7 @@ def apply(ctx):
                 # そのとき記録まで空だと「MOD が動いていない」のと見分けが付かない。
                 write("補正なし: {}={} ({}) 確率 {}% のまま".format(
                     attribute, score,
-                    "上限で頭打ち" if isinstance(score, (int, float)) and score > PIVOT
+                    "上限で頭打ち" if frames.is_number(score) and score > PIVOT
                     else "基準 {} 以下".format(PIVOT),
                     percent_of(credibility)))
                 return result
@@ -608,7 +589,6 @@ def apply(ctx):
                       "ゲームの判定をそのまま通す: credibility={}".format(credibility))
                 return result
 
-            state["rolls"] += 1
             write("能力値補正: {}={} -> {:+d}%(能力値) {:+d}%(底上げ) | "
                   "説得力 {} -> {} | 確率の見込み {}% -> {}%".format(
                       attribute, score, bonus, flat, credibility, installed,
@@ -619,60 +599,16 @@ def apply(ctx):
             ctx.log_exc("ability check: could not adjust the credibility")
         return result
 
-    # ------------------------------------------------------------ 自己検証
-    # 実経路はクエストでイベントを1回引くまで通らないので、計算だけ先に確かめる。
+    # 今の設定での換算表。設定で変わるので、注入のたびにログに残す。
+    # 式そのものの確かめは固定の入力なので tools/tests/test_event_ability_check.py にある。
     table = [(score, ability_percent(score))
              for score in (PIVOT, PIVOT + 1, PIVOT + STEP,
                            PIVOT + STEP + 1, 28, 30)]
-    # 式を確かめるので、設定は既定の値を明示で渡す（GUI で変えても期待値がずれない）。
-    # 既定 15 / 3点 / 1段4% / 上限20% / 減点なし / 底上げ0 / 10% 未満の刻みあり。
-    base = {"flat": 0, "fine": True, "pivot": 15, "step": 3, "per_step": 4,
-            "bonus_cap": 20, "penalty_cap": 0}
-    cases = (
-        # (能力値, 説得力, 既定から変える値, 期待する新しい説得力)
-        (15, 5, {}, 5),
-        (16, 5, {}, 5 + 4 / 10.0),
-        (1, 5, {}, 5),                        # 低くても減点しない（減点上限0）
-        (99, 5, {}, 5 + 20 / 10.0),
-        (99, 10, {}, CREDIBILITY_MAX),        # 上限で頭打ち
-        (None, 5, {"flat": 10}, 5 + 10 / 10.0),   # 読めない能力値は底上げだけ
-        (16, 5, {"fine": False}, 5),          # 刻みを切れば整数へ丸める
-        (1, 5, {"penalty_cap": 8}, 5 - 8 / 10.0),  # 減点を許せば下がる
-    )
-
-    def verify_case(score, credibility, change):
-        options = dict(base, **change)
-        return adjusted(credibility, score, **options)[0]
-
-    failures = [c for c in cases if verify_case(c[0], c[1], c[2]) != c[3]]
-    if failures:
-        ctx.log("VERIFY FAILED: {}".format(
-            ["score={} cred={} with={} want={} got={}".format(
-                s, c, change, want, verify_case(s, c, change))
-             for s, c, change, want in failures]),
-            level="ERROR")
-    else:
-        ctx.log("verified: pivot={} step={} 1段{}% 加点上限{}% 減点上限{}% "
-                "底上げ{}% fine={} ({})".format(
-                    PIVOT, STEP, BONUS_PER_STEP, MAX_BONUS, MAX_PENALTY,
-                    FLAT_BONUS, FINE_STEPS,
-                    " / ".join("{}→{:+d}%".format(s, p) for s, p in table)))
-
-    # 語句の表も、作った文で1度だけ確かめる（実経路は自由入力を1回通すまで来ない）。
-    samples = (("", None),
-               ("崩れた瓦礫をこじ開けて押し破る", "strength"),
-               ("物陰に隠れてこっそり忍び寄る", "dexterity"),
-               ("古代文字を解読し、術式の構造を分析する", "intelligence"),
-               ("周囲の気配を探り、罠の痕跡を見抜く", "wisdom"),
-               ("店主を説得して値切る", "charisma"),
-               ("毒に耐えながら踏ん張る", "constitution"),
-               ("ただ歩く", None))
-    bad = [(text, want, infer_by_keywords(text))
-           for text, want in samples if infer_by_keywords(text) != want]
-    if bad:
-        ctx.log("VERIFY FAILED (keywords): {}".format(bad), level="ERROR")
-    else:
-        ctx.log("verified: keyword inference on 8 sample sentences")
+    ctx.log("settings: pivot={} step={} 1段{}% 加点上限{}% 減点上限{}% "
+            "底上げ{}% fine={} ({})".format(
+                PIVOT, STEP, BONUS_PER_STEP, MAX_BONUS, MAX_PENALTY,
+                FLAT_BONUS, FINE_STEPS,
+                " / ".join("{}→{:+d}%".format(s, p) for s, p in table)))
 
     ctx.log("event ability check installed; source={} free_action={} log={}".format(
         SCORE_SOURCE, FREE_ACTION_MODE, log_path))

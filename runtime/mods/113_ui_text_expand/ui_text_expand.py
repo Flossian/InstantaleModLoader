@@ -183,6 +183,8 @@ HP）」の4つが並んでいるので、キャラの欄は**枠の右端より
 import weakref
 
 from instantale_modloader import frames, ui
+# hud という名前の引数（upkeep(hud) など）が多いので、窓口のモジュールは別名で持つ
+from instantale_modloader import hud as hud_window
 
 LOG_BASENAME = "text_expand.log"
 
@@ -591,33 +593,12 @@ def apply(ctx):
         次のフレームで `update_label_height` を呼ぶだけで、`texture_update()` は呼ばない（TECH.md §6.2）。
         折り返し幅を変えた時点で Kivy がテクスチャの作り直しを予約しており、
         それはこの予約より先に走るので、高さを出す時点の `texture_size` は新しい幅のものになっている。
+        予約はローダの `hud.settle_text`（`112_` / `117_` の分と HUD ごとに1つにまとめる。TECH.md §3.3.21）。
         """
-        def run():
-            try:
-                update_height = frames.attr(hud, "update_label_height")
-                if callable(update_height):
-                    update_height()
-            except Exception:
-                ctx.log_exc("text expand: could not settle the label height")
+        hud_window.settle_text(hud, write=note)
 
-        schedule(run)
-
-    def clamp(box):
-        """`pos_hint` を持たない枠を窓の内側へ。位置はゲームが入れるので次のフレームに。"""
-        win_width, win_height = window_size()
-        if not win_width or not win_height:
-            return
-        try:
-            if box.y + box.height > win_height:
-                box.y = win_height - box.height
-            if box.y < 0:
-                box.y = 0
-            if box.x + box.width > win_width:
-                box.x = win_width - box.width
-            if box.x < 0:
-                box.x = 0
-        except Exception:
-            ctx.log_exc("text expand: clamp failed")
+    # `pos_hint` を持たない枠を窓の内側へ寄せるのはローダの語彙。位置はゲームが入れるので次のフレームに呼ぶ。
+    clamp = ui.clamp_into_window
 
     def clamp_all(design):
         """伸びた枠を窓の内側へ。仲間は同じ量だけ動かす（別々に収めると揃わない）。
@@ -1167,19 +1148,13 @@ def apply(ctx):
 
     # -- フック --------------------------------------------------------------
     # 本文が変わったとき（1文字ずつ来る）と、選択肢が塗り直されたとき。
-    # どちらもゲームに先に仕事をさせてから、
-    # こちらの後始末をする（`safe=True` の落とし先が `orig` の結果になる）。
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_display_text", safe=True)
-    def update_display_text(orig, self, instance=None, value=None, *args, **kwargs):
-        result = orig(self, instance, value, *args, **kwargs)
-        upkeep(self)
-        return result
+    # どちらもゲームに先に仕事をさせてから、こちらの後始末をする。
+    # 包むのはローダの窓口 `hud` の1枚（TECH.md §3.3.21）。後始末が投げても窓口が握り、ゲームの結果はそのまま返る
+    def painted(call):
+        upkeep(call.obj)
 
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_button_texts", safe=True)
-    def update_button_texts(orig, self, instance=None, value=None, *args, **kwargs):
-        result = orig(self, instance, value, *args, **kwargs)
-        upkeep(self)
-        return result
+    hud_window.on(ctx.mod_name or "113_ui_text_expand", ctx, (hud_window.TEXT, hud_window.BUTTONS),
+                  after=painted, write=note)
 
     ctx.log("text expand: {} widens the narration frame to x{} / x{} ({} corner); "
             "sizes go to out/{}".format(LABEL_EXPAND, WIDTH_SCALE, HEIGHT_SCALE,

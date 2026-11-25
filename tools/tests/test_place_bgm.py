@@ -262,6 +262,8 @@ try:
     class FakeCtx:
         generation = "g1"
         _mod = None      # 本物の logger が MOD 名に使う
+        # 窓口に名乗る持ち主の名前（本物は apply() の間フォルダ名を返す）。
+        mod_name = os.path.basename(os.path.dirname(mod.__file__))
 
         def __init__(self):
             self.out_dir = os.path.join(tmp, "out")

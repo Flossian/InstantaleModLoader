@@ -137,7 +137,7 @@ config.json の欄  --parallel 2 --ctx-size 32768 --cache-reuse 256
 `tools\llm_ctx_probe.bat` が実測して出す。
 溢れてもエラーにはならず「異様に遅い」になるだけなので、勘で上げないこと。
 
-## 窓を共有する起動ではスキーマ説明を縮める（版6）
+## 窓を共有する起動ではスキーマ説明を縮める
 
 統合 KV（`--parallel` 無し）は4スロットが窓を1つの領域で分け合うので、
 2本が同時に走ると1件あたりは約半分になり、足りなければ `context-exceeded` で止まる。
@@ -153,7 +153,6 @@ config.json の欄  --parallel 2 --ctx-size 32768 --cache-reuse 256
 起動を見ていないうちに頼みが来たら（注入がサーバより後）、走っているサーバの引数を読んで決め、
 読めなければ縮める。
 縮め方の部品は `schema_compact.py`。
-`105_` は取込済として伏せた。
 
 ## 割り切り
 
@@ -182,6 +181,8 @@ import struct
 import subprocess
 import sys
 import types
+
+from instantale_modloader import frames
 
 from . import schema_compact
 
@@ -304,24 +305,17 @@ _COMPACT_STATE.__dict__.setdefault("why", "")
 
 
 def is_llama_server(argv):
-    """この argv が llama-server の起動か。実行ファイル名で判定する。
+    """この argv が llama-server の起動か。argv のどれかに実行ファイル名の目印が含まれるかで判定する。
 
     背景除去のサイドカーも同じ関数を通るので、
     ここを緩めると無関係なプロセスに `--ctx-size` を足すことになる。
     """
     if not isinstance(argv, (list, tuple)):
         return False
-    for item in argv:
-        try:
-            text = str(item).lower()
-        except Exception:
-            continue
-        # 実行ファイルは argv[0] に来るはずだが、
-        # 位置は決め打ちしない（ゲームが
-        # python 経由で起こす形に変わっても拾えるように）。
-        if EXE_MARK in os.path.basename(text) or EXE_MARK in text:
-            return True
-    return False
+    # 実行ファイルは argv[0] に来るはずだが、
+    # 位置は決め打ちしない（ゲームが
+    # python 経由で起こす形に変わっても拾えるように）。
+    return any(EXE_MARK in str(item).lower() for item in argv)
 
 
 def server_exe(argv):
@@ -769,10 +763,9 @@ def running_flags():
         return None
 
     def value_of(cmdline, flag):
-        for i, item in enumerate(cmdline):
-            if str(item) == flag and i + 1 < len(cmdline):
-                return str(cmdline[i + 1])
-        return None
+        # 短い綴り（-c / -np）と `--parallel=2` の形も `flag_value` で読む。呼び手は文字列で受ける
+        value = flag_value(cmdline, flag)
+        return None if value is None else str(value)
 
     try:
         for proc in psutil.process_iter(["name", "cmdline"]):
@@ -851,8 +844,7 @@ def apply(ctx):
         # `popen_sidecar` は Popen の薄い包みなので、
         # argv は第1位置引数かキーワード `args` のどちらかで来る。
         # 受け取ったのと同じ渡し方で返す。
-        from_kwargs = "args" in kwargs
-        argv = kwargs.get("args") if from_kwargs else (args[0] if args else None)
+        argv = frames.arg(args, kwargs, "args", 0)
 
         if not is_llama_server(argv):
             return orig(*args, **kwargs)
@@ -873,10 +865,7 @@ def apply(ctx):
                 flag, before if before is not None else "(無し)", after))
         write("[REWRITE] {}".format(describe(new_argv)))
 
-        if from_kwargs:
-            kwargs = dict(kwargs, args=new_argv)
-        else:
-            args = (new_argv,) + tuple(args[1:])
+        args, kwargs, _ = frames.replace_arg(args, kwargs, "args", 0, new_argv)
         return orig(*args, **kwargs)
 
     def report():
@@ -915,7 +904,7 @@ def apply(ctx):
 
 
 def install_schema_compact(ctx, write):
-    """窓を共有する起動のときだけ、頼みの本文のスキーマ説明を縮める（版6。docstring）。"""
+    """窓を共有する起動のときだけ、頼みの本文のスキーマ説明を縮める（モジュールの docstring）。"""
     compact_write = ctx.logger(COMPACT_LOG)
     state = {"hits": 0}
 
@@ -938,13 +927,16 @@ def install_schema_compact(ctx, write):
         return _COMPACT_STATE.need
 
     @ctx.wrap(CHAT_TARGET, required=False, safe=True)
-    def chat(orig, self, model, messages, format=None, *args, **kwargs):
+    def chat(orig, self, *args, **kwargs):
+        # LlamaCppClient.chat(self, model, messages, format=...)。位置は self を除いて数える
+        messages = frames.arg(args, kwargs, "messages", 1)
+        format = frames.arg(args, kwargs, "format", 2)
         # format が dict のとき（＝実体のあるスキーマが渡っているとき）だけ。
         # "json" のような汎用指定はフィールド単位の強制をしないので触らない。
         if isinstance(format, dict) and format and isinstance(messages, list) and need_now():
             new_messages, done = schema_compact.compact_messages(messages)
             if new_messages is not None:
-                messages = new_messages
+                args, kwargs, _ = frames.replace_arg(args, kwargs, "messages", 1, new_messages)
                 for role, before, after, compact in done:
                     state["hits"] += 1
                     compact_write("[COMPACT] chat {} | スキーマ説明を圧縮 {} -> {} 文字 (削減 {})".format(
@@ -952,14 +944,7 @@ def install_schema_compact(ctx, write):
                     if state["hits"] <= COMPACT_AUDIT_FIRST_N:
                         for line in compact.split("\n"):
                             compact_write("    {}".format(line))
-        return orig(self, model, messages, format, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
-    # 実経路はゲームが構造付きの頼みを出したときにしか通らず、起動直後に通る保証が無いので、
-    # 注入の時点で見本を通して正しさを確かめておく。
-    failure, sizes = schema_compact.verify()
-    if failure:
-        ctx.log("llm speed: VERIFY FAILED: schema compaction " + failure, level="ERROR")
-    else:
-        ctx.log("llm speed: verified schema compaction {} -> {} chars, idempotent, "
-                "no-op without a schema or under {} chars".format(
-                    sizes[0], sizes[1], schema_compact.MIN_SCHEMA_CHARS))
+    # 見本での正しさの確かめ（`schema_compact.verify`）は固定の入力の計算なので、注入のたびには走らせず
+    # tools/tests/test_schema_compact.py に置く（TECH.md §6.1）。

@@ -17,7 +17,7 @@ MOD_DIR = os.path.join(RUNTIME_DIR, "mods", "345_date_display")
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
-from instantale_modloader import durations, loads, state as state_api, ui  # noqa: E402
+from instantale_modloader import durations, loads, state as state_api, status_text, ui  # noqa: E402
 
 # フォルダ名が数字で始まるので、パッケージの名前を付け直して読む（本体は相対 import で同居のファイルを読む）。
 package = types.ModuleType("date_display_pkg")
@@ -125,9 +125,14 @@ class FakeStore(object):
     def load(self, world, fresh=False):
         return dict(self.records.get(world, {}))
 
+    def forget(self, *_args):
+        pass
+
 
 class FakeCtx(object):
     mod_dir = MOD_DIR
+    # 本物の ctx は apply() の間、フォルダ名を返す（窓口に名乗る名前）。
+    mod_name = os.path.basename(MOD_DIR)
 
     def __init__(self):
         self.hooks = {}
@@ -172,7 +177,8 @@ def game_paint(self, instance=None, value=None):
     label.text = value
 
 
-hud.update_status_texts = lambda instance, value: ctx.hooks[mod.HUD_TARGET](game_paint, hud, instance, value)
+# 見張りはローダの窓口 `status_text` が1枚だけ包む。
+hud.update_status_texts = lambda instance, value: ctx.hooks[status_text.TARGET](game_paint, hud, instance, value)
 
 ctx = FakeCtx()
 days_hooks, load_hooks, world_name = [], [], ["甲"]
@@ -193,9 +199,12 @@ try:
     mod.measure_on = lambda _l, _t: (lambda _f, _h: (8, 34))
 
     FakeStore.records = {"乙": {"START_YEAR": 500, "MONTHS": "霜月:10,10", "FORMAT": "{year}-{month}-{day}"}}
+    status_text.reset()         # 包みは1つの世代に1枚。偽の ctx に包みを渡す
     mod.apply(ctx)
-    wrap = ctx.hooks[mod.HUD_TARGET]
+    wrap = ctx.hooks[status_text.TARGET]
     check("the status watcher is wrapped", callable(wrap))
+    check("the date goes to the status_text window (not a wrap of its own)",
+          status_text.owners() == ["345_date_display"], status_text.owners())
     check("applying again repaints what was painted without the wrap",
           painted[-1:] == [STATUS + "\nDate:1年2月1日"], painted[-1:])
 
@@ -231,7 +240,28 @@ try:
     wrap(lambda self, instance=None, value=None: None, hud, hud, STATUS)
     check("the label is written when the watcher ignores the value",
           label.text.endswith("701-2月-3"), label.text)
-    check("that is warned about", any("did not take the value" in line for line in ctx.logs))
+    # 保険は窓口が受け持ち、ローダのログに1回だけ書く。
+    check("that is warned about", "unpainted" in status_text._store()["said"], status_text._store()["said"])
+
+    # 世界ごとの値の型が合わなければ一括設定のまま（前の読み方と同じ）。
+    FakeStore.records["乙"] = {"START_YEAR": True, "MONTHS": 5, "FORMAT": "{year}|{month}|{day}"}
+    load_hooks[-1][2](types.SimpleNamespace(app=app))
+    check("values of the wrong type fall back to the global settings",
+          painted[-1] == STATUS + "\n1|2月|2", painted[-1:])
+
+    # 収まりを見るのは日付を足した回の塗りの後だけ。見張りが投げた回の印を、次の日付の無い回へ持ち越さない。
+    fits = []
+    mod.measure_on = lambda _l, text: fits.append(text) or (lambda _f, _h: (8, 34))
+
+    def broken_paint(self, instance=None, value=None):
+        raise RuntimeError("the watcher failed")
+
+    try:
+        wrap(broken_paint, hud, hud, STATUS)
+    except RuntimeError:
+        pass
+    wrap(game_paint, hud, hud, "HP:10")
+    check("a paint without the date does not refit after a failed paint", fits == [], fits)
 finally:
     mod.measure_on = real_measure
     (state_api.WorldStore, durations.on_days, loads.on, ui.find_app, ui.find_hud, state_api.world_key,

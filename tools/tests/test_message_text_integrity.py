@@ -104,6 +104,9 @@ def install_fake_kivy():
 
 
 class FakeCtx(object):
+    # 窓口に名乗る持ち主の名前（本物は apply() の間フォルダ名を返す）。
+    mod_name = os.path.basename(os.path.dirname(MOD_PATH))
+
     def __init__(self):
         self.errors = []
         self.wrapped = {}
@@ -136,6 +139,10 @@ def load_mod():
 
 def install(module, ctx):
     FakeHUD.update_display_text = PRISTINE
+    # 包みと高さの予約はローダの窓口 hud が持つ。偽の ctx は世代を持たないので、覚えを消して立て直させる。
+    from instantale_modloader import gates, hud
+    gates.reset_all()
+    hud.reset()
     module.apply(ctx)
 
 

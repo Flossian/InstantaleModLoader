@@ -41,7 +41,7 @@ import sys
 import threading
 import time
 
-from . import alive, frames, gates, log, log_exc
+from . import alive, frames, gates, log, log_exc, state, window_put
 
 TARGET = "scripts.llm.llm_manager_world_generate:random_quest_generator"
 #: `random_quest_generator` の引数の並び（recon の signatures.json）。
@@ -57,13 +57,7 @@ gates.track_install_attr(STORE_ATTR)
 
 
 def _store():
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"rewriters": {}, "offers": {}, "seq": 0, "installed": None}
-        setattr(sys, STORE_ATTR, store)
-    for key, empty in (("rewriters", {}), ("offers", {}), ("seq", 0), ("installed", None)):
-        store.setdefault(key, empty)
-    return store
+    return state.process_store(STORE_ATTR, {"rewriters": {}, "offers": {}, "seq": 0, "installed": None})
 
 
 class Request(object):
@@ -104,6 +98,7 @@ def _run(owner, entry, label, fn, *args):
 
 
 def _is_difficulty(value):
+    """難易度として渡せる値か。整数だけ（`frames.is_number` は float も通すので寄せない）。"""
     return isinstance(value, int) and not isinstance(value, bool)
 
 
@@ -115,9 +110,8 @@ def on(owner, ctx, rewrite, write=None):
     with _LOCK:
         store = _store()
         store["seq"] += 1
-        store["rewriters"].pop(str(owner), None)
-        store["rewriters"][str(owner)] = {"ctx": ctx, "rewrite": rewrite, "write": write,
-                                          "seq": store["seq"]}
+        window_put(store["rewriters"], owner, {"ctx": ctx, "rewrite": rewrite, "write": write,
+                                               "seq": store["seq"]})
     install(ctx, write)
 
 
@@ -147,12 +141,11 @@ def offer(owner, ctx, brief=None, difficulty=None, rewrite=None, after=None, ttl
     with _LOCK:
         store = _store()
         store["seq"] += 1
-        store["offers"].pop(str(owner), None)
-        store["offers"][str(owner)] = {
+        window_put(store["offers"], owner, {
             "ctx": ctx, "brief": brief or None, "difficulty": difficulty, "rewrite": rewrite,
             "after": after, "ttl": float(ttl), "at": time.monotonic(), "tag": tag or str(owner),
             "write": write, "seq": store["seq"],
-        }
+        })
     return True
 
 

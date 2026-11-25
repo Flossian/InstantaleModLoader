@@ -173,6 +173,10 @@ class FakeCtx(object):
         import instantale_modloader as _ml
         return _ml.ModContext.logger(self, name, **kw)
 
+    def once(self, write, *args, **kw):
+        import instantale_modloader as _ml
+        return _ml.ModContext.once(self, write, *args, **kw)
+
     def wrap(self, target, required=True):
         name = target.partition(":")[2].rsplit(".", 1)[-1]
 

@@ -31,11 +31,6 @@ spec.loader.exec_module(MOD)
 for key, spec_ in manifest["settings"].items():
     assert getattr(MOD, key) == spec_["default"], key
 
-# area_description の末尾へ足す側（会話・道のりの指示）より外側に置く。
-# 内側に回ると、当たった回に足した指示ごと差し替えて消してしまう
-for name in ("301_quest_from_conversation", "307_area_move_dungeon", "325_road_opening"):
-    assert name in manifest["after"], name
-
 # roll の両端
 assert not MOD.roll(0, rnd=lambda: 0.0)
 assert MOD.roll(100, rnd=lambda: 0.999)
@@ -47,6 +42,8 @@ class Ctx(object):
     def __init__(self):
         self.hooks = {}
         self.lines = []
+        # 窓口に名乗る持ち主の名前（本物は apply() の間だけフォルダ名）。
+        self.mod_name = os.path.basename(folder)
 
     def logger(self, name):
         return self.lines.append
@@ -81,6 +78,13 @@ a, kw = hook(orig, *ARGS)
 n = MOD.NOTE_WORLD_ONLY
 assert a == ("world", "town", n, n, n, 7), a
 assert any(l.startswith("world-only") for l in ctx.lines)
+
+# 当たった回でも、よその MOD が置いた1回だけの指示（会話・道のり）は伏せた後の末尾に残る。
+# 窓口が生成ごとの書き換え（`on`）を `offer` の指示より先に当てるので、読み込み順に依らない。
+from instantale_modloader import quest_generation  # noqa: E402
+quest_generation.offer("301_quest_from_conversation", ctx, brief="【会話の指示】")
+a, kw = hook(orig, *ARGS)
+assert a == ("world", "town", n, n, n + "【会話の指示】", 7), a
 
 # ゲームがキーワード引数で呼んでも、受け取った形のまま3欄だけを差し替える（版4）。
 names = ("world_overview", "settlement_name", "settlement_overview",

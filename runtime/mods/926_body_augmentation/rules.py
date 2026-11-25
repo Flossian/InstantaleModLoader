@@ -8,7 +8,7 @@
 
 import hashlib
 
-from instantale_modloader import battle_effects
+from instantale_modloader import battle_effects, frames, items
 
 # ---------------------------------------------------------------- 部位
 #: 部位はゲームの怪我（`body_parts`）と同じ6つ。並びは画面の左の列・右の列。
@@ -31,7 +31,8 @@ PART_COST = {"head": "wisdom", "arms": "dexterity", "legs": "constitution", "bod
 PART_BOOST = {"head": "intelligence", "arms": "strength", "legs": "dexterity", "body": "constitution",
               "organs": "constitution", "sanity": "wisdom"}
 
-RARITIES = ("common", "rare", "magical", "epic", "legendary", "mythic")
+#: レア度の6段（GAME.md §2.13.2。ローダの `items.RARITIES`）。
+RARITIES = items.RARITIES
 #: 見立てに回す品の種類（ゲームの6種すべて）。クラフトで作った部品が防具や武器の種類になっても候補に乗せる。
 #: 体に使えるかは種類ではなく見立てで決める。
 ITEM_TYPES = ("material", "utility", "weapon", "wearable", "healing_item", "consumable")
@@ -240,13 +241,13 @@ class Config(object):
                 setattr(self, name, value)
 
 
-def _number(value):
-    return not isinstance(value, bool) and isinstance(value, (int, float))
+#: int か float で bool ではないか（ローダの `frames.is_number`）。
+_number = frames.is_number
 
 
 def rarity_index(rarity):
-    """レア度の段（0〜5）。知らない値は common。"""
-    return RARITIES.index(rarity) if rarity in RARITIES else 0
+    """レア度の段（0〜5）。知らない値は common（ローダの `items.rarity_rank`）。"""
+    return items.rarity_rank(rarity)
 
 
 def clamp(value, low, high):
@@ -403,9 +404,10 @@ def candidate_empty(tally, at_facility):
 
 def item_size(data):
     """品の辞書（またはゲームの品）の大きさ `(幅, 高さ)` のマス数。読めなければ 1x1。"""
-    get = data.get if isinstance(data, dict) else (lambda name: getattr(data, name, None))
+    # 辞書でも品でも読む。読めなかった番人は None（ローダの `frames.field`）
     try:
-        return max(1, int(get("width_slots") or 1)), max(1, int(get("height_slots") or 1))
+        return (max(1, int(frames.field(data, "width_slots") or 1)),
+                max(1, int(frames.field(data, "height_slots") or 1)))
     except (TypeError, ValueError):
         return 1, 1
 

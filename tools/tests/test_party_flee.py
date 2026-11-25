@@ -24,6 +24,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
+from instantale_modloader import battles, gates        # noqa: E402
 
 
 def find_mod(suffix):
@@ -85,6 +86,8 @@ class FakeCtx:
         return path
 
     _mod = None
+    # 本物の ctx は apply() の間、フォルダ名を返す（窓口に名乗る名前）。
+    mod_name = os.path.basename(os.path.dirname(MOD_PATH))
 
     def logger(self, name, **kw):
         return ml.ModContext.logger(self, name, **kw)
@@ -113,9 +116,20 @@ def setup(members):
     spec.loader.exec_module(mod)
     work = tempfile.mkdtemp(prefix="party_flee_test_")
     ctx = FakeCtx(work)
+    # 1手と終わり方はローダの窓口 `battles` が包む。偽の ctx を作り直すので関所を立て直させる。
+    gates.reset_all()
     mod.apply(ctx)
     app = InstantaleApp(members)
     return mod, ctx, app, work
+
+
+def hook_errors(work):
+    """窓口が握った前後の処理の例外（MOD のログに WARN 行で残る）。"""
+    path = os.path.join(work, "party_flee.log")
+    if not os.path.isfile(path):
+        return []
+    with io.open(path, encoding="utf-8") as fh:
+        return [line for line in fh if " hook raised " in line]
 
 
 def game_flee(app):
@@ -128,10 +142,10 @@ def one_action(mod, ctx, app, effect):
     manager = Manager(app)
 
     def handle(self):
-        ctx.hooks[mod.RESOLVE_TARGET](lambda _self: effect(app), self)
+        ctx.hooks[battles.TARGETS[battles.EFFECT]](lambda _self: effect(app), self)
         app.add_text("（審判の地の文）")
 
-    ctx.hooks[mod.HANDLE_TARGET](handle, manager)
+    ctx.hooks[battles.TARGETS[battles.ACTION]](handle, manager)
 
 
 def end_battle(mod, ctx, app, label, give_back):
@@ -141,7 +155,7 @@ def end_battle(mod, ctx, app, label, give_back):
             for member_id, value in list(app.escaped_member_in_battle.items()):
                 app.party[member_id] = value
             app.escaped_member_in_battle.clear()
-    target = dict((lbl, tgt) for tgt, lbl in mod.END_TARGETS)[label]
+    target = dict((battles.LABELS[kind], battles.TARGETS[kind]) for kind in battles.ENDS)[label]
     ctx.hooks[target](end_phase, Manager(app))
 
 
@@ -156,7 +170,12 @@ end_battle(mod, ctx, app, "BattleEndManager.end_phase", give_back=True)
 check("逃走の終わり方でゲームが全員を戻す（二重にしない）",
       list(app.party) == ["player", "95", "104"] and not app.escaped_member_in_battle,
       (list(app.party), app.escaped_member_in_battle))
-check("例外を残さない", ctx.errors == [], ctx.errors)
+check("例外を残さない", ctx.errors == [] and not hook_errors(work), (ctx.errors, hook_errors(work)))
+check("1手・終わり方は窓口 battles に登録する（自分で包まない）",
+      all(battles.owners(kind) == ["147_fix_party_flee"]
+          for kind in (battles.EFFECT, battles.ACTION, battles.END))
+      and mod.CHECK_TARGET in ctx.hooks,
+      [(kind, battles.owners(kind)) for kind in (battles.EFFECT, battles.ACTION, battles.END)])
 shutil.rmtree(work, ignore_errors=True)
 
 print("動かない")
@@ -187,12 +206,10 @@ check("戻した仲間は預かりから外す", list(app.escaped_member_in_batt
       list(app.escaped_member_in_battle))
 end_battle(mod, ctx, app, "BattleEndInFreeAction.end_phase", give_back=False)
 check("次の終わり方では何もしない（控えは使い切り）", list(app.party).count("95") == 1, list(app.party))
-check("例外を残さない（戻す）", ctx.errors == [], ctx.errors)
+check("例外を残さない（戻す）", ctx.errors == [] and not hook_errors(work), (ctx.errors, hook_errors(work)))
 shutil.rmtree(work, ignore_errors=True)
 
 print("ロードで戦闘を抜けた")
-from instantale_modloader import gates  # noqa: E402
-gates.reset_all()                       # 偽の ctx を作り直すので、読み込みの関所を立て直させる
 mod, ctx, app, work = setup({"95": Character("リュウ")})
 one_action(mod, ctx, app, game_flee)
 ctx.hooks["__main__:InstantaleApp.load_game_new"](lambda self, *a: None, app)   # end_phase を通らずに抜ける

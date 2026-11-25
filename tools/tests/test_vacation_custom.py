@@ -264,6 +264,10 @@ class JustSetButtonToNormalPhase:
 class InstantaleApp:
     def __init__(self):
         self.player = Player()
+        # 人物が揃った世界。窓口 choices は人物が居ないと宣言型のボタンを組まない（`choices.ready`）。
+        world = type("World", (), {})()
+        world.characters = {"1": object()}
+        self.world = world
         self.buttons = []
         self.display_button_map = None
         self.to_display_buttons = []
@@ -387,6 +391,15 @@ class FakeCtx:
         # ここが同じ値だと 2本目以降の apply() で関所が立たない（durations.install）。
         FakeCtx._seq += 1
         self.generation = FakeCtx._seq
+        # 本物の ctx.mod_name と同じく MOD のフォルダ名（窓口に名乗る持ち主名）
+        self.mod_name = os.path.basename(os.path.dirname(MOD))
+        # `modnpc` の控え（宿の主への指示文の口）の置き場。本番と同じく out とは別のフォルダ
+        self.state_dir = os.path.join(out_dir, "state")
+
+    def state_path(self, *parts):
+        path = os.path.join(self.state_dir, *parts)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        return path
 
     def out_path(self, *parts):
         path = os.path.join(self.out_dir, *parts)
@@ -568,11 +581,39 @@ check("背景の quality もゲームのまま", app.backgrounds == ["private_ro
 check("日数送りもゲームのまま（90日）", app.elapsed == [90], app.elapsed)
 check("エラーなし", not ctx.errors, ctx.errors)
 
-print("[ラベル] 部屋のボタンの形を変えても自己検証は通る")
+print("[ラベル] 部屋のボタンの形を変えても注入でエラーを出さない")
 module, ctx, app, choice_cls, start_cls = setup(
     configure=lambda m: setattr(m, "ROOM_BUTTON", "{name}【{price}G】"))
-check("VERIFY FAILED が出ない",
+check("ERROR の行が出ない",
       not [msg for level, msg in ctx.logs if level == "ERROR"], ctx.logs)
+
+# -- 注入時の自己検証から移した確かめ（固定の入力。TECH.md §6.1） -------------------
+print("[計算] ラベルの読み書きと期間の計算（年齢の加算つき）")
+# 通貨の表記は `130_` が差し替えていることがあるので、見本のほうも同じ表記へ通してから突き合わせる。
+check("ラベルから料金を読む", ml.ui.parse_coin(ml.ui.rewrite_coins("個室(1,000G)")) == 1000)
+# テンプレートは既定の形を直に書く（`ROOM_BUTTON` は設定で変えられる）。
+check("テンプレートを埋める",
+      module.fmt("{name}({price}G)", name="大部屋", price=30) == ml.ui.rewrite_coins("大部屋(30G)"))
+check("知らない変数名は残す", module.fmt("{name}と{typo}", name="個室") == "個室と{typo}")
+
+
+def stay_field(choice, age, scaling, key):
+    stay = module.compute_stay(choice, age, scaling)
+    return None if stay is None else stay.get(key)
+
+
+check("デフォルトは None", module.compute_stay("デフォルト", 55, True) is None)
+check("1週間・25歳", module.compute_stay("1週間", 25, True)
+      == {"unit": "week", "count": 1, "months": 1, "days": 7, "length": "1週間"})
+check("1週間・35歳は2週間", stay_field("1週間", 35, True, "length") == "2週間")
+check("2週間・55歳は上限の4週間（28日）", stay_field("2週間", 55, True, "days") == 28)
+check("1ヵ月・42歳は3ヵ月", stay_field("1ヵ月", 42, True, "months") == 3)
+check("3ヵ月・47歳は5ヵ月", stay_field("3ヵ月", 47, True, "months") == 5)
+check("4ヵ月・61歳は上限の6ヵ月", stay_field("4ヵ月", 61, True, "months") == 6)
+check("6ヵ月・20歳は6ヵ月", stay_field("6ヵ月", 20, True, "months") == 6)
+check("加算OFFなら2週間は14日", stay_field("2週間", 55, False, "days") == 14)
+check("年齢が読めなければ加算なし", stay_field("1週間", None, True, "days") == 7)
+check("年齢を読む", module.parse_age("28歳") == 28 and module.parse_age(None) is None)
 
 print("[ラベル] 名前と宿代を変えた部屋だけ表示し直す")
 
@@ -687,6 +728,9 @@ def month6(module):
 module, ctx, app, choice_cls, start_cls = setup(configure=month6)
 check("宿泊のボタンが 6ヵ月 になる", texts_of(app)[0] == "宿泊する(6ヵ月)",
       texts_of(app))
+check("ゲームの一覧（セーブに残る方）の文言はゲームのまま",
+      [entry.get("text") for entry in ml.choices.game_buttons(app)][0] == STAY_TEXT,
+      [entry.get("text") for entry in ml.choices.game_buttons(app)])
 press(app, "宿泊する(6ヵ月)")
 check("部屋ボタンの args の月数も 6（型も int のまま）",
       app.buttons[2]["spec"].args == [6, "private_room"],
@@ -909,19 +953,51 @@ TALK = "scripts.llm.llm_manager:conversation_facilitator"
 TALK_AFTER = "scripts.llm.llm_manager:conversation_facilitator_after_retrieval"
 
 
+def install_fake_llm_manager():
+    """宿の主との会話の2本を持つ `scripts.llm.llm_manager` を差し込む。
+
+    指示文の差し替えはローダの `modnpc` の `prompt` の口で、その関所は差し込まれている素の関数の署名で
+    引数を名前に直す。実物の引数の名前を持たせる（recon の signatures.json）。
+    """
+    name = "scripts.llm.llm_manager"
+    module = sys.modules.get(name) or types.ModuleType(name)
+
+    def facilitator(messages, character_life_log, player, character_instance, worldview=None, world_story=None,
+                    area_residency=None, area_achievements=None, response_list=None, negotiate=None,
+                    response_prompt_instruction=None, **kwargs):
+        return "answer"
+
+    def after_retrieval(messages, character_life_log, player, character_instance, worldview=None, world_story=None,
+                        area_residency=None, area_achievements=None, response_list=None,
+                        response_prompt_instruction=None, **kwargs):
+        return "answer"
+    module.conversation_facilitator = facilitator
+    module.conversation_facilitator_after_retrieval = after_retrieval
+    sys.modules[name] = module
+
+
+install_fake_llm_manager()
+
+#: 話している宿の主（`modnpc` の関所は相手の id が引けたときだけ層を呼ぶ）。
+TALK_KEEPER = types.SimpleNamespace(id="9", name="宿の主", profile="宿を営む。")
+
+
 def keeper_talk(ctx, instruction, target=TALK, keyword=False):
     """宿の主との会話の LLM を呼び、届いた指示文を返す。"""
     seen = []
+    at = 10 if target == TALK else 9
 
     def orig(*args, **kwargs):
         seen.append(kwargs["response_prompt_instruction"] if "response_prompt_instruction" in kwargs
-                    else args[10 if target == TALK else 9])
+                    else args[at])
         return "answer"
 
     if keyword:
-        result = ctx.hooks[target](orig, "messages", response_prompt_instruction=instruction)
+        result = ctx.hooks[target](orig, "messages", [], None, character_instance=TALK_KEEPER,
+                                   response_prompt_instruction=instruction)
     else:
-        args = ["a{}".format(i) for i in range(10 if target == TALK else 9)] + [instruction, "last"]
+        args = ["a{}".format(i) for i in range(at)] + [instruction]
+        args[3] = TALK_KEEPER
         result = ctx.hooks[target](orig, *args)
     check("元の関数の答えを返す", result == "answer", result)
     return seen[0]
@@ -991,6 +1067,17 @@ check("当たらなかったことが残る", "WARN keeper: the inn terms did no
 print("[宿の主] 設定を切れば指示文に触らない")
 module, ctx, app, choice_cls, start_cls = setup(configure=week1_no_llm)
 check("フックを置かない", TALK not in ctx.hooks and TALK_AFTER not in ctx.hooks)
+check("前の注入で積んだ modnpc の層も外す",
+      not [layer for layer in ml.modnpc.layers(ml.modnpc.ANY) if layer.get("owner") == ctx.mod_name],
+      ml.modnpc.layers(ml.modnpc.ANY))
+check("外したことは記録に残る", "unregistered" in read_log(), read_log())
+# ほかの MOD（301 など）の層が残る id でも、自分の層が無ければ「外した」と書かない（注入のたびに並ぶため）。
+ml.modnpc.register("test_other_mod", ml.modnpc.ANY, prompt=lambda info: None)
+try:
+    module, ctx, app, choice_cls, start_cls = setup(configure=week1_no_llm)
+    check("自分の層が無い回は外したと書かない", "unregistered" not in read_log(), read_log())
+finally:
+    ml.modnpc.unregister("test_other_mod", ml.modnpc.ANY)
 
 
 def inn_with_keeper(app):

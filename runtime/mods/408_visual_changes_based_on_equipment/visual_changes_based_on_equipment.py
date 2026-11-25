@@ -18,7 +18,7 @@ import re
 import sys
 import typing
 
-from instantale_modloader import equipment, frames, imagegen, items, llm, state, ui
+from instantale_modloader import equipment, frames, imagegen, llm, state, ui
 
 
 # GUI 設定と同じ名前・既定値。ローダが apply() 前に上書きする。
@@ -30,7 +30,6 @@ MAX_PROMPT_COUNT = 3
 
 # 人物の絵を描く関数は画像生成の方式ごとに別のモジュールに居るが、どの方式かはローダの
 # `imagegen` が吸収する（GAME.md §2.33）。
-FAMILIES = imagegen.FAMILIES
 IMAGE_FUNC = "generate_character_image"
 STORE_ATTR = "_instantale_408_equipment_visual_store"
 STORE_DIRNAME = "equipment_visuals"
@@ -61,16 +60,8 @@ def _store(ctx, write):
 config_backend = imagegen.backend
 
 
-def image_targets(backend):
-    """包む対象。方式が分からなければ4つとも（入っていない方式は待つだけ）。"""
-    return imagegen.creature_targets(IMAGE_FUNC, backend)
-
-
-def _value(obj, name, default=None):
-    if isinstance(obj, dict):
-        return obj.get(name, default)
-    value = frames.attr(obj, name, default)
-    return default if value is frames.MISSING else value
+# 辞書でも属性でも1項目を読む（読めなければ default。ローダの語彙）。
+_value = frames.field
 
 
 def _text(obj, name):
@@ -106,33 +97,13 @@ def _find_holder(app, name):
     return None
 
 
-def _resolve_item(owner, value):
-    if isinstance(value, str):
-        inventory = items.inventory_of(owner) or {}
-        return inventory.get(value)
-    return value
-
-
 def _equipment(owner, app):
-    """[(部位, 品)]。部位名を使えるのは333の窓口が答えた場合だけ。"""
-    if owner is None:
-        return []
-    offered = equipment.gear(app, owner)
-    if offered is not None:
-        return [(slot, item) for slot, item in offered if item is not None]
+    """[(部位, 品)]。部位名を使えるのは333の窓口が答えた場合だけ。
 
-    # 333 が無い場合の本体側の最小フォールバック。
-    # 本体の equipments の weapon / wearable は装備品の入れ物であり、
-    # 333 の装備部位ではない。したがって部位名としてLLMへ渡さない。
-    equipment_map = _value(owner, "equipments", {})
-    if not isinstance(equipment_map, dict):
-        return []
-    result = []
-    for slot in ("weapon", "wearable"):
-        item = _resolve_item(owner, equipment_map.get(slot))
-        if item is not None:
-            result.append(("", item))
-    return result
+    読み方はローダの `equipment.worn`。窓口が答えなければ本体の `equipments` の weapon / wearable へ戻り、
+    その部位は "" になる（本体の2つの枠は装備品の入れ物で、333 の装備部位ではないので LLM へ部位名として渡さない）。
+    """
+    return [(slot, item) for slot, item in equipment.worn(app, owner) if item is not None]
 
 
 def _item_row(item):
@@ -140,13 +111,15 @@ def _item_row(item):
 
     value / rarity / attributes / upgrade_level など、数値や強化状態は意図的に読まない。
     """
+    # 細かい分類は `attributes` の中の `item_detail`（`small_weapon` / `body_armor` …。GAME.md §2.13）。
+    attributes = _value(item, "attributes", None)
     row = {
         "name": _text(item, "name"),
         "description": _text(item, "description"),
         "item_type": _text(item, "item_type"),
-        "sub_type": _text(item, "sub_type"),
+        "item_detail": _text(attributes, "item_detail") if isinstance(attributes, dict) else "",
     }
-    if not any(row[key] for key in ("name", "description", "item_type", "sub_type")):
+    if not any(row.values()):
         return None
     return row
 
@@ -326,7 +299,7 @@ def _prepare(ctx, store, write, app, holder, rows):
 def _append_prompt(original, prompts):
     """元のプロンプトの後ろへ足す。元に在る要素は足さない。
 
-    本体の prompt が文字列か並びかは測っていないので、どちらでも受ける。
+    本体は prompt を並びで渡す（DOC.md）。他の MOD が文字列に変えて渡しても受ける。
     """
     if not prompts:
         return original
@@ -373,24 +346,21 @@ def apply(ctx):
             name, len(prompts)))
         return orig(*new_args, **new_kwargs)
 
-    def install(target):
-        @ctx.wrap(target, required=False, safe=True)
-        def generate_character_image(orig, *args, **kwargs):
-            """NPC の再生成と主人公の絵（335 の描き直し）の入口。
-
-            描き終わった後の表示の読み直しは 138_fix_character_image_refresh が持つ。
-            """
-            app = ui.find_app()
-            name = frames.arg(args, kwargs, "name", 1, None)
-            if not _is_regeneration() and not _is_player(app, name):
-                return orig(*args, **kwargs)
-            prompt = frames.arg(args, kwargs, "prompt", 3, None)
-            return rewrite(orig, args, kwargs, app, name, prompt)
-
     backend = config_backend()
-    targets = image_targets(backend)
-    for target in targets:
-        install(target)
+
+    # 方式が分からなければ4つとも包む（入っていない方式は待つだけ）。
+    @imagegen.wrap_creature(ctx, IMAGE_FUNC, name=backend, required=False, safe=True)
+    def generate_character_image(orig, *args, **kwargs):
+        """NPC の再生成と主人公の絵（335 の描き直し）の入口。
+
+        描き終わった後の表示の読み直しは 138_fix_character_image_refresh が持つ。
+        """
+        app = ui.find_app()
+        name = frames.arg(args, kwargs, "name", 1, None)
+        if not _is_regeneration() and not _is_player(app, name):
+            return orig(*args, **kwargs)
+        prompt = frames.arg(args, kwargs, "prompt", 3, None)
+        return rewrite(orig, args, kwargs, app, name, prompt)
 
     ctx.log("408 equipment visual installed (prompt_count={}, backend={})".format(
         _prompt_count(), backend))

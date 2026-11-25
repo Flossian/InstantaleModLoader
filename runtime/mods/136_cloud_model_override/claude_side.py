@@ -30,10 +30,10 @@ SDK が説明文へ書き移した `const` も、送る前に `enum` へ戻す�
 差し替えもキャッシュも切っていても、この3つは効かせる。
 """
 
-import json
+from instantale_modloader import frames
 
 from . import claude_bounds, claude_grammar
-from .prefix_cache import Prefixes
+from .prefix_cache import Prefixes, dump as _dump
 
 #: SDK で、全リクエストが最後に通る1点。
 POST = "anthropic._base_client:SyncAPIClient.post"
@@ -167,13 +167,6 @@ def fix(body, target, effort):
             del body["output_config"]
         changed.append("-effort")
     return changed
-
-
-def _dump(value):
-    try:
-        return json.dumps(value, ensure_ascii=False, sort_keys=True)
-    except Exception:
-        return repr(value)
 
 
 def segments(body):
@@ -314,11 +307,13 @@ def install(ctx, target, effort, cache, log):
     loosened = {}
 
     @ctx.wrap(POST, required=False, safe=True, alias_scan=False)
-    def claude_post(orig, self, path=None, *args, **kwargs):
+    def claude_post(orig, self, *args, **kwargs):
+        # 並びは (self, path, *, cast_to, body, ...)。body はキーワードだけで来る。
+        path = frames.arg(args, kwargs, "path", 0)
         body = kwargs.get("body")
         if not (isinstance(body, dict) and body.get("model")
                 and str(path or "").rstrip("/").endswith("/messages")):
-            return orig(self, path, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         source = body.get("model")
         sent_to = target or source
         body = dict(body)
@@ -346,11 +341,11 @@ def install(ctx, target, effort, cache, log):
         if source != sent_to or changed:
             log.swap("claude", source, sent_to, path, changed)
         try:
-            result = orig(self, path, *args, **dict(call_kwargs, body=body))
+            result = orig(self, *args, **dict(call_kwargs, body=body))
         except Exception as exc:
             if schema is None or known or not claude_grammar.too_large(exc):
                 raise
-            result = resend_loosened(orig, self, path, args, kwargs, body, schema, key, exc)
+            result = resend_loosened(orig, self, args, kwargs, body, schema, key, exc)
         if caching and log.wants("usage"):
             # 当たったかは応答の usage でしか分からない。
             # ここで投げると safe=True が素の送信をやり直し、同じ頼みを2回払うので握る。
@@ -369,7 +364,7 @@ def install(ctx, target, effort, cache, log):
         except Exception:
             pass
 
-    def resend_loosened(orig, self, path, args, kwargs, body, schema, key, first):
+    def resend_loosened(orig, self, args, kwargs, body, schema, key, first):
         """選択肢を深いものから1つずつ文字列の欄にして送り直す。通ったら覚える。"""
         paths = []
         last = first
@@ -377,7 +372,7 @@ def install(ctx, target, effort, cache, log):
             paths.append(place)
             narrow = claude_grammar.loosen(schema, paths)
             try:
-                result = orig(self, path, *args, **dict(
+                result = orig(self, *args, **dict(
                     claude_grammar.with_decoder(kwargs, narrow),
                     body=claude_grammar.with_schema(body, narrow)))
             except Exception as exc:

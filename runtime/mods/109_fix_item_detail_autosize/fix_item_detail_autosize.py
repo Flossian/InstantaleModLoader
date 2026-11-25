@@ -32,7 +32,7 @@
 その分だけ伸ばす**。
 
 1. 各ラベルの書体・行間・余白を写した**画面に出ない複製**（`kivy.core.text.Label`）を
-   `(元の幅, None)` で焼き、その高さを読む（`_probe_height`）。
+   `(元の幅, None)` で焼き、その高さを読む（ローダの `ui.text_height`）。
    これが文字の要求する高さ。
    幅はこちらで決めない（ゲームの 316/300 のまま）。
    表示中のラベルは測定に使わない（測るだけでテクスチャが焼き直され、
@@ -250,55 +250,12 @@ def apply(ctx):
     #: （表示中のラベル側が変わっても控えが古いままにならない）。
     measured = {}
 
-    def _probe_height(label, text, width):
-        """**画面に出ていない複製**で折り返しの高さを測る。読めなければ None。
-
-        `kivy.core.text.Label` は Kivy がラベルの中身を焼くのに使っている当のもので、
-        ウィジェットではないので画面には出ない。
-        表示中のラベルから書体・大きさ・行間・余白を写して同じ条件で焼く。
-
-        表示中のラベルを測定器にしない。
-        前の版は `label.text_size = (幅, None)` を書いてから
-        `texture_update()` を呼んでいたが、これには2つ困りごとがあった:
-
-        * 測るだけでテクスチャが焼き直される。
-          幅の候補を試す `resize` のループは1回のホバーで
-          ラベル3枚 × 最大6周ぶん呼ぶので、**表示中の箱を測定のために
-          18回焼き直す**ことになる（`112_` / `117_` が同じ形で打ち出しを
-          1.6 倍遅くしていた。VERIFICATION_LOG.md §2.34）
-        * 測り終えた時点で `text_size` が `(幅, None)` のまま残る。
-          確定値は呼び出し側が入れ直すが、その前に `capture()` が走ると
-          **測定用の値を設計値として控える**
-
-        複製で測れば表示中のラベルには指一本触れない。
-        `118_batch_message_render` の `measured_height` と同じ手（あちらが先に
-        確立した。同じ計測なので寄せてある）。
-        """
-        try:
-            from kivy.core.text import Label as CoreLabel
-        except Exception:
-            return None       # 画面の無い環境（オフライン検証）
-        options = {
-            "text": text or "",
-            "font_size": frames.attr(label, "font_size", 12),
-            "text_size": (width, None),
-            "line_height": frames.attr(label, "line_height", 1.0),
-        }
-        font_name = frames.attr(label, "font_name")
-        if isinstance(font_name, str) and font_name:
-            options["font_name"] = font_name
-        padding = frames.attr(label, "padding")
-        if isinstance(padding, (list, tuple)) and len(padding) == 4:
-            options["padding"] = tuple(padding)
-        try:
-            probe = CoreLabel(**options)
-            probe.refresh()
-            return float(probe.texture.size[1])
-        except Exception:
-            return None
-
     def needed_height(label, width):
         """その幅で折り返したときに文字が要求する高さ。
+
+        **画面に出ていない複製**で測る（ローダの `ui.text_height`）。表示中のラベルを測定器にすると、
+        測るたびに表示中の箱が焼き直され（`resize` のループで1ホバーに最大18回。VERIFICATION_LOG.md §2.34）、
+        測定用の `text_size` が残って `capture()` が設計値と取り違えるため。
 
         同じ本文を同じ幅で測り直さない。
         `update_content` はマウスが動くたびに走るので、
@@ -310,7 +267,7 @@ def apply(ctx):
                frames.attr(label, "font_name", None))
         if key in measured:
             return measured[key]
-        height = _probe_height(label, key[0], width)
+        height = ui.text_height(label, key[0] or "", width)
         if height is None:
             return 0.0        # 測れない ＝ 設計値のまま（`measure` の `max`）
         if len(measured) > MEASURE_CACHE_MAX:
@@ -393,26 +350,16 @@ def apply(ctx):
         design["applied_width"] = box_width
         return heights, (box_width, box_height)
 
-    def clamp(box):
-        """伸びた箱を窓の内側へ。位置を入れるのはゲーム側なので次のフレームに。"""
-        try:
-            from kivy.core.window import Window
-            top = box.y + box.height
-            if top > Window.height:
-                box.y = Window.height - box.height
-            if box.y < 0:
-                box.y = 0
-            right = box.x + box.width
-            if right > Window.width:
-                box.x = Window.width - box.width
-            if box.x < 0:
-                box.x = 0
-        except Exception:
-            ctx.log_exc("item detail autosize: clamp failed")
+    # 伸びた箱を窓の内側へ寄せるのはローダの語彙。位置を入れるのはゲーム側なので次のフレームに呼ぶ。
+    clamp = ui.clamp_into_window
 
+    # 窓口 `items` の `DETAIL` には載せず自分で包む。窓口の関所は一番外側に立つので、
+    # 伸ばした後の寸法を写すために `109_` の外側に置いた計測（`208_` の mod.json の after）より外で伸ばすことになり、
+    # 計測が伸ばす前の箱を写す。`410_` が `109_` の内側で足す形（410 の mod.json の before）は、どちらでも同じ。
     @ctx.wrap("scripts.hud.new_hud:ItemDetailBox.update_content")
-    def update_content(orig, self, item, *args, **kwargs):
-        result = orig(self, item, *args, **kwargs)
+    def update_content(orig, self, *args, **kwargs):
+        item = frames.arg(args, kwargs, "item", 0)
+        result = orig(self, *args, **kwargs)
         try:
             labels = labels_of(self)
             if labels is None:

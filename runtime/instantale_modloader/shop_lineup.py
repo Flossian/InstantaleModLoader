@@ -33,7 +33,7 @@ MOD どうしは import しない（TECH.md §3.2.3）。
 """
 import sys
 
-from . import window_call, window_entries, window_put
+from . import state, window_call, window_entries, window_put
 
 STORE_ATTR = "_instantale_shop_lineup"
 #: 足す文の終わりとみなす字。これで終わっていない文には「。」を足す。
@@ -41,12 +41,8 @@ SENTENCE_ENDS = ("。", "．", ".", "！", "？", "!", "?")
 
 
 def _store():
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"providers": {}, "notes": {}, "errors": []}
-        setattr(sys, STORE_ATTR, store)
-    store.setdefault("notes", {})       # 足す文の口の無い前の版の置き場を引き継いだとき
-    return store
+    # 足す文の口（`notes`）の無い前の版の置き場を引き継いだときも、足りない鍵は足される（`state.process_store`）。
+    return state.process_store(STORE_ATTR, {"providers": {}, "notes": {}, "errors": []})
 
 
 def provide(owner, ctx, fn, exclude=None):

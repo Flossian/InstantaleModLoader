@@ -62,7 +62,7 @@ import json
 import math
 import os
 
-from . import log, log_exc, log_unrepeated, write_json
+from . import log, log_exc, log_unrepeated, read_json, write_json
 
 # 選んだ値の置き場所。
 # 配布フォルダ直下の settings/（runtime/ の1つ上）。
@@ -291,20 +291,22 @@ def resolve(decls: dict, chosen) -> dict:
 # --------------------------------------------------------------------------
 # 置き場所の読み書き
 # --------------------------------------------------------------------------
+def _read_dict(path: str, name: str) -> dict:
+    """`settings/` の JSON を辞書として読む（内部用）。無い・読めない・辞書でなければ `{}`。
+
+    読み方は `read_json`（BOM 付きも読む。在るのに読めなければ記録してから `{}`）。
+    辞書でなければ `name` を頭に WARN を1行書く。`load_store` と `load_flags` に同じ本体が写されていた。
+    """
+    data = read_json(path, {})
+    if not isinstance(data, dict):
+        log("{}: オブジェクトではない（無視した）".format(name), level="WARN")
+        return {}
+    return data
+
+
 def load_store(runtime_dir: str) -> dict:
     """`mod_settings.json` を `{mod フォルダ名: {設定名: 値}}` として返す。"""
-    path = store_path(runtime_dir)
-    try:
-        with open(path, "r", encoding="utf-8-sig") as fh:     # 手で直して BOM が付いても読む
-            data = json.load(fh)
-    except FileNotFoundError:
-        return {}
-    except Exception:
-        log_exc("cannot read {}".format(path))
-        return {}
-    if not isinstance(data, dict):
-        log("{}: オブジェクトではない（無視した）".format(STORE_NAME), level="WARN")
-        return {}
+    data = _read_dict(store_path(runtime_dir), STORE_NAME)
     return {k: v for k, v in data.items() if isinstance(k, str) and isinstance(v, dict)}
 
 
@@ -339,19 +341,21 @@ def load_flags(runtime_dir: str) -> dict:
     GUI で何か切り替えて初めてできるので、
     「無い＝デバッグモードは切」が自然に成り立つ。
     """
-    path = flags_path(runtime_dir)
+    return _read_dict(flags_path(runtime_dir), FLAGS_NAME)
+
+
+def _flag(runtime_dir, name, default=True, label="") -> bool:
+    """`loader.json` の真偽のフラグ `name`（内部用）。無いか真偽値でなければ `default`。
+
+    読むときに投げたら `label: cannot read <name>` を記録して `default`。
+    `drift.enabled` / `stalls.enabled` / `modnpc._read_lift_roster` に同じ本体が写されていた。
+    """
     try:
-        with open(path, "r", encoding="utf-8-sig") as fh:     # 手で直して BOM が付いても読む
-            data = json.load(fh)
-    except FileNotFoundError:
-        return {}
+        value = load_flags(runtime_dir).get(name)
     except Exception:
-        log_exc("cannot read {}".format(path))
-        return {}
-    if not isinstance(data, dict):
-        log("{}: オブジェクトではない（無視した）".format(FLAGS_NAME), level="WARN")
-        return {}
-    return data
+        log_exc("{}: cannot read {}".format(label or "config", name))
+        value = None
+    return value if isinstance(value, bool) else default
 
 
 def debug_mode(runtime_dir: str) -> bool:

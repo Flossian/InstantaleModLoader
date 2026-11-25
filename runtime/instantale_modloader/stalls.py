@@ -120,7 +120,11 @@ def is_failed(value) -> bool:
 
 
 def _state():
-    """注入をまたいで共有する控え。送信中の呼び出しは前の世代の包みの中にも居る。"""
+    """注入をまたいで共有する控え。送信中の呼び出しは前の世代の包みの中にも居る。
+
+    `state.process_store` にしないのは、送信のスレッドが同時に作っても1つに決まるよう、
+    入れ物も鍵も `setdefault` で置くため（`drift._state` と同じ）。
+    """
     state = getattr(sys, _STATE_ATTR, None)
     if not isinstance(state, dict):
         state = vars(sys).setdefault(_STATE_ATTR, {})
@@ -132,12 +136,8 @@ def _state():
 
 
 def enabled(runtime_dir) -> bool:
-    try:
-        value = config.load_flags(runtime_dir).get(FLAG)
-    except Exception:
-        log_exc("stall guard: cannot read {}".format(FLAG))
-        value = None
-    return value if isinstance(value, bool) else True
+    """`loader.json` の `FLAG` が真偽値ならその値、無いか真偽値でなければ True。"""
+    return config._flag(runtime_dir, FLAG, True, "stall guard")
 
 
 # --------------------------------------------------------------------------

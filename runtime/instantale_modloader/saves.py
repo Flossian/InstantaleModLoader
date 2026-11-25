@@ -50,7 +50,7 @@ import io
 import json
 import os
 
-from . import state
+from . import read_json, state
 
 #: セーブと世界の置き場（`%LOCALAPPDATA%\Darmabeko\Instantale`）。
 DATA_VENDOR = ("Darmabeko", "Instantale")
@@ -76,6 +76,19 @@ def data_dir(override: str = "") -> str:
     return os.path.join(local, *DATA_VENDOR)
 
 
+def _game_ai_setting(path=None):
+    """ゲームの `config.json` の `ai_setting`（ローダの内部用）。読めないか辞書でなければ None。
+
+    `path` を省くと `data_dir()` の `config.json`（ゲームが使うのはこちら。導入先の config.json は読まれない）。
+    読み方は `read_json`（BOM 付きも読む）。読めなくても記録しない（呼ぶ側は None を「分からない」として扱う）。
+    `imagegen.backend` と `llm.game_choice` に写されていた（文字コードが `utf-8` と `utf-8-sig` でずれていた）。
+    """
+    data = read_json(path or os.path.join(data_dir(), "config.json"), None,
+                     report=lambda _text: None)
+    setting = data.get("ai_setting") if isinstance(data, dict) else None
+    return setting if isinstance(setting, dict) else None
+
+
 def saves_dir(base: str = "") -> str:
     """遊んでいる世界の親。`base` を渡せるのは検査が仮の置き場を指すため。"""
     return os.path.join(base or data_dir(), "saves")
@@ -93,6 +106,14 @@ def save_path(world: str, base: str = "") -> str:
     世界名が要るときは `world_names()` が対応を返す。
     """
     return os.path.join(saves_dir(base), world, "savedata.json")
+
+
+def world_data_path(world: str, base: str = "") -> str:
+    r"""世界の骨格 `worlds\<world>\world_data.json` のパス。`save_path` と対。
+
+    `world` は `worlds\` の下のフォルダ名（`save_path` と同じく世界名とは限らない）。
+    """
+    return os.path.join(worlds_dir(base), world, "world_data.json")
 
 
 # ---- 難読化を解く --------------------------------------------------------
@@ -158,6 +179,21 @@ def read_save(world: str, base: str = ""):
     """
     try:
         with io.open(save_path(world, base), "rb") as fh:
+            raw = fh.read()
+    except OSError:
+        return None
+    return decode(raw)
+
+
+def read_world(world: str, base: str = ""):
+    r"""1世界ぶんの骨格 `worlds\<world>\world_data.json`（`app.world_dict` の元）。読めなければ `None`。
+
+    `read_save` と対で、同じく落とさない（開けない・読めない・辞書でないは None）。
+    `143_` / `318_` / `343_` が各自でパスを組んで `decode` していた読み方と同じ答え。
+    読むたびにディスクから読む。読み直しを省く控え（`143_` の更新時刻の鍵）は呼び側が持つ。
+    """
+    try:
+        with io.open(world_data_path(world, base), "rb") as fh:
             raw = fh.read()
     except OSError:
         return None

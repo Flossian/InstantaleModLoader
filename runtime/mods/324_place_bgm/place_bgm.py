@@ -96,10 +96,9 @@ pygame に触る（鳴っているかを見る・鳴らし直す）のは Kivy �
 
 import os
 import random
-import sys
 
 from instantale_modloader import arrivals, frames, sounds, ui
-from instantale_modloader.state import WorldStore, world_key
+from instantale_modloader.state import WorldStore, ordered, process_store, world_key
 
 # GUI から変えられる値。mod.json の "settings" と同じ名前・同じ既定値。
 DEFAULT_WEIGHT = 100     # 設定画面で「使う」に入れたときの重み（本体は読まない。宣言と既定値を揃えるためにある）
@@ -144,8 +143,6 @@ MEMORY_GROUPS = {"area": "areas", "facility": "facilities"}
 
 # 見張りの間隔（秒）。場所が変わったときだけ働く。0 で見張りなし。
 POLL_INTERVAL = 1.0
-
-BATTLE_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle")
 
 # 世代をまたいで持つもの（再注入で曲を鳴らし直さないため）。
 STORE_ATTR = "_instantale_place_bgm"
@@ -363,10 +360,10 @@ def order_world(bucket):
         if not isinstance(entries, dict):
             entries = {}
         out[group] = dict(sorted(entries.items(), key=lambda item: _place_sort_key(item[0])))
-    for key, value in (bucket or {}).items():
-        if key not in out:
-            out[key] = value
-    return out
+    # ほかの項目は捨てずに元の順で後ろへ（ローダの state.ordered）。
+    merged = dict(bucket) if isinstance(bucket, dict) else {}
+    merged.update(out)
+    return ordered(merged, ("areas", "facilities"))
 
 
 def empty_world():
@@ -509,21 +506,22 @@ def apply(ctx):
                 "only state/musics/place will be used", level="WARN")
 
     # 世代をまたいで持つもの。再注入しても鳴っている曲を鳴らし直さない。
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {
-            "worlds": WorldStore(ctx, WORLDS_DIRNAME, default=empty_world,
-                                 normalize=normalize_world, order=order_world, write=write),
-            "playing": (None, None, None),  # (段の鍵, 曲の鍵, 場所)。None は未知（注入直後）
-            "last": {},                # 段の鍵 -> 前回選んだ曲（AVOID_REPEAT 用）
-            "issued": [],              # 自分が出したパス
-            "game_src": None,          # ゲームが最後に渡してきた戦闘以外の曲
-            "current_src": None,       # 最後に鳴らしたパス（自分のもゲームのも）
-            "manager": None,
-            "passthrough": False,      # 自分の鳴らし直しを包みで素通しする印
-            "last_ctx": None,          # 見張りが最後に見た場所
-        }
-        setattr(sys, STORE_ATTR, store)
+    # 入れ物はローダの state.process_store（前の版が置いた入れ物の足りない鍵も埋める）。
+    store = process_store(STORE_ATTR, {
+        "worlds": None,            # 世界ごとの控えの器（下で1回だけ作る）
+        "playing": (None, None, None),  # (段の鍵, 曲の鍵, 場所)。None は未知（注入直後）
+        "last": {},                # 段の鍵 -> 前回選んだ曲（AVOID_REPEAT 用）
+        "issued": [],              # 自分が出したパス
+        "game_src": None,          # ゲームが最後に渡してきた戦闘以外の曲
+        "current_src": None,       # 最後に鳴らしたパス（自分のもゲームのも）
+        "manager": None,
+        "passthrough": False,      # 自分の鳴らし直しを包みで素通しする印
+        "last_ctx": None,          # 見張りが最後に見た場所
+    })
+    if store["worlds"] is None:
+        # 器は作るだけで台帳に載るので、既定値の中では作らない（process_store は既定値を毎回組む）。
+        store["worlds"] = WorldStore(ctx, WORLDS_DIRNAME, default=empty_world,
+                                     normalize=normalize_world, order=order_world, write=write)
     worlds = store["worlds"].rebind(ctx, write)
 
     def load_pool():
@@ -558,7 +556,7 @@ def apply(ctx):
             del store["issued"][:-MAX_ISSUED]
 
     def in_battle(app):
-        if any(getattr(app, flag, False) for flag in BATTLE_FLAGS):
+        if ui.battle_flags(app):
             return True
         return is_battle_track(store.get("current_src"))
 
@@ -764,14 +762,11 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("place bgm: reconcile failed ({})".format(why))
 
+    # メインスレッドへ回すのはローダの語彙（Clock が無ければその場で）。
+    schedule_main = ui.scheduler(ctx, "place bgm")
+
     def schedule(why, app=None):
-        """メインスレッドへ回す。Clock が無ければその場で。"""
-        try:
-            from kivy.clock import Clock
-        except Exception:
-            reconcile_guarded(why, app)
-            return
-        Clock.schedule_once(lambda _dt: reconcile_guarded(why, app), 0)
+        schedule_main(lambda: reconcile_guarded(why, app))
 
     def after_move(call):
         """施設に着いた後（ローダの窓口 `arrivals`。TECH.md §3.3.21）。
@@ -780,7 +775,7 @@ def apply(ctx):
         """
         schedule("move_phase", call.app)
 
-    arrivals.on(os.path.basename(getattr(ctx, "mod_dir", "") or "") or "324_place_bgm", ctx, (arrivals.FACILITY,), after=after_move, write=write)
+    arrivals.on(ctx.mod_name or "324_place_bgm", ctx, (arrivals.FACILITY,), after=after_move, write=write)
 
     # ----------------------------------------------------- 見張り
     def start_poll():

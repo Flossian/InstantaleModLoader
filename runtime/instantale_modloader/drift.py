@@ -64,7 +64,10 @@ REWRITE_MIN_EXPECTED = 5.0
 
 REWRITES_NAME = "rewrites.json"
 
-# 1プロセスに1つの状態。ローダは boot ごとに読み直されるので sys に置く。
+# 1プロセスに1つの状態。ローダは注入し直すたびに読み直される（遅れて当て直す boot では読み直されない）ので、
+# 注入をまたいで持つために sys に置く。
+# `state.process_store` にしないのは、見張りのスレッドとゲームのスレッドが同時に作っても1つに決まるよう、
+# 入れ物も鍵も `setdefault` で置くため（`process_store` は作るときに getattr と setattr を分けて呼ぶ）。
 _STATE_ATTR = "__instantale_drift__"
 
 
@@ -83,12 +86,8 @@ def _state() -> dict:
 
 
 def enabled(runtime_dir, flag=FLAG) -> bool:
-    try:
-        value = config.load_flags(runtime_dir).get(flag)
-    except Exception:
-        log_exc("drift: cannot read {}".format(flag))
-        value = None
-    return value if isinstance(value, bool) else True
+    """`loader.json` の `flag` が真偽値ならその値、無いか真偽値でなければ True。"""
+    return config._flag(runtime_dir, flag, True, "drift")
 
 
 # --------------------------------------------------------------------------

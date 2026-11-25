@@ -20,7 +20,7 @@ LOG_BASENAME = "quest_return_days.log"
 RETURN_TEXT = "帰還までに{days}日経過した。"
 
 QUEST_END_TARGET = quest_ends.TARGET   # ローダの窓口 `quest_ends` が1枚だけ包む
-QUEST_RETIRE_TARGET = "__main__:QuestRetireManager.execute"
+QUEST_RETIRE_TARGET = quest_ends.RETIRE_TARGET   # 放棄もローダの窓口（`quest_ends.on_retire`）が1枚だけ包む
 
 
 def days_after_return(stay_days, limit):
@@ -69,17 +69,11 @@ def apply(ctx):
 
     quest_ends.on("344_quest_return_days", ctx, before=quest_end_before, after=quest_end_after, write=write)
 
-    @ctx.wrap(QUEST_RETIRE_TARGET, required=False, safe=True)
-    def quest_retire(orig, self, *args, **kwargs):
-        app = getattr(self, "app", None) or ui.find_app()
-        quest_id = None
-        try:
-            quest_id = ui.current_quest_id(app)
-        except Exception:
-            ctx.log_exc("quest return days: cannot read the quest")
-        result = orig(self, *args, **kwargs)
-        after_return(app, "abandoned", quest_id)
-        return result
+    def quest_retire_after(call):
+        """依頼を放棄して帰った。移動する依頼でも放棄なら帰りの日数を進める（ローダの窓口 `quest_ends.on_retire`）。"""
+        after_return(call.app, "abandoned", call.quest_id)
+
+    quest_ends.on_retire("344_quest_return_days", ctx, after=quest_retire_after, write=write)
 
     ctx.log("quest return days: on, up to {} day(s) ({})".format(
         MAX_DAYS, ctx.out_path(LOG_BASENAME)))

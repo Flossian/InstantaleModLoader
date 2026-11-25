@@ -30,7 +30,7 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
 import math
 import sys
 
-from . import alive, ui, window_call, window_entries, window_put
+from . import alive, frames, state, ui, window_call, window_entries, window_put
 
 STORE_ATTR = "_instantale_wanted"
 
@@ -39,11 +39,8 @@ WANTED_BELOW = 0
 
 
 def _store():
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"hunted": {}, "hunt_end": {}, "pressure": {}, "taker": {}, "errors": []}
-        setattr(sys, STORE_ATTR, store)
-    return store
+    return state.process_store(STORE_ATTR, {"hunted": {}, "hunt_end": {}, "pressure": {}, "taker": {},
+                                            "errors": []})
 
 
 # --------------------------------------------------------------------------
@@ -55,7 +52,7 @@ def weight_of(lawfulness):
     読めない値（`None`・真偽値・文字列）は 0。読めなかったことを手配の重さに変換しない。
     `336_` の役場の罰金と追手の条件と強さが、この物差しで数える。
     """
-    if isinstance(lawfulness, bool) or not isinstance(lawfulness, (int, float)):
+    if not frames.is_number(lawfulness):
         return 0
     if isinstance(lawfulness, float) and not math.isfinite(lawfulness):
         return 0                    # NaN / inf は読めない値と同じ扱い（int() で落ちる）
@@ -95,7 +92,7 @@ def hunted_line(app):
         ok, got = window_call(store, owner, fn, app)
         if not ok:
             continue
-        if isinstance(got, bool) or not isinstance(got, (int, float)):
+        if not frames.is_number(got):
             continue
         if isinstance(got, float) and not math.isfinite(got):
             continue        # NaN / inf は線を置かなかったものとみなす（int() で落ちる）
@@ -171,7 +168,7 @@ def shop_pressure(app):
         ok, got = window_call(store, owner, fn, app)
         if not ok:
             continue
-        if isinstance(got, bool) or not isinstance(got, (int, float)):
+        if not frames.is_number(got):
             continue
         got = min(1.0, max(0.0, float(got)))
         if got > rate:

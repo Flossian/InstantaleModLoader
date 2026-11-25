@@ -18,7 +18,7 @@ MOD どうしは import しない（TECH.md §3.2.3）。
 """
 import sys
 
-from . import window_call, window_entries, window_put
+from . import state, window_call, window_entries, window_put
 
 STORE_ATTR = "_instantale_value_limits"
 
@@ -27,11 +27,7 @@ GAME_MAX = 76
 
 
 def _store():
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"providers": {}, "errors": []}
-        setattr(sys, STORE_ATTR, store)
-    return store
+    return state.process_store(STORE_ATTR, {"providers": {}, "errors": []})
 
 
 def provide(owner, ctx, fn):

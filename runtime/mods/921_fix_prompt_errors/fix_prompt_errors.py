@@ -26,7 +26,7 @@ import sys
 import threading
 import typing
 
-from instantale_modloader import llm, value_limits
+from instantale_modloader import frames, llm, value_limits
 
 LOG_BASENAME = "prompt_errors.log"
 
@@ -108,12 +108,12 @@ def rewrite_prompt(message):
 
 # ================================================================== 頼みごとの直し（C）
 
-#: ゲームの難易度の上限（`QUEST_DIFFICULTY_VALUE_MAX`。GAME.md §2.9）。ゲームの頼みは「/70」「最高が70」と書く。
-#: 76 を超えた難易度（`318_` で上限を上げたとき）もゲームはそのまま使うが、強くなるのは敵だけで、
-#: 報酬・才能点・品の値段と強さは 76 の値で止まる（VERIFICATION.md §3.112）。
-DIFFICULTY_MAX = 76
-#: 76 を超えた難易度に添える文。
-OVER_MAX_NOTE = "（通常の上限{}を超える。敵は上限の依頼よりさらに強い）".format(DIFFICULTY_MAX)
+#: ゲームの難易度の上限（`QUEST_DIFFICULTY_VALUE_MAX`。GAME.md §2.9）は、呼ぶたびにローダの
+#: `value_limits.game_max()` で読む（読めなければ 76）。ゲームの頼みは「/70」「最高が70」と書く。
+#: 上限を超えた難易度（`318_` で上限を上げたとき）もゲームはそのまま使うが、強くなるのは敵だけで、
+#: 報酬・才能点・品の値段と強さは上限の値で止まる（VERIFICATION.md §3.112）。
+#: 上限を超えた難易度に添える文。{} に上限が入る。
+OVER_MAX_NOTE = "（通常の上限{}を超える。敵は上限の依頼よりさらに強い）"
 DIFFICULTY_70 = re.compile(r"難易度は(\d+)/70")
 VALUE_REQUEST = re.compile(r"価値として「(\d+)」を指定")
 #: 難易度の窓（GAME.md §2.9 の表。序盤の街 1〜18・中盤の街 19〜46・終盤の街 47〜76）。
@@ -137,11 +137,13 @@ def stage_of(text):
 
 
 def fix_difficulty(text):
-    """「難易度はN/70」を上限 76 の目盛りに。76 を超えた値は、超えた分は敵だけが強いと添える。"""
+    """「難易度はN/70」をゲームの上限（素は 76）の目盛りに。上限を超えた値は、超えた分は敵だけが強いと添える。"""
+    top = value_limits.game_max()
+
     def one(found):
         value = int(found.group(1))
-        note = OVER_MAX_NOTE if value > DIFFICULTY_MAX else ""
-        return "難易度は{}/{}{}".format(value, DIFFICULTY_MAX, note)
+        note = OVER_MAX_NOTE.format(top) if value > top else ""
+        return "難易度は{}/{}{}".format(value, top, note)
     return DIFFICULTY_70.sub(one, text)
 
 
@@ -154,6 +156,19 @@ def fix_value_request(text):
     def one(found):
         return "価値として「{}」を指定".format(min(int(found.group(1)), value_limits.value_max()))
     return VALUE_REQUEST.sub(one, text)
+
+
+VALUE_MAX_TEXT = "この世界における最低が1で最高が70"
+
+
+def fix_value_max(text):
+    """価値の目盛りの「最高が70」を、`fix_value_request` と同じ上限（窓口 `value_limits`）に。
+
+    同じ頼みの中で「価値として「N」を指定」と上限が食い違わないようにする（`923_beyond_76` で 100 になる）。
+    """
+    if VALUE_MAX_TEXT not in text:
+        return text
+    return text.replace(VALUE_MAX_TEXT, "この世界における最低が1で最高が{}".format(value_limits.value_max()))
 
 
 def fix_stage(text):
@@ -200,7 +215,7 @@ RULES = (
     ("stage", ("settlement_quest_generator",), "func", fix_stage, None),
     ("difficulty", None, "func", fix_difficulty, None),
     ("value_request", None, "func", fix_value_request, None),
-    ("value_max", None, "text", "この世界における最低が1で最高が70", "この世界における最低が1で最高が{}".format(DIFFICULTY_MAX)),
+    ("value_max", None, "func", fix_value_max, None),
     ("typo", ("get_sentence_sought",), "text", "具体的な休憩内容", "具体的な求刑内容"),
     ("trait", ENEMY_MAKERS, "regex", re.compile(r"(trait: [^\n。]*特性。)無いこともある。"),
      r"\g<1>必ず1つ書く（目立つ特性が無ければ控えめなものでよい）。"),
@@ -374,11 +389,6 @@ def repair_model(structure, kinds, people, create_model, field=None):
 
 # ================================================================== 確かめる・足す（B）
 
-def as_data(raw):
-    """返事を辞書に（入れ子のモデルも辞書に）。読めなければ None。"""
-    return llm.as_dict(raw)
-
-
 def lacking(data, kinds):
     """`(欠けた施設の種類, {足りない人物の並び: 足す人数})`。"""
     present = set()
@@ -474,12 +484,8 @@ def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     #: id(元の型) -> (元の型, 種類)。
     kinds_of = {}
-    warned = set()
-
-    def warn_once(key, text):
-        if key not in warned:
-            warned.add(key)
-            write("WARN " + text)
+    # 理由ごとに1回だけ書く（覚えは apply ごと。ローダの ctx.once）
+    warn_once = ctx.once(write, prefix="WARN ")
 
     def tools():
         pydantic = sys.modules.get("pydantic")
@@ -509,20 +515,13 @@ def apply(ctx):
             return raw
         free = "concept" in facility_order(structure)       # 自由生成施設ありの世界の型
         model = repair_model(structure, missing, short, create_model, field)
-        extra_args, extra_kwargs = list(args), dict(kwargs)
         new_message = repair_message(message, data, missing, short, free)
-        if extra_args:
-            extra_args[0] = REPAIR_NAME
-        else:
-            extra_kwargs["manager_name"] = REPAIR_NAME
-        if len(extra_args) > 1:
-            extra_args[1] = new_message
-        else:
-            extra_kwargs["message"] = new_message
-        if len(extra_args) > 2:
-            extra_args[2] = model
-        else:
-            extra_kwargs["structure"] = model
+        # 来た側（位置かキーワード）に合わせて差し替え、届いていなければ名前で足す
+        extra_args, extra_kwargs = args, kwargs
+        for name, index, value in (("manager_name", 0, REPAIR_NAME), ("message", 1, new_message),
+                                   ("structure", 2, model)):
+            extra_args, extra_kwargs, _done = frames.replace_arg(
+                extra_args, extra_kwargs, name, index, value, insert=True)
         try:
             got = llm.as_dict(orig(*extra_args, **extra_kwargs))
         except Exception as exc:
@@ -554,11 +553,7 @@ def apply(ctx):
             new_message, hit = rewrite_prompt(message)
             if not hit:
                 warn_once("rules", "the structure block was not found; the prompt is sent as is")
-            new_args, new_kwargs = list(args), dict(kwargs)
-            if len(new_args) > 1:
-                new_args[1] = new_message
-            else:
-                new_kwargs["message"] = new_message
+            new_args, new_kwargs, _done = frames.replace_arg(args, kwargs, "message", 1, new_message, insert=True)
         except Exception:
             ctx.log_exc("prompt errors: cannot rewrite the settlement prompt; sending it as is")
             new_args, new_kwargs, new_message = list(args), dict(kwargs), message
@@ -568,7 +563,7 @@ def apply(ctx):
             if kinds is None:
                 warn_once("kinds", "no facility type in the structure; not checked")
                 return raw
-            data = as_data(raw)
+            data = llm.as_dict(raw)     # 入れ子のモデルも辞書に。読めなければ None
             if data is None:
                 write("unreadable answer; not checked")
                 return raw
@@ -584,8 +579,8 @@ def apply(ctx):
                 return orig(*args, **kwargs)
             pass_local.active = True
             try:
-                manager_name = args[0] if args else kwargs.get("manager_name")
-                message = args[1] if len(args) > 1 else kwargs.get("message")
+                manager_name = frames.arg(args, kwargs, "manager_name", 0)
+                message = frames.arg(args, kwargs, "message", 1)
                 try:
                     new_message, hits = fix_prompt(manager_name, message)
                 except Exception:
@@ -593,13 +588,9 @@ def apply(ctx):
                     new_message, hits = message, []
                 if hits:
                     note_fixed(manager_name, hits)
-                    args, kwargs = list(args), dict(kwargs)
-                    if len(args) > 1:
-                        args[1] = new_message
-                    else:
-                        kwargs["message"] = new_message
+                    args, kwargs, _done = frames.replace_arg(args, kwargs, "message", 1, new_message, insert=True)
                 if manager_name == MANAGER_NAME and not ns:
-                    structure = args[2] if len(args) > 2 else kwargs.get("structure")
+                    structure = frames.arg(args, kwargs, "structure", 2)
                     return settle(orig, args, kwargs, structure, new_message)
                 return orig(*args, **kwargs)
             finally:
@@ -609,18 +600,6 @@ def apply(ctx):
     llm.watch_aliases(ctx, [target for target, _ns in llm.MANAGER_SEND_TARGETS],
                       lambda target: install_send(target, ns_of[target]), label="prompt errors")
 
-    # 注入した時点で、頼みの書き直しを確かめておく（実経路は新しい街に入るまで通らない）。
-    sample = ("【構造の生成要素】\n- 特殊facility \"free\": x\n【NPCの生成要素】\n- 名前\n"
-              "【生成ルール】\n- y\n\n【世界のデータ】\nz")
-    after = rewrite_rules(sample)
-    fixed, labels = fix_text("settlement_quest_generator",
-                             "- 想定段階: ゲーム序盤\n難易度は30/70。液状の生物の一部はliquid_materialであり")
-    ok = (after is not None and STRUCTURE_FREE in after and "【生成ルール】" not in after
-          and after.endswith("【世界のデータ】\nz") and "【NPCの生成要素】\n- 名前\n" in after
-          and fixed == "- 想定段階: ゲーム中盤\n難易度は30/76。液状の生物の一部もcreature_partであり"
-          and labels == ["liquid", "stage", "difficulty"])
-    if ok:
-        ctx.log("prompt errors: {} rule(s) on the game's requests; settlement structure rules and repairs "
-                "on {} (log {})".format(len(RULES), MANAGER_NAME, LOG_BASENAME))
-    else:
-        ctx.log("prompt errors: self-check failed", level="ERROR")
+    # 頼みの書き直しの確かめは固定の入力なので tools/tests/test_wip_prompt_errors.py に置く（TECH.md §6.1）
+    ctx.log("prompt errors: {} rule(s) on the game's requests; settlement structure rules and repairs "
+            "on {} (log {})".format(len(RULES), MANAGER_NAME, LOG_BASENAME))

@@ -35,8 +35,11 @@ MOD_DIR = os.path.dirname(os.path.abspath(__file__))
 _IML_ROOT = os.environ.get("IML_ROOT") or ""
 for _tools in ([os.path.join(_IML_ROOT, "tools")] if _IML_ROOT else []) + [
         os.path.normpath(os.path.join(MOD_DIR, os.pardir, os.pardir, os.pardir, "tools"))]:
-    if os.path.isfile(os.path.join(_tools, "modtool.py")) and _tools not in sys.path:
-        sys.path.insert(0, _tools)
+    # 見つかった最初の候補で止める（両方を先頭へ足すと、後の3つ上が IML_ROOT より先になる）
+    if os.path.isfile(os.path.join(_tools, "modtool.py")):
+        if _tools not in sys.path:
+            sys.path.insert(0, _tools)
+        break
 if MOD_DIR not in sys.path:
     sys.path.insert(0, MOD_DIR)
 

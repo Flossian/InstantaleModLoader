@@ -238,9 +238,51 @@ GATE_TARGETS = {
     "__main__:InstantaleApp.save_game": "saving.on(owner, ctx, ...)",
     "scripts.llm.llm_manager_world_generate:random_quest_generator":
         "quest_generation.offer / on（引数を書き換える。TECH.md §3.3.30）",
+    "__main__:InstantaleApp.return_to_title": "loads.on(owner, ctx, (loads.TITLE,), ...)",
+    "__main__:AreaMoveManager.__init__": "arrivals.on(owner, ctx, (arrivals.AREA_SETUP,), ...)",
+    "__main__:QuestRetireManager.execute": "quest_ends.on_retire(owner, ctx, ...)",
+    "__main__:BattlePhaseManager.handle_battle_situation": "battles.on(owner, ctx, (battles.ACTION,), ...)",
+    "__main__:ShoppingStartManagerRemake.set_item_from_world_data":
+        "shopping.on(owner, ctx, (shopping.LAY,), ...)",
+    "__main__:VacationStartManager.__init__": "stays.on(owner, ctx, (stays.START,), ...)（月数と部屋は stays が控える）",
+    "__main__:VacationRestManager.__init__": "stays.on(owner, ctx, (stays.REST,), ...)（月数と部屋は stays が控える）",
+    "__main__:VacationRestManager.execute": "stays.on(owner, ctx, (stays.REST,), ...)",
+    "__main__:VacationEndManager.execute": "stays.on(owner, ctx, (stays.END,), ...)",
+    "__main__:ConversationPhaseManager.conversation_continued": "talks.on(owner, ctx, (talks.TURN,), ...)",
+    "__main__:ConversationInQuestPhase.conversation_continued":
+        "talks.on(owner, ctx, (talks.TURN_IN_QUEST,), ...)",
+    "scripts.hud.new_hud:InstanTaleHUD.update_button_texts": "hud.on(owner, ctx, (hud.BUTTONS,), ...)",
+    "scripts.hud.new_hud:InstanTaleHUD.toggle_character_sheet_visibility": "hud.on(owner, ctx, (hud.SHEET,), ...)",
+    "scripts.hud.new_hud:InstanTaleHUD.update_status_texts": "status_text.on(owner, ctx, ...)",
+    "scripts.hud.new_hud:InventoryItem.change_inventory": "twin_windows.on(owner, ctx, (twin_windows.MOVE,), ...)",
+    "__main__:InstantaleApp.close_shopping_window_process":
+        "twin_windows.on(owner, ctx, (twin_windows.CLOSE,), ...)",
+    "scripts.hud.new_hud:InstanTaleHUD.turnoff_window_visibility":
+        "twin_windows.on(owner, ctx, (twin_windows.BACKDROP,), ...)",
+    "__main__:InstantaleApp.generate_item_from_item_data": "items.on(owner, ctx, (items.FROM_ITEM_DATA,), ...)",
+    "__main__:InstantaleApp.generate_item_from_dict": "items.on(owner, ctx, (items.FROM_DICT,), ...)",
+    "__main__:InstantaleApp.generate_item_from_ready_made_data": "items.on(owner, ctx, (items.FROM_READY_MADE,), ...)",
+    "scripts.items:Item.__init__": "items.on(owner, ctx, (items.BUILD,), ...)",
+    "scripts.hud.new_hud:InstanTaleHUD.place_crafted_item": "items.on(owner, ctx, (items.PLACE_CRAFTED,), ...)",
+    "scripts.llm.llm_manager:master_ai_item_generate": "items.on(owner, ctx, (items.MASTER_ITEM,), ...)",
+    "__main__:InstantaleApp.toggle_center_inventory_window": "items.on(owner, ctx, (items.CENTER,), ...)",
+    "__main__:DisplayTalkChoice.execute": "choices.listing() / View.listing（一覧の種類の印）",
+    "__main__:DisplayAdventurerTalkChoice.execute": "choices.listing() / View.listing（一覧の種類の印）",
 }
-# `QuestEndManager.execute`（`quest_ends`）と `InstantaleApp.add_text`（`text_filters`）も窓口が包むが、
-# 前後で処理の形が違う MOD（125 の評価の保ち方・306 の行の後ろへの足し方）が自分で包んでいるので、ここには載せない。
+# 次の対象も窓口が包むが、窓口の前後の処理に載らない形の MOD（orig を止める・orig を呼び直す・引数を書き換える・
+# ほかの MOD より先に効かせる）や、取込済の MOD（106・316・406）が自分で包んでいるので、ここには載せない。
+# - `QuestEndManager.execute`（`quest_ends`）: 125 の評価の保ち方
+# - `InstantaleApp.add_text`（`text_filters`）: 306 の行の後ろへの足し方
+# - `BattleStartManager.__init__` / `start_battle`・`BattleEndManager` ほか2つの `end_phase`（`battles`）: 106・316
+# - `BattlePhaseManager.resolve_battle_effect`（`battles.EFFECT`）: 342 の vfx の書き換え
+# - `ShoppingStartManagerRemake.execute`（`shopping.ENTER`）: 331 の自分の建物での例外の握り
+# - `VacationStartManager.execute`（`stays.START`）: 330・331 の自分の建物での例外の握り
+# - `ConversationEndManager.execute` / `finish_conversation`（`talks`）: 125
+# - `InstanTaleHUD.update_display_text`（`hud.TEXT`）: 118 の打ち切り
+# - `InstantaleApp.toggle_twin_inventory_window`（`twin_windows.OPEN`）: 405 の検品
+# - `ItemDetailBox.update_content`（`items.DETAIL`）: 109・410 の測り方の層
+# - `llm_manager:conversation_starter`（`arrivals`）: 902
+# - 送信口の `send_request`（`llm.on_request`）: 406・921
 
 
 def check_gate_targets(path):

@@ -74,10 +74,7 @@ def install(env):
 
     def job_open(app, quest_id):
         """まだ片付いていない依頼か（生きた一覧に在り、`status` が `incomplete`）。"""
-        quest = ui.quest_of(app, str(quest_id))
-        config = ui.quest_value(quest, "config", None) if quest is not None else None
-        status = config.get("status") if isinstance(config, dict) else None
-        return quest is not None and status == "incomplete"
+        return ui.quest_status(ui.quest_of(app, str(quest_id))) == ui.QUEST_INCOMPLETE
 
     def withdraw_stale(app):
         """作ってから `DEADLINE_DAYS` 日経った裏の仕事を取り下げる（`ui.remove_quest` で世界から片付ける）。
@@ -134,8 +131,7 @@ def install(env):
         facility = current_facility(app)
         if ui.facility_type_of(facility) != OFFICE_FACILITY_TYPE:
             return None
-        owner_id = getattr(facility, "owner", None)
-        broker = getattr(ui.character_of(app, str(owner_id)), "name", None) if owner_id else None
+        broker = getattr(ui.facility_owner(app, facility)[1], "name", None)
         return facility, broker if isinstance(broker, str) and broker else None
 
     def banned(app):
@@ -260,7 +256,7 @@ def install(env):
         kind = cfg._RNG.choice(kinds)
         area = ui.current_area(app)
         area_id = ui.area_id_of(area)
-        town = getattr(area, "name", None) or "この街"
+        town = ui.area_name(app, area, fallback="この街", limit=None)
         display_cls = ui.cls_of("DisplayQuestChoice")
         if display_cls is None:
             write("WARN underworld: DisplayQuestChoice is not available")
@@ -292,7 +288,7 @@ def install(env):
         with worlds.lock:
             playthrough, jobs = jobs_of(app)
             jobs[quest_id] = {"kind": kind["key"], "area": area_id, "mult": mult, "loss": loss,
-                              "client": str(getattr(_facility, "owner", "") or ""), "day": ui.game_day(app)}
+                              "client": ui.facility_owner(app, _facility)[0] or "", "day": ui.game_day(app)}
             worlds.save(playthrough)
         quest = ui.quest_of(app, quest_id)
         summary = ui.quest_value(quest, "request_summary", "") or ""
@@ -381,8 +377,7 @@ def install(env):
         loss = max(0, int(job.get("loss") or 0))
         lines = []
         if before is not None and loss and ui.set_lawfulness(entry, before - loss):
-            area = ui.world_areas(app).get(area_id)
-            town = getattr(area, "name", None) or "この街"
+            town = ui.area_name(app, area_id, fallback="この街", limit=None)
             write("underworld: lawfulness of {} {} -> {}".format(area_id, before, before - loss))
             lines.append(JOB_DONE_TEXT.format(town=town, name=kind["name"], before=before,
                                               after=before - loss))
@@ -400,20 +395,6 @@ def install(env):
         if lines:
             screen.when_idle(app, lambda: [screen.say(app, line) for line in lines],
                              proceed_on_timeout=True, tag="underworld done")
-
-    class SearchPhase(object):
-        """自前のフェーズ。**`PhaseSpec` には決して載せない**。"""
-
-        def __init__(self, app):
-            self.app = app
-
-        def execute(self, choice_text):
-            try:
-                search_job(self.app)
-            except Exception:
-                ctx.log_exc("crime incentive: searching a job failed")
-                if screen.is_busy():
-                    screen.busy_off(self.app)
 
     def on_refresh(app, buttons):
         """事務所の外の一覧（ギルドの掲示板）から裏の仕事を隠す（ゲームの一覧の間引き）。"""
@@ -436,8 +417,8 @@ def install(env):
 
     def press_search(app):
         write("pressed {!r}".format(SEARCH_LABEL))
-        screen.start_phase(app, SearchPhase(app), SEARCH_LABEL,
-                           fallback=lambda: search_job(app))
+        # 使い捨てのフェーズはローダの `Screen.run_phase`（`PhaseSpec` には載せない）。投げたら待機表示を解く。
+        screen.run_phase(app, SEARCH_LABEL, search_job, label="searching a job", busy_off_on_error=True)
         return None
 
     def kept_off(app):
@@ -463,10 +444,10 @@ def install(env):
                 for facility in ui.facilities_of(node).values():
                     if ui.facility_type_of(facility) != OFFICE_FACILITY_TYPE:
                         continue
-                    owner_id = getattr(facility, "owner", None)
-                    name = getattr(ui.character_of(app, str(owner_id)), "name", None) if owner_id else None
-                    if isinstance(name, str) and name.strip():
-                        owners[name.strip()] = str(owner_id)
+                    owner_id, keeper = ui.facility_owner(app, facility)
+                    name = getattr(keeper, "name", None)
+                    if owner_id and isinstance(name, str) and name.strip():
+                        owners[name.strip()] = owner_id
         return owners
 
     def older_jobs(app, known):
@@ -484,8 +465,7 @@ def install(env):
             if str(quest_id) in known:
                 continue
             quest = ui.quest_of(app, quest_id)
-            config = ui.quest_value(quest, "config", None) if quest is not None else None
-            if not isinstance(config, dict) or config.get("status") != "completed":
+            if ui.quest_status(quest) != ui.QUEST_COMPLETED:
                 continue
             client = ui.quest_value(quest, "client_name", "")
             if isinstance(client, str) and client.strip() in owners:

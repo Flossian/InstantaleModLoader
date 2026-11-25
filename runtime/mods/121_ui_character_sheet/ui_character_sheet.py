@@ -33,8 +33,8 @@
 
 ### なぜ倍率ではなく割合なのか
 
-最初は「ゲームが決めた寸法の 1.4 倍」で書いたが、
-これは**窓を小さくすると下の情報欄や本文に食い込む**。
+「ゲームが決めた寸法の倍率」で書くと、
+**窓を小さくしたときに下の情報欄や本文に食い込む**（VERIFICATION_LOG.md §2.46）。
 ゲームの各欄は窓に対する割合で置かれているので、こちらも同じ土俵に乗せる。
 四辺を割合で決めれば、どの大きさでも他の欄との位置関係が変わらない。
 
@@ -59,6 +59,7 @@ import os
 import sys
 
 from instantale_modloader import abilities, frames, ui
+from instantale_modloader import hud as hud_window   # 中の hud という名前の変数に隠れないよう別名で
 from instantale_modloader.state import playthrough_key, world_filename
 
 from . import sheet
@@ -75,7 +76,7 @@ from . import sheet
 #: 能力値の箱が書体によってはぎりぎりだったので、上へ広げて縦の余裕に充てている。
 #: 左端 0.02 は画面下のステータス欄（Atk/Def の箱）の左端。
 #: 箱は `size_hint 0.2, center_x 0.12` で置かれていて、左端は 0.12 - 0.2/2 = 0.02
-#: （212 のプローブで実測。`out/character_sheet.log` の `status_label^1`）。
+#: （`212_probe_character_sheet` の採寸）。
 #: 広げたぶんは手配度の箱の幅に充てている（`sheet.BOXES`）。
 PANEL_LEFT = 0.02
 PANEL_RIGHT = 0.645
@@ -101,29 +102,16 @@ DETAIL_MARK = MARK + "_detail"
 
 #: 説明の窓の効果の行の色（名前の白と説明の灰色の間で目に付く色）。
 DETAIL_EFFECT = (0.93, 0.80, 0.52, 1)
-#: いまの場面で効いていない効果の色。説明の灰色と並ぶと見分けにくかった（実機）ので、効果の色を暗くする。
+#: いまの場面で効いていない効果の色。説明の灰色と並ぶと見分けにくいので、効果の色を暗くする。
 DETAIL_INACTIVE = (0.45, 0.39, 0.27, 1)
 #: 説明の窓で、手配されている土地（手配度 0 未満）の行の色。`317_` の評判の画面の悪名と同じ赤。
 DETAIL_ALERT = (0.886, 0.329, 0.282, 1)
-
-HUD_MODULE = "scripts.hud.new_hud"
 
 
 def apply(ctx):
     state = {"reported": False, "hud": None}
 
-    def hud_module():
-        return sys.modules.get(HUD_MODULE)
-
     # ------------------------------------------------------------ 寸法
-    def window_size():
-        """窓の実寸。取れなければ `None`（画面の無い環境では何もしない）。"""
-        try:
-            from kivy.core.window import Window
-            return float(Window.width), float(Window.height)
-        except Exception:
-            return None
-
     def is_open(layout):
         """人物欄が開いているか。閉じているときは触らない。
 
@@ -148,10 +136,10 @@ def apply(ctx):
         """
         if not is_open(layout):
             return False
-        window = window_size()
-        if window is None:
+        # 窓の実寸。取れなければ (0, 0)（画面の無い環境では何もしない）。
+        width, height = ui.window_size()
+        if not width:
             return False
-        width, height = window
         layout.size = ((PANEL_RIGHT - PANEL_LEFT) * width,
                        (PANEL_BOTTOM - PANEL_TOP) * height)
         layout.pos_hint = {
@@ -219,7 +207,7 @@ def apply(ctx):
 
     def add_border(widget):
         """枠線はゲームの描き方を借りる。引けなければ枠線なしで進む。"""
-        module = hud_module()
+        module = sys.modules.get(ui.HUD_MODULE)
         for name in ("add_border", "add_border_before"):
             painter = getattr(module, name, None) if module is not None else None
             if not callable(painter):
@@ -256,8 +244,8 @@ def apply(ctx):
         if button is not None and frames.attr(button, "parent") is layout:
             return button
         # 大きさは正方形の固定値（ゲームの upx で拡縮）。
-        # `place()` で箱の割合を与えない ― 割合だと窓の形に引きずられて横長に潰れ、
-        # 絵柄（円弧）が楕円になる（実機で確認）。
+        # `place()` で箱の割合を与えない。割合だと窓の形に引きずられて横長に潰れ、
+        # 絵柄が歪む（VERIFICATION_LOG.md §2.46）。
         button = ui.make_icon_button(size=24.0,
                                      pos_hint=dict(sheet.REROLL_POS))
         if button is None:
@@ -320,18 +308,15 @@ def apply(ctx):
     def wanted_rows(app, character):
         """手配度の `(箱の文, 全件)`。箱は `MAX_WANTED_LINES` で切り、全件は説明の窓に出す。"""
         areas = ui.world_areas(app)
-        world = frames.attr(app, "world")
-        holders = [app] if world in (frames.MISSING, None) else [app, world]
-        raw = sheet.raw_areas(holders)
-        sizes = sheet.area_sizes(areas, raw)
+        sizes, saved = sheet.area_sizes(areas, lambda area_id: ui.area_size(app, area_id))
         every = sheet.wanted_entries(
-            areas, sizes, frames.attr(character, "area_history"), max_lines=None)
+            areas, sizes, ui.lawfulness_by_area(character), max_lines=None)
         entries = every[:MAX_WANTED_LINES]
         if not state["reported"]:
             # どこから規模を読めたのかは、後で食い違ったときに最初に見る所。
             state["reported"] = True
             ctx.log("character sheet: {} area(s), size from {} ({} shown)".format(
-                len(areas or {}), "the save's area table" if raw else "the bgm path",
+                len(areas or {}), "the save's area table" if saved else "the bgm path",
                 len(entries)))
         return sheet.wanted_text(entries), every
 
@@ -472,12 +457,9 @@ def apply(ctx):
         skills = frames.attr(character, "skills")
         traits = frames.attr(character, "traits")
         boxes["skills"].text = sheet.list_text(sheet.SKILLS_HEADING, sheet.names_of(skills))
-        # 既定を None にして「無い」も「None が入っている」も1つの判定で弾く。
-        # 番人だけを見ていた版は、ゲームが箱を作る前（`character_sheet_empty` が None）に
-        # `None.text = ...` を踏んでいた。
-        # `safe=True` がゲームを守るので落ちはしないが、
-        # そこで降りるためこの後の塗りが全部飛ぶ。
-        # 同じ関数の他の2箇所は最初から両方見ている（下の `place` / `copy_style`）。
+        # 既定を None にして「無い」も「None が入っている」も1つの判定で弾く
+        # （ゲームが箱を作る前は `character_sheet_empty` が None）。
+        # 踏むと `safe=True` で落ちはしないが、そこで降りるためこの後の塗りが全部飛ぶ。
         traits_box = frames.attr(hud, sheet.TRAITS_BOX, None)
         if traits_box is not None:
             traits_box.text = sheet.list_text(sheet.TRAITS_HEADING, sheet.names_of(traits))
@@ -528,7 +510,7 @@ def apply(ctx):
 
     def hide_detail():
         """説明の窓を消す。注入し直す前の世代が出したままの窓も一緒に片付ける
-        （マウスが動かないと新しい世代の見張りは呼ばれず、古い窓が残った。実機）。"""
+        （マウスが動かないと新しい世代の見張りは呼ばれず、古い窓が残る）。"""
         widget = state.get("detail")
         state["hovering"] = None
         if widget is not None and widget.parent is not None:
@@ -727,8 +709,8 @@ def apply(ctx):
         # 素の短い行では左に居るように見えるだけで、二つ名を続けて書いて
         # 箱を広げると中央へ寄ってしまう。寸法に束ねて `halign`（ゲーム自身の
         # left）を効かせる。束ねは1度だけ（開くたびに重ねない）。
-        # 借りている特性の箱も素のゲームでは `text_size` を持たず、長い行が箱の外で切れた
-        # （特性の効果を書き足したときの実機）。同じく寸法に束ねて箱の幅で折り返す。
+        # 借りている特性の箱も素のゲームでは `text_size` を持たず、長い行が箱の外で切れる。
+        # 同じく寸法に束ねて箱の幅で折り返す。
         for info in (frames.attr(hud, "character_sheet_basic_info"),
                      frames.attr(hud, sheet.TRAITS_BOX)):
             if info is frames.MISSING or info is None:
@@ -775,15 +757,16 @@ def apply(ctx):
     # 人物欄を開くまでは置き直す相手が無いので、開いたときに結べば間に合う。
     watch_window = ui.window_watcher(ctx, on_window_resize, WINDOW_ATTR, "character sheet")
 
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.toggle_character_sheet_visibility",
-              safe=True)
-    def toggle(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
+    # 人物欄の開け閉めはローダの窓口 `hud` の SHEET が包み、orig が返った後に呼ばれる
+    # （自分で包まない。TECH.md §3.3.21）。前後の処理の例外は窓口が握るので、壊れてもゲームは orig の結果を受け取る。
+    def after_toggle(call):
         watch_window()      # 注入ごとに1回だけ結ぶ（2回目からは何もしない）
         watch_mouse()
         hide_detail()       # 開け閉めのたびに説明は消す（閉じた後に残さない）
-        decorate(self)      # 壊れてもゲームは orig の結果を受け取る（§3.1.5）
-        return result
+        decorate(call.obj)
+
+    hud_window.on(ctx.mod_name or "121_ui_character_sheet", ctx, (hud_window.SHEET,),
+                  after=after_toggle)
 
     ctx.log("character sheet: panel at ({}, {})-({}, {}) of the window"
             .format(PANEL_LEFT, PANEL_TOP, PANEL_RIGHT, PANEL_BOTTOM))

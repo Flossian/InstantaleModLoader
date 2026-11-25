@@ -39,19 +39,18 @@
 ## 街の見分けは `size`
 
 id 0〜8 の決め打ちではなく `size` が village / town / city のエリアを街とみなす
-（冒険エリアは dungeon。実データで確認。HANDOVER_world_structure.md §3）。
+（冒険エリアは dungeon。実データで確認。GAME.md §2.11 の「エリアBGM」）。
 エディタで後から足した街も自動で候補になる。
 
 **実行時の `Area.size` は読めない**（`207_` と `324_` の実機で取れず。GAME.md §2.7）。
-`324_` の `size_of` と同じ順で、実行時の属性 → `app.save_data_dict["areas"][id]["size"]`
-→ `app.world_dict["areas"][id]["size"]` と落ちる。初版は属性しか見ておらず、
-実機で候補が 0 件のまま「新たな道を探す」が出なかった。
+ローダの `ui.area_size` で、実行時の属性 → `app.save_data_dict` の `areas`
+→ `app.world_dict` の `areas` → 実行時の土地の表 と落ちる（VERIFICATION.md §3.50）。
 
 ## world_data.json には書かない（不可侵の原本）
 
 接続の変更は実行時の `Area.connections` だけ。
 `world_dict` に書くと世界のファイルに焼かれ、同じ世界で新しく始めた別のキャラクタにまで乗る
-（`318_` が初版で踏んだ。GAME.md §2.9.1）。
+（GAME.md §2.9.1）。
 実行時の list が骨格側と共有されている可能性があるので、**中身を書き換えず、
 新しい list を作って属性ごと差し替える**（`321_` の descriptions と同じ）。
 
@@ -99,19 +98,20 @@ TECH.md §3.2.3）。違いは3点:
 
 遊び方の説明は DOC.md、検証の物差しは VERIFICATION.md §3.50。
 
-版8: `QuestStartManager.__init__`・`AreaMoveManager.__init__`・`add_text`・`random_quest_generator` のフックは、
+`QuestStartManager.__init__`・`add_text`・`random_quest_generator` のフックは、
 引数を受け取った形のまま元の関数へ渡す（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
+依頼の放棄（`quest_ends.on_retire`）と街の移動の組み立て（`arrivals` の `AREA_SETUP`）は
+ローダの窓口が包み、ここは前後の処理だけを渡す（TECH.md §3.3.21）。
 生成のプロンプトへの差し込みは、来た側に合わせて `area_description` と `quest_difficulty` を差し替える。
 """
 
 import datetime
-import os
 import random
 import sys
 import time
 
-from instantale_modloader import choices, durations, frames, loads, quest_ends, quest_generation, text_filters, ui
-from instantale_modloader.state import UNKNOWN_WORLD, WorldStore
+from instantale_modloader import arrivals, choices, durations, frames, loads, quest_ends, quest_generation, text_filters, ui
+from instantale_modloader.state import UNKNOWN_WORLD, WorldStore, ordered
 
 
 LOG_BASENAME = "road_opening.log"
@@ -203,13 +203,12 @@ COMMISSION_TEXT = "{price}G を支払い、{target}への道の開削を委託�
 PAY_LABEL_NOW = "お金を支払い委託する（{price}G）"
 BACK_LABEL = "やめる"
 
-#: 版6までがセーブに焼いた自前のボタンの文言の前方一致（ローダの窓口 `choices` の `labels`）。
-#: 汎用語（「やめる」）は入れない。既定の文言のもの（後方互換で残す）。使うのは `our_label_prefixes()`。
-OUR_LABEL_PREFIXES = (SEARCH_LABEL, "お金を支払い委託する（", "自ら切り拓く（")
-
 
 def our_label_prefixes():
-    """今の設定の文言から組んだ前方一致（読み込みの時点に固めると、文言を設定で変えた後の残骸を掃除できない）。
+    """版6までがセーブに焼いた自前のボタンの文言の前方一致（ローダの窓口 `choices` の `labels`）。
+
+    今の設定の文言から組む（読み込みの時点に固めると、文言を設定で変えた後の残骸を掃除できない）。
+    汎用語（「やめる」）は入れない。
 
     `{` より前を頭にする。頭が短すぎるもの（空や1字）は、ほかのボタンまで巻き込むので使わない。
     """
@@ -271,21 +270,9 @@ _RNG = random.Random()
 
 
 # ================================================================ 純粋な部品
-class _SafeDict(dict):
-    def __missing__(self, key):
-        return "{" + str(key) + "}"
-
-
-def fmt(template, **values):
-    """設定のテンプレートを埋める。壊れたテンプレートでも素の文字列で返す。"""
-    try:
-        return str(template).format_map(_SafeDict(values))
-    except Exception:
-        return str(template)
-
-
-def _number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+#: 設定のテンプレートを埋める。書式に無い名前は {名前} のまま残し、壊れたテンプレートは素の文字列で返す
+#: （ローダの `frames.safe_format`。`133_` と同じ写しを持っていたのを寄せた）。
+fmt = frames.safe_format
 
 
 def parse_sizes(text):
@@ -296,30 +283,16 @@ def parse_sizes(text):
 
 
 def size_of(app, area, area_id=None):
-    """土地の種類。実行時の属性 → セーブの辞書 → 骨格の辞書 の順（`324_` の `size_of` と同じ）。
+    """土地の種類（小文字）。読めなければ None。
 
-    実行時の `Area.size` は読めない（GAME.md §2.7）ので、実際に効くのは辞書の側。
-    読めなければ None。
+    実行時の `Area.size` は読めない（GAME.md §2.7）ので、実際に効くのはセーブ側の土地の表。
+    読み方はローダの `ui.area_size`（土地の属性 → セーブと骨格の表 → 実行時の表）。
+    `area_id` は表の鍵が土地の `id` と違うときのために、土地で引けなかったら引き直す。
     """
-    size = getattr(area, "size", None)
-    if isinstance(size, str) and size.strip():
-        return size.strip().lower()
-    wanted = str(area_id if area_id is not None else ui.area_id_of(area))
-    for attr in ("save_data_dict", "world_dict"):
-        container = getattr(app, attr, None)
-        areas = container.get("areas") if isinstance(container, dict) else None
-        if not isinstance(areas, dict) or not wanted:
-            continue
-        entry = areas.get(wanted)
-        if entry is None:
-            for key, value in areas.items():
-                if str(key) == wanted:
-                    entry = value
-                    break
-        size = entry.get("size") if isinstance(entry, dict) else None
-        if isinstance(size, str) and size.strip():
-            return size.strip().lower()
-    return None
+    size = ui.area_size(app, area)
+    if size is None and area_id is not None:
+        size = ui.area_size(app, area_id)
+    return size
 
 
 def is_town(app, area, sizes, area_id=None):
@@ -379,11 +352,11 @@ def difficulty_for(origin_level, target_level, hops, rng=_RNG):
 
     読めない側（None）は除いて決める。両方読めなければ下限から。
     """
-    known = [int(v) for v in (origin_level, target_level) if _number(v)]
+    known = [int(v) for v in (origin_level, target_level) if frames.is_number(v)]
     if not known:
         base = MIN_DIFFICULTY
     elif DIFFICULTY_MODE == "destination":
-        base = int(target_level) if _number(target_level) else known[0]
+        base = int(target_level) if frames.is_number(target_level) else known[0]
     elif DIFFICULTY_MODE == "harder":
         base = max(known)
     else:
@@ -435,17 +408,20 @@ def road_brief(origin_name, target_name, difficulty):
     ).format(origin=origin, target=target, difficulty=difficulty)
 
 
+#: 控えの鍵の並び（`ordered_bucket`）。
+BUCKET_KEYS = ("roads", "commissions", "pending")
+
+
 def ordered_bucket(bucket):
-    """控えを書く前に並びを固定する（`state/` の差分を読めるように）。"""
+    """控えを書く前に並びを固定する（`state/` の差分を読めるように）。
+
+    3つの鍵は必ず置き、知らない鍵は捨てずに後ろへ回す（後半はローダの `state.ordered`）。
+    """
     if not isinstance(bucket, dict):
         return {"roads": [], "commissions": [], "pending": None}
-    out = {"roads": list(bucket.get("roads") or []),
-           "commissions": list(bucket.get("commissions") or []),
-           "pending": bucket.get("pending")}
-    for key, value in bucket.items():
-        if key not in out:
-            out[key] = value
-    return out
+    return ordered(dict(bucket, roads=list(bucket.get("roads") or []),
+                        commissions=list(bucket.get("commissions") or []),
+                        pending=bucket.get("pending")), BUCKET_KEYS)
 
 
 def describe_pending(record):
@@ -463,7 +439,6 @@ def apply(ctx):
             "worlds": WorldStore(ctx, STATE_DIRNAME, order=ordered_bucket),
             "state": {
                 "generating": False,
-                "departing": False,  # 自分が起こした AreaMoveManager かどうかの印
                 # 自前のフェーズが動いている間の旗。押下はここが立っている間は無視する。
                 # 押してから次のフレームで選択肢が差し替わるまでの間に同じボタンをもう一度
                 # 押せてしまい、支払いが二重に起きた（実機。VERIFICATION.md §3.50）。
@@ -477,7 +452,7 @@ def apply(ctx):
 
     log_path = ctx.out_path(LOG_BASENAME)
     write = ctx.logger(LOG_BASENAME)
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "road_opening"
+    owner = ctx.mod_name or "road_opening"
     worlds = store["worlds"].rebind(ctx, write)
     screen = ui.Screen(ctx, write, tag="road opening", mark=MARK)
     save_soon = ui.saver(ctx, write, "road opening")
@@ -610,8 +585,8 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 土地の読み
     def area_name(area, fallback):
-        name = getattr(area, "name", None)
-        return name if isinstance(name, str) and name else fallback
+        """土地の名前。切らずに返す（ローダの `ui.area_name`。ここで渡すのは土地そのもの）。"""
+        return ui.area_name(None, area, fallback, limit=None)
 
     def difficulties_of(app, area):
         """その土地の依頼の難易度の一覧。ゲーム自身の関数に聞く（`133_` と同じ）。"""
@@ -620,7 +595,7 @@ def apply(ctx):
         fn = getattr(functions, "get_quest_difficulties", None) if functions else None
         if fn is not None:
             try:
-                return [v for v in (fn(area, world) or []) if _number(v)]
+                return [v for v in (fn(area, world) or []) if frames.is_number(v)]
             except Exception as exc:
                 write("WARN get_quest_difficulties failed on {!r}: {}: {}".format(
                     area_name(area, "?"), type(exc).__name__, exc))
@@ -636,7 +611,7 @@ def apply(ctx):
                 owner = ui.quest_value(quest, QUEST_AREA_KEY, None)
                 if owner is not None and str(owner) == wanted:
                     value = ui.quest_value(quest, QUEST_DIFFICULTY_KEY, None)
-                    if _number(value):
+                    if frames.is_number(value):
                         found.append(value)
         return found
 
@@ -894,9 +869,7 @@ def apply(ctx):
         if origin is None or target is None:
             screen.say(app, NO_ROAD_TEXT)
             return
-        graph = build_graph(ui.world_areas(app))
-        offer = offer_of(app, origin, target,
-                         hops_between(graph, ui.area_id_of(origin), str(target_id)))
+        offer = means_offer(app, origin, target, target_id)
         price = offer["price"]
         waiting = commission_of(worlds.playthrough(app), ui.area_id_of(origin), target_id)
         if waiting is not None:
@@ -1052,9 +1025,9 @@ def apply(ctx):
         player = getattr(app, "player", None)
         value = getattr(player, "physical_integrity", None)
         limit = getattr(player, "max_physical_integrity", None)
-        if not _number(limit) or limit <= 0:
+        if not frames.is_number(limit) or limit <= 0:
             limit = getattr(player, "original_max_physical_integrity", None)
-        if not _number(value) or not _number(limit) or limit <= 0:
+        if not frames.is_number(value) or not frames.is_number(limit) or limit <= 0:
             write("WARN stamina: cannot read physical_integrity; letting the road through")
             return None
         if value * 100 >= limit * percent:
@@ -1082,9 +1055,7 @@ def apply(ctx):
             screen.say(app, refusal)
             settle(app, lambda: show_means(app, target_id))
             return
-        graph = build_graph(ui.world_areas(app))
-        offer = offer_of(app, origin, target,
-                         hops_between(graph, ui.area_id_of(origin), str(target_id)))
+        offer = means_offer(app, origin, target, target_id)
         origin_name = area_name(origin, "この土地")
         target_name = area_name(target, "その土地")
         difficulty = offer["difficulty"]
@@ -1246,31 +1217,12 @@ def apply(ctx):
         screen.say(app, ARRIVE_TEXT.format(target=target_name))
         write("arrive: process_choice(AreaMoveManager, {!r}, {!r})".format(
             target_id, WALK_MODE))
-        state["departing"] = True
-        try:
-            screen.start_phase(app, manager, target_name)
-        finally:
-            state["departing"] = False
+        screen.start_phase(app, manager, target_name)
         arrived_check(app)
 
-    # ------------------------------------------------------------ 自前のフェーズ
-    class RoadPhase(object):
-        """自前のフェーズ。**`PhaseSpec` には決して載せない**（セーブに焼かれる）。"""
-
-        def __init__(self, app, action, target_id):
-            self.app = app
-            self.action = action
-            self.target_id = target_id
-
-        def execute(self, choice_text):
-            state["acting"] = True
-            try:
-                run_action(self.app, self.action, self.target_id)
-            except Exception:
-                ctx.log_exc("road opening: phase {!r} failed".format(self.action))
-            finally:
-                state["acting"] = False
-
+    # ------------------------------------------------------------ 押下の処理
+    # 押下はローダの `screen.run_phase` が使い捨てのフェーズに包んで `process_choice` へ流す
+    # （`PhaseSpec` に載せない注意もそちら）。`acting` は処理の間だけ立つ連打よけの旗。
     def run_action(app, action, target_id):
         if action == "search":
             show_candidates(app)
@@ -1312,7 +1264,7 @@ def apply(ctx):
 
         ゲームが `connections` を別の場所（骨格の辞書）から読んでいて開いた道が
         並ばなかったときは、同じ形（`AreaMoveCofirmation` + `[target_area_id]`）の
-        ボタンの写しをこちらで出し（押下はゲームへ流す）、WARN を残す（HANDOVER §6 の1）。
+        ボタンの写しをこちらで出し（押下はゲームへ流す）、WARN を残す（VERIFICATION.md §3.50）。
         """
         buttons = view.buttons
         if not buttons or not is_move_list(buttons):
@@ -1364,46 +1316,46 @@ def apply(ctx):
                 write("ignored {!r}: the previous press is still running".format(text))
                 return None
             write("pressed {!r} ({} target={})".format(text, action, target_id))
-            screen.start_phase(app, RoadPhase(app, action, target_id), text,
-                               fallback=lambda: run_action(app, action, target_id))
+            screen.run_phase(app, text, run_action, action, target_id, label=action,
+                             acting=(state, "acting"))
             return None
         return on_press
 
     def world_loaded(call):
-        """セーブを読み込んだ直後、開いた道をこの世界へ当て直す（`318_` / `321_` と同型）。"""
+        """セーブを読み込んだ直後、開いた道をこの世界へ当て直す（`318_` / `321_` と同型）。
+
+        例外は窓口 `loads` が記録する（TECH.md §3.3.21）。
+        """
         self, save_data_dict, app = call.obj, call.save_data, call.app
-        try:
-            key = worlds.playthrough(app, save_data_dict)
-            if key and key != UNKNOWN_WORLD:
-                worlds.forget(key)
-                apply_roads(self, key, "load")
-        except Exception:
-            ctx.log_exc("road opening: cannot re-apply the roads on load")
+        key = worlds.playthrough(app, save_data_dict)
+        if key and key != UNKNOWN_WORLD:
+            worlds.forget(key)
+            apply_roads(self, key, "load")
 
     loads.on(owner, ctx, (loads.WORLD,), after=world_loaded, write=write)
 
     def refresh_choice_buttons(self, _buttons):
-        """集落の選択肢に戻ったら、待っている移動を起こす（保険の経路。`307_` と同じ）。"""
-        try:
-            observe_quest(self)
-            arrived_check(self)
-            check_commissions(self, "refresh")
-            record = pending_of(self, "ready")
-            if record is not None and in_settlement(getattr(self, "buttons", None)):
-                advance(self, "arriving")
-                write("arrive: back in a settlement; leaving for {!r}".format(
-                    record.get("target_name")))
+        """集落の選択肢に戻ったら、待っている移動を起こす（保険の経路。`307_` と同じ）。
 
-                def go():
-                    current = pending_of(self)
-                    if current is not None and current.get("stage") == "arriving":
-                        advance(self, "ready")
-                    depart(self)
+        例外は窓口 `choices` が記録する。
+        """
+        observe_quest(self)
+        arrived_check(self)
+        check_commissions(self, "refresh")
+        record = pending_of(self, "ready")
+        if record is not None and in_settlement(getattr(self, "buttons", None)):
+            advance(self, "arriving")
+            write("arrive: back in a settlement; leaving for {!r}".format(
+                record.get("target_name")))
 
-                screen.when_idle(self, go, settle=SETTLE, proceed_on_timeout=True,
-                                 tag="arrive")
-        except Exception:
-            ctx.log_exc("road opening: cannot start the pending move")
+            def go():
+                current = pending_of(self)
+                if current is not None and current.get("stage") == "arriving":
+                    advance(self, "ready")
+                depart(self)
+
+            screen.when_idle(self, go, settle=SETTLE, proceed_on_timeout=True,
+                             tag="arrive")
 
     # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14 の宣言型の口）に預ける。
     # 一覧の「新たな道を探す」は `offer`、候補と手段は MOD だけの画面。集落に戻ったときの移動の起こし直しは `refresh`
@@ -1464,46 +1416,39 @@ def apply(ctx):
 
     quest_ends.on(owner, ctx, after=quest_end_after, write=write)
 
-    @ctx.wrap("__main__:QuestRetireManager.execute", required=False, safe=True)
-    def quest_retire(orig, self, *args, **kwargs):
-        """放棄。道は開かない。出発地に留まる。"""
-        app = getattr(self, "app", None) or ui.find_app()
-        ended = None
-        try:
-            ended = ui.current_quest_id(app)
-        except Exception:
-            ctx.log_exc("road opening: cannot read the current quest")
-        result = orig(self, *args, **kwargs)
-        try:
-            record = pending_of(app, "offered", "armed", "ready")
-            if record is not None and ended is not None \
-                    and ended != record.get("quest_id"):
-                write("quest {!r} was abandoned but the road is for {!r}; leaving it"
-                      .format(ended, record.get("quest_id")))
-            elif record is not None and (ended is not None
-                                         or record.get("stage") != "offered"):
-                origin = record.get("origin_name") or "元の土地"
-                target = record.get("target_name") or "その街"
-                drop_pending(app, "the quest was abandoned")
-                settle(app, lambda: screen.say(
-                    app, RETIRE_TEXT.format(origin=origin, target=target)))
-        except Exception:
-            ctx.log_exc("road opening: cannot cancel the road")
-        return result
+    def quest_retire_after(call):
+        """放棄。道は開かない。出発地に留まる（ローダの窓口 `quest_ends.on_retire`）。
 
-    @ctx.wrap("__main__:AreaMoveManager.__init__", required=False, safe=True)
-    def area_move(orig, self, *args, **kwargs):
-        """自分が起こしたのでない移動が始まったら、待っている道中は捨てる。"""
-        try:
-            # (app, target_area_id, mode)。受け取った形のまま元の関数へ渡す。
-            app = frames.arg(args, kwargs, "app", 0)
-            mode = frames.arg(args, kwargs, "mode", 2)
-            if not state["departing"] and pending_of(app, "offered", "armed") is not None:
-                drop_pending(app, "the player travelled by other means (mode={!r})"
-                             .format(mode))
-        except Exception:
-            ctx.log_exc("road opening: cannot clear the pending road")
-        return orig(self, *args, **kwargs)
+        放棄する依頼の id は窓口が `orig` の前に読んである（読めなかった回は None）。
+        例外は窓口が記録する。
+        """
+        app, ended = call.app, call.quest_id
+        record = pending_of(app, "offered", "armed", "ready")
+        if record is not None and ended is not None \
+                and ended != record.get("quest_id"):
+            write("quest {!r} was abandoned but the road is for {!r}; leaving it"
+                  .format(ended, record.get("quest_id")))
+        elif record is not None and (ended is not None
+                                     or record.get("stage") != "offered"):
+            origin = record.get("origin_name") or "元の土地"
+            target = record.get("target_name") or "その街"
+            drop_pending(app, "the quest was abandoned")
+            settle(app, lambda: screen.say(
+                app, RETIRE_TEXT.format(origin=origin, target=target)))
+
+    quest_ends.on_retire(owner, ctx, after=quest_retire_after, write=write)
+
+    def area_move_before(call):
+        """自分が起こしたのでない移動が始まったら、待っている道中は捨てる（窓口 `arrivals` の `AREA_SETUP`）。
+
+        自分が起こす移動（`depart`）は段階が `ready` のときに組むので、ここでは落ちない。
+        行き先と手段は窓口が引数から読んである。例外は窓口が記録する。
+        """
+        if pending_of(call.app, "offered", "armed") is not None:
+            drop_pending(call.app, "the player travelled by other means (mode={!r})"
+                         .format(call.mode))
+
+    arrivals.on(owner, ctx, (arrivals.AREA_SETUP,), before=area_move_before, write=write)
 
     def arrival_text(context, app):
         """到着の移動中だけ、ゲームの「徒歩で目指す。長旅だ...」を伏せる（`307_` と同じ。ローダの窓口 `text_filters`）。"""
@@ -1561,11 +1506,9 @@ def apply(ctx):
         """日数が進んだ後に、期日が来た委託を開く（`check_commissions`）。
 
         日数そのものには触らない（それは関所の `claim_days`）。後処理は同じ関所の `on_days` に預ける。
+        例外は窓口が記録する（TECH.md §3.3.21）。
         """
-        try:
-            check_commissions(call.app, "days")
-        except Exception:
-            ctx.log_exc("road opening: cannot check the commissions")
+        check_commissions(call.app, "days")
 
     durations.on_days(owner, ctx, after=after_days, write=write)
 
@@ -1593,35 +1536,8 @@ def apply(ctx):
 
     ctx.on_ready(initial_apply)
 
-    # ------------------------------------------------------------ 自己検証
-    # 実経路は一覧を開くまで通らない。距離補正だけは作ったデータで先に確かめておく。
-    class _A(object):
-        def __init__(self, aid, size, links):
-            self.id, self.size, self.connections = aid, size, list(links)
-    sample = {"0": _A("0", "town", ["1", "4"]), "1": _A("1", "village", ["0", "2"]),
-              "2": _A("2", "town", ["1"]), "4": _A("4", "village", ["0"]),
-              "9": _A("9", "dungeon", []), "21": _A("21", "village", [])}
-    graph = build_graph(sample)
-    probe_a = _A("x", "town", ["1"])
-    grew = add_connection(probe_a, "2") and probe_a.connections == ["1", "2"] \
-        and not add_connection(probe_a, "2")
-    class _App(object):
-        world_dict = {"areas": {"5": {"size": "town"}}}
-    sized = is_town(_App(), _A("5", None, []), {"town"}) \
-        and not is_town(_App(), _A("6", None, []), {"town"}) \
-        and is_town(_App(), _A("9", "city", []), {"city"})
-    if sized and hops_between(graph, "0", "2") == 1 and hops_between(graph, "2", "4") == 2 \
-            and hops_between(graph, "0", "1") == 0 and hops_between(graph, "0", "21") is None \
-            and price_for(2) == int(PRICE_BASE) + 2 * int(PRICE_PER_HOP) \
-            and difficulty_for(None, None, 0) == MIN_DIFFICULTY + max(0, int(DIFFICULTY_OFFSET)) \
-            and grew and fmt("{a}と{typo}", a="砦") == "砦と{typo}":
-        ctx.log("verified: BFS hops, price, size lookup and connection replacement")
-    else:
-        ctx.log("VERIFY FAILED: sized={} hops={} {} {} {} price={} grew={}".format(
-            sized, hops_between(graph, "0", "2"), hops_between(graph, "2", "4"),
-            hops_between(graph, "0", "1"), hops_between(graph, "0", "21"),
-            price_for(2), grew), level="ERROR")
-
+    # 距離・金額・規模の読み・接続の差し替えの確かめは固定の入力なので、注入のたびではなく
+    # tools/tests/test_road_opening.py で行う（TECH.md §6.1）。ここには効いている設定だけを残す。
     ctx.log("road opening: price={}+{}/hop difficulty={} +{}/hop offset={} isolated={} "
             "arrival_days={} stamina>={}% log={}".format(
                 PRICE_BASE, PRICE_PER_HOP, DIFFICULTY_MODE, DIFFICULTY_PER_HOP,

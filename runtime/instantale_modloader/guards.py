@@ -23,7 +23,7 @@ MOD がするのは、このマネージャを組んで `process_choice` に乗�
 import sys
 import weakref
 
-from . import log, log_exc, ui
+from . import _log_line, frames, log_exc, state, ui
 
 GUARD_ENEMY_TYPE = "guard"
 
@@ -36,24 +36,20 @@ _GATE_ATTR = "_instantale_guards_gate"
 
 
 def _state():
-    state = getattr(sys, _STATE_ATTR, None)
-    if not isinstance(state, dict):
-        state = {"armed": weakref.WeakKeyDictionary(), "inside": None, }
-        setattr(sys, _STATE_ATTR, state)
-    return state
+    return state.process_store(_STATE_ATTR, {"armed": weakref.WeakKeyDictionary(), "inside": None})
 
 
-def _write(text):
-    """窓口の記録は `modloader.log` へ（どの MOD が先に包んだかで行き先を変えない）。"""
-    try:
-        log(text, level="WARN" if text.startswith("WARN") else "INFO")
-    except Exception:
-        pass
+#: 窓口の記録は `modloader.log` へ（どの MOD が先に包んだかで行き先を変えない。`_log_line`）。
+_write = _log_line
 
 
 def is_number(value):
-    """数として読める値か。`bool` は弾く（`True` を難易度1にしない）。"""
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    """数として読める値か。`bool` は弾く（`True` を難易度1にしない）。
+
+    中身は `frames.is_number`（衛兵の戦闘の外でも使う判定なので frames に置いた）。
+    この名前は公開 I/F なので残す。
+    """
+    return frames.is_number(value)
 
 
 def difficulty_index(args):

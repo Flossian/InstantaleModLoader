@@ -65,20 +65,13 @@
 こちらが外側に居ると先に置き換えてしまい、307_ の伏せが効かなくなる。
 
 遊び方の説明は MODS.md の `314_` の項、検証の経過は VERIFICATION.md §3.27。
-
-版7: `AreaMoveManager.__init__` と `add_text` のフックは、引数を受け取った形のまま元の関数へ渡す
-（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。文言の言い換えは来た側に合わせて差し替える。
-`hasattr` を既定値付きの `getattr` に替えた（TECH.md §6）。
-`add_text` は窓の外では設定を読み直さない（版6までは本文1行ごとにワールド別の設定ファイルを `os.stat` していた）。
 """
 
-import os
 import re
-import sys
 import time
 
-from instantale_modloader import arrivals, choices, durations, frames, text_filters, ui
-from instantale_modloader.state import UNKNOWN_WORLD, WorldStore, playthrough_key, world_key
+from instantale_modloader import arrivals, choices, durations, text_filters, ui
+from instantale_modloader.state import WorldSettings, WorldStore, playthrough_key, process_store
 
 LOG_BASENAME = "area_move_custom.log"
 
@@ -102,7 +95,7 @@ MARK = "mod_area_move_custom"
 # 「-1 で無効」のような番人値は使わない。
 # 画面に出る数字がそのまま素の値になるほうが分かりやすい。
 # 素の値との照合は下の GAME_* 定数。
-# 移動にかかる日数（徒歩=90 は実測。馬車=14 は推定、`217_` で確定させる）。
+# 移動にかかる日数（徒歩=90・馬車=14 は実測。GAME.md §2.18）。
 WALK_DAYS = 90
 COACH_DAYS = 14
 
@@ -202,7 +195,6 @@ ROADS_DIRNAME = "road_opening"
 # ワールド個別の設定の控え。
 # 書くのは同梱の tool.py だけ。ゲーム中はこの MOD が読む。
 SETTINGS_DIRNAME = "area_move_custom"
-SETTINGS_STORE_ATTR = "__instantale_area_move_custom_settings_store__"
 SETTING_NAMES = (
     "WALK_DAYS", "COACH_DAYS", "COACH_PRICE", "WALK_NAME", "COACH_NAME",
     "WALK_BUTTON", "COACH_BUTTON", "WALK_DEPART_TEXT", "COACH_DEPART_TEXT",
@@ -237,6 +229,24 @@ def kind_of_mode(mode):
     return None
 
 
+def scaled(base, hops, add_per_hop, mode=None, factor=None):
+    """距離補正後の値。挟む街が 0 なら素通し。
+
+    `mode` / `factor` は検査（`tools/tests/test_area_move_custom.py`）が設定と無関係に式を確かめるための引数で、
+    実経路では常に設定（`HOP_SCALING` / `HOP_FACTOR`）を読む。
+    """
+    mode = str(HOP_SCALING) if mode is None else mode
+    factor = float(HOP_FACTOR) if factor is None else factor
+    hops = max(0, int(hops))
+    if hops == 0 or mode == "off":
+        return max(0, int(base))
+    if mode == "add":
+        return max(0, int(base) + int(add_per_hop) * hops)
+    if mode == "multiply":
+        return max(0, int(round(int(base) * (1.0 + factor * hops))))
+    return max(0, int(base))
+
+
 def move_options(buttons):
     """確認画面に並ぶ `AreaMoveManager` のボタンを `(entry, args)` で返す。
 
@@ -268,18 +278,15 @@ def apply(ctx):
     # 日数の頭打ちが効かなくなる。「2週間」の滞在が素の30日を、
     # 調整した徒歩が素の90日を消費する。
     # `311_` / `312_` が控えを `sys` に置いているのと同じ理由。
-    state = getattr(sys, STATE_STORE_ATTR, None)
-    if state is None:
-        state = {
-            # いま `AreaMoveManager.execute` の中に居るかの窓。
-            # 中身は _open_window。
-            "window": None,
-            # 確認画面のラベルから読み取った素の運賃（読めた最新の値）。
-            "game_price": None,
-            # 最後に書いた文言の差し替え（同じものを組み直しのたびにログへ書かない）。
-            "noted": None,
-        }
-        setattr(sys, STATE_STORE_ATTR, state)
+    state = process_store(STATE_STORE_ATTR, {
+        # いま `AreaMoveManager.execute` の中に居るかの窓。
+        # 中身は _open_window。
+        "window": None,
+        # 確認画面のラベルから読み取った素の運賃（読めた最新の値）。
+        "game_price": None,
+        # 最後に書いた文言の差し替え（同じものを組み直しのたびにログへ書かない）。
+        "noted": None,
+    })
 
     # 325_ が開いた道の控え。読むだけ（own=False はフォルダも作らず save も拒む）。
     # 書くのは 325_ だけなので `fresh=True` で読めば足りる（更新時刻が変われば
@@ -287,73 +294,22 @@ def apply(ctx):
     roads = WorldStore(ctx, ROADS_DIRNAME, own=False, write=write)
 
     # ワールド個別の設定。控えがあればその世界を見ているあいだだけ上書きし、
-    # 無い世界では一括設定（ローダが注入した値）へ戻す。
-    settings_store = getattr(sys, SETTINGS_STORE_ATTR, None)
-    if not isinstance(settings_store, WorldStore):
-        settings_store = WorldStore(ctx, SETTINGS_DIRNAME, default=dict,
-                                    write=write)
-        setattr(sys, SETTINGS_STORE_ATTR, settings_store)
-    elif settings_store is not None and callable(getattr(settings_store, "rebind", None)):
-        settings_store.rebind(ctx, write)
-    # 注入のたびにモジュールは作り直され、一括設定を注入してからここへ来る（TECH.md §3.8）。
-    # だからここで控えた値がそのまま一括設定（`sys` に固定してはいけない。
-    # 一括設定を変えて注入し直しても古い値が残る）。
-    base_settings = {name: globals()[name] for name in SETTING_NAMES}
-    active_settings = [None]    # 直前に反映した (世界, 値) の署名
+    # 無い世界では一括設定（ローダが注入した値）へ戻す。読み手はローダの state.WorldSettings（TECH.md §3.12.1）。
+    # 注入のたびにモジュールは作り直され、一括設定を注入してからここへ来る（TECH.md §3.8）ので、
+    # apply() の中で作れば写した値がそのまま一括設定になる。
+    world_settings = WorldSettings(ctx, SETTINGS_DIRNAME, SETTING_NAMES, globals(), write=write)
 
     def refresh_world(app=None):
-        """現在のワールドの控えを読み直す。変わっていれば True。"""
-        current_world = UNKNOWN_WORLD
+        """現在のワールドの控えを読み直してモジュールの定数へ重ねる。変わっていれば True。"""
         if app is None:
             try:
                 app = ui.find_app()
             except Exception:
                 app = None
-        try:
-            if app is not None:
-                current_world = world_key(app)
-        except Exception:
-            pass
-        record = {}
-        if isinstance(current_world, str) and current_world != UNKNOWN_WORLD:
-            try:
-                loaded = settings_store.load(current_world, fresh=True)
-                if isinstance(loaded, dict):
-                    record = loaded
-            except Exception:
-                ctx.log_exc("area move custom: cannot read world settings")
-        values = {}
-        for name in SETTING_NAMES:
-            default = base_settings[name]
-            value = record.get(name, default)
-            values[name] = value if type(value) is type(default) else default
-        signature = (current_world,
-                     tuple((name, values[name]) for name in SETTING_NAMES))
-        changed = signature != active_settings[0]
-        if changed:
-            globals().update(values)
-            active_settings[0] = signature
-        return changed
+        return world_settings.refresh(app, globals())
 
     # 起動時に現在ワールドが分かっていれば即時に反映する。
     refresh_world()
-
-    def scaled(base, hops, add_per_hop, mode=None, factor=None):
-        """距離補正後の値。挟む街が 0 なら素通し。
-
-        `mode` / `factor` は自己検証が設定と無関係に式を確かめるための引数で、
-        実経路では常に設定（`HOP_SCALING` / `HOP_FACTOR`）を読む。
-        """
-        mode = str(HOP_SCALING) if mode is None else mode
-        factor = float(HOP_FACTOR) if factor is None else factor
-        hops = max(0, int(hops))
-        if hops == 0 or mode == "off":
-            return max(0, int(base))
-        if mode == "add":
-            return max(0, int(base) + int(add_per_hop) * hops)
-        if mode == "multiply":
-            return max(0, int(round(int(base) * (1.0 + factor * hops))))
-        return max(0, int(base))
 
     def road_hops(app, origin_id, target_id):
         """この2街の間に挟む街の数。`325_` が開いた道でなければ 0。
@@ -421,8 +377,8 @@ def apply(ctx):
             "coach_fare": fare_for(hops),
         }
 
-    # `ctx.mod_dir` はフックの中では読めない（apply() の間だけ）ので、ここで控える。
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "area_move_custom"
+    # `ctx.mod_name` はフックの中では読めない（apply() の間だけ）ので、ここで控える。
+    owner = ctx.mod_name or "area_move_custom"
     durations.declare(durations.AREA_MOVE, area_move_for, owner=owner, write=write)
 
     def values_for(window):
@@ -574,24 +530,9 @@ def apply(ctx):
     choices.provide(ctx, screen, offer=offer, intercept=on_button_press)
 
     # ============================================================ 移動の窓
-    @ctx.wrap("__main__:AreaMoveManager.__init__", required=False, safe=True)
-    def area_move_init(orig, self, *args, **kwargs):
-        """`execute` には引数が来ないので、行き先と手段をここで自分に控える。
-
-        自分専用の属性名で持つだけで、ゲームのデータには何も書かない（マネージャはセーブに入らない。セーブに入るのは
-        PhaseSpec のほう）。
-        """
-        result = orig(self, *args, **kwargs)
-        try:
-            # (app, target_area_id, mode)。受け取った形のまま渡し、ここでは読むだけ。
-            target_area_id = frames.arg(args, kwargs, "target_area_id", 1)
-            mode = frames.arg(args, kwargs, "mode", 2)
-            self._mod_area_move_custom = {"target_id": str(target_area_id),
-                                          "mode": str(mode)}
-        except Exception:
-            pass
-        return result
-
+    # `execute` には引数が来ないので、行き先と手段は組み立て（`AreaMoveManager.__init__`）の引数でしか読めない。
+    # 読んでマネージャに控えるのはローダの窓口 arrivals で、`AREA` の call に `target_area_id` / `mode` が載る
+    # （TECH.md §3.3.21）。
     def _open_window(app, info):
         target_id = info.get("target_id")
         target = ui.world_areas(app).get(target_id) if app is not None else None
@@ -664,12 +605,11 @@ def apply(ctx):
         引いてから返す方式だと、支払い直後の所持金表示が1000引かれた値のまま残る）。
         ずらした直後に描画は走らないので、増えた瞬間が画面に見えることもない。
         """
-        self, app = call.obj, call.app
+        app = call.app
         refresh_world(app)
         window = None
         try:
-            info = getattr(self, "_mod_area_move_custom", None) or {}
-            window = _open_window(app, info)
+            window = _open_window(app, {"target_id": call.target_area_id, "mode": call.mode})
             window["gold_before"] = ui.gold_of(app)
             window["game_price"] = state["game_price"] or GAME_COACH_PRICE
             write("move: kind={} mode={!r} {!r} -> {!r} days_limit={} hops={} "
@@ -780,32 +720,8 @@ def apply(ctx):
 
     text_filters.on(owner, ctx, travel_text, write=write)
 
-    # ------------------------------------------------------------ 自己検証
-    # 実経路はエリア移動を1回するまで通らない。
-    # ラベルの読み書きだけは作ったデータで先に確かめておく（`103_` /
-    # `215_` と同じ方針）。
-    # 通貨の表記は `130_` が差し替えていることがあるので、
-    # 見本のほうも同じ表記へ通してから突き合わせる。
-    parsed = ui.parse_coin(ui.rewrite_coins("馬車(1,000G)"))
-    # テンプレートは既定の形を直に書く（`COACH_BUTTON` は GUI で変えられるので、
-    # 設定を通すと変えた回に期待値とずれる）。
-    sample = fmt("{name}({price}G・{days}日)", name="馬車", price=1000, days=7)
-    survives = fmt("{name}と{typo}", name="徒歩")
-    expected = ui.rewrite_coins("馬車(1000G・7日)")
-    # 距離補正の式。設定と無関係に確かめる（mode= / factor= を明示で渡す）。
-    grown = (scaled(90, 2, 7, mode="multiply", factor=1.0),
-             scaled(90, 2, 7, mode="add"),
-             scaled(1000, 3, 500, mode="add"),
-             scaled(90, 2, 7, mode="off"),
-             scaled(90, 0, 7, mode="multiply", factor=1.0))
-    if parsed == 1000 and sample == expected and survives == "徒歩と{typo}" \
-            and grown == (270, 104, 2500, 90, 90):
-        ctx.log("verified: reads the fare from a label, formats templates, "
-                "and scales by hops")
-    else:
-        ctx.log("VERIFY FAILED: parsed={!r} sample={!r} survives={!r} grown={!r}"
-                .format(parsed, sample, survives, grown), level="ERROR")
-
+    # ラベルの読み書きと距離補正の式は固定の入力で確かめられるので、注入時ではなく
+    # tools/tests/test_area_move_custom.py が確かめる（TECH.md §6.1）。
     ctx.log("area move custom: walk={}d coach={}d fare={} names={}/{} "
             "hops={}(x{}/+{}d+{}G) log={}".format(
                 WALK_DAYS, COACH_DAYS, COACH_PRICE, WALK_NAME, COACH_NAME,

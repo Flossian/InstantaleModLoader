@@ -1054,7 +1054,8 @@ def scene_approach():
     arrive(ctx, app, guild)
     check("第一声の前は種を残す", [t["kind"] for t in bucket_of(module, app)["topics"]] == ["intro"],
           bucket_of(module, app)["topics"])
-    module._store()["approach"]["at"] -= module.APPROACH_TTL + 1
+    # 第一声の予約はローダの窓口 `arrivals.opening` が持つ。期限を過ぎたことにする
+    arrivals._openings()[module.OWNER]["at"] -= module.APPROACH_TTL + 1
     check("印が古ければ第一声は変えない", opening(ctx, app) == "<行動: 話しかける>")
     check("第一声を読み替えられなければ種は残る",
           [t["kind"] for t in bucket_of(module, app)["topics"]] == ["intro"],

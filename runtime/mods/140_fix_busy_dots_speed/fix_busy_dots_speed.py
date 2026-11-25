@@ -52,14 +52,8 @@ def queued_loads(clock, app):
 
 
 def apply(ctx):
-    append = ctx.logger(LOG_BASENAME)
-    state = {"lines": 0, "stopped": 0}
-
-    def write(text):
-        if state["lines"] >= MAX_LINES:
-            return
-        state["lines"] += 1
-        append(text)
+    write = ctx.logger(LOG_BASENAME, cap=MAX_LINES)
+    state = {"stopped": 0}
 
     try:
         from kivy.clock import Clock

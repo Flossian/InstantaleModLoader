@@ -6,17 +6,14 @@
 スキルは `Character.skills` に `{名前: {..., "current_uses": 残り, "max_uses": 上限}}` で入り、
 ゲームは使うたびに残りを減らす。プレイヤーは残りが 0 になると選べなくなる（`SkillUnusableManager`）。
 **NPC（仲間と敵）には止めが無い**。NPC の手は審判 LLM（`referee_npc`）がスキル一覧から選ぶが、
-一覧には残りがマイナスになったスキルもそのまま載り、審判はそれを選び続ける。
-`236_probe_enemy_stats` の記録で、仲間の自己強化が残り −23、ボスの全体弱体が −2 まで減っていた。
+一覧には残りがマイナスになったスキルもそのまま載り、審判はそれを選び続ける（GAME.md §2.10.4）。
 ローカルのモデルは戦闘の記録にある自分の前の手をなぞりやすく、仲間が効果の見えない自己強化を
 毎手繰り返して一度も攻撃しない戦闘が出た（VERIFICATION.md §3.77）。
 
 強化・弱体だけのスキル（効果が `buff` / `debuff`）は、残りがあるうちも同じことが起きる。
-回数を使い切るまで毎手重ねがけし、その間は戦力にならない（実機）。
-NPC の審判の記録 344 件のうち 137 件が強化・弱体のスキルだった（GAME.md §2.10.4）。
+回数を使い切るまで毎手重ねがけし、その間は戦力にならない（GAME.md §2.10.4）。
 
-仲間の残り回数はゲームが戻さない。クエストの終わりにも、宿屋の休養（2回）を挟んでも減り続けた。
-プレイヤーの回数は、クエストの終わりから宿屋の休養までの間に上限へ戻っていた（GAME.md §2.10.4）。
+仲間の残り回数はゲームが戻さない。プレイヤーの回数は戻る（GAME.md §2.10.4）。
 
 ##### 直し方
 
@@ -36,16 +33,13 @@ NPC の審判の記録 344 件のうち 137 件が強化・弱体のスキルだ
 MOD を外せば元どおり（使い切ったスキルも選ばれる）。セーブに独自の鍵は増やさない。
 """
 
-from instantale_modloader import frames, saving, ui
+from instantale_modloader import battles, frames, saving, stays, ui
 
 LOG_BASENAME = "npc_skill_uses.log"
 LOG_TAG = "npc skill uses"
 
 #: 通常攻撃のスキル名。残り回数に関わらず審判に見せる。
 BASIC_ATTACK = "通常攻撃"
-
-#: 仲間の回数を戻す休養。宿泊の活動のうち「休養をとる」（GAME.md §2.17）。
-REST_TARGET = "__main__:VacationRestManager.execute"
 
 #: 強化・弱体の効果の種類。スキルの効果がこれだけなら、効果の続く間は選ばせない。
 LINGERING_TYPES = ("buff", "debuff")
@@ -56,7 +50,7 @@ DEFAULT_DURATION = 3
 
 def _uses(skill, key):
     value = skill.get(key) if isinstance(skill, dict) else None
-    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+    return value if frames.is_number(value) else None
 
 
 def usable(name, skill):
@@ -114,15 +108,13 @@ def refill(skills):
 
 def chosen_skill(response):
     """審判の戻りから選ばれたスキル名。辞書でも pydantic のモデルでも読む。"""
-    if isinstance(response, dict):
-        name = response.get("skill")
-    else:
-        name = getattr(response, "skill", None)
+    name = frames.field(response, "skill")
     return name if isinstance(name, str) else None
 
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME, tag=LOG_TAG + ":")
+    owner = ctx.mod_name or "137_fix_npc_skill_uses"
 
     # 審判の間だけ絞っている者。{id(持ち主): (持ち主, 元の辞書, 絞った辞書)}
     hidden = {}
@@ -144,27 +136,40 @@ def apply(ctx):
                 del own[name]
         return now
 
-    @ctx.wrap("scripts.llm.llm_manager_battle:referee_npc", required=False, safe=True)
-    def referee_npc(orig, player=None, combat_log=None, actor_name=None, actor=None,
-                    *args, **kwargs):
+    def rest_for_turn(actor):
+        """`referee_npc` の手番。数えを1つ進め、同じ手番の書き直しにも同じ一覧を控える。"""
+        now = tick(actor)
+        last_rest[id(actor)] = now
+        return now
+
+    def narrowed_call(orig, args, kwargs, rest_of, rewrite):
+        """審判の間だけ手番の者の `skills` を絞って呼び、戻したら選ばれた強化・弱体を休ませる。
+
+        `referee_npc` と `referee_npc_rewrite` の共通部分。`rest_of(actor)` が今外す強化・弱体の名前。
+        `rewrite` が真なら書き直しの経路で、ログは例外の時だけ書く。
+        引数の並びは `(player, combat_log, actor_name, actor, ...)`。
+        """
+        actor_name = frames.arg(args, kwargs, "actor_name", 2)
+        actor = frames.arg(args, kwargs, "actor", 3)
         original = frames.attr(actor, "skills", None)
         kept = None
         try:
-            now = tick(actor)
-            last_rest[id(actor)] = now
+            now = rest_of(actor)
             kept = usable_skills(original, now)
             if kept is not None:
                 gone = [name for name in original if name not in kept]
                 spent = [name for name in gone if not usable(name, original[name])]
                 actor.skills = kept
                 hidden[id(actor)] = (actor, original, kept)
-                write("{}: hid from the referee: spent={} resting={}".format(
-                    actor_name, spent, [name for name in gone if name not in spent]))
+                if not rewrite:
+                    write("{}: hid from the referee: spent={} resting={}".format(
+                        actor_name, spent, [name for name in gone if name not in spent]))
         except Exception:
             kept = None
-            ctx.log_exc("npc skill uses: cannot narrow the skills")
+            ctx.log_exc("npc skill uses: cannot narrow the skills"
+                        + (" for the rewrite" if rewrite else ""))
         try:
-            response = orig(player, combat_log, actor_name, actor, *args, **kwargs)
+            response = orig(*args, **kwargs)
         finally:
             if kept is not None:
                 hidden.pop(id(actor), None)
@@ -177,52 +182,34 @@ def apply(ctx):
             turns = lingering_turns(original.get(name)) if isinstance(original, dict) and name else 0
             if turns:
                 resting.setdefault(id(actor), {})[name] = turns
-                write("{}: used {} (buff/debuff); resting it for {} turn(s)".format(actor_name, name, turns))
+                if not rewrite:
+                    write("{}: used {} (buff/debuff); resting it for {} turn(s)".format(
+                        actor_name, name, turns))
         except Exception:
-            ctx.log_exc("npc skill uses: cannot read the chosen skill")
+            ctx.log_exc("npc skill uses: cannot read the chosen skill"
+                        + (" of the rewrite" if rewrite else ""))
         return response
 
+    @ctx.wrap("scripts.llm.llm_manager_battle:referee_npc", required=False, safe=True)
+    def referee_npc(orig, *args, **kwargs):
+        return narrowed_call(orig, args, kwargs, rest_for_turn, rewrite=False)
+
     @ctx.wrap("scripts.llm.llm_manager_battle:referee_npc_rewrite", required=False, safe=True)
-    def referee_npc_rewrite(orig, player=None, combat_log=None, actor_name=None, actor=None,
-                            *args, **kwargs):
+    def referee_npc_rewrite(orig, *args, **kwargs):
         """NPC の手の書き直し（`referee_npc` と同じく NPC の手を扱う。GAME.md §2.10）。
 
         こちらにも使い切ったスキルと効果の続いている強化・弱体を見せない。見せると、書き直しの経路で
         外したはずのスキルがまた選ばれうる。手番の数は `referee_npc` が減らしたので、ここでは減らさない。
         """
-        original = frames.attr(actor, "skills", None)
-        kept = None
-        try:
-            kept = usable_skills(original, last_rest.get(id(actor), set()))
-            if kept is not None:
-                actor.skills = kept
-                hidden[id(actor)] = (actor, original, kept)
-        except Exception:
-            kept = None
-            ctx.log_exc("npc skill uses: cannot narrow the skills for the rewrite")
-        try:
-            response = orig(player, combat_log, actor_name, actor, *args, **kwargs)
-        finally:
-            if kept is not None:
-                hidden.pop(id(actor), None)
-                try:
-                    actor.skills = original
-                except Exception:
-                    ctx.log_exc("npc skill uses: cannot put the skills back")
-        try:
-            name = chosen_skill(response)
-            turns = lingering_turns(original.get(name)) if isinstance(original, dict) and name else 0
-            if turns:
-                resting.setdefault(id(actor), {})[name] = turns
-        except Exception:
-            ctx.log_exc("npc skill uses: cannot read the chosen skill of the rewrite")
-        return response
+        return narrowed_call(orig, args, kwargs,
+                             lambda actor: last_rest.get(id(actor), set()), rewrite=True)
 
-    @ctx.wrap("__main__:BattleStartManager.start_battle", required=False, safe=True)
-    def start_battle(orig, self, *args, **kwargs):
+    def battle_starting(call):
+        """戦闘が変わったら休ませている強化・弱体の数えを空にする（ローダの窓口 `battles` の START の前）。"""
         resting.clear()
         last_rest.clear()
-        return orig(self, *args, **kwargs)
+
+    battles.on(owner, ctx, (battles.START,), before=battle_starting, write=write)
 
     def save_before(call):
         """審判の途中で保存が走っても、セーブには元の辞書を入れる（ローダの窓口 `saving`）。"""
@@ -237,14 +224,14 @@ def apply(ctx):
             if id(holder) in hidden:
                 holder.skills = kept
 
-    saving.on("137_fix_npc_skill_uses", ctx, before=save_before, after=save_after, always=True)
+    saving.on(owner, ctx, before=save_before, after=save_after, always=True)
 
-    @ctx.wrap(REST_TARGET, required=False, safe=True)
-    def rest(orig, self, *args, **kwargs):
+    def rest(call):
+        """宿の休養（ローダの窓口 `stays` の REST の前。宿泊の活動のうち「休養をとる」。GAME.md §2.17）。"""
         # 戻すのは orig の前。この行動の保存（orig の中）に戻した回数を載せる
         # （後で戻すと、休んでそのまま終えたセーブでは減ったまま残りうる）。休養は日数も金も動かさないので先に戻してよい
         try:
-            app = getattr(self, "app", None) or ui.find_app()
+            app = call.app
             for member_id in ui.party_member_ids(app):
                 member = ui.character_of(app, member_id)
                 changed = refill(frames.attr(member, "skills", None))
@@ -254,7 +241,8 @@ def apply(ctx):
                         for name, before, after in changed)))
         except Exception:
             ctx.log_exc("npc skill uses: cannot refill the party's skills")
-        return orig(self, *args, **kwargs)
+
+    stays.on(owner, ctx, (stays.REST,), before=rest, write=write)
 
     ctx.log("npc skill uses: spent skills and lingering buffs/debuffs are hidden from referee_npc; "
             "party refills at rest (log -> {})".format(ctx.out_path(LOG_BASENAME)))

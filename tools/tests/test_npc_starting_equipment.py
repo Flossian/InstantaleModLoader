@@ -238,6 +238,8 @@ class FakeCtx:
     def __init__(self, out_dir, state_dir):
         self.out_dir = out_dir
         self.state_dir = state_dir
+        # 本物の ctx.mod_name と同じく MOD のフォルダ名（窓口に名乗る持ち主名）
+        self.mod_name = os.path.basename(MOD_DIR)
         self.hooks = {}
         self.errors = []
         self.logs = []

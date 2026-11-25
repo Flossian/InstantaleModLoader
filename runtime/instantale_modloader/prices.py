@@ -140,12 +140,8 @@ _INN_OWNER = "prices:inn"
 
 
 def _inn_store():
-    found = getattr(sys, _INN_ATTR, None)
-    if not isinstance(found, dict) or not isinstance(found.get("adjust"), list):
-        found = {"adjust": [], "observed": {}, "ours": set(), "unknown": set(),
-                 "write": None, "generation": None, "installed": False}
-        setattr(sys, _INN_ATTR, found)
-    return found
+    return state.process_store(_INN_ATTR, {"adjust": [], "observed": {}, "ours": set(), "unknown": set(),
+                                           "write": None, "generation": None, "installed": False})
 
 
 def adjust_inn(owner, fn, write=None):
@@ -604,7 +600,11 @@ class _Ledger:
 
 
 def _item_registry():
-    """`{"base": (持ち主, 関数, on_sight, write), "adjust": [...], "ledger": _Ledger}`。"""
+    """`{"base": (持ち主, 関数, on_sight, write), "adjust": [...], "ledger": _Ledger}`。
+
+    `state.process_store` にしないのは、前の世代の台帳の中身を引き継ぐ処理（下）を持つのと、
+    値段を引くたびに呼ばれるので、既定の台帳（弱参照の辞書）を毎回作りたくないため。
+    """
     found = getattr(sys, _ITEM_ATTR, None)
     if not isinstance(found, dict) or not isinstance(found.get("adjust"), list):
         found = {"base": None, "adjust": [], "ledger": _Ledger()}

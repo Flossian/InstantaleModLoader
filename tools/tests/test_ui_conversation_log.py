@@ -478,6 +478,10 @@ class FakeCtx(object):
     def __init__(self, out_dir, state_dir):
         self.out_dir = out_dir
         self.state_dir = state_dir
+        # 窓口に名乗る持ち主の名前（本物は apply() の間 MOD のフォルダ名）。
+        self.mod_name = os.path.basename(os.path.dirname(MOD))
+        # 注入の世代。ローダの窓口（`hud`）は世代ごとに1回だけ包むので、注入をやり直すたびに替える（`install`）。
+        self.generation = 0
         self.wrapped = {}
         self.errors = []
         self.warnings = []
@@ -556,6 +560,7 @@ def install(mod, ctx):
     """注入をやり直す。**ラッパを重ねない**（本物は世代管理で置き換える）。"""
     (FakeHUD.update_display_text, FakeHUD.update_button_texts,
      InstantaleApp.add_text_display) = PRISTINE
+    ctx.generation += 1
     mod.apply(ctx)
 
 
@@ -621,6 +626,9 @@ def run():
           "__main__:InstantaleApp.add_text_display" in ctx.wrapped)
     check("hooked update_display_text",
           "scripts.hud.new_hud:InstanTaleHUD.update_display_text" in ctx.wrapped)
+    check("the repaint hooks go through the loader's hud window",
+          ml.hud.owners(ml.hud.TEXT) == [ctx.mod_name] and ml.hud.owners(ml.hud.BUTTONS) == [ctx.mod_name],
+          (ml.hud.owners(ml.hud.TEXT), ml.hud.owners(ml.hud.BUTTONS)))
 
     log_path = os.path.join(state_dir, mod.STATE_DIRNAME,
                             ml.state.world_filename("オルステッド", ".jsonl"))

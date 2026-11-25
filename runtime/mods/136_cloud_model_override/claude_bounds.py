@@ -22,6 +22,12 @@ API は数の範囲も配列の長さも縛らないので、Claude が範囲の
 import json
 import re
 
+# 数かの判定（int か float で bool ではない）はローダの `frames.is_number`
+from instantale_modloader import frames
+
+# `$ref` の引き方は文法の迂回と同じ（`#/` で始まる参照を最大16段たどり、引けなければそのまま）。
+from .claude_grammar import _resolve
+
 #: SDK が書き移した縛り（説明文の末尾の `{key: value, ...}`）。
 NOTE = re.compile(r"\{([^{}]*)\}\Z")
 #: 読む縛りの名前。
@@ -52,23 +58,6 @@ def has_bounds(schema):
     """型のどこかに数の縛りの書き移しがあるか（無ければ包まない）。"""
     text = json.dumps(schema, ensure_ascii=False)
     return any("{" + key + ":" in text or ", " + key + ":" in text for key in KEYS)
-
-
-def _resolve(schema, node):
-    seen = 0
-    while isinstance(node, dict) and isinstance(node.get("$ref"), str) and seen < 16:
-        ref = node["$ref"]
-        if not ref.startswith("#/"):
-            break
-        target = schema
-        try:
-            for key in ref[2:].split("/"):
-                target = target[key]
-        except (KeyError, TypeError):
-            break
-        node = target
-        seen += 1
-    return node
 
 
 def _fits(option, value, schema):
@@ -104,12 +93,12 @@ def clamp(value, node, schema, changes):
             return clamp(value, arrays[0], schema, changes) if len(arrays) == 1 else value
         numbers = [option for option in options
                    if _resolve(schema, option).get("type") in ("integer", "number")]
-        if len(numbers) == 1 and isinstance(value, (int, float)) and not isinstance(value, bool):
+        if len(numbers) == 1 and frames.is_number(value):
             return clamp(value, numbers[0], schema, changes)
         return value
     kind = node.get("type")
     limits = bounds(node)
-    if kind in ("integer", "number") and isinstance(value, (int, float)) and not isinstance(value, bool):
+    if kind in ("integer", "number") and frames.is_number(value):
         low, high = limits.get("minimum"), limits.get("maximum")
         if kind == "integer":
             if "exclusiveMinimum" in limits:

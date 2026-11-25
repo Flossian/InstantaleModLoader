@@ -310,9 +310,6 @@ def arm(rules_text, out_dir, roll=None, settings=None):
     client = FakeClient()
     ctx = FakeCtx(client, out_dir)
     mod.apply(ctx)
-    if any("VERIFY FAILED" in line for line in ctx.lines):
-        check("自己検証: apply() の中の _verify が通る", False,
-              [line for line in ctx.lines if "VERIFY" in line])
     return client, ctx, rules_path
 
 
@@ -443,6 +440,54 @@ def test_regex():
     check("正規表現: 無い番号は文字として出す",
           apply_one(rules[5], "1つだけ") == "$3 は無い",
           apply_one(rules[5], "1つだけ"))
+
+
+def test_sample_rules():
+    """書式を1つずつ含めた見本を、読む・抽選する・替えるまで通す。
+
+    前は MOD が注入のたびに apply() の中で回していた固定の入力の確かめ（TECH.md §6.1）。
+    タブ・無効タブ・コメント・確率・0%・エスケープ・正規表現の後方参照を1つの本文に当てる。
+    """
+    lines = [
+        "#tab:標準",
+        "#off:切った行=>効かない",
+        "古い言い方=>新しい言い方",
+        "念のため=>必ず替える=>100",
+        "絶対に替えない=>替わってしまった=>0",
+        "改行を入れる=>入れた\\n次の行",
+        "regex:(残り: -?\\d+)  - 効果:=>$1\\n  - 効果:",
+        "#offtab:切ったタブ",
+        "この行は切ったタブの中=>効かない",
+    ]
+    text = ("古い言い方。念のため。絶対に替えない。改行を入れる。"
+            "この行は切ったタブの中。残り: -1  - 効果: なし")
+    expected = ("新しい言い方。必ず替える。絶対に替えない。入れた\n次の行。"
+                "この行は切ったタブの中。残り: -1\n  - 効果: なし")
+    rules, warnings = mod.parse_rules(lines)
+    check("見本: 警告は出ない", not warnings, warnings)
+    check("見本: 規則は5つ", len(rules) == 5, len(rules))
+    chosen, skipped = mod.decide(mod.group_rules(rules), text, roll=lambda denom: 0)
+    got, _hits = mod.apply_chosen(text, chosen)
+    check("見本: 置換の結果", got == expected, repr(got))
+    check("見本: 0% の規則だけ見送る",
+          len(skipped) == 1 and "確率0" in skipped[0][3], skipped)
+
+    # 同じ「置換前」が2行あるときは1回の抽選でどちらかに決まる（合計 120 > 100）。
+    pair, _warnings = mod.parse_rules(["同じ前=>Aへ=>60", "同じ前=>Bへ=>60"])
+    pair_groups = mod.group_rules(pair)
+    check("見本: 同じ置換前は1グループ", len(pair_groups) == 1, len(pair_groups))
+    outcomes = []
+    for value in (0, 70):
+        chosen, _skipped = mod.decide(pair_groups, "同じ前", roll=lambda denom, v=value: v)
+        outcomes.append(mod.apply_chosen("同じ前", chosen)[0])
+    check("見本: 抽選値で両方の枝を通る", outcomes == ["Aへ", "Bへ"], outcomes)
+
+    # ボディの形で書かれた規則は復号した形も登録する。
+    escaped, _warnings = mod.parse_rules(["\\u3042い=>う\\u3048"])
+    check("見本: 復号した形も登録する",
+          len(escaped) == 2 and escaped[1].from_text == "あい"
+          and escaped[1].to_text == "うえ",
+          [(r.from_text, r.to_text) for r in escaped])
 
 
 # --------------------------------------------------------------------------
@@ -1260,6 +1305,7 @@ def main():
         test_format()
         test_decode()
         test_regex()
+        test_sample_rules()
         test_probability()
         test_paths(tmp)
         test_cloud_path(tmp)

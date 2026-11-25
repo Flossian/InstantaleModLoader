@@ -41,6 +41,8 @@
 
 def apply(ctx):
     """ローダがこれを呼ぶ。引数の `ctx` でできることは §3.1.3 の表にある。"""
+    # ローダの部品は apply() の中で import する（ゲームの外の検査でもこのファイルを読めるように）。
+    from instantale_modloader import frames
 
     # フックをまたいで持ち回す値は辞書に入れる。
     # `nonlocal` でも書けるが、辞書なら入れ子のどこからでも読み書きできる（既存
@@ -70,7 +72,8 @@ def apply(ctx):
         # こうしておくと、ここで壊れても safe=True が
         # orig の結果をそのまま返せる（§3.1.5）。
         # 中身を読みたい引数は、受けたものから拾う（位置でも名前でも来る）。
-        context = args[0] if args else kwargs.get("context")
+        # 読み方はローダの `frames.arg`（名前で来ていればそちら、無ければ位置）。
+        context = frames.arg(args, kwargs, "context", 0)
         state["seen"] += 1
         ctx.log("template: add_text #{} len={}".format(
             state["seen"], len(context) if isinstance(context, str) else "?"))

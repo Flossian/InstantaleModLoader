@@ -7,16 +7,15 @@
 このMODは一覧に「冒険者を募集する」を足し、
 押されたら新しい冒険者をLLMで書いてギルドに入れる。
 
-##### 画面の見分け（armed の旗）
+##### 画面の見分け（一覧の種類の印）
 
 冒険者一覧には固有の目印が無い。
 並ぶのは `ConversationStartManager` × 人数 + `JustSetButtonToNormalPhase`
 （やめる）だけで、これは「会話する」（`DisplayTalkChoice`）の一覧と同じ形
-（実測: `out/bounty_hunter.jsonl` と `out/city_case.log` の画面ダンプ）。
-spec だけでは区別できないので、`DisplayAdventurerTalkChoice.execute` を
-包んで旗を立て、`DisplayTalkChoice.execute` と
-「別の画面の目印が見えたとき」に下ろす。
-旗と形の両方が揃ったときだけ一覧とみなす（GAME.md §2.5 の
+（VERIFICATION.md §3.39）。
+spec だけでは区別できないので、どちらの一覧かはローダの窓口 `choices` の印で見る
+（`view.listing` / `choices.listing()`。TECH.md §3.3.14）。
+印と形（「やめる」が在る）の両方が揃ったときだけ一覧とみなす（GAME.md §2.5 の
 「既知以外を既定側に倒さない」）。
 
 ##### 数えるのは画面に並んだ人数
@@ -33,8 +32,8 @@ spec だけでは区別できないので、`DisplayAdventurerTalkChoice.execute
 強さは土地の水準に合わせる: その土地の冒険者の
 `config['difficulty_level']`（死んでいても記録は残っているので拾える）と、
 土地の依頼の難易度（`318_` が育てた値もここに現れる）の最大値。
-`get_npc_employ_price` の定義域が 0..76 なので上限で刈る
-（`101_` が踏んだ `KeyError: 80` を作らないため）。
+ゲーム自身も人物の難易度を 76 で切る（`clamp_npc_difficulty_value`、
+VERIFICATION_LOG.md §2.2）ので、プロンプトの目盛り 0〜76 と揃えて上で刈る。
 
 世界への入れ方はローダの `npcs.make_npc`（素データ・組み立て・施設への
 配置まで。`902_` が実測で確立した手順）。
@@ -70,14 +69,12 @@ REJECTED_MAX 件まで控え、頼み文の「使えない名前」に並べる�
 MODを外しても消えない（DOC.md に明記）。
 増えすぎない根拠はボタンの出る条件そのもの ―
 一覧が RECRUIT_MIN 人以下のときしか募集できない。
-
-版6: 一覧の `execute` のフック2本は、引数を受け取った形のまま元の関数へ渡す
-（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 """
 
+import copy
 import sys
 
-from instantale_modloader import choices, frames, llm, npcs, state as state_api, ui
+from instantale_modloader import choices, frames, llm, modnpc, npcs, state as state_api, ui
 from instantale_modloader.npcs import make_npc
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
@@ -93,19 +90,12 @@ MANAGER_NAME = "mod_adventurer_recruit"   # LLM記録の分かれ目（output_da
 RECRUIT_TIMEOUT = 90.0              # LLM 1問の待ち。無期限にしない（GAME.md §2.12）
 RECRUIT_MAX_TOKENS = 800
 DIFFICULTY_FALLBACK = 4             # 土地の水準が読めないときの難易度（902_ と同じ）
-DIFFICULTY_MAX = 76                 # get_npc_employ_price の定義域（VERIFICATION_LOG.md §2.2）
-NAME_MAX = npcs.NAME_MAX
+DIFFICULTY_MAX = 76                 # ゲームが人物の難易度を切る上限（clamp_npc_difficulty_value。VERIFICATION_LOG.md §2.2）
 TAKEN_NAMES_MAX = 15                # プロンプトに並べる既存名の上限
 REJECTED_MAX = 10                   # 控える改名前の名前の上限（古いものから落とす）
 STATE_DIRNAME = "adventurer_recruit"
 #: 控えを世代をまたいで1つだけ持つ（`state.WorldStore` は apply() の外に置く約束）。
 STATE_STORE_ATTR = "_instantale_adventurer_recruit_store"
-
-#: 冒険者一覧ではありえない spec。
-#: 1つでも見えたら別の画面に移っている（armed を下ろす）。
-OTHER_SCREEN_SPECS = ("ConversationEndManager", "MovePhaseManager",
-                      "DisplayTalkChoice", "DisplayQuestChoice",
-                      "QuestChoiceManager")
 
 #: 実セーブに出てくる `category` の語彙（立ち絵の生成に使われる英語の句）。
 #: これ以外を返されたら先頭の候補へ倒す。
@@ -134,7 +124,7 @@ PROMPT = (
 
 def apply(ctx):
     write = ctx.logger("adventurer_recruit.log")
-    state = {"armed": False, "recruiting": False, "offered": None}
+    state = {"recruiting": False, "offered": None}
     screen = ui.Screen(ctx, write, tag="adventurer recruit", mark=MARK)
     store = getattr(sys, STATE_STORE_ATTR, None)
     if not isinstance(store, dict):
@@ -143,26 +133,16 @@ def apply(ctx):
     worlds = store["worlds"].rebind(ctx, write)
 
     # ================================================== 冒険者一覧の見分け
-    @ctx.wrap("__main__:DisplayAdventurerTalkChoice.execute",
-              required=False, safe=True)
-    def adventurer_list_execute(orig, self, *args, **kwargs):
-        state["armed"] = True
-        return orig(self, *args, **kwargs)
-
-    @ctx.wrap("__main__:DisplayTalkChoice.execute", required=False, safe=True)
-    def talk_list_execute(orig, self, *args, **kwargs):
-        # 「会話する」の一覧は冒険者一覧と同じ形なので、明示的に旗を下ろす。
-        state["armed"] = False
-        return orig(self, *args, **kwargs)
+    # どちらの一覧が出ているかはローダの窓口 `choices` が見分ける（`view.listing` / `choices.listing()`）。
+    # 包みは全 MOD の適用の後に boot が立てるが、ここで呼んでも同じ世代では1回だけ。
+    choices.install_listing(ctx)
 
     def offer(app, view):
         """冒険者の一覧なら、人数が閾値以下のとき「やめる」の手前に募集ボタンを出す（窓口 `choices` の `offer`）。"""
-        if not state["armed"]:
+        if view.listing != choices.LISTING_ADVENTURER:
             return None
         buttons = view.buttons
         names = [ui.spec_cls_name(entry) for entry in buttons]
-        if any(name in OTHER_SCREEN_SPECS for name in names):
-            return None
         at = screen.back_button_index(buttons)
         if at is None:
             return None                 # 「やめる」が無い＝一覧が組み上がっていない
@@ -175,7 +155,7 @@ def apply(ctx):
         return [choices.Choice(RECRUIT_LABEL, place=choices.at(at), on_press=on_button_press)]
 
     def refresh_choice_buttons(self, _buttons):
-        """組み直しの前（窓口の `refresh`）。冒険者の一覧でない画面に来たら旗を下ろす。"""
+        """組み直しの前（窓口の `refresh`）。冒険者の一覧でない画面に来たら出した人数の控えを捨てる。"""
         try:
             buttons = getattr(self, "buttons", None)
             if not isinstance(buttons, list):
@@ -185,33 +165,21 @@ def apply(ctx):
             if old:
                 buttons[:] = [entry for entry in buttons if not any(entry is d for d in old)]
                 write("dropped {} recruit button(s) with the older mark".format(len(old)))
-            if state["armed"] and any(ui.spec_cls_name(entry) in OTHER_SCREEN_SPECS for entry in buttons):
-                state["armed"] = False
+            if choices.listing() != choices.LISTING_ADVENTURER:
                 state["offered"] = None
         except Exception:
             ctx.log_exc("adventurer recruit: cannot look at the choices")
 
     # ================================================== 押されたら募集する
-    class RecruitPhase(object):
-        """自前のフェーズ。`process_choice` に渡してゲームと同じ経路を通す。
-
-        `PhaseSpec` には載せない（セーブに焼かれて、MOD無しの次回起動で
-        `getattr(__main__, ...)` が失敗する。GAME.md §2.2）。
-        """
-
-        def __init__(self, app):
-            self.app = app
-
-        def execute(self, choice_text):
-            return recruit(self.app)
-
     def on_button_press(self):
-        """募集ボタンが押された（窓口がボタンに持たせた処理として呼ぶ）。"""
+        """募集ボタンが押された（窓口がボタンに持たせた処理として呼ぶ）。
+
+        `process_choice` に渡してゲームと同じ経路を通す（`ui.Screen.run_phase`）。
+        """
         if state["recruiting"]:
             return None                 # 連打。生成中は無反応でよい
         write("pressed {!r}".format(RECRUIT_LABEL))
-        screen.start_phase(self, RecruitPhase(self), RECRUIT_LABEL,
-                           fallback=lambda: recruit(self))
+        screen.run_phase(self, RECRUIT_LABEL, recruit)
         return None
 
     # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14 の宣言型の口）に預ける。
@@ -247,8 +215,6 @@ def apply(ctx):
         target = max(found) if found else DIFFICULTY_FALLBACK
         return min(max(target, 0), DIFFICULTY_MAX)
 
-    guild_of = ui.guild_of
-
     def taken_names(app, area, made):
         """名前をかぶらせないための既存名。土地の冒険者 + 今回作った分。"""
         names = []
@@ -278,18 +244,6 @@ def apply(ctx):
             worlds.save(key)
 
     # ================================================== LLMに1人書かせる
-    clean_text = npcs.clean_text
-
-    clean_name = npcs.clean_name
-
-    area_notes = npcs.area_notes
-
-    clean_category = npcs.clean_category
-
-    clean_look = npcs.clean_look
-
-    exp_level_for = npcs.exp_level
-
     def compose(app, area, difficulty, made, key):
         """冒険者1人ぶんの項目。書けなければ None。"""
         structure = llm.create_structure(
@@ -305,8 +259,8 @@ def apply(ctx):
         taken = taken_names(app, area, made)
         rejected = rejected_names(key)
         prompt = PROMPT.format(
-            area=clean_text(getattr(area, "name", None), 60) or "名も無い土地",
-            notes=clean_text(area_notes(area), 240) or "（記録なし）",
+            area=npcs.clean_text(getattr(area, "name", None), 60) or "名も無い土地",
+            notes=npcs.clean_text(npcs.area_notes(area), 240) or "（記録なし）",
             difficulty=difficulty,
             taken="、".join(taken) if taken else "（いない）",
             rejected="、".join(rejected) if rejected else "（なし）",
@@ -318,26 +272,24 @@ def apply(ctx):
                        label="adventurer recruit", write=write)
         if not isinstance(data, dict):
             return None
-        name = clean_name(data.get("name"))
+        name = npcs.clean_name(data.get("name"))
         if not name:
             write("compose: no usable name in {!r}".format(data))
             return None
-        category = clean_category(data.get("category"))
+        category = npcs.clean_category(data.get("category"))
         return {"name": name,
-                "profile": clean_text(data.get("profile")),
-                "personality": clean_text(data.get("personality")),
-                "speech_style": clean_text(data.get("speech_style"), 120),
-                "look_description": clean_text(data.get("look_description")),
+                "profile": npcs.clean_text(data.get("profile")),
+                "personality": npcs.clean_text(data.get("personality")),
+                "speech_style": npcs.clean_text(data.get("speech_style"), 120),
+                "look_description": npcs.clean_text(data.get("look_description")),
                 "category": category,
-                "look": clean_look(data.get("look"), category),
+                "look": npcs.clean_look(data.get("look"), category),
                 "job": "adventure",
                 # 実セーブの生成直後の個体に合わせる（GAME.md §2.23）。
-                # age は全NPCが 20 の定数。関係値は「初対面」の初期値。
+                # age は全NPCが 20 の定数。関係値は「初対面」の初期値（ローダの modnpc が持つ）。
                 "age": 20,
-                "experience_level": exp_level_for(difficulty),
-                "relationship": {"player": {
-                    "affinity": 0, "affinity_text": "警戒心がある",
-                    "relationship": ["初対面"], "conversation_count": 0}}}
+                "experience_level": npcs.exp_level(difficulty),
+                "relationship": copy.deepcopy(modnpc.DEFAULT_RELATIONSHIP)}
 
     # ================================================== 名簿へ入れる
     def enroll(app, area, area_id, npc_id):
@@ -359,7 +311,7 @@ def apply(ctx):
             write("recruit: current area unknown")
             return []
         area_id = ui.area_id_of(area)
-        guild_id, _guild = guild_of(area)
+        guild_id, _guild = ui.guild_of(area)
         if guild_id is None:
             write("recruit: no guild in area {}".format(area_id))
             return []

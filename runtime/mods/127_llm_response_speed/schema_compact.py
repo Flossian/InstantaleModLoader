@@ -430,7 +430,10 @@ EXPECTED = ('Location = {"name": string, "kind": "shop"|"inn"}\n'
 
 
 def verify():
-    """見本で正しさを確かめる。戻り値は失敗の説明（成功なら None）と縮み方の組。"""
+    """見本で正しさを確かめる。戻り値は失敗の説明（成功なら None）と縮み方の組。
+
+    固定の入力の計算なので、注入の時ではなく tools/tests/test_schema_compact.py が呼ぶ（TECH.md §6.1）。
+    """
     prompt = "出力は次の構造に従うこと: " + SAMPLE_SCHEMA + "\n以上を守ること。"
 
     # 見本は短いので、実際の長さの下限では触らないこと。

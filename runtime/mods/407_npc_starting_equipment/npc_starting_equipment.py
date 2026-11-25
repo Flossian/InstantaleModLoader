@@ -24,7 +24,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 import threading
 import typing
@@ -46,7 +45,8 @@ STATE_KEY_OVERRIDE = "__instantale_407_npc_starting_equipment_key__"
 RUNTIME_STORE = "__instantale_407_npc_starting_equipment_runtime__"
 WORLDS = state.SysWorldStore(STATE_STORE, STATE_DIRNAME, STATE_KEY_OVERRIDE)
 
-RARITIES = ("common", "rare", "magical", "epic", "legendary", "mythic")
+# レア度の6段はゲームのスキーマの定数（GAME.md §2.13.2）なのでローダの items に置いてある。
+RARITIES = items.RARITIES
 
 # generate_item_from_item_data へ渡す細分。ゲーム自身の品揃え生成のスキーマと同じ語彙で、
 # 312 と同じ組。武器はゲームが ``_weapon`` を足して item_detail にするので、
@@ -246,7 +246,12 @@ def _playthrough(app):
 
 
 def _worn_types(app, character):
-    """もう身に着けている種類。装備欄の MOD が答えればそちら、居なければ ``equipments`` から読む。"""
+    """もう身に着けている種類。装備欄の MOD が答えればそちら、居なければ ``equipments`` から読む。
+
+    ローダの ``equipment.worn`` は使わない。本体の枠では枠の名前（weapon / wearable）をそのまま種類として数え、
+    持ち物から引き当てられない id が入っていても「埋まっている」とみなして作らないため
+    （``worn`` は部位を "" にし、引けない id を数えない）。
+    """
     worn = equipment.gear(app, character)
     if worn is not None:
         return {getattr(item, "item_type", None) for _slot, item in worn} & set(EQUIP_TYPES)
@@ -291,12 +296,14 @@ def _make_item(ctx, app, character, spec, write):
         inventory = items.inventory_of(character)
         if not isinstance(inventory, dict):
             return None
+        # ゲームの入口は品を obtainer の持ち物へ入れる（GAME.md §2.13.1.5）。
         added = [key for key in inventory if key not in before]
         if added:
             return str(added[0])
         if item is None:
             continue
-        # ゲームの入口がオブジェクトだけ返す版にも対応する。
+        # 鍵が増えなかったときの予備。ゲームは採番した鍵が既に在っても上書きするので
+        # （ids.py）、品が取れて鍵が増えない場面は今のゲームでも起こりうる。
         item_key = ids.claim(app, "item", write=write)
         try:
             inventory[item_key] = item
@@ -529,11 +536,11 @@ def apply(ctx):
 
     @ctx.wrap("__main__:InstantaleApp.add_party_member",
                required=False, safe=True)
-    def add_party_member(orig, self, character_id=None, *args, **kwargs):
+    def add_party_member(orig, self, *args, **kwargs):
         """本体の加入処理をそのまま通し、加入できたNPCの初期装備を頼む。"""
-        result = orig(self, character_id, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         try:
-            enqueue(self, character_id)
+            enqueue(self, frames.arg(args, kwargs, "character_id", 0))
         except Exception:
             ctx.log_exc("npc starting equipment: party join hook failed")
         return result
@@ -575,10 +582,10 @@ def apply(ctx):
         finally:
             worlds.lock.release()
 
-    saving.on("407_npc_starting_equipment", ctx, before=save_before, after=save_after, always=True, write=write)
+    owner = ctx.mod_name or "407_npc_starting_equipment"
+    saving.on(owner, ctx, before=save_before, after=save_after, always=True, write=write)
 
     # ロード・新規開始・世界の組み立ての前後はローダの窓口 `loads` から呼ばれる（TECH.md §3.3.21）。
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "407_npc_starting_equipment"
 
     def world_init_begin(call):
         """ロードと新規開始。LLM待ちの仕事と、保存されなかった印を捨てる。"""

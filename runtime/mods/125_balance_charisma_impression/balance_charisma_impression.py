@@ -99,7 +99,7 @@ NPC の応答が無条件に友好的になる ＝ 交渉も説得も勝手に�
 ##### 相手が誰かは、会話のマネージャを包んで拾う
 
 `document_emotion_scores_new` の引数に NPC は居ない。
-そして**呼び出し元のフレームからも拾えない** ―
+そして**呼び出し元のフレームからも拾えない**。
 ゲームの生きたフレームは `f_locals` が空で
 （Nuitka はトレースバックに載るときしか中身を作らない。
 実測: 会話終了の3フレームすべて「ローカル 0件」。VERIFICATION.md §3.23）、
@@ -117,7 +117,7 @@ NPC の応答が無条件に友好的になる ＝ 交渉も説得も勝手に�
 どちらも、通っている間だけ相手の id をスレッドごとに控える
 （要約は別スレッドで回る。GAME.md §2.25）。
 **終了側を落とすと、会話のたびに好みが 0 の値で上書きされる**
-（初版がこれで、開始時に付けた差が会話の終わりに消えていた）。
+（開始時に付けた差が会話の終わりに消える。VERIFICATION.md §3.23）。
 
 id は**世界の名簿（`world.characters`）で引けたものだけ**を採る。
 `in_conversation_id` のような「相手の id とは限らない値」を鍵にすると、
@@ -128,12 +128,12 @@ id は**世界の名簿（`world.characters`）で引けたものだけ**を採�
 実機では空振りするが、`f_locals` が読める環境ではこちらが先に当たる。
 Character かどうかは**持ち物で見分ける**（`relationship` が dict で、
 `profile` / `personality` / `life_log` などが2つ以上ある）。
-`relationship` に `"player"` の欄が在ることは条件にしない ―
+`relationship` に `"player"` の欄が在ることは条件にしない。
 初めて会う相手にはまだ無い可能性があり、
 そこを条件にすると**いちばん効かせたい相手だけ外れる**。
 
 どちらでも決まらなければ好みの増減を 0 にし（親しさのぶんだけが効く）、
-**その場のローカルと `self` の中身を、呼び出し元ごとに1度だけ記録に写す** ―
+**その場のローカルと `self` の中身を、呼び出し元ごとに1度だけ記録に写す**。
 次に外れたとき、相手がどこに居るのかがログだけで分かるようにするため。
 
 相手が決まらないまま文を作り直す場面が3つある（依頼のクリアで同行者の全員、
@@ -167,7 +167,7 @@ import hashlib
 import sys
 import threading
 
-from instantale_modloader import abilities, frames, ui
+from instantale_modloader import abilities, frames, npcs, patch, ui
 
 LOG_BASENAME = "charisma_impression.log"
 
@@ -212,8 +212,8 @@ ATTR_HINTS = ("character_instance", "character", "npc", "npc_instance",
               "target_character", "conversation_character")
 
 # 相手の id が入っている名前。
-# `ConversationStartManager.__init__(self, app, character_id)` ―
-# 実機で通っているのはここ（`out/recon/targets.txt`）。
+# 実機で通っているのは `ConversationStartManager.__init__(self, app, character_id)`
+# （`out/recon/targets.txt`）。
 ID_HINTS = ("character_id", "npc_id", "target_character_id",
             "in_conversation_id", "character_key")
 
@@ -299,10 +299,9 @@ _UNSET = object()
 def _edges_of(pairs, index):
     """`値 -> 段` の並びが変わった境目。閾値を記録に残すためだけのもの。
 
-    `(引いた値, 戻り値)` の組で受け取る。**値と行を別々に渡さない** ―
+    `(引いた値, 戻り値)` の組で受け取り、**値と行を別々に渡さない**。
     ゲームが受け付けない点は飛ばすので、引いた値の列と行の列は長さが揃わず、
-    別々に渡すと閾値が丸ごとずれる（実機のログで好感度の閾値が -180 から
-    始まっていた）。
+    別々に渡すと閾値が丸ごとずれる（VERIFICATION.md §3.23）。
     """
     edges, previous = [], _UNSET
     for value, row in pairs:
@@ -314,33 +313,25 @@ def _edges_of(pairs, index):
 
 
 def apply(ctx):
-    append = ctx.logger(LOG_BASENAME)
-    state = {"lines": 0, "ladders": False, "taste": {},
+    write = ctx.logger(LOG_BASENAME, cap=MAX_LINES)
+    state = {"ladders": False, "taste": {},
              "blind": set(), "talking": {}, "pending": {}, "keeping": {}}
-
-    def write(text):
-        if state["lines"] >= MAX_LINES:
-            return
-        state["lines"] += 1
-        append(text)
 
     # ------------------------------------------------------------ 段を覚える
     def learn(orig):
         """元の関数を総当たりして、戻り値のどの位置がどの段の並びかを決める。
 
-        `orig` は（他の MOD が同じ関数を包んでいれば）その層を含んだもの。
-        素の関数まで剥がさないのは、実際に効いている振る舞いの段を覚えたいため。
-        剥がすと、他の MOD の書き換えを知らないまま段を数えることになる。
+        `orig` はラッパーを剥がした素の関数（`patch.unwrap`）。
+        `safe=True` のフックに渡る `orig` は `_guard` の記録を兼ねていて、
+        合成引数で呼ぶと記録が探りの答えに変わるため、そちらは使わない（TECH.md §6.1）。
         """
         def probe(affinity, charisma):
             """1点だけ引く。**ゲームが受け付けない組み合わせは飛ばす。**
 
             素の `document_emotion_scores_new` は定義域の外で例外を出す
-            （実測: `charisma=0` で `ValueError: max() arg is an empty sequence`。
-            `out/modloader.log` にずっと出ていた）。
-            1点でも投げたら総当たり全体を諦める作りだったため、
-            **この MOD は一度も段を覚えられていなかった**
-            （`out/charisma_impression.log` が 0 バイトのままだった）。
+            （`charisma=0` で `ValueError: max() arg is an empty sequence`）。
+            1点でも投げたら総当たり全体を諦める作りでは、段を一度も覚えられない
+            （VERIFICATION_LOG.md §2.50）。
             段の並びは動く位置さえ分かればよく、全点は要らない。
             """
             try:
@@ -417,8 +408,8 @@ def apply(ctx):
         app = ui.find_app()
         if app is None:
             return None
-        player = frames.attr(app, "player", None)
-        return player if player not in (None, frames.MISSING) else None
+        # 読めなかった番人（MISSING と「<X while reading>」）は None に倒す（ローダの `frames.field`）
+        return frames.field(app, "player")
 
     def world_of():
         app = ui.find_app()
@@ -480,9 +471,9 @@ def apply(ctx):
         会話の通し番号のような「相手ではない id」を掴むと、全員が同じ鍵になって
         好みが一律に戻ってしまうため。
 
-        1つ目だけで足りると思っていたのが初版で、実機の呼び出し元
+        1つ目だけでは足りない。実機の呼び出し元
         （`ConversationStartManager.conversation_start_method_1(self)`）には
-        マネージャしか居ないため何も拾えなかった（VERIFICATION.md §3.23）。
+        マネージャしか居ない（VERIFICATION.md §3.23）。
         """
         # `weak` は「id らしいが世界の名簿に無い値」。会話の通し番号のような
         # **相手ではない id** を掴むと、全員が同じ鍵になって好みが一律に戻る。
@@ -567,7 +558,7 @@ def apply(ctx):
         """相手が拾えなかったときに、**その場に何が居たか**を1度だけ残す。
 
         推測で拾い方を足すより、実機のフレームの中身を1回写すほうが速い
-        （初版はこれを持たず、拾えないことしか分からないまま実機を1往復した）。
+        （VERIFICATION.md §3.23）。
         """
         site = seen[0][0].co_name if seen else "?"
         if site in state["blind"] or len(state["blind"]) >= BLIND_SITES:
@@ -731,9 +722,8 @@ def apply(ctx):
         if not isinstance(characters, dict):
             return out
         for key, npc in list(characters.items()):
-            relation = frames.attr(npc, "relationship", None)
-            entry = relation.get("player") if isinstance(relation, dict) else None
-            texts = entry.get("affinity_text") if isinstance(entry, dict) else None
+            entry = npcs.player_row(npc)
+            texts = entry.get("affinity_text") if entry is not None else None
             if isinstance(texts, (list, tuple)) and texts:
                 out[key] = (npc, entry, tuple(texts))
         return out
@@ -742,7 +732,7 @@ def apply(ctx):
         """主人公の素の魅力（補正を足す前）。読めなければ None。"""
         scores = abilities.raw(player_of(), "ability_scores")
         value = scores.get("charisma") if isinstance(scores, dict) else None
-        return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+        return value if frames.is_number(value) else None
 
     def keep_charm(before, site):
         """包んだ呼び出しの間に作り直された文の、魅力の段だけを前の値へ戻す。"""
@@ -859,15 +849,9 @@ def apply(ctx):
     def emotion_scores(orig, *args, **kwargs):
         result = orig(*args, **kwargs)
 
-        # ここから先は**必ず飲む**。
-        # `safe=True` のとき渡される `orig` は `_guard` の記録係で、
-        # 呼ぶたびに「素の答え」を覚え直す。`learn()` は段を覚えるために
-        # その `orig` を合成引数で何度も呼ぶので、覚えられているのは
-        # **探りの答え**になっている。
-        # この後ろで投げると `_guard` は「orig は既に走った」と見なして
-        # その探りの答えをゲームへ返す。それが `affinity_text` に書かれ、
-        # 以後その NPC の会話プロンプトに乗り、セーブされる。
-        # 落とす先は自分で持つ。
+        # ここから先は**必ず飲む**。後処理が投げたら、素の答え `result` を自分で返す。
+        # 段の総当たりは `orig`（`_guard` の記録を兼ねる）ではなく、剥がした素の関数で行う
+        # （TECH.md §6.1）。
         try:
 
             if state["ladders"] is False:
@@ -879,7 +863,11 @@ def apply(ctx):
                 # 総当たりは元の関数を読むだけで副作用が無く、
                 # 二重に走っても結果は同じ（記録が1組増えるだけ）。
                 try:
-                    ladders, why = learn(orig)
+                    raw, _depth, still_ours = patch.unwrap(patch.resolve(TARGET)[2])
+                    if still_ours:
+                        ladders, why = None, "素の関数まで剥がし切れない"
+                    else:
+                        ladders, why = learn(raw)
                 except Exception:
                     ctx.log_exc("charisma impression: 段の総当たりが失敗した; 素通しにする")
                     state["ladders"] = None

@@ -9,7 +9,6 @@
   追記   … 最後の user message の末尾へ足し、呼び出し元の list / dict は壊さない
   上限   … 1項目ずつの上限と、同行者全員ぶんの合計上限が効く
   控え   … runtime に無い項目だけ `World.generate_character` の保存辞書から補う
-  記録   … `in_battle` が落ちている間に他の戦闘フラグが立っていたら1度だけ残す
 
 ゲームが起動していなくても走るので、mod を編集したらまずこれを通すこと。
 """
@@ -97,6 +96,8 @@ class Ctx(object):
         self.hooks = {}
         self.errors = []
         self.notes = []
+        # 窓口に名乗る持ち主の名前（本物は apply() の間だけフォルダ名）。
+        self.mod_name = os.path.basename(os.path.dirname(MOD_PATH))
 
     def out_path(self, *parts):
         path = os.path.join(self.out_dir, *parts)
@@ -143,10 +144,13 @@ def load_mod():
 
 MOD = load_mod()
 
+from instantale_modloader import llm, loads  # noqa: E402
+
 SEND_TARGET = "scripts.llm.llm_manager_battle:send_request"
 NO_STRUCTURE_TARGET = "scripts.llm.llm_manager_battle:send_request_with_no_structure"
 GENERATE = "__main__:World.generate_character"
-RETURN_TO_TITLE = "__main__:InstantaleApp.return_to_title"
+# タイトルへ戻るのはローダの窓口 `loads` の TITLE が包む。
+RETURN_TO_TITLE = loads.TARGETS[loads.TITLE]
 
 APP = None   # __main__ の属性として ui.find_app() に見つけてもらう
 
@@ -157,6 +161,10 @@ def build(app):
     APP = app
     out_dir = tempfile.mkdtemp(prefix="battle_context_test_")
     ctx = Ctx(out_dir)
+    # 送り口とタイトルへ戻るのはローダの窓口が包む。偽の ctx は世代を持たないので、
+    # 包みの印と登録を忘れさせないと、この ctx に包みが渡らない。
+    llm.reset_requests()
+    loads.reset()
     MOD.apply(ctx)
 
     sent = {}
@@ -347,10 +355,7 @@ app.in_battle = False
 app.in_boss_battle = True
 ctx, send, sent, out_dir = build(app)
 send("referee_player_attack_new_new", user_message())
-send("referee_player_attack_new_new", user_message())
-notes = [n for n in ctx.notes if "in_boss_battle is set" in n]
-check("立っていたら記録する", len(notes) == 1, notes)
-check("記録しても足しはしない", MOD.MARKER not in appended_block(sent), sent["message"])
+check("in_battle が落ちていれば足さない", MOD.MARKER not in appended_block(sent), sent["message"])
 check("構造化なしの送り口にも仕掛ける",
       NO_STRUCTURE_TARGET in ctx.hooks, sorted(ctx.hooks))
 shutil.rmtree(out_dir, ignore_errors=True)

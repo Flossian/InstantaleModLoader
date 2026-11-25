@@ -37,8 +37,8 @@ LAST_STAY_KEY = "last_stay_end"
 #: いくつから悪名とみなすかは入口の判断。
 NORMAL_LAWFULNESS = 10
 
-#: 完了した依頼の `config["status"]`（GAME.md §2.9。観測できている値は2つだけ）。
-COMPLETED_STATUS = "completed"
+#: 完了した依頼の `config["status"]`（GAME.md §2.9。観測できている値は2つだけ）。読み方はローダの `ui.quest_status`。
+COMPLETED_STATUS = ui.QUEST_COMPLETED
 
 #: 依頼がどの土地のものかを持っている鍵。**どちらで持つかを決めつけない**。
 #: `neighboring_settlement_id` は受注条件に使われている側（GAME.md §2.9）。
@@ -65,16 +65,7 @@ def player_of(app):
 
 
 def player_name(app):
-    name = getattr(player_of(app), "name", None)
-    return frames.short(name, 40) or "その者"
-
-
-def game_day(app):
-    """いまのゲーム内日数。読めなければ `None`（GAME.md §2.16）。"""
-    value = getattr(getattr(app, "world", None), "days_elapsed", None)
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return int(value)
+    return ui.player_name(app, "その者", limit=40)
 
 
 def current_area_id(app):
@@ -83,8 +74,7 @@ def current_area_id(app):
 
 def area_name(app, area_id):
     """エリアの名前。引けなければ空文字（呼び側が「この土地」に倒す）。"""
-    area = ui.world_areas(app).get(str(area_id))
-    return frames.short(getattr(area, "name", ""), 40) or ""
+    return ui.area_name(app, area_id, fallback="", limit=40)
 
 
 def achievements_of(record):
@@ -119,7 +109,7 @@ def residency_of(record):
     out = {}
     for key in (TOTAL_DAYS_KEY, LAST_STAY_KEY):
         number = value.get(key)
-        if isinstance(number, bool) or not isinstance(number, (int, float)):
+        if not frames.is_number(number):
             continue
         out[key] = int(number)
     return out
@@ -138,9 +128,7 @@ def completed_quests(app, area_id):
         quest = ui.quest_of(app, quest_id)
         if quest is None:
             continue
-        config = ui.quest_value(quest, "config")
-        status = config.get("status") if isinstance(config, dict) else None
-        if status != COMPLETED_STATUS:
+        if ui.quest_status(quest) != COMPLETED_STATUS:
             continue
         if not any(str(ui.quest_value(quest, key, "")) == wanted
                    for key in QUEST_AREA_KEYS):
@@ -155,7 +143,7 @@ def completed_quests(app, area_id):
 
 
 def _number(value):
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if not frames.is_number(value):
         return None
     return int(value)
 
@@ -166,8 +154,7 @@ def quest_difficulty(quest):
 
 
 def is_completed(quest):
-    config = ui.quest_value(quest, "config")
-    return isinstance(config, dict) and config.get("status") == COMPLETED_STATUS
+    return ui.quest_status(quest) == COMPLETED_STATUS
 
 
 def story_quests(app):
@@ -186,12 +173,6 @@ def story_quests(app):
     return []
 
 
-def _field(holder, name):
-    if isinstance(holder, dict):
-        return holder.get(name)
-    return frames.attr(holder, name, None)
-
-
 def arenas(app):
     """土地ごとの闘技場の戦績 `{エリアid: {"name", "wins", "ranks"}}`（GAME.md の闘技場の節）。
 
@@ -206,7 +187,7 @@ def arenas(app):
             for facility in ui.facilities_of(node).values():
                 if ui.facility_type_of(facility) != ARENA_TYPE:
                     continue
-                config = _field(facility, "config")
+                config = frames.field(facility, "config")
                 if not isinstance(config, dict):
                     continue
                 phase = _number(config.get("current_phase")) or 0
@@ -227,7 +208,7 @@ def arenas(app):
                 entry = found.setdefault(str(area_id), {"name": "", "wins": 0, "ranks": []})
                 entry["wins"] += wins
                 entry["ranks"].extend(ranks)
-                entry["name"] = entry["name"] or frames.short(_field(facility, "name") or "", 40)
+                entry["name"] = entry["name"] or frames.short(frames.field(facility, "name") or "", 40)
     return found
 
 
@@ -291,9 +272,7 @@ def survey(app):
         town = quest_town(quest)
         if town and difficulty is not None:
             stats.setdefault(town, _blank_stats())["difficulties"].append(difficulty)
-        config = ui.quest_value(quest, "config")
-        status = config.get("status") if isinstance(config, dict) else None
-        if status != COMPLETED_STATUS:
+        if ui.quest_status(quest) != COMPLETED_STATUS:
             continue
         if town:
             entry = stats.setdefault(town, _blank_stats())
@@ -391,24 +370,3 @@ def fingerprint(item):
         core["arena_wins"] = wins
     text = json.dumps(core, ensure_ascii=False, sort_keys=True)
     return hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
-
-
-def describe_shape(app, area_id):
-    """`area_history` が実行時にどう見えているかの1行（注入の確認用）。
-
-    VERIFICATION.md §3.36 で「実行時に読めるか未確認」としていた点をログで押さえるための関数。
-    値そのものではなく**形**を出す（`achievements` の本文は長く、ログを埋める）。
-    """
-    player = player_of(app)
-    history = ui.area_history_of(player)
-    if history is None:
-        return "area_history: {} には無い（{}）".format(
-            type(player).__name__, ", ".join(sorted(vars(player))[:12])
-            if getattr(player, "__dict__", None) is not None else "vars() が引けない")
-    record = ui.area_record(player, area_id)
-    return ("area_history: {}件のエリア / いま {!r} / 記録は {} / "
-            "achievements {}件 / lawfulness {!r} / residency {!r}".format(
-                len(history), area_id,
-                "無い" if record is None else type(record).__name__,
-                len(achievements_of(record)), ui.lawfulness_of(record),
-                residency_of(record)))

@@ -20,22 +20,18 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
 """
 import sys
 
-from . import alive
+from . import state, window_call, window_entries, window_put
 
 STORE_ATTR = "_instantale_board"
 
 
 def _store():
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"kept_off": {}, "errors": []}
-        setattr(sys, STORE_ATTR, store)
-    return store
+    return state.process_store(STORE_ATTR, {"kept_off": {}, "errors": []})
 
 
 def declare_kept_off(owner, ctx, fn):
-    """`owner` が掲示板に出さない依頼の id を返す関数を登録する。同じ持ち主の登録は差し替える。"""
-    _store()["kept_off"][str(owner)] = (ctx, fn)
+    """`owner` が掲示板に出さない依頼の id を返す関数を登録する。同じ持ち主の登録は差し替える（新しい登録として後ろへ）。"""
+    window_put(_store()["kept_off"], owner, (ctx, fn))
 
 
 def withdraw(owner):
@@ -47,14 +43,9 @@ def kept_off(app):
     """掲示板に出さない依頼の id（文字列）の集合。誰も置いていなければ空。"""
     store = _store()
     found = set()
-    for owner, (ctx, fn) in list(store["kept_off"].items()):
-        if not alive(ctx):
-            continue
-        try:
-            got = fn(app)
-        except Exception as exc:
-            store["errors"].append("{}: {}: {}".format(owner, type(exc).__name__, exc))
-            del store["errors"][:-20]
+    for owner, (_ctx, fn) in window_entries(store["kept_off"]):
+        ok, got = window_call(store, owner, fn, app)
+        if not ok:
             continue
         for quest_id in got or ():
             if quest_id is not None and not isinstance(quest_id, bool):
@@ -64,7 +55,7 @@ def kept_off(app):
 
 def owners():
     """いま数えている登録の持ち主。ログ用。"""
-    return [owner for owner, (ctx, _fn) in _store()["kept_off"].items() if alive(ctx)]
+    return [owner for owner, _entry in window_entries(_store()["kept_off"])]
 
 
 def reset():

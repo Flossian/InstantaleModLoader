@@ -46,13 +46,15 @@ import すると番号を振り直した瞬間に壊れる、という理由で�
 
 from __future__ import annotations
 
+import collections
+import copy
 import hashlib
-import json
 import os
 import re
 import sys
 import threading
 import time
+import weakref
 
 #: ファイル名に使えない文字（Windows の禁則＋制御文字）。
 _UNSAFE = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
@@ -474,15 +476,14 @@ def retire_entries(state_dir, world, name, payload, *, write=None, now=None):
     while os.path.exists(path):
         serial += 1
         path = "{}-{}{}".format(base, serial, ext)
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp = path + ".writing"
-        with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump(payload, fh, ensure_ascii=False, indent=1)
-        os.replace(tmp, path)
-    except (OSError, TypeError, ValueError) as exc:
+    # 書き方は `write_json` の1か所（隣に書いて差し替える）。このモジュールは他のローダのモジュールを
+    # import しないので、関数の中で引く（`drift` と同じ）。`report` は書けなかったときの例外の中で呼ばれる。
+    from . import write_json
+    failed = []
+    if not write_json(path, payload, indent=1, report=lambda _text: failed.append(sys.exc_info()[1])):
         if write is not None:
-            write("WARN state: 前の周回の分を退避できなかった: {} ({})".format(name, exc))
+            write("WARN state: 前の周回の分を退避できなかった: {} ({})".format(
+                name, failed[-1] if failed else "unknown"))
         return None
     return path
 
@@ -950,6 +951,108 @@ def jsonable(value) -> bool:
     return False
 
 
+def ordered(record, keys) -> dict:
+    """控えの1件を決まった鍵の順に並べた写し。辞書でなければ `{}`。
+
+    `keys` の順に、`record` に在る鍵だけを並べる（無い鍵は足さない）。
+    `keys` に無い鍵は捨てずに、元の順のまま後ろへ回す（後の版で足した欄を古い版の並びで消さない）。
+    書く前に並びを固定するのは、`state/` の差分を読めるようにするため（`WorldStore` の `order=`）。
+
+    `311_` / `317_` / `321_` / `324_` / `325_` / `330_` / `331_` に写されていた。揃えたのは `311_` の
+    `ordered_record`。`911_` の `rival`（無い鍵を None で足す）や、知らない鍵を捨てる写し
+    （`338_` の `order_event`・`925_` の雇い主）とは答えが違う。
+    中の値は写さない（同じ物を指す）。
+    """
+    if not isinstance(record, dict):
+        return {}
+    out = {key: record[key] for key in keys if key in record}
+    for key, value in record.items():
+        if key not in out:
+            out[key] = value
+    return out
+
+
+#: `process_store` が写してから置く入れ物の型（`copy.copy` で別物にする）。
+#: これ以外（錠・`threading.local`・乱数・自作の物・数・文字列）はそのまま置く。
+_CONTAINERS = (dict, list, set, bytearray, collections.deque,
+               weakref.WeakSet, weakref.WeakKeyDictionary, weakref.WeakValueDictionary)
+
+
+def _fresh(value):
+    """既定値を入れ物に置くときの値。入れ物なら浅い写し、それ以外はそのもの。"""
+    if isinstance(value, _CONTAINERS):
+        return copy.copy(value)
+    return value
+
+
+def _same_kind(found, blank) -> bool:
+    """`found` を `blank` と同じ種類の値として持ち続けてよいか（`process_store` の型の確かめ）。
+
+    `isinstance` で見て、通らなくてもクラスのモジュール名と名前が同じなら同じ種類とみなす。
+    手で注入し直すとローダのモジュールも MOD のモジュールも読み直され、前の世代が置いた
+    `WorldStore` などは別のクラスの実体になる（`SysWorldStore.bind` の説明）。
+    `isinstance` だけで見ると、注入のたびに作り直して前の世代のキャッシュと錠から分かれてしまう。
+    """
+    kind = type(blank)
+    if isinstance(found, kind):
+        return True
+    other = type(found)
+    return (getattr(other, "__module__", None) == getattr(kind, "__module__", None)
+            and getattr(other, "__qualname__", None) == getattr(kind, "__qualname__", None))
+
+
+def process_store(attr, defaults) -> dict:
+    """`sys` の属性 `attr` に置いた、プロセスに1つの入れ物（辞書）を返す。無ければ作って置く。
+
+    注入し直しをまたいで数や控えを持ちたい MOD が使う（TECH.md §3.5）:
+
+        store = state.process_store(STORE_ATTR, {"logged": 0, "seen": set(), "lock": threading.Lock()})
+
+    * 無いか辞書でなければ、`defaults` の写しで作って置く
+    * 在れば、足りない鍵と型の変わった鍵だけを `defaults` の値で埋める。ほかの鍵（数・控え）は残す
+
+    前の版の MOD が置いた入れ物を、型を見ずに握ると壊れる（旗から集合に変えた鍵に
+    `label not in False` で TypeError。`129_` が実際に踏んだ）ので、`129_` の手順をそのまま共通にした。
+    `isinstance(store, dict)` だけを見て `setdefault` する写し（`338_` / `410_` / `411_` など）より厳しい。
+
+    型の確かめの決まり:
+
+    * 既定値が None の鍵は、無いときだけ埋める（型を見ると毎回 None に戻ってしまう）
+    * `bool` は `int` の子なので、既定値が `0` の鍵に `True` が入っていても残る（`isinstance` の答えのまま）
+    * クラスのモジュール名と名前が同じなら、注入し直しで別物になったクラスの実体も残す（`_same_kind`）
+
+    入れ物の既定値（dict・list・set・deque・弱参照の入れ物）は `copy.copy` で写してから置くので、
+    `defaults` をモジュールの定数にしても共有されない（写しは浅いので、入れ子の中身は共有される）。
+    錠・`threading.local`・`random.Random` などはそのまま置く。
+    呼ぶたびに `defaults` を書く形（上の例）なら、そのたびに新しい物が作られる。
+    """
+    store = getattr(sys, attr, None)
+    if not isinstance(store, dict):
+        store = {name: _fresh(blank) for name, blank in defaults.items()}
+        setattr(sys, attr, store)
+        return store
+    for name, blank in defaults.items():
+        if name not in store:
+            store[name] = _fresh(blank)
+        elif blank is not None and not _same_kind(store[name], blank):
+            store[name] = _fresh(blank)
+    return store
+
+
+def _process_value(attr, kind=list):
+    """`sys` の属性 `attr` に置いた、プロセスに1つの入れ物（`kind` の実体）を返す。無いか型が違えば `kind()` で作って置く。
+
+    ローダの内部用。辞書でない入れ物（`patch` の剥がしの記録の list・`on_ready` の印の set・
+    `equipment` の貸しの list）のためのもので、辞書は `process_store` を使う。
+    このモジュールは他のローダのモジュールを import しない（どこからでも呼べるように）。
+    """
+    found = getattr(sys, attr, None)
+    if not isinstance(found, kind):
+        found = kind()
+        setattr(sys, attr, found)
+    return found
+
+
 def _is_store(found) -> bool:
     """`WorldStore` の実体か。読み直す前のモジュールの実体も含める（`SysWorldStore.bind`）。"""
     return (found is not None and callable(getattr(found, "rebind", None))
@@ -1010,3 +1113,245 @@ class SysWorldStore(object):
         if not key or key == UNKNOWN_WORLD:
             return None, None
         return key, found.load(key)
+
+
+# ---------------------------------------------------------------------------
+# ワールド個別の設定（ゲームの中の読み手）
+# ---------------------------------------------------------------------------
+
+class WorldSettings(object):
+    r"""ワールド個別の設定を、いまの世界のときだけ一括設定に重ねる（ゲームの中の読み手）。
+
+    書く側は設定画面のワールド別の画面（`tools/modtool.py` の `world_settings_main`）で、
+    `state\<dirname>\<世界>.json` に一括設定と違う項目だけを書く（TECH.md §3.12.1）。
+    これはその控えをゲームの中で読み、一括設定に重ねた値を返す:
+
+        def apply(ctx):
+            settings = state.WorldSettings(ctx, SETTINGS_DIRNAME, SETTING_NAMES, globals(), write=write)
+
+            def enabled(app):
+                settings.refresh(app, globals())      # いまの世界の値をモジュールの定数へ。変わったかを返す
+                return bool(ENABLED)
+
+    | 引数 | |
+    |---|---|
+    | `dirname` | `state\` の下のフォルダ名（設定画面の `state_dirname(mod_dir)`。番号を落とした MOD の名前） |
+    | `names` | 世界ごとに変えられる設定の名前 |
+    | `base` | 一括設定の値の入った辞書（ふつうは `globals()`）。作ったときに `names` の分を写して持つ |
+    | `write` | MOD 自身のログ関数。型の合わない値を捨てたときに1度だけ書く。無くてよい |
+    | `aliases` | `{旧い名前: 新しい名前}`。旧い名前で書かれた値を新しい名前の値として読む（新しい名前が先） |
+    | `check` | `check(name, value, base) -> bool`。既定の型の照合の代わりに使う。真なら値をそのまま使う |
+    | `follow_file` | 真（既定）は呼ぶたびにファイルの更新時刻と大きさを見て、変わっていれば読み直す。偽は世界が変わったときだけ読む |
+
+    `base` を作ったときに写すのは、`refresh(app, globals())` が同じ辞書を上書きするため
+    （後から読むと、前の世界の個別の値を一括設定と取り違える）。
+    ローダは一括設定をモジュールの定数に書いてから `apply()` を呼ぶ（TECH.md §3.8）ので、
+    `apply()` の中で作れば写した値が一括設定になる。`apply()` の外（モジュールの直下）では作らない。
+
+    型の照合（既定）:
+
+    * 控えに無い項目と、`null` の項目は一括設定のまま
+    * `type(値) is type(一括設定)` なら使う（`bool` は `int` として通さない。設定画面の読み方と同じ）
+    * `int` と `float` は入れ替えて受け、一括設定の型に直す。`int` の設定に整数でない `float` は受けない
+      （切り捨てると書いた値と違う数で動くため）
+    * ほかは一括設定に戻し、`write` があれば1度だけ記録する
+
+    写し（`128_` / `130_` / `314_` / `332_` / `339_` / `345_` / `926_`）との違い:
+
+    * 型: `128_` / `314_` / `332_` / `339_` は `int` と `float` の入れ替えを受けなかった。
+      `926_` は受けて型を直さなかった。`130_` / `345_` は項目ごとに `isinstance` を書いていた（`check` で書ける）。
+      一括設定が None の項目は、既定の照合ではどの値も通らない（写しと同じ。宣言の型で見る設定画面とは違う）
+    * 置き場: `refresh` の `target` に辞書（`globals()`）か関数（`fn(values)`。`130_` の `ui.set_currency`、
+      `345_` の暦の辞書）を渡す。その都度引く形（`926_`）は `value(app, name)`
+    * 読み直し: `follow_file=True` は `128_` / `314_` / `332_` の形（`(世界, 値)` が変わったときだけ反映）。
+      毎回反映していた `339_` も同じ値になる。世界が変わったときだけ読む `130_` / `345_` は `follow_file=False`
+    * 控えの器は `sys` に置かず、他の MOD の控えを読むとき（`own=False`）と同じく読むだけにする。
+      フォルダを作らず、`owner_of` の台帳にも載らない。
+      写しは `isinstance(store, WorldStore)` で `sys` の器を見分けていて、注入し直すと必ず偽になっていた
+      （`SysWorldStore.bind` の説明）。読むたびに更新時刻を見るので、器を世代をまたいで持つ利点が無い
+    * `app` が None なら一括設定を返す（`ui.find_app()` で探しはしない。要るなら呼ぶ側が渡す）
+    """
+
+    def __init__(self, ctx, dirname, names, base, *, write=None, aliases=None, check=None,
+                 follow_file=True):
+        self.ctx = ctx
+        self.dirname = dirname
+        self.write = write
+        self.aliases = dict(aliases or {})
+        self.check = check
+        self.follow_file = bool(follow_file)
+        names = tuple(names)
+        #: 名前 -> 一括設定の値（作ったときの写し）。
+        self.base = {name: base[name] for name in names if name in base}
+        self.names = tuple(name for name in names if name in self.base)
+        missing = [name for name in names if name not in self.base]
+        if missing:
+            self._note("WARN world settings {}: 一括設定に無い名前は使わない: {}".format(
+                dirname, ", ".join(str(name) for name in missing)))
+        self.store = WorldStore(ctx, dirname, own=False, default=dict, write=write)
+        self.lock = threading.RLock()
+        #: `follow_file=False` のときに覚える `(世界, 値)`。
+        self._last = None
+        #: `refresh` が最後に反映した `(世界, ((名前, 値), ...))`。
+        self._signature = None
+        #: 型が合わずに捨てた `(世界, 名前, repr(値))`。同じものを何度も書かない。
+        self._rejected = set()
+
+    # -- 記録 ---------------------------------------------------------------
+
+    def _note(self, text):
+        if self.write is None:
+            return
+        try:
+            self.write(text)
+        except Exception:
+            pass
+
+    def _log_exc(self, text):
+        report = getattr(self.ctx, "log_exc", None)
+        if callable(report):
+            try:
+                report(text)
+                return
+            except Exception:
+                pass
+        self._note("WARN " + text)
+
+    # -- 読み ---------------------------------------------------------------
+
+    def world(self, app):
+        """いまの世界の鍵（`world_key`）。`app` が None か読めなければ `UNKNOWN_WORLD`。"""
+        if app is None:
+            return UNKNOWN_WORLD
+        try:
+            return world_key(app)
+        except Exception:
+            return UNKNOWN_WORLD
+
+    def record(self, world) -> dict:
+        """その世界の控え（一括設定と違う項目だけ）。無い・読めない・世界が分からなければ `{}`。
+
+        返すのは写し（`aliases` を当てたもの）なので、書き換えてもよい。
+        """
+        if not isinstance(world, str) or not world or world == UNKNOWN_WORLD:
+            return {}
+        try:
+            loaded = self.store.load(world, fresh=True)
+        except Exception:
+            self._log_exc("world settings {}: cannot read {!r}".format(self.dirname, world))
+            return {}
+        if not isinstance(loaded, dict):
+            return {}
+        found = dict(loaded)
+        for old, new in self.aliases.items():
+            if old in found and new not in found:
+                found[new] = found[old]
+        return found
+
+    @staticmethod
+    def accept(value, base):
+        """既定の型の照合。`(使うか, 使う値)`。決まりはクラスの説明の「型の照合」。"""
+        if value is None:
+            return False, value
+        if type(value) is type(base):
+            return True, value
+        numbers = (int, float)
+        if (isinstance(value, numbers) and not isinstance(value, bool)
+                and isinstance(base, numbers) and not isinstance(base, bool)):
+            if isinstance(base, float):
+                return True, float(value)
+            # ここに来る値は float（int どうしなら上の型の一致で通っている）。nan と inf は is_integer が偽。
+            if value.is_integer():
+                return True, int(value)
+        return False, value
+
+    def _value(self, world, name, record):
+        base = self.base[name]
+        if name not in record or record[name] is None:
+            return base
+        value = record[name]
+        if self.check is not None:
+            try:
+                ok = bool(self.check(name, value, base))
+            except Exception:
+                self._log_exc("world settings {}: check failed for {}".format(self.dirname, name))
+                ok = False
+        else:
+            ok, value = self.accept(value, base)
+        if ok:
+            return value
+        try:
+            seen = (world, name, repr(value))
+        except Exception:
+            seen = (world, name, type(value).__name__)
+        if seen not in self._rejected:
+            self._rejected.add(seen)
+            self._note("WARN world settings {} {!r}: {} の値 {!r} は使えないので一括設定 {!r} を使う（一括設定の型 {}）".format(
+                self.dirname, world, name, value, base, type(base).__name__))
+        return base
+
+    def _values_of(self, world) -> dict:
+        """その世界の値（全項目）。`follow_file=False` なら同じ世界の2回目からは覚えた値。"""
+        with self.lock:
+            if not self.follow_file and self._last is not None and self._last[0] == world:
+                return dict(self._last[1])
+            record = self.record(world)
+            values = {name: self._value(world, name, record) for name in self.names}
+            self._last = (world, values)
+            return dict(values)
+
+    def values(self, app) -> dict:
+        """いまの世界の値。`{名前: 値}` で全項目そろう（控えの無い項目は一括設定）。"""
+        return self._values_of(self.world(app))
+
+    def value(self, app, name, default=None):
+        """いまの世界の1項目。`names` に無い名前なら `default`。"""
+        if name not in self.base:
+            return default
+        return self._values_of(self.world(app))[name]
+
+    def overrides(self, app) -> dict:
+        """いまの世界で一括設定と違う項目だけ（記録に出す用）。"""
+        return {name: value for name, value in self.values(app).items()
+                if value != self.base[name]}
+
+    # -- 反映 ---------------------------------------------------------------
+
+    def refresh(self, app, target=None) -> bool:
+        """いまの世界の値を `target` に反映する。前に反映したときから変わっていれば True。
+
+        `target` が辞書なら `update`（`globals()` を渡すとモジュールの定数が変わる）、
+        呼べる物なら `target(values)`。None なら反映せず、変わったかだけを返す。
+        比べるのは `(世界, 値の組)` で、世界が替われば値が同じでも True（`314_` / `332_` の署名と同じ）。
+        初回は必ず True（一括設定でも反映する）。
+        反映が投げたら記録して False を返し、次の呼び出しでもう一度反映する。
+        """
+        world = self.world(app)
+        with self.lock:
+            if (not self.follow_file and self._signature is not None
+                    and self._signature[0] == world):
+                return False
+            values = self._values_of(world)
+            signature = (world, tuple((name, values[name]) for name in self.names))
+            if signature == self._signature:
+                return False
+            self._signature = signature
+            if target is None:
+                return True
+            try:
+                if isinstance(target, dict):
+                    target.update(values)
+                else:
+                    target(values)
+            except Exception:
+                self._signature = None
+                self._log_exc("world settings {}: cannot apply the values".format(self.dirname))
+                return False
+            return True
+
+    def forget(self) -> None:
+        """覚えた値と反映の印を捨てる。次の `refresh` は必ず反映し直す。"""
+        with self.lock:
+            self._last = None
+            self._signature = None
+            self.store.forget()

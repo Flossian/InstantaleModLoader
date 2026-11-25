@@ -25,11 +25,14 @@
 戦闘の終わり方の後で、ここで移した仲間が一覧に居なければ手で戻す。
 
 審判の文は主人公の逃走しか書かないので、その手の地の文の後に1行足す（`FOLLOW_TEXT`）。
+
+1手（`resolve_battle_effect` / `handle_battle_situation`）と終わり方3つは、ローダの窓口 `battles` に
+前後の処理として預ける（TECH.md §3.3.21）。`check_battle_end` は窓口に無いので自分で包む。
 """
 
 import threading
 
-from instantale_modloader import loads, ui
+from instantale_modloader import battles, loads, ui
 
 LOG_BASENAME = "party_flee.log"
 
@@ -37,15 +40,7 @@ PLAYER_KEY = "player"
 #: 仲間が後に続いたときの本文。{names} は仲間の名前（「と」と「、」でつなぐ）。
 FOLLOW_TEXT = "{names}も後に続いて戦いを離れた。"
 
-RESOLVE_TARGET = "__main__:BattlePhaseManager.resolve_battle_effect"
-#: 1手ぶん。中で `resolve_battle_effect` → 地の文と回る（`308_battle_damage_display` の記録）。
-HANDLE_TARGET = "__main__:BattlePhaseManager.handle_battle_situation"
 CHECK_TARGET = "__main__:BattlePhaseManager.check_battle_end"
-END_TARGETS = (
-    ("__main__:BattleEndManager.end_phase", "BattleEndManager.end_phase"),
-    ("__main__:BattleEndInFreeAction.end_phase", "BattleEndInFreeAction.end_phase"),
-    ("__main__:BattleEndInColosseum.end_phase", "BattleEndInColosseum.end_phase"),
-)
 
 
 def join_names(names):
@@ -74,6 +69,7 @@ def follow(party, escaped):
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME, tag="party flee:")
+    owner = ctx.mod_name or "147_fix_party_flee"
     lock = threading.Lock()
     # 移した仲間（戦闘の終わりまで）と、まだ出していない本文の1行。
     state = {"moved": [], "line": None}
@@ -94,27 +90,28 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("party flee: add_text failed")
 
-    @ctx.wrap(RESOLVE_TARGET, required=False, safe=True)
-    def resolve_battle_effect(orig, self, *args, **kwargs):
-        app = getattr(self, "app", None) or ui.find_app()
-        escaped = getattr(app, "escaped_member_in_battle", None)
-        was_out = isinstance(escaped, dict) and PLAYER_KEY in escaped
-        result = orig(self, *args, **kwargs)
-        if was_out or app is None:
-            return result
-        try:
-            moved = follow(getattr(app, "party", None), getattr(app, "escaped_member_in_battle", None))
-            if moved:
-                names = [name_of(app, member_id, value) for member_id, value in moved]
-                with lock:
-                    state["moved"].extend(moved)
-                    state["line"] = FOLLOW_TEXT.format(names=join_names(names))
-                write("the player fled; {} followed into escaped_member_in_battle".format(
-                    ", ".join("{} ({})".format(member_id, name)
-                              for (member_id, _value), name in zip(moved, names))))
-        except Exception:
-            ctx.log_exc("party flee: cannot move the party after the player")
-        return result
+    def effect_before(call):
+        # 主人公が前から抜けていたかは orig の前に読む（orig の中で預かりに入る）。
+        escaped = getattr(call.app, "escaped_member_in_battle", None)
+        return {"was_out": isinstance(escaped, dict) and PLAYER_KEY in escaped}
+
+    def effect_after(call):
+        # 前の処理が投げて控えが無い回は、逃げたかを決められないので動かさない。
+        app = call.app
+        if not isinstance(call.memo, dict) or call.memo["was_out"] or app is None:
+            return
+        moved = follow(getattr(app, "party", None), getattr(app, "escaped_member_in_battle", None))
+        if moved:
+            names = [name_of(app, member_id, value) for member_id, value in moved]
+            with lock:
+                state["moved"].extend(moved)
+                state["line"] = FOLLOW_TEXT.format(names=join_names(names))
+            write("the player fled; {} followed into escaped_member_in_battle".format(
+                ", ".join("{} ({})".format(member_id, name)
+                          for (member_id, _value), name in zip(moved, names))))
+
+    # 例外は窓口が握って modloader.log と write に残す。
+    battles.on(owner, ctx, (battles.EFFECT,), before=effect_before, after=effect_after, write=write)
 
     def forget_on_load(_call):
         # ロード・新規開始は戦闘を抜ける（end_phase を通らない）。移した仲間の控えを残すと、
@@ -125,13 +122,10 @@ def apply(ctx):
         if dropped:
             write("load: forgot {} member(s) moved in the last battle".format(len(dropped)))
 
-    loads.on("147_fix_party_flee", ctx, (loads.LOAD, loads.NEW_GAME), before=forget_on_load, write=write)
+    loads.on(owner, ctx, (loads.LOAD, loads.NEW_GAME), before=forget_on_load, write=write)
 
-    @ctx.wrap(HANDLE_TARGET, required=False, safe=True)
-    def handle_battle_situation(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
-        say_pending(getattr(self, "app", None) or ui.find_app())
-        return result
+    # 1手ぶん。中で `resolve_battle_effect` → 地の文と回る（`308_battle_damage_display` の記録）。
+    battles.on(owner, ctx, (battles.ACTION,), after=lambda call: say_pending(call.app), write=write)
 
     @ctx.wrap(CHECK_TARGET, required=False, safe=True)
     def check_battle_end(orig, self, *args, **kwargs):
@@ -158,18 +152,8 @@ def apply(ctx):
         else:
             write("{}: the party is back ({})".format(where, [member_id for member_id, _v in moved]))
 
-    def on_end(target, label):
-        @ctx.wrap(target, required=False, safe=True)
-        def _end(orig, self, *args, **kwargs):
-            result = orig(self, *args, **kwargs)
-            try:
-                ensure_back(getattr(self, "app", None) or ui.find_app(), label)
-            except Exception:
-                ctx.log_exc("party flee: cannot bring the party back")
-            return result
-        return _end
-
-    for _target, _label in END_TARGETS:
-        on_end(_target, _label)
+    # 終わり方3つの後。orig が返った回だけ（投げた回は前と同じく何もしない）。
+    battles.on(owner, ctx, (battles.END,), after=lambda call: ensure_back(call.app, call.label),
+               write=write)
 
     ctx.log("party flee: the party follows when the player flees ({})".format(ctx.out_path(LOG_BASENAME)))

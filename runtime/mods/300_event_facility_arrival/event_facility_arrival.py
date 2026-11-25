@@ -100,19 +100,16 @@ narration モードのセリフは `move_phase` の内側（入れ子の narrato
 （`911_` のライバルの声かけなど）が同じ到着で重なることがある。
 申し出だけ出すと、同じ優先度で後から申し出たほかの MOD が、会話を始めないこちらに譲って黙ってしまう。
 
-版3: ローダの窓口 `arrivals` で、同じ到着で会話を始めるほかの MOD に譲るようにした（conversation モードのみ）。
-
-版6: `conversation_starter`・`ConversationPhaseManager.conversation_continued`・`ConversationStartManager.__init__` の
-フックは、引数を受け取った形のまま元の関数へ渡す（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
-第一声の読み替えは、来た側（位置かキーワード）に合わせて `messages` を差し替える。
+第一声の読み替えはローダの窓口 `arrivals.opening` に予約し、会話の1手と終わりは窓口 `talks` に預ける
+（TECH.md §3.3.21）。相手の確かめは、会話を始めるときに渡した NPC の id で行う。
 """
 
 import random
 import sys
 import time
 
-from instantale_modloader import arrivals, frames, llm, modfacility, ui
-from instantale_modloader.state import WorldStore, world_key
+from instantale_modloader import arrivals, frames, llm, modfacility, talks, ui
+from instantale_modloader.state import WorldStore, process_store, world_key
 
 LOG_BASENAME = "player_events.log"
 
@@ -145,19 +142,12 @@ CHANCE_UNDERWORLD_OFFICE = 0.20
 
 # None なら上の表を使う。
 # 数値ならその確率を全施設種別に適用する（動作確認用）。
-# 確認が済んだら None に戻すこと。
-# CHANCE_OVERRIDE = 1.0
 CHANCE_OVERRIDE = None
 
 # 同じ施設で続けて出さない間隔。
 # その施設に入った回数で数える。
 # 2 なら「出た後、その施設に2回入るまでは出さない」（＝ 3回に1回まで）。
-# 元は移動回数で数えていたが（`COOLDOWN_MOVES = 3`）、
-# それだと出入りするだけで抜けてしまい、
-# 同じ施設で繰り返し出るという体感になっていた。
-# 実際、同じ宿の同じ NPC が1日に3回発火していた（ログの
-# `roll 0.23 / 0.02 / 0.17`）。
-# 数える単位を「その施設への訪問」に変えると、間隔がそのまま訪問回数で決まる。
+# 移動回数で数えると出入りするだけで抜けるので、その施設への訪問で数える（VERIFICATION.md §2.8）。
 # 0 にすると間引かない（入るたびに抽選する）。
 COOLDOWN_VISITS = 2
 
@@ -184,19 +174,10 @@ PENDING_TTL = 90.0
 # 返らないと画面ごと止まる。
 LINE_TIMEOUT = 30.0
 
-# ここが真の間はイベントを出さない。
-# 戦闘中・会話中など。
-# 「手が空いているか」（テキストの流し込み中・操作を受け付けていない・ポップアップが開いている）の判定は `ui.IDLE_SIGNALS` 側にあり、
-# そちらは `301_` / `302_` も使う。
-# ここは**イベントを出す前提が崩れている状態**の一覧。
-BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
-              "in_conversation", "in_free_input",
-              "in_action_in_conversation")
-
-# `in_shopping` はここに入れない。
-# 店の外をただ往復しているだけの移動でも True のままなので、
-# 「買い物中か」の信号としては当てにならない。
-# これを見ていると店系の施設でイベントがほとんど出なくなる。
+# 戦闘中・会話中など、イベントを出す前提が崩れている旗はローダの `ui.busy_flags`（`ui.BUSY_FLAGS`）で見る。
+# 「手が空いているか」（テキストの流し込み中・操作を受け付けていない・ポップアップが開いている）の判定は
+# `ui.IDLE_SIGNALS` 側にある。
+# `in_shopping` は表に入っていない（店の外を往復するだけでも True のまま。理由は `ui.BUSY_FLAGS` の註）。
 # 買い物窓が開いている状態は
 # `is_popup_window_opened`（待っている間と会話を始める直前に見る。`gone`）で弾ける。
 
@@ -227,10 +208,6 @@ WATCH_TTL = 1800.0
 #: MOD のボタンで閉じた会話に付ける印（`ConversationEndManager` の実体に）。無視と数えない。
 MOD_CLOSE_ATTR = "_instantale_300_mod_close"
 
-# 注入した瞬間に、今いる施設で narration モードのセリフを1本作ってログにだけ出す。
-# 画面には出さないし状態も変えない（会話フェーズは開始しない）。
-SELFTEST_ON_BOOT = False
-
 
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
@@ -239,11 +216,8 @@ def apply(ctx):
     rng = random.Random()
     state = {
         "pending": None,      # narration モード: 入れ子の narrator が回収する印
-        "move_count": 0,
         "visits": {},         # 施設 id -> その施設に入った回数
         "fired_at": {},       # 施設 id -> 発火したときの訪問回数
-        "rephrase": None,     # conversation モード: 第一声の読み替え待ち
-        "npc_id_kind": None,  # ゲーム自身が character_id に何を渡しているか
         "ignored_key": None,  # いま控えを持っている世界（`ignored_store`）
         "watching": None,     # こちらが始めた会話の見届け
     }
@@ -278,7 +252,7 @@ def apply(ctx):
         """施設に着いたときの画面でなければ、その選択肢のクラス名を返す（画面なら None）。
 
         着いた先で衛兵に見つかると、ゲームは「大人しく捕まる／抵抗する！」だけを並べる。
-        旗は何も立たないので `BUSY_FLAGS` では弾けず、その上から会話を始めていた（実機）。
+        旗は何も立たないので `ui.busy_flags` では弾けず、その上から会話を始めていた（実機）。
         画面の見分けはローダの `modfacility.is_top_screen` に任せる（`331_` などと同じ判定）。
         """
         buttons = getattr(app, "buttons", None)
@@ -314,10 +288,10 @@ def apply(ctx):
     #
     # 控えの出し入れ（場所・読み・キャッシュ・書き）は `state.WorldStore` に
     # 1つだけある。MOD ごとに写すとずれるため。
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"ignored": WorldStore(ctx, STATE_DIRNAME, write=write)}
-        setattr(sys, STORE_ATTR, store)
+    store = process_store(STORE_ATTR, {"ignored": None})
+    if store["ignored"] is None:
+        # 器は無いときだけ作る（既定値に置くと、注入のたびに使わない器を作ることになる）。
+        store["ignored"] = WorldStore(ctx, STATE_DIRNAME, write=write)
     ignored_store = store["ignored"].rebind(ctx, write)
 
     def ignores(app):
@@ -359,12 +333,10 @@ def apply(ctx):
         characters = getattr(getattr(app, "world", None), "characters", None)
         if not isinstance(characters, dict):
             return None, None
-        owner = getattr(facility, "owner", None)
-        if owner is not None:
-            npc_id = str(owner)
-            npc = characters.get(npc_id)
-            if npc is not None and is_at(npc, facility) and not is_muted(app, npc_id):
-                return npc_id, npc
+        npc_id, npc = ui.facility_owner(app, facility)
+        if npc_id is not None and npc is not None and is_at(npc, facility) \
+                and not is_muted(app, npc_id):
+            return npc_id, npc
         # 施設に居合わせた NPC（重複することがあるので一意化してから選ぶ）。
         present = getattr(facility, "characters", None)
         if isinstance(present, (list, tuple)) and present:
@@ -409,7 +381,7 @@ def apply(ctx):
 
         # 状態の判定は施設が決まってから。
         # どこで何に邪魔されたのかが分かる。
-        busy = [flag for flag in BUSY_FLAGS if getattr(app, flag, False)]
+        busy = ui.busy_flags(app)
         if busy:
             write("skip: {} busy {}".format(where, busy))
             return None
@@ -470,7 +442,7 @@ def apply(ctx):
             """待ち合わせを取り消す条件。理由を返す（無ければ None）。"""
             if getattr(getattr(app, "player", None), "location", None) is not facility:
                 return "player left {!r}".format(getattr(facility, "name", ""))
-            busy = [flag for flag in BUSY_FLAGS if getattr(app, flag, False)]
+            busy = ui.busy_flags(app)
             if busy:
                 return "became busy {}".format(busy)
             # 待っている間に売買の窓が開いた＝着いた後にもう手を付けている。閉じた後に声をかけても場面に合わない。
@@ -512,14 +484,13 @@ def apply(ctx):
                 state["fired_at"].pop(str(getattr(facility, "id", "")), None)
                 return
             if REPHRASE_OPENING:
-                # 第一声を「NPC の方から声をかけた」に読み替える印。
-                state["rephrase"] = {"at": time.monotonic(), "npc": npc_name,
-                                     "facility": getattr(facility, "name", "")}
+                # 第一声を「NPC の方から声をかけた」に読み替える予約。
+                reserve_opening(app, npc_id, getattr(facility, "name", ""))
             try:
                 manager = manager_cls(app, npc_id)
             except Exception:
                 ctx.log_exc("launch: cannot build ConversationStartManager")
-                state["rephrase"] = None
+                arrivals.cancel_opening(ARRIVAL_OWNER)
                 arrivals.withdraw(app, ARRIVAL_OWNER)
                 return
             write("launch: process_choice(ConversationStartManager, {!r}) npc_id={!r}"
@@ -528,7 +499,7 @@ def apply(ctx):
                 app.process_choice(manager, npc_name)
             except Exception:
                 ctx.log_exc("launch: process_choice failed")
-                state["rephrase"] = None
+                arrivals.cancel_opening(ARRIVAL_OWNER)
                 arrivals.withdraw(app, ARRIVAL_OWNER)
                 return
             # ここから会話の終わりまでを見届ける。
@@ -576,12 +547,12 @@ def apply(ctx):
             "- その場の役割（宿の主人なら宿の主人）として自然な、日常的な一言にすること。\n"
             "- 物語を勝手に進めないこと。依頼・事件・重大な報せを持ち出さないこと。\n"
             "- personality と speech_style の記述には強く従うこと。"
-        ).format(player_name=frames.short(getattr(player, "name", "冒険者"), 60),
+        ).format(player_name=ui.player_name(app, fallback="冒険者", limit=60),
                  facility_name=frames.short(getattr(facility, "name", ""), 80),
                  npc_name=frames.short(getattr(npc, "name", ""), 60),
                  language=language)
 
-        # 材料は字数で切らない（v1.21.0。窓に収まる根拠は VERIFICATION.md §3.95）。名前と種別の切りは壊れた値への用心。
+        # 材料は字数で切らない（窓に収まる根拠は VERIFICATION.md §3.95）。名前と種別の切りは壊れた値への用心。
         context = (
             "【世界観】\n{worldview}\n\n"
             "【現在地】\n- エリア: {area_name}({area_overview})\n"
@@ -603,7 +574,7 @@ def apply(ctx):
                  npc_speech=frames.short(getattr(npc, "speech_style", ""), None),
                  npc_job=frames.short(getattr(npc, "job", ""), 60),
                  relationship=frames.short(_relationship_of(npc, player), None),
-                 player_name=frames.short(getattr(player, "name", "冒険者"), 60),
+                 player_name=ui.player_name(app, fallback="冒険者", limit=60),
                  player_profile=frames.short(getattr(player, "profile", ""), None),
                  recent=recent)
 
@@ -625,8 +596,7 @@ def apply(ctx):
         """セリフを1本作る。作れなければ None（＝情景描写に何も足さない）。
 
         送信モジュールは名指ししない。
-        プロバイダごとに違ううえ、名前を並べた一覧は増えた時点で古くなる（`llama_cpp` と `any_server` しか知らないまま、Gemini /
-        OpenAI / Claude では毎回空振りしていた）。
+        プロバイダごとに違ううえ、名前を並べた一覧は増えた時点で古くなる（VERIFICATION.md §2.8）。
         `llm.ask` が `llm_manager` の別名から引く（TECH.md §5.3）。
         """
         result = llm.ask(ctx, MANAGER_NAME, build_messages(app, facility, npc),
@@ -679,15 +649,13 @@ def apply(ctx):
         return result
 
     # ------------------------------------------------------------------ フック
-    arrivals.install(ctx, write)
-
     # 施設を移る前後はローダの窓口 `arrivals` から呼ばれる（TECH.md §3.3.21）。
+    # 包みは `arrivals.on` が立てる（`arrivals.install` を呼んだのと同じ）。
     def before_move(call):
-        state["move_count"] += 1
         if EVENT_MODE == "narration":
             # 情景描写は move_phase の *内側* で呼ばれる。
             # だから印は先に置く。
-            state["pending"] = {"at": time.monotonic(), "move_no": state["move_count"]}
+            state["pending"] = {"at": time.monotonic()}
 
     def after_move(call):
         state["pending"] = None
@@ -729,54 +697,33 @@ def apply(ctx):
         return append_to_narration(result, line) if line else result
 
     # ---------------------------------------------- 第一声の読み替え（conversation）
-    @ctx.wrap("scripts.llm.llm_manager:conversation_starter", required=False)
-    def conversation_starter(orig, *args, **kwargs):
-        """こちらが起こした会話のときだけ、開始の合図を差し替える。
+    # ゲーム本来の合図は `<行動: 話しかける>`（＝プレイヤーが話しかけた）。到着イベントは逆なので、
+    # こちらが起こした会話のときだけ、ローダの窓口 `arrivals.opening` に第一声を予約して差し替えさせる
+    # （TECH.md §3.3.21）。窓口は渡す messages の写しだけを書き換え、ゲームの会話履歴には触らない。
+    # 置き換えるのはゲームの合図の1行目だけで、2行目以降は残す（`keep_rest`）。
+    # `301_` などがローダの `modnpc` の prompt の口で同じ messages[-1] に改行で足した状況を消さないため。
+    # 予約は次の `conversation_starter` で片付き、相手の id が予約と違えば使わない。
+    arrivals.install_opening(ctx, write)
 
-        ゲーム本来の合図は `<行動: 話しかける>`（＝プレイヤーが話しかけた）。
-        到着イベントは逆なので、**渡す messages のコピーだけ**を書き換える。
-        ゲームが保持している会話履歴そのものには触らない。
-        """
-        mark = state["rephrase"]
-        if mark is None or not REPHRASE_OPENING:
-            return orig(*args, **kwargs)
-        state["rephrase"] = None
-        if time.monotonic() - mark["at"] > REPHRASE_TTL:
-            write("rephrase: stale marker, left untouched")
-            return orig(*args, **kwargs)
-        # 印は相手を確かめてから使う。こちらが起こした会話が始まらないまま別の相手との会話が来たら、
-        # その第一声は書き替えず、見届けも捨てる（始まらなかった会話の終わりを待ち続けないため）。
-        partner = getattr(frames.arg(args, kwargs, "character_instance", 3), "name", None)
-        if isinstance(partner, str) and partner and partner != mark["npc"]:
-            write("rephrase: the talk is with {!r}, not {!r}; marker dropped".format(partner, mark["npc"]))
+    def reserve_opening(app, npc_id, facility_name):
+        def text(call):
+            return (
+                "<状況: {facility}に入ってきた{player}に、あなたの方から声をかけた。"
+                "呼び止める第一声を述べよ>"
+            ).format(facility=facility_name or "この場所",
+                     player=ui.player_name(call.app, fallback="旅人", limit=40))
+
+        def dropped(call):
+            # こちらが起こした会話が始まらないまま別の相手との会話が来たら、見届けも捨てる
+            # （始まらなかった会話の終わりを待ち続けないため）。
+            if call.reason != arrivals.DROP_PARTNER:
+                return
             watch = state["watching"]
-            if watch is not None and watch.get("name") == mark["npc"]:
+            if watch is not None and watch.get("npc_id") == call.npc_id:
                 state["watching"] = None
-            return orig(*args, **kwargs)
-        messages = frames.arg(args, kwargs, "messages", 0)
-        if not isinstance(messages, list) or not messages:
-            return orig(*args, **kwargs)
-        last = messages[-1]
-        if not isinstance(last, dict) or "content" not in last:
-            return orig(*args, **kwargs)
-        replacement = dict(last)
-        opening = (
-            "<状況: {facility}に入ってきた{player}に、あなたの方から声をかけた。"
-            "呼び止める第一声を述べよ>"
-        ).format(facility=mark["facility"] or "この場所",
-                 player=frames.short(getattr(getattr(find_app(), "player", None),
-                                         "name", "旅人"), 40))
-        # 置き換えるのはゲームの合図の1行目だけで、2行目以降は残す。
-        # `301_` などがローダの `modnpc` の prompt の口で同じ messages[-1] に改行で足した状況を消さないため
-        # （関所がこのフックより外側になる世代では、足された後の messages がここへ来る）。
-        content = last.get("content")
-        rest = content.partition("\n")[2] if isinstance(content, str) else ""
-        replacement["content"] = opening + ("\n" + rest if rest else "")
-        write("rephrase: {!r} -> {!r}".format(
-            frames.short(last.get("content"), 60), replacement["content"]))
-        args, kwargs, _ = frames.replace_arg(args, kwargs, "messages", 0,
-                                             messages[:-1] + [replacement])
-        return orig(*args, **kwargs)
+
+        arrivals.opening(app, ARRIVAL_OWNER, npc_id, text, ttl=REPHRASE_TTL, keep_rest=True,
+                         dropped=dropped, write=write)
 
     # ================================================================
     # 応答されずに終わった回数を数える
@@ -835,15 +782,14 @@ def apply(ctx):
         else:
             write("watch: {!r} ignored {} time(s)".format(name, count))
 
-    @ctx.wrap("__main__:ConversationPhaseManager.conversation_continued",
-              required=False)
-    def conversation_continued(orig, self, *args, **kwargs):
+    # 会話の1手と終了処理はローダの窓口 `talks` に預ける（TECH.md §3.3.21）。
+    # 相手（`call.partner`）は窓口が orig の前に `app.in_conversation` から読む（終わると下りるため）。
+    # 例外は窓口が握って modloader.log と write に残す。
+    def turn_before(call):
         """1ターン進んだ＝プレイヤーが返事をした。値には触らない。"""
-        try:
-            note_response(getattr(getattr(self, "app", None), "in_conversation", None))
-        except Exception:
-            ctx.log_exc("watch: cannot note the response")
-        return orig(self, *args, **kwargs)
+        note_response(call.partner)
+
+    talks.on(ARRIVAL_OWNER, ctx, (talks.TURN,), before=turn_before, write=write)
 
     @ctx.wrap("__main__:ConversationEndManager.__init__", required=False)
     def conversation_end_init(orig, self, *args, **kwargs):
@@ -866,64 +812,16 @@ def apply(ctx):
             pass
         return result
 
-    @ctx.wrap("__main__:ConversationEndManager.finish_conversation", required=False)
-    def finish_conversation(orig, self, *args, **kwargs):
-        """会話の終わり。ここで数える。"""
-        app = getattr(self, "app", None) or find_app()
-        partner = getattr(app, "in_conversation", None)     # 終わると下りるので先に読む
+    def finish_before(call):
         # 「会話を終了する」以外の閉じ方は、MOD のボタン（依頼の話・別れ話など）を押した＝返事をした。
-        if getattr(self, MOD_CLOSE_ATTR, False):
-            try:
-                note_response(partner)
-            except Exception:
-                ctx.log_exc("watch: cannot note the response")
-        result = orig(self, *args, **kwargs)
-        try:
-            settle_watch(app, partner)
-        except Exception:
-            ctx.log_exc("watch: cannot settle")
-        return result
+        if getattr(call.obj, MOD_CLOSE_ATTR, False):
+            note_response(call.partner)
 
-    # ------------------------------- ゲーム自身が使う character_id の形を控える
-    @ctx.wrap("__main__:ConversationStartManager.__init__", required=False)
-    def conversation_start_init(orig, self, *args, **kwargs):
-        character_id = frames.arg(args, kwargs, "character_id", 1)   # (app, character_id)
-        kind = "{} {!r}".format(type(character_id).__name__, character_id)
-        if state["npc_id_kind"] != kind:
-            state["npc_id_kind"] = kind
-            write("observed ConversationStartManager(character_id={})".format(kind))
-        return orig(self, *args, **kwargs)
+    def finish_after(call):
+        """会話の終わり。ここで数える（orig が返った回だけ）。"""
+        settle_watch(call.app, call.partner)
 
-    # ------------------------------------------------------------ 自己テスト
-    def selftest():
-        app = find_app()
-        facility = getattr(getattr(app, "player", None), "location", None)
-        if facility is None:
-            write("selftest: no current facility (not in a game?)")
-            return
-        npc_id, npc = pick_speaker(app, facility)
-        write("selftest: facility={!r} type={!r} speaker={!r} id={!r}".format(
-            getattr(facility, "name", ""), getattr(facility, "facility_type", ""),
-            getattr(npc, "name", None), npc_id))
-        if npc is not None:
-            write("selftest result: {!r}".format(generate_line(app, facility, npc)))
-
-    if SELFTEST_ON_BOOT:
-        import threading
-
-        def _run():
-            try:
-                selftest()
-            except Exception:
-                ctx.log_exc("arrival event: selftest failed")
-
-        # **`on_ready` に預ける**（TECH.md §3.6）。
-        # `apply()` は再注入と遅延当て直しで最大8回走るので、
-        # ここで直に起こすと**そのたびに LLM を 1回呼ぶ**。
-        # 1回きりの副作用は印を付けて1回に畳む。
-        ctx.on_ready(lambda: threading.Thread(
-            target=_run, name="instantale_mod.arrival_selftest",
-            daemon=True).start(), key="300_event_facility_arrival:selftest")
+    talks.on(ARRIVAL_OWNER, ctx, (talks.FINISH,), before=finish_before, after=finish_after, write=write)
 
     ctx.log("arrival events: mode={} chance={} log={}".format(
         EVENT_MODE,

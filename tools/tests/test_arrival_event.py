@@ -682,18 +682,37 @@ clock.tick()
 clock.run_onces()
 original = [{"role": "user", "content": "<行動: 話しかける>"}]
 seen = {}
+# 相手は会話を始めるときに渡した NPC の id で確かめる（ローダの窓口 `arrivals.opening`）。
 hooks["starter"](lambda messages, *a, **k: seen.setdefault("messages", messages),
-                 original, "life_log", "player")
+                 original, "life_log", "player", app.world.characters["64"])
 check("最後のメッセージが差し替わる",
       "あなたの方から声をかけた" in seen["messages"][-1]["content"],
       seen["messages"][-1]["content"])
+check("  → 施設名と主人公の名前が入る",
+      "テスト宿屋に入ってきたテストプレイヤーに" in seen["messages"][-1]["content"],
+      seen["messages"][-1]["content"])
 check("元の messages は書き換えない",
       original[-1]["content"] == "<行動: 話しかける>", original)
+check("第一声は窓口 arrivals.opening に予約する（自分で包まない）",
+      mod.arrivals.opening_installed() is not None and mod.arrivals.openings() == [], mod.arrivals.openings())
+seen.clear()
+hooks["starter"](lambda messages, *a, **k: seen.setdefault("messages", messages),
+                 original, "life_log", "player", app.world.characters["64"])
+check("印は1回で使い切る（次の会話は素通し）",
+      seen["messages"][-1]["content"] == "<行動: 話しかける>", seen["messages"])
+
+# 相手が読めない会話（character_instance が無い）は、相手違いと同じく書き替えずに予約を捨てる。
+clock = install_fake_kivy()
+mod, ctx, calls, hooks = setup()
+do_move(hooks)
+clock.tick()
+clock.run_onces()
 seen.clear()
 hooks["starter"](lambda messages, *a, **k: seen.setdefault("messages", messages),
                  original, "life_log", "player")
-check("印は1回で使い切る（次の会話は素通し）",
+check("相手が読めない会話は書き替えない",
       seen["messages"][-1]["content"] == "<行動: 話しかける>", seen["messages"])
+check("  → 予約は片付いている", mod.arrivals.openings() == [], mod.arrivals.openings())
 
 # ゲームがキーワード引数で呼んでも、受け取った形のまま messages だけを差し替える（版6）。
 clock = install_fake_kivy()
@@ -703,12 +722,14 @@ clock.tick()
 clock.run_onces()
 seen.clear()
 hooks["starter"](lambda *a, **k: seen.update(args=a, kwargs=k),
-                 messages=original, character_life_log="life_log", player="player")
+                 messages=original, character_life_log="life_log", player="player",
+                 character_instance=app.world.characters["64"])
 check("キーワード引数で呼ばれても最後のメッセージが差し替わる",
       "あなたの方から声をかけた" in seen["kwargs"]["messages"][-1]["content"],
       seen.get("kwargs"))
 check("  → 受け取った形のまま渡す（位置引数に直さない）",
-      seen["args"] == () and sorted(seen["kwargs"]) == ["character_life_log", "messages", "player"],
+      seen["args"] == () and sorted(seen["kwargs"]) == [
+          "character_instance", "character_life_log", "messages", "player"],
       (seen.get("args"), sorted(seen.get("kwargs") or {})))
 
 print("10b. 読み替えはゲームの合図の1行目だけ。ほかの MOD が改行で足した状況は残す")
@@ -966,8 +987,8 @@ out18 = do_move(hooks)
 check("知らないプロバイダ経由でもセリフが足される",
       "「ようこそ、旅の方」" in out18, out18)
 check("そのプロバイダが呼ばれる", len(gemini_calls) == 1, gemini_calls)
-check("timeout を必ず渡している",
-      bool(gemini_calls) and gemini_calls[0][3] == mod.LINE_TIMEOUT, gemini_calls)
+check("timeout は送り口へ渡さない（llm.ask の目安。VERIFICATION.md §3.101）",
+      bool(gemini_calls) and gemini_calls[0][3] is None, gemini_calls)
 
 print("19. llm_manager の別名があればそちらを先に使う")
 # 送信モジュールを名指しせずに済む本筋の経路（GAME.md §2.12）。

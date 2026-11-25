@@ -10,7 +10,7 @@
     "en": "The text the game keeps grows to hundreds of thousands of characters, and a label that long draws nothing at all. This shows only the latest 1,000 characters on screen and leaves the stored text unchanged",
     "ja": "ゲームが溜める本文は数十万文字になり、表示ラベルは長すぎると何も描かれなくなる。画面には末尾1,000文字だけを載せ、保持している本文は変えない"
   },
-  "version": "2",
+  "version": "3",
   "author": "yoshinari/tomotomo-y",
   "before": [
     "112_ui_text_spacing"

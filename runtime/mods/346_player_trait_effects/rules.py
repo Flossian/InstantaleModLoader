@@ -14,8 +14,9 @@
 
 import hashlib
 import json
+import math
 
-from instantale_modloader import battle_effects
+from instantale_modloader import battle_effects, frames
 
 #: 能力値の鍵（`ability_scores` の綴り。窓口 `abilities` と同じ）。
 STATS = ("strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma")
@@ -149,17 +150,14 @@ SEVERITY_MODES = ("guide", "fit", "off")
 # ================================================================== 特質の読み方
 def trait_fields(trait):
     """特質1つを `(名前, 説明, severity)` にする。名前が無ければ None。"""
-    if isinstance(trait, dict):
-        name, description, severity = trait.get("name"), trait.get("description"), trait.get("severity")
-    else:
-        name = getattr(trait, "name", None)
-        description = getattr(trait, "description", None)
-        severity = getattr(trait, "severity", None)
+    # 辞書でも属性でも読む。読めなかった番人は None（ローダの `frames.field`）
+    name, description, severity = (frames.field(trait, key) for key in ("name", "description", "severity"))
     if not isinstance(name, str) or not name.strip():
         return None
     if not isinstance(description, str):
         description = ""
-    if isinstance(severity, bool) or not isinstance(severity, (int, float)):
+    # NaN・無限大は int() が投げるので読めない値として扱う（_int と同じ）
+    if not frames.is_number(severity) or not math.isfinite(severity):
         severity = None
     else:
         severity = int(severity)
@@ -284,16 +282,16 @@ def build_messages(player_name, profile, traits, severity_mode="guide", profile_
 
 # ================================================================== 返答の検算
 def _int(value):
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return int(round(value))
+    """LLM が答えた量を四捨五入した整数にする。読めない・NaN・無限大は None。
+
+    数への直しはローダの `frames.to_number`。`llm.whole` は切り捨てなので使わない（答えが変わる）。
+    """
     if isinstance(value, str):
-        try:
-            return int(round(float(value.strip().lstrip("+"))))
-        except ValueError:
-            return None
-    return None
+        value = value.strip().lstrip("+")
+    number = frames.to_number(value)
+    if number is None or not math.isfinite(number):
+        return None
+    return int(round(number))
 
 
 def clean_effect(raw):
@@ -380,10 +378,10 @@ def _one_per_stat(effects):
 
 
 def clean_note(value):
+    """性質の文を1行に畳み、`NOTE_CHARS` 字を超えたら切って「…」を付ける（ローダの `frames.short`）。"""
     if not isinstance(value, str):
         return ""
-    text = " ".join(value.split())
-    return text if len(text) <= NOTE_CHARS else text[:NOTE_CHARS] + "…"
+    return frames.short(value, NOTE_CHARS, collapse=True)
 
 
 def normalize(data, traits):

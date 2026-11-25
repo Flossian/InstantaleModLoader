@@ -29,7 +29,7 @@ id 0〜8 の範囲は世界の形と関係なく id で決まり、id 9 以降�
 
 import threading
 
-from instantale_modloader import quest_bands, ui
+from instantale_modloader import frames, quest_bands, ui
 from instantale_modloader.state import UNKNOWN_WORLD, WorldStore, world_key, world_key_of_dict
 
 from . import bands
@@ -75,8 +75,8 @@ def install(ctx, cfg, owner):
     @ctx.wrap("save_area_json:write_area_data_to_world_dict", required=False, safe=True)
     def build(orig, *args, **kwargs):
         """街の中身を作る。間の `random.sample` の窓を開く。引数は来た形のまま渡す。"""
-        world_dict = args[0] if args else kwargs.get("world_dict")
-        area_id = args[1] if len(args) > 1 else kwargs.get("area_id")
+        world_dict = frames.arg(args, kwargs, "world_dict", 0)
+        area_id = frames.arg(args, kwargs, "area_id", 1)
         previous = getattr(local, "build", None)
         local.build = {"key": world_key_of_dict(world_dict, UNKNOWN_WORLD),
                        "area": None if area_id is None else str(area_id), "used": False}
@@ -90,8 +90,8 @@ def install(ctx, cfg, owner):
         window = getattr(local, "build", None)
         if not window or window["used"]:
             return orig(*args, **kwargs)
-        population = args[0] if args else kwargs.get("population")
-        k = args[1] if len(args) > 1 else kwargs.get("k")
+        population = frames.arg(args, kwargs, "population", 0)
+        k = frames.arg(args, kwargs, "k", 1)
         if not isinstance(population, range) or population.step != 1 or k != 3:
             return orig(*args, **kwargs)
         window["used"] = True

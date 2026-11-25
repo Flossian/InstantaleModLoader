@@ -3,7 +3,7 @@
 
 服役の流れは GAME.md §2.20「逮捕・裁判・服役」（`238_probe_prison` の実機）。
 """
-from instantale_modloader import choices, combat, equipment, guards, items, loads, ui
+from instantale_modloader import battles, choices, combat, equipment, guards, items, loads, ui
 
 from . import common, jailbreak
 
@@ -323,25 +323,25 @@ def install(env):
             return prepare_year(app, key, args)
         return False
 
-    @ctx.wrap("__main__:BattleStartManager.start_battle", required=False, safe=True)
-    def jail_start_battle(orig, self, *args, **kwargs):
-        """決行の戦闘が始まった印を立てる。別の戦闘が始まったら控えを捨てる（強さは `guards` が差し替える）。"""
+    def jail_start_battle(call):
+        """決行の戦闘が始まった印を立てる。別の戦闘が始まったら控えを捨てる（強さは `guards` が差し替える）。
+
+        敵が揃う前（ローダの窓口 `battles.START` の前の処理）。
+        """
         battle = jail["battle"]
         if battle is not None:
-            if self is battle["phase"]:
+            if call.obj is battle["phase"]:
                 battle["started"] = True
             elif battle["started"]:
                 write("jailbreak: another battle started; dropping the jailbreak battle")
                 jail["battle"] = None
-                app = getattr(self, "app", None) or ui.find_app()
+                app = call.app
                 if app is not None:
                     set_breaking(app, None)
-        return orig(self, *args, **kwargs)
 
-    @ctx.wrap("__main__:BattleEndManager.end_phase", required=False, safe=True)
-    def jail_battle_end(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
-        app = getattr(self, "app", None) or ui.find_app()
+    def jail_battle_end(call):
+        """戦闘の終わりの後（ローダの窓口 `battles.END_NORMAL`）。即席の品を引き上げ、決行なら牢を出た始末をする。"""
+        app = call.app
         # 即席の品はどの戦闘の終わりでも引き上げる（注入し直しで決行の控えを失っていても、貸しは残っている）
         recovered = False
         try:
@@ -358,13 +358,17 @@ def install(env):
                           "area": saved.get("area")}
                 write("jailbreak: the break-out battle ended after a reinjection; settling from the record")
         if battle is None or not battle["started"]:
-            return result
+            return
         jail["battle"] = None
         try:
-            set_free(app, battle, getattr(self, "end_type", None), recovered)
+            set_free(app, battle, call.end_type, recovered)
         except Exception:
             ctx.log_exc("crime incentive: cannot settle the break out")
-        return result
+
+    # 追手（`hunter`）と同じ節目なので持ち主を分ける。追手より後に登録するので、前の包み（脱獄が外側）と同じく
+    # 前の処理は追手より先、後の処理は追手より後に呼ばれる。
+    battles.on(env.owner + ":prison", ctx, (battles.START,), before=jail_start_battle, write=write)
+    battles.on(env.owner + ":prison", ctx, (battles.END_NORMAL,), after=jail_battle_end, write=write)
 
     def set_free(app, battle, end_type, recovered=False):
         """勝つか逃げた。牢の外（ゲームが戻した場所の画面）。その土地の手配度を下げる。"""
@@ -381,7 +385,7 @@ def install(env):
             before = ui.lawfulness_of(entry)
             loss = max(0, int(cfg.JAILBREAK_LOSS))
             if before is not None and loss and ui.set_lawfulness(entry, before - loss):
-                town = getattr(ui.world_areas(app).get(battle["area"]), "name", None) or "この街"
+                town = ui.area_name(app, battle["area"], fallback="この街", limit=None)
                 write("jailbreak: lawfulness of {} {} -> {}".format(
                     battle["area"], before, before - loss))
                 lines.append(jailbreak.ESCAPED_LAW_TEXT.format(town=town, before=before,

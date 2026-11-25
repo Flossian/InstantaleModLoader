@@ -20,8 +20,8 @@
     `(絵, 絵の写し)` を返す。縮めない。入って来た絵をスレッドに控える。
     元の工程を呼ぶのは形の保険。ゲームの更新で戻り値の形が変われば
     2つ組の受け取りで投げ、`safe=True` が元の工程の結果（素の荒い絵）に落とす。
-    呼ばずに形を決め打ちしていた版は、形が違ったときに生成スレッドごと死んで
-    「NPC の絵が出ない」になった（VERIFICATION_LOG.md §2.80 の版1）。
+    呼ばずに形を決め打ちすると、形が違ったときに生成スレッドごと死んで
+    「NPC の絵が出ない」になる（VERIFICATION_LOG.md §2.80）。
     代償は 256x256 の KMeans 1回（0.3〜0.5秒）
   * `reduce_image_colors`: **控えた絵を返す**。減色しない。
     入って来るのはゲームが2倍に伸ばした 1024x2048 で、最近傍の2倍は情報を足さない。
@@ -51,7 +51,7 @@
 ゲームの側は触らず（戻り値もそのまま）、ファイルだけ差し替える。
 `SHARP_PORTRAIT` が切のときは立ち絵が 330x660 で、ゲームの縮め方がそのまま合うので触らない。
 
-## 先に YuNet で探す（`FACE_YUNET`。版19）
+## 先に YuNet で探す（`FACE_YUNET`）
 
 ゲームの1回目の検出（anime）の前に、YuNet（OpenCV の深層学習の顔検出。`faces.py`）で探す。
 見つかれば、その箱から `faces.crop_box` でゲームの戻り値と同じ形を作って返し、ゲームの検出は呼ばない。
@@ -64,7 +64,7 @@ YuNet は 651 体を拾い、外した 44 体は目の大きいアニメ寄り�
 
 モデルは同梱の `models/face_detection_yunet_2023mar.onnx`（MIT、NOTICE）。
 パスに日本語があると OpenCV がファイルを開けないことがあるので、numpy で読んでバイト列で渡す。
-読めない・作れない・投げたときは、ゲームの検出だけで探す（版18 と同じ動き）。
+読めない・作れない・投げたときは、ゲームの検出だけで探す。
 
 ## 顔の検出をやり直す（`FACE_RETRY`）
 
@@ -91,7 +91,7 @@ anime の回の `None` では呼び直さない。ここで拾って返すとゲ
   * カスケードは1回の呼び出しの中で両方試す（anime だけだと拾いが 42 → 24 に落ちる）。
     渡す形は**ゲームが渡して来た形に合わせる**。ゲームはフォルダ付き
     （`runtime/models/face_recognition/...`）で渡していて、素のファイル名では
-    ゲームの関数がカスケードを読めず `None` を返す（版7〜9 がこれで拾えなかった）
+    ゲームの関数がカスケードを読めず `None` を返す
   * 検出は縮小の前の絵に対して走るので、`SHARP_PORTRAIT` と独立に効く
   * 58 体のうち 42 体を拾い、目で見て 4 体が顔ではなかった
 
@@ -157,7 +157,7 @@ import threading
 import time
 
 from instantale_modloader import config as loader_config
-from instantale_modloader import imagegen, patch, ui
+from instantale_modloader import frames, imagegen, patch, ui
 
 from . import cutout, faces
 
@@ -195,7 +195,7 @@ HUMAN_ENEMY_SCALE = 1.0
 # 顔の検出が外れた回に、前処理した絵でやり直すか。
 FACE_RETRY = True
 
-# ゲームの検出より先に YuNet で顔を探すか（版19）。外したらゲームの検出とやり直しへ落とす。
+# ゲームの検出より先に YuNet で顔を探すか。外したらゲームの検出とやり直しへ落とす。
 FACE_YUNET = True
 
 #: この MOD の記録。
@@ -251,8 +251,8 @@ ENEMY_DISPLAY = "scripts.hud.new_hud:InstanTaleHUD.update_enemy_display"
 #: ゲームが組み直すたびに大きさを決め直すかは読めないので、二重にかけないために持つ。
 SCALED_ATTR = "_mod131_scaled"
 
-#: `apply_dark_fantasy_tone(img, color, contrast, brightness, randomize)` の、img を除いた randomize の位置。
-TONE_RANDOMIZE_POS = 3
+#: `apply_dark_fantasy_tone(img, color, contrast, brightness, randomize)` の、img を含めた randomize の位置。
+TONE_RANDOMIZE_POS = 4
 
 #: 色調の雑音の下限。0 を渡すとゲームの関数が `np.random.randint(0, 0)` で投げ、生成スレッドが死ぬ。
 #: 1 なら画素値が最大1落ちるだけで見えない。
@@ -278,7 +278,7 @@ def is_human_call(args, kwargs):
     種族の引数のほかに、文字列の引数に入った本文の `creature,(<種族>:1.1)` も見る
     （設定の画面の「画像の再生成」は、記録から組み直した本文で入口を呼ぶ）。
     """
-    race = args[RACE_POS] if len(args) > RACE_POS else kwargs.get("race")
+    race = frames.arg(args, kwargs, "race", RACE_POS)
     if is_human_race(race):
         return True
     texts = [value for value in list(args) + list(kwargs.values()) if isinstance(value, str)]
@@ -315,13 +315,13 @@ def scale_widget(widget, scale):
     setattr(widget, SCALED_ATTR, (size, pos, tuple(widget.size), tuple(widget.pos)))
 
 
-def quiet_tone(orig, image, args, kwargs):
-    """色調はゲームのまま、雑音だけ下限まで落として呼ぶ。"""
-    if len(args) > TONE_RANDOMIZE_POS:
-        args = args[:TONE_RANDOMIZE_POS] + (TONE_QUIET,) + args[TONE_RANDOMIZE_POS + 1:]
-    else:
-        kwargs = dict(kwargs, randomize=TONE_QUIET)
-    return orig(image, *args, **kwargs)
+def quiet_tone(orig, args, kwargs):
+    """色調はゲームのまま、雑音だけ下限まで落として呼ぶ。`args` / `kwargs` はフックが受けたまま（img を含む）。
+
+    randomize が渡されていなければキーワードで足す（ゲームの関数は randomize を受ける。GAME.md §2.30）。
+    """
+    args, kwargs, _ = frames.replace_arg(args, kwargs, "randomize", TONE_RANDOMIZE_POS, TONE_QUIET, insert=True)
+    return orig(*args, **kwargs)
 
 
 def take_over_cutout_setting(ctx, note):
@@ -338,7 +338,7 @@ def take_over_cutout_setting(ctx, note):
         value = old.pop("CUTOUT_MODEL")
         if not old:
             store.pop(CUTOUT_OLD_OWNER)
-        own_name = os.path.basename(ctx.mod_dir)
+        own_name = ctx.mod_name or os.path.basename(ctx.mod_dir)
         own = store.get(own_name)
         # この MOD の欄に既に値があれば、そちらを選び直したものとして尊重する。
         if value == "isnet-anime" and not (isinstance(own, dict) and "CUTOUT_MODEL" in own):
@@ -361,7 +361,7 @@ def apply(ctx):
     # YuNet のモデルのバイト列（1度読んだら使い回す）。読めなかったら `False` で、以後は試さない。
     yunet_model = []
     cascades = {}
-    seen_args = []          # ゲームの呼び方を1度だけ記録するための印
+    note_once = ctx.once(note)      # ゲームの呼び方を1度だけ記録する（ローダの `ctx.once`）
     backend = config_backend()
     creatures = imagegen.creature_modules(backend)
 
@@ -414,7 +414,7 @@ def apply(ctx):
     @ctx.wrap(CUTOUT_TARGET, required=False, safe=True)
     def remove_background(orig, *args, **kwargs):
         """設定に従ってゲームのフォルダのモデルで抜く。抜けなければゲームの切り抜きへ戻す。"""
-        image = args[0] if args else kwargs.get("image")
+        image = frames.arg(args, kwargs, "image", 0)
         merge = enemy() and ENEMY_CUTOUT_MERGE
         if image is None or not (merge or str(CUTOUT_MODEL) == "isnet-anime"):
             return orig(*args, **kwargs)
@@ -433,23 +433,25 @@ def apply(ctx):
         return got
 
     @hook("add_border_to_image", required=False, safe=True, alias_scan=False)
-    def add_border_to_image(orig, image, *args, **kwargs):
+    def add_border_to_image(orig, *args, **kwargs):
         if sharp_enemy() and not ENEMY_BORDER:
-            return image
-        return orig(image, *args, **kwargs)
+            return frames.arg(args, kwargs, "image", 0)
+        return orig(*args, **kwargs)
 
     @hook("apply_dark_fantasy_tone", required=False, safe=True, alias_scan=False)
-    def creature_tone(orig, image, *args, **kwargs):
+    def creature_tone(orig, *args, **kwargs):
+        image = frames.arg(args, kwargs, "img", 0)
         if enemy() and HUMAN_ENEMY_NO_TONE and getattr(_LOCAL, "human", False):
             note("敵: 人間の敵なので色調を当てない {}".format(dims(image)))
             return image
         if sharp_enemy():
             note("敵: 色調 {} 雑音を {} に".format(dims(image), TONE_QUIET))
-            return quiet_tone(orig, image, args, kwargs)
-        return orig(image, *args, **kwargs)
+            return quiet_tone(orig, args, kwargs)
+        return orig(*args, **kwargs)
 
     @ctx.wrap(ENEMY_IMAGE_TEXTURE, required=False, safe=True, alias_scan=False)
     def on_texture(orig, widget, *args, **kwargs):
+        # NearestNeighborImage.on_texture(self, instance, value)。widget は self
         result = orig(widget, *args, **kwargs)
         if SHARP_ENEMY and os.path.basename(str(getattr(widget, "source", None) or "")) in ENEMY_SHOWN:
             texture = getattr(widget, "texture", None)
@@ -472,11 +474,12 @@ def apply(ctx):
             ctx.log_exc("sharp portrait: scaling a human enemy failed")
         return result
 
-    def background_pixel(orig, image, *args, **kwargs):
+    def background_pixel(orig, *args, **kwargs):
         if not SHARP_BACKGROUND:
-            return orig(image, *args, **kwargs)
+            return orig(*args, **kwargs)
         # 元の工程は形の保険として呼ぶ。形が違えばここで投げ、safe=True が素に落とす。
-        _big, _small = orig(image, *args, **kwargs)
+        _big, _small = orig(*args, **kwargs)
+        image = frames.arg(args, kwargs, "image", 0)
         note("背景: 縮小 {} をそのまま通す".format(dims(image)))
         return image, image.copy()
 
@@ -485,26 +488,28 @@ def apply(ctx):
                  required=False, safe=True, alias_scan=False)(background_pixel)
 
     @ctx.wrap(BACKGROUND_TONE, required=False, safe=True, alias_scan=False)
-    def background_tone(orig, image, *args, **kwargs):
+    def background_tone(orig, *args, **kwargs):
         if not SHARP_BACKGROUND:
-            return orig(image, *args, **kwargs)
-        note("背景: 色調 {} 雑音を {} に".format(dims(image), TONE_QUIET))
-        return quiet_tone(orig, image, args, kwargs)
+            return orig(*args, **kwargs)
+        note("背景: 色調 {} 雑音を {} に".format(dims(frames.arg(args, kwargs, "img", 0)), TONE_QUIET))
+        return quiet_tone(orig, args, kwargs)
 
     @ctx.wrap(BACKGROUND_REDUCE, required=False, safe=True, alias_scan=False)
-    def background_reduce(orig, image, *args, **kwargs):
+    def background_reduce(orig, *args, **kwargs):
         if not SHARP_BACKGROUND:
-            return orig(image, *args, **kwargs)
+            return orig(*args, **kwargs)
+        image = frames.arg(args, kwargs, "image", 0)
         note("背景: 減色 {} をそのまま通す".format(dims(image)))
         return image
 
     @hook("pixel_art_process", safe=True, alias_scan=False)
-    def pixel_art_process(orig, image, *args, **kwargs):
+    def pixel_art_process(orig, *args, **kwargs):
+        image = frames.arg(args, kwargs, "image", 0)
         if enemy():
             if not SHARP_ENEMY:
-                return orig(image, *args, **kwargs)
+                return orig(*args, **kwargs)
             # 元の工程は形の保険として呼ぶ。形が違えばここで投げ、safe=True が素に落とす。
-            _big, _small = orig(image, *args, **kwargs)
+            _big, _small = orig(*args, **kwargs)
             # NPC の戦闘用の絵はこの後に減色を通らないので、ここでも控える。
             _LOCAL.enemy_source = image
             note("敵: 縮小 {} をそのまま通す".format(dims(image)))
@@ -512,23 +517,24 @@ def apply(ctx):
         if getattr(_LOCAL, "after_reduce", False):
             _LOCAL.after_reduce = False
             note("縮小: {} 顔の代わりを作る回なのでゲームに任せる".format(dims(image)))
-            return orig(image, *args, **kwargs)
+            return orig(*args, **kwargs)
         # 顔の箱は検出した絵の座標系。検出もこの絵（同じ寸法）に対して走る。
         _LOCAL.detect_width = image.size[0]
         if not SHARP_PORTRAIT:
             note("縮小: {} ゲームのまま".format(dims(image)))
-            return orig(image, *args, **kwargs)
+            return orig(*args, **kwargs)
         # 元の工程は形の保険として呼ぶ。形が違えばここで投げ、safe=True が素に落とす。
-        _big, _small = orig(image, *args, **kwargs)
+        _big, _small = orig(*args, **kwargs)
         _LOCAL.source = image
         note("縮小: {} をそのまま通す".format(dims(image)))
         return image, image.copy()
 
     @hook("reduce_image_colors", safe=True, alias_scan=False)
-    def reduce_image_colors(orig, image, *args, **kwargs):
+    def reduce_image_colors(orig, *args, **kwargs):
+        image = frames.arg(args, kwargs, "image", 0)
         if enemy():
             if not SHARP_ENEMY:
-                return orig(image, *args, **kwargs)
+                return orig(*args, **kwargs)
             _LOCAL.enemy_source = image
             note("敵: 減色 {} をそのまま通す".format(dims(image)))
             return image
@@ -537,7 +543,7 @@ def apply(ctx):
         _LOCAL.source = None
         if not SHARP_PORTRAIT:
             note("減色: {} ゲームのまま".format(dims(image)))
-            return orig(image, *args, **kwargs)
+            return orig(*args, **kwargs)
         if source is None:
             note("減色: {} 控えが無いのでそのまま通す".format(dims(image)))
             return image
@@ -587,11 +593,14 @@ def apply(ctx):
         return found
 
     @hook("detect_face_coordinates", required=False, safe=True, alias_scan=False)
-    def detect_face_coordinates(orig, image, *args, **kwargs):
+    def detect_face_coordinates(orig, *args, **kwargs):
         if enemy():
-            return orig(image, *args, **kwargs)
-        rest = dict(zip(ARG_NAMES, args))
-        rest.update(kwargs)
+            return orig(*args, **kwargs)
+        image = frames.arg(args, kwargs, "image", 0)
+        # image を除いた残りの引数を名前で持つ（呼び直しには image の代わりに前処理した絵を渡す）。
+        # image は先頭の引数なので、位置で来れば args の頭が image。名前で来たなら残りも名前で来て args は空
+        rest = dict(zip(ARG_NAMES, args[1:]))
+        rest.update((key, value) for key, value in kwargs.items() if key != "image")
         # 箱の一辺はゲームが渡した crop_size。切り直し（`extract_and_save_face`）もこの値で戻す
         try:
             _LOCAL.crop_size = int(rest.get("crop_size") or faces.FACE_CROP)
@@ -609,7 +618,7 @@ def apply(ctx):
                 found = None
             if found is not None:
                 return found
-        found = orig(image, *args, **kwargs)
+        found = orig(*args, **kwargs)
         if found is not None:
             note("顔: ゲームが見つけた {}".format(found))
             return found
@@ -631,9 +640,7 @@ def apply(ctx):
         import PIL.Image
         # ゲームがカスケードをどう渡しているか（素の名前か、フォルダ付きか）は
         # ここでしか分からない。1度だけ記録する。
-        if not seen_args:
-            seen_args.append(True)
-            note("顔: ゲームの呼び方 {}".format(rest or "（引数なし。既定のまま）"))
+        note_once("call", "顔: ゲームの呼び方 {}".format(rest or "（引数なし。既定のまま）"))
         # 呼び直しに渡すカスケードは、ゲームが渡して来た形（`given`）に合わせる。
         # フォルダ付きで来ていれば同じフォルダ、素の名前なら素の名前。
         gray = cv2.cvtColor(np.asarray(image.convert("RGB")), cv2.COLOR_RGB2GRAY)
@@ -670,10 +677,12 @@ def apply(ctx):
         return None
 
     @hook("extract_and_save_face", required=False, safe=True, alias_scan=False)
-    def extract_and_save_face(orig, pixelated_image, coordinates, output_path, *args, **kwargs):
-        # 引数名は本体と同じにする（キーワードで渡されても二重にならない。版17）。
-        result = orig(pixelated_image, coordinates, output_path, *args, **kwargs)
-        image = pixelated_image
+    def extract_and_save_face(orig, *args, **kwargs):
+        # extract_and_save_face(pixelated_image, coordinates, output_path)。位置でもキーワードでも来うるので名前で読む
+        result = orig(*args, **kwargs)
+        image = frames.arg(args, kwargs, "pixelated_image", 0)
+        coordinates = frames.arg(args, kwargs, "coordinates", 1)
+        output_path = frames.arg(args, kwargs, "output_path", 2)
         if enemy():
             return result
         # 顔が切られた＝見つかった。顔の代わりを作る縮小は来ないので旗を降ろす

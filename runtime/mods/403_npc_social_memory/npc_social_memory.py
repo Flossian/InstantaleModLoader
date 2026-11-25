@@ -30,11 +30,10 @@
 抽出のプロンプトも `output_data/` に残る（GAME.md §2.12）。
 """
 import datetime
-import os
 import sys
 import typing
 
-from instantale_modloader import frames, jobs, llm, modnpc, ui
+from instantale_modloader import frames, jobs, llm, modnpc, talks, ui
 from instantale_modloader.state import WorldStore, world_key
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
@@ -69,7 +68,7 @@ STATE_DIRNAME = "npc_social_memory"
 PROFILE_STATE_DIRNAME = "npc_profiles"
 
 # 会話参加者から読むゲーム側の項目。
-# 版10 で、材料と会話に足す文の字数の上限を外した（ゲームの欄・311 と 403 が長さの目安で書かせた記録・
+# 材料と会話に足す文は字数で切らない（ゲームの欄・311 と 403 が長さの目安で書かせた記録・
 # 件数で抑えた事実と書き起こし。窓に収まる根拠は VERIFICATION.md §3.95）。
 CHARACTER_FIELDS = ("profile", "personality", "job")
 
@@ -216,7 +215,7 @@ def parse_result(result, allowed_ids):
 def apply(ctx):
     state_dir = ctx.state_path(STATE_DIRNAME)
     write = ctx.logger(LOG_BASENAME)
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "403_npc_social_memory"
+    owner = ctx.mod_name or "403_npc_social_memory"
     # ここでは Clock への予約（`screen.schedule`）にだけ使う。選択肢は作らない。
     screen = ui.Screen(ctx, write, tag="npc social memory")
 
@@ -314,24 +313,6 @@ def apply(ctx):
                 blocks.append("{}: {}".format(field, text))
         return "\n".join(blocks)
 
-    def npc_id_of(app, npc):
-        """会話関数に渡された Character（`npc`）の id を、共有UI部品で特定する。全NPC走査はしない。
-
-        `app.in_conversation` が今の会話相手の id。渡された `npc` がその実体なら即決。
-        実体が違っていても（他の MOD が浅い複製を渡してくる場合）、会話相手の id が
-        引けるならそれを正本にする。どちらでもなければ仲間の中から同一instanceを探す。
-        """
-        current = getattr(app, "in_conversation", None)
-        if current is not None and ui.character_of(app, current) is npc:
-            return str(current)
-        # 会話関数の引数が浅い複製でも、会話相手IDを正本にする。
-        if current is not None and ui.character_of(app, current) is not None:
-            return str(current)
-        for candidate in ui.party_member_ids(app):
-            if ui.character_of(app, candidate) is npc:
-                return str(candidate)
-        return ""
-
     def participant_ids(app, conversation_id):
         """抽出に載せる NPC の id。会話相手を先頭に、同行の仲間を続ける。上限 MAX_PARTICIPANTS（最低2）。"""
         ids = [str(conversation_id)] if conversation_id else []
@@ -360,9 +341,15 @@ def apply(ctx):
         return out
 
     def player_name_of(app):
-        """プレイヤーの名前。属性名が版で揺れるので候補を順に見る。"""
+        """プレイヤーの名前。`app.player.name` はローダの `ui.player_name` で読む。
+
+        別名（`character_name` / `player_name`）はゲームに在るかを測っていないので、読めなかったときの候補として残す。
+        """
+        name = ui.player_name(app)
+        if name:
+            return name
         player = getattr(app, "player", None)
-        for attr in ("name", "character_name", "player_name"):
+        for attr in ("character_name", "player_name"):
             value = getattr(player, attr, None) if player is not None else None
             if isinstance(value, str) and value.strip():
                 return value.strip()
@@ -521,11 +508,12 @@ def apply(ctx):
 
         ローダの `modnpc` の notes から呼ばれ、関所が**浅い複製**の `profile` の末尾に足す
         （本体の NPC には書かない。書くと世界の人物像そのものが伸び続ける。TECH.md §5.7）。
+        関所は相手の id を引けた呼び出しにしか notes を呼ばないので、id は `info["npc_id"]` だけを見る。
         """
         app = info.get("app") or ui.find_app()
         if app is None:
             return None
-        observer_id = str(info.get("npc_id") or "") or npc_id_of(app, info.get("character"))
+        observer_id = str(info.get("npc_id") or "")
         if not observer_id:
             return None
         block = social_block(app, observer_id)
@@ -834,31 +822,16 @@ changed=falseならrelations=[]。""".format(player_name=player_name,
             note_skip("could not schedule next-frame snapshot")
 
     # ================================================================ フック
-    # 2種類ある。
-    #   conversation_continued（通常／依頼中）: プレイヤーが1手入力した後。抽出の予約。
+    # 2種類ある。どちらもローダの窓口に預け、自分では包まない。
+    #   1手の後（通常／依頼中）: 抽出の予約。窓口 `talks` の TURN / TURN_IN_QUEST の after（TECH.md §3.3.21）。
     #   conversation_facilitator / starter（5本）: NPC の返答を作る LLM 呼び出し。
-    #       渡される Character を差し替えて同行者の情報を読ませる（注入）。
-    # どれも本体の戻り値はそのまま返す。
+    #       渡される Character の浅い複製に同行者の情報を足す（窓口 `modnpc` の notes）。
 
-    @ctx.wrap("__main__:ConversationPhaseManager.conversation_continued",
-              required=False)
-    def conversation_continued(orig, self, choice_text, *args, **kwargs):
-        result = orig(self, choice_text, *args, **kwargs)
-        try:
-            schedule_extract(getattr(self, "app", None))
-        except Exception:
-            ctx.log_exc("npc social memory: cannot schedule extraction")
-        return result
+    def turn_after(call):
+        """プレイヤーが1手入力した後。例外は窓口が記録する。"""
+        schedule_extract(call.app)
 
-    @ctx.wrap("__main__:ConversationInQuestPhase.conversation_continued",
-              required=False)
-    def conversation_continued_in_quest(orig, self, choice_text, *args, **kwargs):
-        result = orig(self, choice_text, *args, **kwargs)
-        try:
-            schedule_extract(getattr(self, "app", None))
-        except Exception:
-            ctx.log_exc("npc social memory: cannot schedule extraction")
-        return result
+    talks.on(owner, ctx, (talks.TURN, talks.TURN_IN_QUEST), after=turn_after, write=write)
 
     # 会話5関数へ足す文は、ローダの `modnpc` の notes に預ける（自分で包まない）。
     # 足す順は前に自分で包んでいたときの重なりと同じ（`NOTES_PRIORITY`）。

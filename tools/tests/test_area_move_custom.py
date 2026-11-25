@@ -46,6 +46,7 @@ import instantale_modloader as ml                      # noqa: E402
 from instantale_modloader import state as mstate       # noqa: E402
 from instantale_modloader import durations            # noqa: E402
 from instantale_modloader import choices              # noqa: E402
+from instantale_modloader import ui                   # noqa: E402
 
 
 def find_mod(suffix):
@@ -321,6 +322,8 @@ class FakeCtx:
 
     # ログは本物の `ctx.logger` をそのまま借りる（`307_` のテストと同じ理由）。
     _mod = None
+    # 窓口に名乗る持ち主の名前（本物は apply() の間フォルダ名を返す）。
+    mod_name = os.path.basename(os.path.dirname(MOD))
 
     def logger(self, name, **kw):
         import instantale_modloader as _ml
@@ -475,6 +478,25 @@ def press(app, text):
     raise AssertionError("no such button: {!r} in {}".format(text, texts_of(app)))
 
 
+# ================================================================ 式
+# 注入時の自己検証から移した確かめ（固定の入力。TECH.md §6.1）。
+print("[式] ラベルから運賃を読み、テンプレートを埋め、挟む街の数で補正する")
+module = load_mod()
+# 通貨の表記は `130_` が差し替えていることがあるので、見本のほうも同じ表記へ通してから突き合わせる。
+check("ラベルから運賃を読む（桁区切りつき）",
+      ui.parse_coin(ui.rewrite_coins("馬車(1,000G)")) == 1000)
+# テンプレートは既定の形を直に書く（`COACH_BUTTON` は設定で変わる）。
+check("テンプレートを埋める",
+      module.fmt("{name}({price}G・{days}日)", name="馬車", price=1000, days=7)
+      == ui.rewrite_coins("馬車(1000G・7日)"))
+check("知らない変数名は残す", module.fmt("{name}と{typo}", name="徒歩") == "徒歩と{typo}")
+grown = (module.scaled(90, 2, 7, mode="multiply", factor=1.0),
+         module.scaled(90, 2, 7, mode="add"),
+         module.scaled(1000, 3, 500, mode="add"),
+         module.scaled(90, 2, 7, mode="off"),
+         module.scaled(90, 0, 7, mode="multiply", factor=1.0))
+check("距離補正の式（倍加・加算・切・挟む街0）", grown == (270, 104, 2500, 90, 90), grown)
+
 # ================================================================ ラベル
 print("[既定] 素のゲームから何も変えない（馬車のボタンにだけ日数が足される）")
 module, ctx, app, confirm_cls, move_cls = setup()
@@ -517,10 +539,10 @@ module, ctx, app, confirm_cls, move_cls = setup(configure=full)
 check("徒歩(30日)", texts_of(app)[0] == "徒歩(30日)", texts_of(app))
 check("竜車(500G・7日)", texts_of(app)[1] == "竜車(500G・7日)", texts_of(app))
 
-print("[ラベル] 馬車のボタンの形を変えても自己検証は通る")
+print("[ラベル] 馬車のボタンの形を変えても注入でエラーが出ない")
 module, ctx, app, confirm_cls, move_cls = setup(
     configure=lambda m: setattr(m, "COACH_BUTTON", "{name}【{days}日・{price}G】"))
-check("VERIFY FAILED が出ない",
+check("ERROR の記録が出ない",
       not [msg for level, msg in ctx.logs if level == "ERROR"], ctx.logs)
 check("ボタンは変えた形で出る", texts_of(app)[1].endswith("日・1000G】"),
       texts_of(app))
@@ -606,24 +628,25 @@ check("文言の金額も実際の引き落としに揃う",
 check("ゲームの言う1000は出ない",
       not any("1000ゴールド" in t for t in app.texts), app.texts)
 check("エラーなし", not ctx.errors, ctx.errors)
-store = getattr(sys, module.SETTINGS_STORE_ATTR)
+# ワールド別の設定の読み手はローダの state.WorldSettings。控えを読む `record` を数える。
 loads = []
-plain_load = store.load
+plain_record = mstate.WorldSettings.record
 
 
-def counting_load(*args, **kwargs):
-    loads.append(args)
-    return plain_load(*args, **kwargs)
+def counting_record(self, world):
+    if self.dirname == module.SETTINGS_DIRNAME:
+        loads.append(world)
+    return plain_record(self, world)
 
 
-store.load = counting_load
+mstate.WorldSettings.record = counting_record
 try:
     app.add_text("宿の主人がこちらを見た。")
     check("移動の窓の外の本文では設定を読み直さない（版7）", loads == [], loads)
     press(app, CARRIAGE_300)
     check("  → 移動を始めるときは読み直す（この世界では読み込みが走る）", len(loads) > 0, loads)
 finally:
-    store.load = plain_load
+    mstate.WorldSettings.record = plain_record
 
 module, ctx, app, confirm_cls, move_cls = setup(configure=fare_only)
 app.keyword_text = True

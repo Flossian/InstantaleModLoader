@@ -72,7 +72,7 @@ MOD を外しても受け渡し済みのアイテムは相手の持ち物に残�
 
 | 症状 | 見るところ |
 | --- | --- |
-| 選択肢が出ない | 会話相手が現在のパーティーメンバーか確認。仲間なのに出ないなら `out\party_inventory_transfer.log` に `added` の行があるか |
+| 選択肢が出ない | 会話相手が現在のパーティーメンバーか確認。仲間なのに出ないなら `out\party_inventory_transfer.log` に `offering` の行があるか |
 | 画面を閉じたら会話ではない画面に戻った | `out\party_inventory_transfer.log` の `closed the window:` の行に、閉じた後の選択肢が残る。`ConversationEndManager` が無ければ戻り損ねている。そのままにせず、誰かと会話して「会話を終了する」で終えると会話中のフラグが下りる |
 | 移したのに保存されていない気がする | `out\party_inventory_transfer.log` に `transfer synced` と `save_game complete` が並んでいれば保存は走っている。`WARN save skipped` なら移した品を見失っている |
 | 装備したまま渡したら装備が残った | v18 で本体の解除処理ごと外れる。外れていなければ `out\party_inventory_transfer.log` を添えて報告 |

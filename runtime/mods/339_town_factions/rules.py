@@ -7,8 +7,11 @@
 LLM に論理は渡さない（`902_city_case` と同じ考え）。
 LLM が決めるのは「設定に何が書いてあるか」「どちらへ動いたか」と文章だけで、
 点数・段・幅・下限はここで決める。
+数の判定と LLM の答えの均しはローダの部品（`frames.is_number`・`llm.whole`）を使う。どちらもゲームを読まない。
 """
 import re
+
+from instantale_modloader import frames, llm
 
 # ============================================================ 段
 #: 勢力からの主人公の見られ方。点数（-100〜100）を段に読む。
@@ -65,18 +68,8 @@ def empty_ledger():
 
 # ============================================================ 数の均し
 def to_int(value, low, high):
-    """LLM の答えを low〜high の整数に均す。読めなければ None。"""
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, str):
-        value = value.strip().lstrip("+")
-    try:
-        number = float(value)
-    except (TypeError, ValueError, OverflowError):
-        return None
-    if number != number or number in (float("inf"), float("-inf")):
-        return None
-    return max(low, min(high, int(number)))
+    """LLM の答えを low〜high の整数に均す。読めなければ None（ローダの `llm.whole`。真偽値・NaN・inf も None）。"""
+    return llm.whole(value, low, high)
 
 
 def standing_stage(score):
@@ -498,8 +491,8 @@ def town_records(area_history):
         law = row.get("lawfulness")
         records[str(town_id)] = {
             "deeds": [str(t) for t in row.get("achievements") or [] if t],
-            "days": int(days) if isinstance(days, (int, float)) and not isinstance(days, bool) else 0,
-            "law": law if isinstance(law, (int, float)) and not isinstance(law, bool) else None}
+            "days": int(days) if frames.is_number(days) else 0,
+            "law": law if frames.is_number(law) else None}
     return records
 
 
@@ -600,8 +593,7 @@ def gain_ceiling(ledger, faction_id, laws):
     """
     row = (ledger.get("standing") or {}).get(faction_id)
     towns = [t for t, r in (ledger.get("towns") or {}).items() if r.get("faction") == faction_id]
-    found = [laws[t] for t in towns if isinstance(laws, dict) and isinstance(laws.get(t), (int, float))
-             and not isinstance(laws.get(t), bool)]
+    found = [laws[t] for t in towns if isinstance(laws, dict) and frames.is_number(laws.get(t))]
     worst = min(found) if found else None
     if (isinstance(row, dict) and row.get("locked")) \
             or (worst is not None and worst <= HEAVILY_WANTED_AT):
@@ -933,7 +925,7 @@ def record_moves(ledger, moves, *, day, kind, reason="", incident=""):
 
 
 def _day(value):
-    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+    return value if frames.is_number(value) else None
 
 
 def needs_rewind(ledger, day):
@@ -1115,8 +1107,7 @@ def hunter_target_level(player_level, lawfulness, offset, per_wanted, floor_leve
     `max_above` があれば、主人公のレベル + `max_above` を超えない（土地から決まるレベルより優先する）。
     """
     # レベルは float で来ても切り捨てて使う（`area_difficulty` と揃える）。読めなければ 1
-    player = int(player_level) if isinstance(player_level, (int, float)) and not isinstance(player_level, bool) \
-        and player_level >= 1 else 1
+    player = int(player_level) if frames.is_number(player_level) and player_level >= 1 else 1
     level = player + _whole(offset)
     wanted = _whole(lawfulness)
     if wanted < 0:

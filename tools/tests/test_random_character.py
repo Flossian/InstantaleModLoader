@@ -21,7 +21,8 @@
   画面の控え 作成画面を開く・さいころ・外見の生成で世界名を控え、「続きから」で捨てる
   経路       偽の LlamaCppClient の chat に流すと user 本文に世界と作りが付き、system は変わらず、
              画面に載った後に [COST] が残る。
-             [WORLD] / [BUILD] / [SCREEN] / [SKIP] がログに残る。自己検証が通る
+             [WORLD] / [BUILD] / [SCREEN] / [SKIP] がログに残る
+  見本       以前は apply() の中の自己検証だった見本の書き換え（TECH.md §6.1）
 """
 
 import importlib.util
@@ -163,6 +164,8 @@ class FakeCtx(object):
         self.client = client
         self.out_dir = out_dir
         self.mod_dir = mod_dir
+        # 窓口に名乗る持ち主の名前（本物は apply() の間 MOD のフォルダ名）。
+        self.mod_name = os.path.basename(mod_dir) if mod_dir else None
         self.api = 1
         self.lines = []
         self.errors = []
@@ -326,6 +329,31 @@ def main():
           and mod.RULE_TRAIT in got[1] and mod.RULE_SKILL not in got[1] and "言葉を話す動物たち" in got[1], done)
     check("特質: 2度目は足さない", mod.rewrite(got, facts, plan)[0] is None)
 
+    # 以前は apply() の中の自己検証だった見本（固定の入力なのでここで確かめる。TECH.md §6.1）。
+    # 世界の名前を `world_data.name` に持つ世界・才能点の行を同じ本文に持つさいころ。
+    sample_world = {"world_data": {"name": "見本の世界", "overview": "見本の概要。",
+                                   "story": {"world_situation": "見本の情勢。"}}}
+    sample_character = ["あなたは大人向けの無骨で無慈悲なダークファンタジーRPGのキャラクター生成AIです。",
+                        "**1体のプレイヤーキャラクター**を**ランダムに**生成してください。"
+                        "- 今回利用可能な才能点：**2497**"]
+    sample_look = ["あなたはダークファンタジーRPGの管理者です。物語の主人公の外見のカテゴリと"
+                   "立ち絵の英語の画像生成プロンプトを設定してください。",
+                   "【設定】- 主人公の名前: 見本 - 外見: 見本の外見"]
+    sample_npc = ["あなたはダークファンタジーRPGのキャラクター生成AIだ。",
+                  "【生成するNPC】- 名前: 宿屋の主人"]
+    sample_facts = mod.world_facts(sample_world, situation=True)
+    sample_plan = mod.plan_build(2497, random.Random(1), 10, 150)
+    got, kind, done = mod.rewrite(sample_character, sample_facts, sample_plan)
+    check("見本: さいころに世界と作り", got is not None and kind == "character" and done == ["world", "build"]
+          and mod.HEAD in got[1] and mod.HEAD_BUILD in got[1] and got[0] == sample_character[0], got)
+    check("見本: 2度目は足さない", mod.rewrite(got, sample_facts, sample_plan)[0] is None)
+    got, kind, done = mod.rewrite(sample_look, sample_facts)
+    check("見本: 立ち絵に世界", got is not None and kind == "look" and mod.HEAD in got[1] and done == ["world"], got)
+    check("見本: NPC の頼み文は触らない", mod.rewrite(sample_npc, sample_facts)[0] is None)
+    check("見本: 作りは範囲の中で、年齢の目安は才能点の半分以下",
+          10 <= sample_plan["talent"] <= 150 and mod.AGE_MIN <= sample_plan["age"] <= mod.AGE_MAX
+          and mod.age_cost(sample_plan["age"]) <= sample_plan["talent"] * mod.AGE_SHARE, sample_plan)
+
     # -- 世界の決め方 ----------------------------------------------------------
     print("\n[世界の決め方]")
     base = tempfile.mkdtemp(prefix="random_character_")
@@ -379,8 +407,7 @@ def main():
         ctx = FakeCtx(client, out_dir, MOD_DIR)
         mod.RNG = random.Random(5)
         mod.apply(ctx)
-        check("自己検証が通る", any("self-check passed" in l for l in ctx.lines)
-              and not any("VERIFY FAILED" in l for l in ctx.lines), ctx.lines)
+        check("apply() は ERROR を書かない", not any(l.startswith("ERROR") for l in ctx.lines), ctx.lines)
         check("仕掛かった記録", any("random character: armed on" in l for l in ctx.lines), ctx.lines)
         story = mod.STORY_APP
         check("作成画面の4つと続きからを包み、絵の関数は包まない",

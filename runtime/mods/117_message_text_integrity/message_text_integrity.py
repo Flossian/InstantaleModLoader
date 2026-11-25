@@ -5,14 +5,13 @@
 表示ラベルは長すぎると何も描かれなくなる（下の `DISPLAY_CHARS`）。
 保持している本文（display_text / 履歴 / セーブ）は触らない。
 画面の `hud.text_display` だけを、省略通知付きで末尾 DISPLAY_CHARS 文字へ載せ直す。
-
-版1は「ゲームが本文を早く切るので広げる」と説明していたが、働きは逆だった
-（版2で題と説明を直した。測った値は VERIFICATION.md §3.29）。
 """
 
 import weakref
 
 from instantale_modloader import frames
+# `hud` は下で HUD の引数名に使っているので別名で読む。
+from instantale_modloader import hud as hud_window
 
 # 表示ラベルに載せる末尾の文字数。
 # 上げすぎると何も描かれなくなる。
@@ -39,12 +38,11 @@ def apply(ctx):
         try:
             state = states.get(hud)
             if state is None:
-                state = {"prefix": "", "pending": False}
+                state = {"prefix": ""}
                 states[hud] = state
             return state
         except TypeError:
-            return fallback_states.setdefault(
-                id(hud), {"prefix": "", "pending": False})
+            return fallback_states.setdefault(id(hud), {"prefix": ""})
 
     def label_for(hud):
         """載せ替えてよい表示ラベルだけを返す。
@@ -60,41 +58,6 @@ def apply(ctx):
         if not isinstance(text, str) or not callable(update):
             return None
         return label
-
-    def settle(hud, label, state):
-        """載せ替えたラベルの高さを、次のフレームで1回だけ出し直す。
-
-        本文は1文字ずつ伸びるので `limit_display` はその回数だけ呼ばれる。
-        `pending` は、同じ予約をその回数だけ積まないための旗。
-        """
-        if state["pending"]:
-            return
-
-        def run(_dt=None, hud=hud, label=label, state=state):
-            state["pending"] = False
-            try:
-                # `texture_update()` は呼ばない。
-                # これを呼ぶと、本文が1文字進むたびにラベルを余計に作り直すことになる（1回 15ms ＝ ティックの間隔の 3分の2。VERIFICATION_LOG.md
-                # §2.34）。
-                # Kivy の作り直しはこの予約より先に走るので、
-                # 高さを出す時点の `texture_size` は既に新しい。
-                update_height = frames.attr(hud, "update_label_height")
-                if callable(update_height):
-                    update_height()
-            except Exception:
-                ctx.log_exc("message text integrity: could not settle label height")
-
-        try:
-            from kivy.clock import Clock
-        except Exception:
-            run()
-            return
-        state["pending"] = True
-        try:
-            Clock.schedule_once(run, 0)
-        except Exception:
-            state["pending"] = False
-            ctx.log_exc("message text integrity: could not schedule height update")
 
     def limit_display(hud, value):
         """ラベルを「前置き + 省略通知 + 末尾 DISPLAY_CHARS 文字」へ載せ替える。
@@ -126,20 +89,23 @@ def apply(ctx):
         if bounded == shown:
             return
         label.text = bounded
-        settle(hud, label, state)
+        # 高さは次のフレームで1回だけ出し直す（本文は1文字ずつ伸び、ここはその回数だけ来る）。
+        # 予約は HUD ごとに1つにまとめ、`texture_update()` は呼ばない（ローダの hud.settle_text。
+        # 呼ぶと1文字ごとにラベルを作り直す。VERIFICATION_LOG.md §2.34）。
+        hud_window.settle_text(hud)
 
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_display_text", safe=True)
-    def update_display_text(orig, self, instance=None, value=None, *args, **kwargs):
-        # 先にゲームへ塗らせて、その後のラベルだけを載せ替える。
-        result = orig(self, instance, value, *args, **kwargs)
+    def repainted(call):
+        # 先にゲームへ塗らせて、その後のラベルだけを載せ替える（窓口 hud の後の処理。TECH.md §3.3.21）。
         # 材料はゲームが持っている本文を優先する。
         # 通知の `value` は呼び出し元によっては渡らないので、控えの方が確か。
-        canonical = frames.attr(self, "display_text")
+        canonical = frames.attr(call.obj, "display_text")
         if not isinstance(canonical, str):
-            canonical = value
+            canonical = call.value
         if isinstance(canonical, str):
-            limit_display(self, canonical)
-        return result
+            limit_display(call.obj, canonical)
+
+    hud_window.on(ctx.mod_name or "117_message_text_integrity", ctx, (hud_window.TEXT,),
+                  after=repainted)
 
     ctx.log("message text integrity installed (DISPLAY_CHARS={})".format(
         DISPLAY_CHARS))

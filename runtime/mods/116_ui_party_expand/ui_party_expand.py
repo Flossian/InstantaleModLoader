@@ -240,6 +240,8 @@ MOD 側の変数に持つと、注入し直したときに「広げた後の寸�
 import weakref
 
 from instantale_modloader import frames, ui
+# `hud` は MOD の中で HUD の部品を指す名前に使っているので、窓口は hud_window の名で引く。
+from instantale_modloader import hud as hud_window
 
 from . import button as toggle_button
 from . import panel as party_panel
@@ -333,8 +335,6 @@ OFFSTAGE = -100000.0
 # `InstantaleApp.update_party_member` が 0.1 秒ごとに入れ直している。
 # その周期をまたぐだけの間を置く。
 REFRESH_DELAY = 0.2
-
-# 塗り直しは何度も来るので、書くのは節目だけ。
 
 # ウィジェット自身に持たせる控え。
 # 注入し直しても残るので、
@@ -479,13 +479,6 @@ def apply(ctx):
         return min(total, row_limit(design)), total
 
     # -- 枠を足す -------------------------------------------------------------
-    def running_app():
-        try:
-            from kivy.app import App
-            return App.get_running_app()
-        except Exception:
-            return None
-
     def press_member(hud, cell):
         """複製した枠が押されたとき。ゲーム自身の経路に流す。
 
@@ -494,7 +487,7 @@ def apply(ctx):
         複製をその並びに追記してあるので、添字を渡すだけで、
         相手の決め方も効果音も会話の入り方もゲームのままになる。
         """
-        app = running_app()
+        app = ui.find_app()
         roster = party_panel.roster_of(hud)
         if app is not None and isinstance(roster, list) and cell in roster:
             press = frames.attr(app, "on_member_label_press")
@@ -935,7 +928,7 @@ def apply(ctx):
             setattr(box, LAYOUT_ATTR, layout)
         except Exception:
             pass
-        schedule(lambda: guarded(lambda: clamp_all(design)))
+        schedule(lambda: clamp_all(design))
         note("expanded to {} row(s) showing #{}-#{} of {} (page {}/{}), "
              "height {:.0f} (design {:.0f}, pitch {:.0f})"
              .format(visible, start + 1, start + count, total, page + 1, pages,
@@ -1125,7 +1118,7 @@ def apply(ctx):
             state["stale"] = False
             upkeep(hud)
 
-        schedule(lambda: guarded(resettled))
+        schedule(resettled)
 
     def on_window_resize(*_args):
         reference = state.get("hud")
@@ -1136,8 +1129,8 @@ def apply(ctx):
         # ここを止めておかないと、
         # 途中の（古い窓のままの）寸法を新しい設計値として控えてしまう。
         state["stale"] = True
-        schedule(lambda: guarded(lambda: rebuild(hud)))
-        schedule(lambda: guarded(lambda: upkeep(hud)), RESETTLE_DELAY)
+        schedule(lambda: rebuild(hud))
+        schedule(lambda: upkeep(hud), RESETTLE_DELAY)
 
     #: 窓の大きさが変わったら塗り直す。結ぶのは1本だけ（ローダの語彙）。
     watch_window = ui.window_watcher(ctx, on_window_resize, WINDOW_ATTR, "party expand")
@@ -1428,17 +1421,10 @@ def apply(ctx):
         upkeep(self)
         return result
 
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_display_text", safe=True)
-    def update_display_text(orig, self, instance=None, value=None, *args, **kwargs):
-        result = orig(self, instance, value, *args, **kwargs)
-        upkeep(self)
-        return result
-
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_button_texts", safe=True)
-    def update_button_texts(orig, self, instance=None, value=None, *args, **kwargs):
-        result = orig(self, instance, value, *args, **kwargs)
-        upkeep(self)
-        return result
+    # 本文と選択肢の塗り直しは、ローダの窓口 `hud` の1枚が包む（TECH.md §3.3.21）。
+    # 後始末が投げても窓口が握り、ゲームの結果はそのまま返る。
+    hud_window.on(ctx.mod_name or "116_ui_party_expand", ctx, (hud_window.TEXT, hud_window.BUTTONS),
+                  after=lambda call: upkeep(call.obj), write=note)
 
     # 仲間が増えた・減ったその場で当て直す。
     # 塗り直しを待たない。
@@ -1457,8 +1443,8 @@ def apply(ctx):
         if hud is None:
             return
         note("party {}: refreshing the panel".format(what))
-        schedule(lambda: guarded(lambda: upkeep(hud)))
-        schedule(lambda: guarded(lambda: upkeep(hud)), REFRESH_DELAY)
+        schedule(lambda: upkeep(hud))
+        schedule(lambda: upkeep(hud), REFRESH_DELAY)
 
     @ctx.wrap("__main__:InstantaleApp.add_party_member", safe=True, required=False)
     def add_party_member(orig, self, character_id, *args, **kwargs):

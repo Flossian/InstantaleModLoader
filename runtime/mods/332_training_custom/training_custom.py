@@ -8,7 +8,7 @@
 この MOD はその3つを mod.json の設定から変えられるようにする。
 既定値はすべて素のゲームの値で、そのままなら挙動は何も変わらない。
 
-変更点は4つ。
+変更点は5つ。
 
 | 何を変えるか | どこで変えるか |
 |---|---|
@@ -52,26 +52,19 @@
 
 遊び方は同じフォルダの DOC.md（`docs\\MODS.md` に綴じられる）、
 実機の記録と残りの確認は VERIFICATION.md §3.64。
-
-版15: 訓練のフック（開始と段の `__init__`・`execute`、`add_text`）は、引数を受け取った形のまま元の関数へ渡す
-（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。年数・代金・文言は来た側に合わせて差し替える
-（版14までは年数と代金を位置引数のときだけ差し替えていて、キーワード引数で来ると素通しになっていた）。
-`hasattr` を既定値付きの `getattr` に替えた（TECH.md §6）。
 """
 
-import os
 import re
 import sys
 import time
 
 from instantale_modloader import choices, durations, frames, llm, text_filters, ui
-from instantale_modloader.state import UNKNOWN_WORLD, WorldStore, world_key
+from instantale_modloader.state import WorldSettings
 
 LOG_BASENAME = "training_custom.log"
 
 #: 控えの置き場（`sys` の属性名）。注入し直しをまたいで残す。
 STATE_STORE_ATTR = "__instantale_training_custom_store__"
-SETTINGS_STORE_ATTR = "__instantale_training_custom_settings_store__"
 
 # ボタンには何も足さないが、`ui.Screen` の道具（say / apply_buttons）を使うので
 # 印のキーは他の MOD と別にして持つ（TECH.md §3.3）。
@@ -533,58 +526,25 @@ def apply(ctx):
         setattr(sys, STATE_STORE_ATTR, state)
 
     # ワールド個別の設定。控えがあればその世界を見ているあいだだけ上書きし、
-    # 無い世界では一括設定（ローダが注入した値）へ戻す。
-    settings_store = getattr(sys, SETTINGS_STORE_ATTR, None)
-    if not isinstance(settings_store, WorldStore):
-        settings_store = WorldStore(ctx, SETTINGS_DIRNAME, default=dict, write=write)
-        setattr(sys, SETTINGS_STORE_ATTR, settings_store)
-    elif settings_store is not None and callable(getattr(settings_store, "rebind", None)):
-        settings_store.rebind(ctx, write)
-    # 注入のたびにモジュールは作り直され、一括設定を注入してからここへ来る（TECH.md §3.8）。
-    # だからここで控えた値がそのまま一括設定（`sys` に固定してはいけない。
-    # 一括設定を変えて注入し直しても古い値が残る）。
-    base_settings = {name: globals()[name] for name in SETTING_NAMES}
-    active_settings = [None]    # 直前に反映した (世界, 値) の署名
+    # 無い世界では一括設定（ローダが注入した値）へ戻す（ローダの `state.WorldSettings`。TECH.md §3.12.1）。
+    # 注入のたびにモジュールは作り直され、一括設定を注入してからここへ来る（TECH.md §3.8）ので、
+    # apply() の中で作れば写した値がそのまま一括設定になる。
+    world_settings = WorldSettings(ctx, SETTINGS_DIRNAME, SETTING_NAMES, globals(), write=write)
 
     def refresh_world(app=None):
-        """現在のワールドの控えを読み直す。変わっていれば True。"""
-        current_world = UNKNOWN_WORLD
+        """現在のワールドの控えを読み直してモジュールの定数へ。変わっていれば True。"""
         if app is None:
             try:
                 app = ui.find_app()
             except Exception:
                 app = None
-        try:
-            if app is not None:
-                current_world = world_key(app)
-        except Exception:
-            pass
-        record = {}
-        if isinstance(current_world, str) and current_world != UNKNOWN_WORLD:
-            try:
-                loaded = settings_store.load(current_world, fresh=True)
-                if isinstance(loaded, dict):
-                    record = loaded
-            except Exception:
-                ctx.log_exc("training custom: cannot read world settings")
-        values = {}
-        for name in SETTING_NAMES:
-            default = base_settings[name]
-            value = record.get(name, default)
-            values[name] = value if type(value) is type(default) else default
-        signature = (current_world,
-                     tuple((name, values[name]) for name in SETTING_NAMES))
-        changed = signature != active_settings[0]
-        if changed:
-            globals().update(values)
-            active_settings[0] = signature
-        return changed
+        return world_settings.refresh(app, globals())
 
     # 起動時に現在ワールドが分かっていれば即時に反映する。
     refresh_world()
 
-    # `ctx.mod_dir` はフックの中では読めない（apply() の間だけ）ので、ここで控える。
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "training_custom"
+    # `ctx.mod_name` はフックの中では読めない（apply() の間だけ）ので、ここで控える。
+    owner = ctx.mod_name or "training_custom"
 
     def training_for(app):
         """ローダの窓口（`durations.TRAINING`）に置く答え。
@@ -765,18 +725,6 @@ def apply(ctx):
                   "({} -> {})".format(moved, want, before, after))
 
     # ============================================================ 再訓練
-    def facility_here(app):
-        """いま立っている施設の実体。読めなければ None。
-
-        立ち位置はロード直後だけ文字列で、遊んでいる最中は施設の実体（GAME.md §2.7）。
-        文字列のときは今のエリアから id で引く。
-        """
-        location = getattr(getattr(app, "player", None), "location", None)
-        if location is not None and not isinstance(location, (str, int)):
-            return location
-        facility, _node = ui.find_facility(ui.current_area(app), str(location or ""))
-        return facility
-
     def fold_trained(app):
         """訓練済みの印を**キーごと**落とす。落としたら True。
 
@@ -794,7 +742,7 @@ def apply(ctx):
         引数の形が実測どおりでも支度が飛ぶので背景の出ない画面になり、
         伏せる・払い戻すの後始末も要る。印を落とす側に寄せた（VERIFICATION.md §3.64）。
         """
-        facility = facility_here(app)
+        facility = ui.current_facility(app)     # ロード直後の施設 id の文字列も引き当てる（GAME.md §2.7）
         config = getattr(facility, "config", None)
         if not isinstance(config, dict):
             # 施設が読めない（立ち位置が引けない・config を持たない作り）。
@@ -1037,48 +985,8 @@ def apply(ctx):
     # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
     choices.provide(ctx, screen, intercept=on_button_press)
 
-    # ------------------------------------------------------------ 自己検証
-    # 実経路は訓練所で1回訓練するまで通らない。
-    # ラベルの読み書きと日数の式だけは作ったデータで先に確かめておく（`314_` と同じ方針）。
-    # 通貨の表記は `130_` が差し替えていることがあるので、
-    # 見本のほうも同じ表記へ通してから突き合わせる。
-    sample = fmt(START_BUTTON, name="訓練を受ける", price=500, years=3)
-    expected = ui.rewrite_coins("訓練を受ける(500G)")
-    survives = fmt("{name}と{typo}", name="訓練")
-    labels = (plain_name("訓練を受ける(300G)"), plain_name("ただ鍛える(1年)"),
-              plain_name("やった"))
-    years = (phase_years("ただ鍛える(1年)"), phase_years("新たな技を学ぶ(3年)"),
-             phase_years("やった"))
-    # ベース期間の表と長さの言い方。設定と無関係に確かめる（期間名を明示で渡す）。
-    periods = tuple(base_days(name) for name in
-                    ("1ヵ月", "2ヵ月", "3ヵ月", "6ヵ月", "1年", "そんな期間は無い"))
-    lengths = (length_text(365), length_text(1095), length_text(30),
-               length_text(540), length_text(7))
-    # 知らない修行内容のときに、ゲームの言う年数が倍率の代わりに立つこと。
-    fallbacks = (phase_days("no_such_activity", game_days=1095)[1],
-                 phase_days("no_such_activity", years=2)[1],
-                 factor_of("no_such_activity", 4))
-    # 文言の書き換え。**設定に関わらず成り立つこと**だけを見る（実測の文で。
-    # 設定しだいで変わる側は `tools\tests\test_training_custom.py` が見ている）。
-    #   AI の描写（文の途中の漢数字）には触らない
-    #   段の外では行頭の漢数字にも触らない
-    spoken = (reword("これからの三年間、私が責任を持ってお手伝いいたしましょう。"),
-              reword("一年間、ひたすら鍛錬した。0の経験値を得た。", "simple"))
-    if sample == expected and survives == "訓練と{typo}" \
-            and labels == ("訓練を受ける", "ただ鍛える", "やった") \
-            and years == (1, 3, None) \
-            and periods == (30, 60, 90, 180, 365, 365) \
-            and lengths == ("1年", "3年", "1ヵ月", "18ヵ月", "7日") \
-            and fallbacks == (3, 2, 4) and spoken == (None, None):
-        ctx.log("verified: reads the activity and the years, formats templates, "
-                "turns a base period into days, and leaves the game's own "
-                "wording alone")
-    else:
-        ctx.log("VERIFY FAILED: sample={!r} survives={!r} labels={!r} years={!r} "
-                "periods={!r} lengths={!r} fallbacks={!r} spoken={!r}".format(
-                    sample, survives, labels, years, periods, lengths, fallbacks,
-                    spoken), level="ERROR")
-
+    # ラベルの読み書き・日数の式・文言の書き換えの確かめは固定の入力なので、注入のたびではなく
+    # tools/tests/test_training_custom.py で行う（TECH.md §6.1）。ここには効いている設定だけを残す。
     ctx.log("training custom: price={} course={}y base={}({}d) factors={} "
             "log={}".format(
                 TRAINING_PRICE, COURSE_YEARS, BASE_PERIOD, base_days(),

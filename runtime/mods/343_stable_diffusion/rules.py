@@ -103,10 +103,42 @@ def rules_path(state_dir):
     return os.path.join(state_dir, STATE_DIRNAME, RULES_NAME)
 
 
+def json_unreadable(path):
+    """そのファイルが在るのに辞書として読めないか（一時的なロック・破損）。無ければ False。
+
+    道具画面の `modtool.json_unreadable` と同じ判定（このモジュールはゲームの中でも読まれるので写す）。
+    読めないファイルを空として見せた後にそれを土台に書き戻すと、在った分が消える。書く前にこれで確かめる。
+    """
+    if not os.path.exists(path):
+        return False
+    try:
+        with io.open(path, encoding="utf-8-sig") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return True
+    return not isinstance(data, dict)
+
+
+def write_json(path, data):
+    """JSON を隣の一時ファイルに書いてから差し替える。書けたか。
+
+    書き方はローダの `write_json`（一時ファイルの名前を毎回変える・fsync・差し替えのやり直し）。
+    このモジュールは道具画面からも読まれ、ローダを引けないことがあるので、そのときは
+    `modtool.write_json`（同じ手順の再実装を持つ）に任せる。どちらも失敗は記録せず False を返す
+    （呼び側が画面に出す）。
+    """
+    try:
+        from instantale_modloader import write_json as loader_write_json
+    except ImportError:
+        import modtool
+        return bool(modtool.write_json(os.environ.get("IML_ROOT") or "", path, data))
+    return bool(loader_write_json(path, data, report=lambda _text: None))
+
+
 def load(state_dir):
     """規則を読む。無い・壊れているなら空（＝何もしない）。"""
     try:
-        with io.open(rules_path(state_dir), encoding="utf-8") as fh:
+        with io.open(rules_path(state_dir), encoding="utf-8-sig") as fh:
             data = json.load(fh)
     except Exception:
         return empty()
@@ -121,17 +153,11 @@ def load(state_dir):
 
 
 def save(state_dir, data):
-    """規則を書く。書けたかを返す（呼び側が画面に出す）。"""
+    """規則を書く。書けたかを返す（呼び側が画面に出す）。在るのに読めないファイルは上書きしない。"""
     path = rules_path(state_dir)
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp = path + ".tmp"
-        with io.open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-            fh.write(json.dumps(data, ensure_ascii=False, indent=1))
-        os.replace(tmp, path)
-        return True
-    except Exception:
+    if json_unreadable(path):
         return False
+    return write_json(path, data)
 
 
 #: 「種類で絞らない」を表す番人。`kind=None` は**種類が分からない**の意味で、

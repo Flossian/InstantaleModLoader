@@ -16,19 +16,14 @@ import time
 from typing import List
 
 from instantale_modloader import frames, imagegen, jobs, llm, state, ui
+# MOD の中に hud という名前の引数が多いので、窓口のモジュールは別名で持つ。
+from instantale_modloader import hud as hud_window
 
 
 CREATE_LOOK_MODULE = "scripts.llm.llm_manager_character_create"
-# ゲームの送り口。`create_look` が呼ぶ。ゲーム側の `timeout` の既定は無期限なので（GAME.md §2.12）、
-# 外見を作らせている間だけ時間切れを付ける（`336_` の盗みの稼ぎと同じく、後から生える別名を見張って包む）。
-SEND_TARGET = "scripts.llm.llm_manager:send_request"
-# `create_look` は `llm_manager_character_create` の送り口から送る。main_026 から部品ごとに別の関数になり、
-# `llm_manager` だけを包む形では届かなくなった（VERIFICATION.md §3.100）。同じ関数なら二重には包まない（llm.watch_aliases）。
-SEND_TARGETS = (SEND_TARGET, CREATE_LOOK_MODULE + ":send_request")
 #: 外見を作らせる1回の待ちの目安（秒）。過ぎたらログに出し、返事が来るまで待つ（打ち切らない。遅い環境で毎回取りやめないため）。
+#: ゲームの送り口には `timeout` を渡さない。打ち切らない方針（VERIFICATION.md §3.101）なので、守るプロバイダで打ち切られないようにする。
 LOOK_TIMEOUT = 120.0
-# いま外見を作らせているスレッドの印（`_player_look` が立て、送り口の包みが読む）。
-_LOOK_CALL = threading.local()
 STORE_ATTR = "_instantale_335_player_portrait_store"
 WORKER_ATTR = "_instantale_335_player_portrait_worker"
 RUNTIME_ATTR = "_instantale_335_player_portrait_runtime"
@@ -37,8 +32,6 @@ LOG_BASENAME = "player_portrait.log"
 
 # 人物の絵を描く関数は画像生成の方式ごとに別のモジュールに居るが、どの方式かはローダの
 # `imagegen` が吸収する（GAME.md §2.33）。
-FAMILIES = imagegen.FAMILIES
-MODULE_FORMAT = imagegen.CREATURE_FORMAT
 FUNC = "generate_character_image"
 
 # SD1.5 へ渡す1要素の形。英小文字・数字・空白・ハイフン・アポストロフィだけ。
@@ -131,13 +124,8 @@ def _worker(ctx, run, write, done):
 
 
 def _runtime():
-    """生成中の本数と、描き直しの最中か。プロセス中だけ持つ。"""
-    found = getattr(sys, RUNTIME_ATTR, None)
-    if isinstance(found, dict) and "inflight" in found:
-        return found
-    found = {"lock": threading.Lock(), "inflight": 0, "busy": False}
-    setattr(sys, RUNTIME_ATTR, found)
-    return found
+    """生成中の本数と、描き直しの最中か。プロセス中だけ持つ（`sys` の入れ物。注入し直しをまたぐ）。"""
+    return state.process_store(RUNTIME_ATTR, {"lock": threading.Lock(), "inflight": 0, "busy": False})
 
 
 class _InFlight(object):
@@ -167,11 +155,8 @@ def _wait_idle(runtime, timeout=IDLE_WAIT, poll=IDLE_POLL):
     return True
 
 
-def _value(obj, name, default=None):
-    if isinstance(obj, dict):
-        return obj.get(name, default)
-    value = frames.attr(obj, name, default)
-    return default if value is frames.MISSING else value
+#: 辞書でも属性でも1項目を読む（読めない番人は default に戻す）。
+_value = frames.field
 
 
 def _text(obj, name):
@@ -183,18 +168,10 @@ def _text(obj, name):
 config_backend = imagegen.backend
 
 
-def module_names(backend):
-    """人物の絵を描くモジュールの名前。方式が分からなければ4つとも。"""
-    return imagegen.creature_modules(backend)
-
-
-def _generator(names):
+def _generator(backend):
     """読み込まれている方の描く関数（ローダの包みが付いたもの）。無ければ None。"""
-    for name in names:
-        found = getattr(sys.modules.get(name), FUNC, None)
-        if callable(found):
-            return found
-    return None
+    found = getattr(imagegen.creature_module(backend), FUNC, None)
+    return found if callable(found) else None
 
 
 def _sd_item(value):
@@ -359,14 +336,11 @@ def _make_look(write, player, desc, ask):
     box = {}
 
     def call():
-        _LOOK_CALL.active = True
         try:
             box["got"] = create(_text(player, "name"), _gender_of(player),
                                 _text(player, "profile"), desc)
         except Exception as exc:
             box["exc"] = exc
-        finally:
-            _LOOK_CALL.active = False
 
     caller = threading.Thread(target=call, name="335_create_look", daemon=True)
     caller.start()
@@ -444,27 +418,13 @@ def apply(ctx):
     # 注入し直したら下ろす。立ったままだとボタンが隠れて押せなくなる。
     # 走っている1件は付け替えた on_done で終わり、同じ仕事は Worker の鍵で二重に積まれない。
     runtime["busy"] = False
-    names = module_names(config_backend())
+    backend = config_backend()
 
-    def count_inflight(target):
-        @ctx.wrap(target, required=False, safe=True)
-        def generate_character_image(orig, *args, **kwargs):
-            # 他の立ち絵（会話を始めたときの NPC など）と同時に描かないための数え。
-            with _InFlight(runtime):
-                return orig(*args, **kwargs)
-
-    for name in names:
-        count_inflight("{}:{}".format(name, FUNC))
-
-    def install_send(target):
-        @ctx.wrap(target, required=False, safe=True)
-        def send_request(orig, *args, **kwargs):
-            if getattr(_LOOK_CALL, "active", False) and frames.arg(args, kwargs, "timeout", 5) is None:
-                args, kwargs, _done = frames.replace_arg(args, kwargs, "timeout", 5, LOOK_TIMEOUT,
-                                                         insert=True)
+    @imagegen.wrap_creature(ctx, FUNC, name=backend, required=False, safe=True)
+    def generate_character_image(orig, *args, **kwargs):
+        # 他の立ち絵（会話を始めたときの NPC など）と同時に描かないための数え。
+        with _InFlight(runtime):
             return orig(*args, **kwargs)
-
-    llm.watch_aliases(ctx, list(SEND_TARGETS), install_send, label="player portrait")
 
     def finish_job(job):
         app = job.get("app") if isinstance(job, dict) else None
@@ -485,7 +445,7 @@ def apply(ctx):
         player = _value(app, "player")
         if app is None or player is None:
             return
-        generator = _generator(names)
+        generator = _generator(backend)
         if generator is None:
             write("skipped: image module unavailable")
             return
@@ -669,15 +629,15 @@ def apply(ctx):
         repaint()
         return button
 
-    @ctx.wrap(
-        "scripts.hud.new_hud:InstanTaleHUD.toggle_character_sheet_visibility",
-        required=False, safe=True)
-    def character_sheet(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
-        close_menu(self)                     # 人物欄を開け閉めしたら一覧は閉じる
-        button = ensure_button(self)
+    def character_sheet(call):
+        """人物欄を開け閉めした後（窓口 `hud` の `SHEET` の after。TECH.md §3.3.21）。HUD は `call.obj`。"""
+        sheet_hud = call.obj
+        close_menu(sheet_hud)                # 人物欄を開け閉めしたら一覧は閉じる
+        button = ensure_button(sheet_hud)
         if button is not None:
-            place_button(self, button)
-        return result
+            place_button(sheet_hud, button)
 
-    ctx.log("player portrait: installed ({})".format(", ".join(names)))
+    hud_window.on(ctx.mod_name or "335_player_portrait_regenerate", ctx, (hud_window.SHEET,),
+                  after=character_sheet, write=write)
+
+    ctx.log("player portrait: installed ({})".format(", ".join(imagegen.creature_modules(backend))))

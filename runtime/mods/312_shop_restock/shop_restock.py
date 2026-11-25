@@ -17,7 +17,8 @@ obtainer が主の Character）。
 品物をこちらで作らない。
 アイテムの値付け（`set_shop_price_for_owner` /
 `normalize_shop_inventory_prices`）も、
-世界データからの選び方（`set_item_from_world_data(shop_owner_instance, next_tier)`）も、
+品の作り方（雛形を持つ店は `set_item_from_world_data(shop_owner_instance, next_tier)`、
+それ以外は `generate_item_in_shopping`。GAME.md §2.13.1.2）も、
 難度に応じた段（tier）の決め方も、全部ゲームが持っている。
 こちらが写し取って再現すれば、その瞬間からゲームの更新に付いていけなくなる。
 
@@ -53,7 +54,7 @@ obtainer が主の Character）。
 新しい品名はローダの LLM 経路（`llm.ask` + `create_structure`。`405_` と同じ口）で作る。
 ゲーム自身の生成関数（`shop_item_generator_ordinary` など）は使わない。
 引数の形が読めず、店を開いても呼ばれないので、それを待つと入れ替えが止まる
-（版3で一度そうなった）。
+（VERIFICATION.md §3.16）。
 
 頼み文は場所（世界名・土地・施設の名前と説明）と、雛形の各品の `value`
 （世界を作ったときの価値段階）、`item_type` / `item_sub_type` の語彙、前の品名（重複禁止）。
@@ -70,8 +71,7 @@ LLM が返らない・読めないときは `WARN new stock:` を書いて、雛
 ゲームが埋め直すのは雛形のうち装備以外だけで、
 `weapon` / `wearable` は作らない（GAME.md §2.13.1.3）。
 空にしたままにすると、入れ替えのたびに店から装備が消え、
-通うほど回復アイテムだけの店になる
-（実測: 雛形8件の店が入れ替え後4件、雛形10件の店が3件）。
+通うほど回復アイテムだけの店になる（VERIFICATION.md §3.16）。
 
 そこで補充の結果を見たあと、**雛形にあるのに戻ってこなかった品**を
 ゲームの生成で作り直す（`InstantaleApp.generate_item_from_dict(item_dict, item_id, obtainer)`。
@@ -93,13 +93,6 @@ id は採番台帳から採る（`ids.claim`）。
 
 **ゲームは店を開くたびに、売れた品を作り直して棚へ戻す**
 （`227_probe_shop_stock` で実測。GAME.md §2.13.1.3）。
-
-```
-15:58:18 買 ハルマンの予備のランプ (utility/tool)
-15:58:27 開き直し → 品の誕生: id=59 'ハルマンの予備のランプ' 主=ハルマン(118)
-         呼び出し元: ShoppingStartManagerRemake.shopping_start_method_1
-                     (instantale.py:3159) <- .execute (instantale.py:3281)
-```
 
 作っているのはゲーム自身で、採番もゲームの台帳（`index['item']`）。
 元にするのは施設の品揃えの雛形（`Facility.config['goods']`）で、
@@ -170,15 +163,13 @@ id は採番台帳から採る（`ids.claim`）。
 控えをその日に付け直して入れ替えない（次の来店から数え直す）。
 控えより先に進んだ日数だけで判断するので、
 複数の世界・複数のセーブを行き来しても混ざらない（周回ごとにファイルを分けてある）。
-
-版9: `toggle_twin_inventory_window` と `set_item_from_world_data` のフックは、引数を受け取った形のまま元の関数へ渡す
-（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 """
 
 import sys
 import typing
 
-from instantale_modloader import frames, ids, items, llm, shop_lineup, ui, value_limits
+from instantale_modloader import (frames, ids, items, llm, shop_lineup, shopping, twin_windows, ui,
+                                  value_limits)
 from instantale_modloader.state import WorldStore
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
@@ -202,7 +193,7 @@ NEW_STOCK_MAX = 12
 # スキーマと同じ組（`output_data` の実記録）。`generate_item_from_item_data` はこの語彙を受けて
 # `item_detail` に直す（武器は `small` -> `small_weapon`、薬草は `herb` -> `plant`）。
 # 品の `item_detail`（`small_weapon`）を渡すと `small_weapon_weapon` になり、
-# 画像の埋め込み `Data/item_embeddings/<item_detail>.json` が見つからずに落ちる（版2まで。武器が1本も入らなかった）。
+# 画像の埋め込み `Data/item_embeddings/<item_detail>.json` が見つからずに落ちる（VERIFICATION.md §3.76）。
 # LLM にはこの組から選ばせ、外れたら先頭の細分に寄せる。
 ITEM_TYPES = {
     "weapon": ("small", "medium", "large", "long", "throwable"),
@@ -215,12 +206,12 @@ ITEM_TYPES = {
                  "plant", "mushroom", "relic", "scrap", "magical_material",
                  "other_material"),
 }
-RARITIES = ("common", "rare", "magical", "epic", "legendary", "mythic")
-#: 頼みに書く価値の目盛りの上限。ゲームの難易度の上限（`QUEST_DIFFICULTY_VALUE_MAX`）と同じ 76。
-#: ゲームの頼みは「最高が70」と書くが、雛形の価値は終盤の街で 76 まで出る。
-#: 返ってきた価値を切る上限は窓口 `value_limits` から引く（素は 76。76 を超えた価値はゲームが値段と強さを
-#: 76 の値で止める。VERIFICATION.md §3.112。`923_beyond_76` が入っていれば 100。TECH.md §3.3.26）。
-VALUE_MAX = 76
+#: レア度の6段（GAME.md §2.13.2）。ゲームのスキーマの定数なので、ローダの `items.RARITIES` を使う。
+RARITIES = items.RARITIES
+# 頼みに書く価値の目盛りの上限は、ゲームの難易度の上限（`QUEST_DIFFICULTY_VALUE_MAX`。素は 76）を
+# `value_limits.game_max()` で引く。ゲームの頼みは「最高が70」と書くが、雛形の価値は終盤の街で 76 まで出る。
+# 返ってきた価値を切る上限は窓口 `value_limits.value_max()` から引く（76 を超えた価値はゲームが値段と強さを
+# 76 の値で止める。VERIFICATION.md §3.112。`923_beyond_76` が入っていれば 100。TECH.md §3.3.26）。
 
 # 店の種類ごとの品揃えの傾向（`340_shop_lineup` がローダの窓口 `shop_lineup` に出す一文）。
 # 誰も口を出さなければ、ゲームのプロンプトと同じく武器と防具を含めさせる。
@@ -302,33 +293,13 @@ def apply(ctx):
         app = getattr(manager, "app", None)
         return app if app is not None else ui.find_app()
 
-    def inventory_of(character):
-        """持ち物の実体（`{item_id: アイテム}`）。毎回引き直すこと。
+    # 持ち物の実体（`{item_id: アイテム}`）はローダの `items.inventory_of` で読む。毎回引き直すこと。
+    # ゲームが新しい辞書を割り当て直す作りだった場合、
+    # 掴んだままの参照は古い辞書を指す（空にしたはずが元の辞書、という壊れ方になる）。
+    inventory_of = items.inventory_of
 
-        ゲームが新しい辞書を割り当て直す作りだった場合、
-        掴んだままの参照は古い辞書を指す（空にしたはずが元の辞書、
-        という壊れ方になる）。
-        """
-        if character is None:
-            return None
-        inventory = getattr(character, "inventory", None)
-        if isinstance(inventory, dict):
-            return inventory
-        inner = getattr(inventory, "inventory", None)
-        if isinstance(inner, dict):
-            return inner
-        return None
-
-    def shop_owner(app):
-        """今の施設の主を (id, Character) で返す。引けなければ (None, None)。"""
-        facility = ui.current_facility(app)
-        if facility is None:
-            return None, None
-        owner = getattr(facility, "owner", None)
-        if owner is None:
-            return None, None
-        owner_id = str(owner)
-        return owner_id, ui.character_of(app, owner_id)
+    # 今の施設の主を (id, Character) で返す（引けなければ人物は None）。ローダの `ui.facility_owner`。
+    shop_owner = ui.facility_owner
 
     def label(app, owner_id, facility):
         return "{}({}) @ {}".format(
@@ -349,8 +320,6 @@ def apply(ctx):
         store["fresh"] = True
         app = app_of(manager)
         if app is None:
-            return
-        if RESTOCK_DAYS <= 0:
             return
 
         facility = ui.current_facility(app)
@@ -586,8 +555,7 @@ def apply(ctx):
 
         ゲームは空にした店を埋め直すとき、**装備（`weapon` / `wearable`）を作らない**
         （GAME.md §2.13.1.3）。放っておくと入れ替えのたびに店から装備が消え、
-        通うほど回復アイテムだけの店になる（実測: 雛形8件の店が入れ替え後4件、
-        雛形10件の店が3件）。
+        通うほど回復アイテムだけの店になる（モジュール冒頭の説明）。
 
         埋めるのは**雛形にある品**だけ。プレイヤーが売った品は雛形に無いので、
         今までどおり入れ替えで流れる（この MOD の元の目的）。
@@ -690,7 +658,7 @@ def apply(ctx):
             kind=frames.attr(facility, "facility_type", ""),
             shop_desc=frames.short(frames.attr(facility, "description", "") or "", None),
             types=types, values=values, rarities="/".join(RARITIES),
-            max=VALUE_MAX,
+            max=value_limits.game_max(),
             old="、".join(old_names) or "無し")
         return [{"role": "system", "content": text},
                 {"role": "user", "content": "＜入れ替え＞"}]
@@ -873,11 +841,15 @@ def apply(ctx):
             ctx.log_exc("shop restock: set_item_from_world_data failed")
             return False
 
-    # ------------------------------------------------------------ フック
-    @ctx.wrap("__main__:ShoppingStartManagerRemake.execute", safe=True)
-    def shopping_start(orig, self, *args, **kwargs):
+    # ------------------------------------------------------------ 窓口への登録
+    # 包むのはローダの窓口（売買の始まりと棚の並べ方は `shopping`、売買画面は `twin_windows`）で、
+    # こちらは前後の処理だけを預ける（TECH.md §3.3.21）。
+    owner_name = ctx.mod_name or "312_shop_restock"
+
+    def shopping_before(call):
+        """売買を押した直後（ワーカースレッド。`orig` の前）。入れ替えと品揃えの生成はここで済ませる。"""
         try:
-            prepare(self)
+            prepare(call.obj)
         except Exception:
             ctx.log_exc("shop restock: prepare failed")
             store["pending"] = None
@@ -887,7 +859,7 @@ def apply(ctx):
         store["held"] = None
         if store["pending"] is None:
             try:
-                store["held"] = held_keys(self)
+                store["held"] = held_keys(call.obj)
             except Exception:
                 ctx.log_exc("shop restock: cannot read the stock before opening")
         elif NEW_STOCK:
@@ -897,57 +869,53 @@ def apply(ctx):
             try:
                 if generate_lineup(store["pending"]) > 0:
                     store["pending"]["generated"] = True
-                    store["held"] = held_keys(self, always=True)
+                    store["held"] = held_keys(call.obj, always=True)
             except Exception:
                 ctx.log_exc("shop restock: cannot generate the new stock")
         # 控えを外すのは `before_window`（画面を開く側）。
         # ここ（別スレッド）で外すと、メインスレッドが持ち物の辞書を
         # 回している最中に鍵が消えてゲームごと落ちる（モジュール冒頭の説明）。
-        # 決着は `finally` で付ける。
-        # `orig` が投げた場合、`safe=True` は素の動作に落としてくれるが、
-        # **この後ろの行は実行されない**。空にした店の控えが更新されないまま残り、
-        # 次の来店でもまた空にすることになる（毎回まっさらな店になる）。
-        # 空にしたのは `orig` の手前なので、後始末も投げ方に関わらず要る。
-        try:
-            return orig(self, *args, **kwargs)
-        finally:
-            pending = store["pending"]
-            store["pending"] = None
-            if pending is not None:
-                # Clock が使えない場面で予約が取れないときはその場で決着させる。
-                if not screen.schedule(lambda: verify(pending), VERIFY_DELAY):
-                    screen.guarded(lambda: verify(pending))
 
-    @ctx.wrap("__main__:InstantaleApp.toggle_twin_inventory_window",
-              required=False, safe=True)
-    def before_window(orig, self, *args, **kwargs):
+    def shopping_after(call):
+        """売買の始まりの `orig` の後。`always=True` で、`orig` が投げても来る。
+
+        空にしたのは `orig` の手前なので、決着も投げ方に関わらず要る。
+        付けないと、空にした店の控えが更新されないまま残り、
+        次の来店でもまた空にすることになる（毎回まっさらな店になる）。
+        """
+        pending = store["pending"]
+        store["pending"] = None
+        if pending is not None:
+            # Clock が使えない場面で予約が取れないときはその場で決着させる。
+            if not screen.schedule(lambda: verify(pending), VERIFY_DELAY):
+                screen.guarded(lambda: verify(pending))
+
+    def before_window(call):
         """売買画面が組み上がる手前で、その来店で増えたぶんを外す。
 
         ここはメインスレッドで、ゲームが持ち物の辞書を回すより前。
         控えは主が一致したときだけ使う（`402_` の受け渡しの窓は素通し）。
         """
         held = store.get("held")
-        if held is not None:
-            left_inventory_obtainer = frames.arg(args, kwargs, "left_inventory_obtainer", 0)
-            owner = held["owner"]
-            same = (left_inventory_obtainer is owner
-                    or (owner is not None and str(getattr(
-                        left_inventory_obtainer, "id", None)) == held["owner_id"]))
-            if same:
-                store["held"] = None
-                try:
-                    drop_refilled(held)
-                except Exception:
-                    ctx.log_exc("shop restock: cannot drop the refilled stock")
-        return orig(self, *args, **kwargs)
+        if held is None:
+            return
+        left = call.left
+        owner = held["owner"]
+        same = (left is owner
+                or (owner is not None and str(getattr(left, "id", None)) == held["owner_id"]))
+        if same:
+            store["held"] = None
+            try:
+                drop_refilled(held)
+            except Exception:
+                ctx.log_exc("shop restock: cannot drop the refilled stock")
 
-    @ctx.wrap("__main__:ShoppingStartManagerRemake.set_item_from_world_data",
-              required=False, safe=True)
-    def observe_tier(orig, self, *args, **kwargs):
+    def observe_tier(call):
+        """ゲームが雛形から棚を並べるときの段(tier)を、主ごとに控える（空のままの店を自分で埋めるため）。"""
+        # 失敗は自分で握る（関所に任せると記録の文面が変わり、こちらのログに WARN の行が増える）
         try:
-            shop_owner_instance = frames.arg(args, kwargs, "shop_owner_instance", 0)
-            next_tier = frames.arg(args, kwargs, "next_tier", 1)
-            owner_id = getattr(shop_owner_instance, "id", None)
+            owner_id = getattr(call.owner, "id", None)
+            next_tier = call.tier
             if owner_id is not None and isinstance(next_tier, (int, float, str)):
                 known = store["tiers"].get(str(owner_id))
                 store["tiers"][str(owner_id)] = next_tier
@@ -955,7 +923,11 @@ def apply(ctx):
                     write("tier: owner={} tier={!r}".format(owner_id, next_tier))
         except Exception:
             ctx.log_exc("shop restock: cannot record the stock tier")
-        return orig(self, *args, **kwargs)
+
+    shopping.on(owner_name, ctx, (shopping.ENTER,), before=shopping_before,
+                after=shopping_after, always=True, write=write)
+    shopping.on(owner_name, ctx, (shopping.LAY,), before=observe_tier, write=write)
+    twin_windows.on(owner_name, ctx, (twin_windows.OPEN,), before=before_window, write=write)
 
     ctx.log("shop restock: every {} in-game day(s), keep_sold_out={}, "
             "new_stock={}; log goes to out/{}".format(

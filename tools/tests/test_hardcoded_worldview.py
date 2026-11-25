@@ -21,7 +21,8 @@
   絵         前置きから medieval / dark fantasy / shabby / fantasy setting、否定から modern / urban を抜く。
              書き方と別の語（medieval fantasy cloak）は残す。prompts.json も直す
   経路       偽の LlamaCppClient の chat に流すと system の役の一文が直り世界が付く。
-             絵の関数へ渡る前置きと否定が直る。[TEXT] / [IMAGE] がログに残る。自己検証が通る
+             絵の関数へ渡る前置きと否定が直る。[TEXT] / [IMAGE] がログに残る
+  自己検証の移し 前は注入のたびに走らせていた固定の見本の確かめ（語り・町・会話・世界なし・前置き）
 """
 
 import importlib.util
@@ -385,6 +386,41 @@ def main():
     finally:
         shutil.rmtree(base, ignore_errors=True)
 
+    # -- 自己検証の移し ------------------------------------------------------------
+    # 前は apply() が注入のたびに同じ固定の入力で確かめていた（TECH.md §6.1）。
+    print("\n[自己検証の移し]")
+    sample_world = {"world_data": {"name": "見本の世界", "overview": "見本の概要。"}}
+    sample_narrator = ["あなたはダークファンタジーTRPGのゲームマスターである。文体は常体。", "【ログ】"]
+    sample_town = ["あなたはダークファンタジーRPGのワールドマップジェネレーターです。",
+                   "【共通世界観】- 冒険者: この世界にはギルドとそれに属する職業冒険者たちがいるが、"
+                   "夢のある仕事ではない。- エリア: 世界はいくつかのエリアに分かれている。\n"
+                   "【世界のデータ】\n- 世界の概要: 見本"]
+    sample_talk = ["ロールプレイとして振舞ってください。" + mod.TONE_FROM,
+                   "【世界の情報】\n- 世界の概要: 見本\n- ダークファンタジーであるため、窃盗は許可する。"]
+    sample_no_world = ["あなたはダークファンタジーRPGの世界そのものを生成する担当です。\n面白そうな世界の概要を生成してください。",
+                       "【共通世界観】- 冒険者: この世界にはギルドとそれに属する職業冒険者たちがいるが、夢のある仕事ではない。"]
+    got, done = mod.rewrite(sample_narrator, sample_world)
+    check("見本の語り: 役が外れて世界が付き、後ろの文は変わらない",
+          got is not None and done == ["role", "world"] and got[0].startswith("あなたはTRPGのゲームマスター")
+          and "見本の概要。" in got[0] and got[1] == sample_narrator[1], (got, done))
+    check("見本の語り: 2度目は何もしない", got is not None and mod.rewrite(got, sample_world)[0] is None)
+    got, done = mod.rewrite(sample_town, sample_world)
+    check("見本の町: 役と共通世界観だけ直り、世界は足さない",
+          got is not None and done == ["role", "common"] and "夢のある" not in got[1]
+          and "- エリア:" in got[1] and mod.HEAD_WORLD not in got[0], (got, done))
+    got, done = mod.rewrite(sample_talk, sample_world)
+    check("見本の会話: 調子と許可の理由が直る",
+          got is not None and done == ["tone", "policy"] and "ダークファンタジー" not in "".join(got), (got, done))
+    check("見本の世界の生成（世界なし）は書き換えない", mod.rewrite(sample_no_world, sample_world)[0] is None)
+    check("世界が読めなければジャンルを外さない", mod.rewrite(sample_narrator, None)[0] is None)
+    check("見本の前置き", mod.drop_tokens(
+        "full-body, masterpiece,high quality, detailed face, medieval, dark fantasy, "
+        "watercolor, standing,shabby, young man, medieval fantasy cloak", mod.POSITIVE_DROP)
+        == "full-body, masterpiece,high quality, detailed face, watercolor, standing, young man, medieval fantasy cloak")
+    check("clip: 文字列でなければ空・limit なしは改行を残す・limit ありは畳んで切る",
+          mod.clip(None) == "" and mod.clip(12, 5) == "" and mod.clip(" a\nb ") == "a\nb"
+          and mod.clip("a\n b  c", 3) == "a b…" and mod.clip("a\nb", 10) == "a b")
+
     # -- 経路 --------------------------------------------------------------------
     print("\n[経路]")
     out_dir = tempfile.mkdtemp(prefix="hardcoded_worldview_out_")
@@ -425,8 +461,8 @@ def main():
         check("  読み込まれる前の方式はローダの保留に任せて包む",
               mod.imagegen.CREATURE_FORMAT.format("diffusers_openvino") + ":generate_upscaled_image_anime"
               in ctx.hooks)
-        check("自己検証が通る", any("self-check passed" in l for l in ctx.lines)
-              and not any("VERIFY FAILED" in l for l in ctx.lines), ctx.lines)
+        check("注入時の自己検証は無い（固定の入力の確かめは [自己検証の移し] にある）",
+              not any("self-check" in l or "VERIFY FAILED" in l for l in ctx.lines), ctx.lines)
         check("仕掛かった記録", any("hardcoded worldview: armed on" in l for l in ctx.lines), ctx.lines)
         creature = mod.imagegen.CREATURE_FORMAT.format("diffusers_openvino")
         background = mod.BACKGROUND_MODULE.format("sdcppvulkan")

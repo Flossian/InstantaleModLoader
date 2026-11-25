@@ -36,7 +36,6 @@ import hashlib
 # ---------------------------------------------------------------- 規模
 SIZES = ("village", "town", "city")
 SIZE_LABEL = {"village": "村", "town": "町", "city": "都市"}
-SIZE_ALIAS = {"dungeons": "dungeon"}
 #: 費用に掛ける。
 SIZE_COST = {"village": 0.6, "town": 1.0, "city": 1.8}
 #: 売上に掛ける。
@@ -271,7 +270,7 @@ def normalize_size(value):
     """`area["size"]` を街の規模に均す。街でなければ None。"""
     if not isinstance(value, str) or not value:
         return None
-    size = SIZE_ALIAS.get(value.strip().lower(), value.strip().lower())
+    size = value.strip().lower()
     return size if size in SIZES else None
 
 
@@ -341,11 +340,10 @@ def income_per_day(kind, tier, size, scale=100, base=None):
 
 
 def facility_name(kind, tier, area_name, seed, taken=()):
-    """施設の名前を表から1つ。`taken` に在る名前は飛ばす（版37）。
+    """施設の名前を表から1つ。`taken` に在る名前は飛ばす。
 
     **同じ鍵と同じ `taken` からは同じ名前**（建て直しても変わらない）。
-    鍵だけで選んでいた頃は、別の世界でも同じ土地の同じ番号なら同じ名前になった
-    （実機。`3-1` がどちらも「七宝の間」）。
+    鍵だけで選ぶと、別の世界でも同じ土地の同じ番号なら同じ名前になる。
     候補を全部使っていたら、鍵の名前に土地の名を冠して分ける。
     """
     spec = kind_of(kind)
@@ -478,7 +476,7 @@ KEEPER_ASK = (
 
 #: 既にこの世界に居る主人の名前を避けさせる一文。
 KEEPER_AVOID = "- 次の名前は既にこの世界の主人が使っている。避けること: {names}\n"
-#: 既にこの世界に在る施設の名前を避けさせる一文（版37）。
+#: 既にこの世界に在る施設の名前を避けさせる一文。
 PLACE_AVOID = "- 次の名前は既にこの世界の施設が使っている。避けること: {names}\n"
 
 

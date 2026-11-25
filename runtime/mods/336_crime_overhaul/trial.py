@@ -9,6 +9,8 @@
 import math
 import re
 
+from instantale_modloader import frames
+
 from . import rules
 
 #: 裁判の画面・判決の画面の目印（ボタンが呼ぶクラス）。
@@ -113,7 +115,7 @@ def verdict_of(buttons, spec_name, spec_args):
         if name == PRISON_SPEC:
             args = spec_args(entry) or []
             years = args[0] if args else None
-            if isinstance(years, (int, float)) and not isinstance(years, bool):
+            if frames.is_number(years):
                 return "imprisonment", int(years)
     return None
 
@@ -126,7 +128,7 @@ def requested_years(sought):
     """検察の求刑の年数。死刑の求刑・読めなければ None。"""
     request = (sought or {}).get("sentencing_request") if isinstance(sought, dict) else None
     years = request.get("years") if isinstance(request, dict) else None
-    if isinstance(years, (int, float)) and not isinstance(years, bool) and years > 0:
+    if frames.is_number(years) and years > 0:
         return int(years)
     return None
 

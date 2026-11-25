@@ -18,17 +18,15 @@
     → 撤退（`QuestRetireManager`）: 処刑（`ExecutionPhaseManager`）
 控えは `state\\crime_overhaul\\<世界×主人公>.json` の `rescue`（依頼の id・土地・手引きした人）。終われば消す。
 """
-import sys
-
-from instantale_modloader import choices, npcs, quest_ends, quest_generation, ui
+from instantale_modloader import choices, frames, modnpc, npcs, quest_ends, quest_generation, ui, value_limits
 
 from . import common, underworld
 
 DEATH_SPEC = "ExecutionPhaseManager"
-#: MOD の人物の id の頭。パーティに入れられないので手引き役に選ばない。
-MOD_NPC_PREFIX = "mod:"
-#: ゲームの依頼の難易度の上限（`scripts.functions.QUEST_DIFFICULTY_VALUE_MAX`）が引けないときの値（`318_` と同じ）。
-DIFFICULTY_MAX = 76
+#: MOD の人物（`modnpc.is_mod_npc`）はパーティに入れられないので手引き役に選ばない。
+#: ゲームの依頼の難易度の上限（`scripts.functions.QUEST_DIFFICULTY_VALUE_MAX`）が引けないときの値（`318_` と同じ。
+#: ローダの `value_limits.GAME_MAX`）。
+DIFFICULTY_MAX = value_limits.GAME_MAX
 JOIN_TEXT = "{name}が駆け付け、行動を共にする。"
 QUEST_START_SPEC = "QuestStartManager"
 QUEST_TYPE = "settlement_quest"
@@ -61,10 +59,8 @@ def rescuer_of(app, threshold):
     if not isinstance(characters, dict):
         return None
     for npc_id, character in list(characters.items()):
-        # 死の印はゲームの人物では `config['is_dead']`（GAME.md §2.22）。`is_dead` の属性は modnpc の人物だけが持つ。
-        config = getattr(character, "config", None)
-        if str(npc_id) == "player" or str(npc_id).startswith(MOD_NPC_PREFIX) \
-                or getattr(character, "is_dead", False) or (isinstance(config, dict) and config.get("is_dead")):
+        # 死の印はゲームの人物と modnpc の人物で置き場が違う（両方を `npcs.is_dead` が見る。GAME.md §2.22）。
+        if str(npc_id) == "player" or modnpc.is_mod_npc(str(npc_id)) or npcs.is_dead(character):
             continue
         value = affinity_of(character)
         name = getattr(character, "name", None)
@@ -81,20 +77,19 @@ def party_level(app):
     player = getattr(app, "player", None)
     for character in [player] + [ui.character_of(app, member) for member in ui.party_member_ids(app)]:
         level = getattr(character, "experience_level", None)
-        if isinstance(level, (int, float)) and not isinstance(level, bool):
+        if frames.is_number(level):
             levels.append(level)
     return int(round(sum(levels) / len(levels))) if levels else None
 
 
 def difficulty_max():
-    """ゲームの依頼の難易度の上限。引けなければ `DIFFICULTY_MAX`。"""
-    value = getattr(sys.modules.get("scripts.functions"), "QUEST_DIFFICULTY_VALUE_MAX", None)
-    return value if isinstance(value, int) and not isinstance(value, bool) else DIFFICULTY_MAX
+    """ゲームの依頼の難易度の上限。引けなければ `DIFFICULTY_MAX`（`value_limits.game_max`。0 以下の値も引けないとみなす）。"""
+    return value_limits.game_max()
 
 
 def rescue_difficulty(area_difficulty, level, plus, ceiling=DIFFICULTY_MAX):
     """「土地の難易度とパーティの平均レベルの高いほう ＋ plus」を `ceiling` で止めた値。どちらも読めなければ None。"""
-    known = [value for value in (area_difficulty, level) if isinstance(value, (int, float))]
+    known = [value for value in (area_difficulty, level) if frames.is_number(value)]
     return min(int(ceiling), int(max(known)) + int(plus)) if known else None
 
 
@@ -187,20 +182,6 @@ def install(env):
             return None
         return [choices.Choice(LABEL.format(name=found[1]), on_press=press)]
 
-    class RescuePhase(object):
-        """自前のフェーズ（依頼の生成は重いので、ゲームと同じく別スレッドで最後までやる）。"""
-
-        def __init__(self, app):
-            self.app = app
-
-        def execute(self, choice_text):
-            try:
-                make_rescue(self.app)
-            except Exception:
-                ctx.log_exc("crime incentive: the rescue failed")
-                if screen.is_busy():
-                    screen.busy_off(self.app)
-
     def make_rescue(app):
         found = rescuer_of(app, cfg.RESCUE_AFFINITY)
         display_cls = ui.cls_of("DisplayQuestChoice")
@@ -213,7 +194,7 @@ def install(env):
         npc_id, name, affinity = found
         area = ui.current_area(app)
         area_id = ui.area_id_of(area)
-        town = getattr(area, "name", None) or "この街"
+        town = ui.area_name(app, area, fallback="この街", limit=None)
         screen.busy_on(app)
         screen.say(app, OFFER_TEXT.format(name=name))
         joined = join(app, npc_id, area_id)
@@ -307,7 +288,9 @@ def install(env):
 
     def press(app):
         write("pressed the rescue")
-        screen.start_phase(app, RescuePhase(app), LABEL_HEAD, fallback=lambda: make_rescue(app))
+        # 依頼の生成は重いので、ゲームと同じく別スレッド（フェーズの中）で最後までやる。
+        # 使い捨てのフェーズはローダの `Screen.run_phase`。投げたら待機表示を解く。
+        screen.run_phase(app, LABEL_HEAD, make_rescue, label="the rescue", busy_off_on_error=True)
         return None
 
     # ---------------------------------------------------- 終わり方
@@ -355,7 +338,7 @@ def install(env):
         before = ui.lawfulness_of(entry)
         loss = max(0, int(cfg.RESCUE_LOSS))
         if before is not None and loss and ui.set_lawfulness(entry, before - loss):
-            town = getattr(ui.world_areas(app).get(area_id), "name", None) or "この街"
+            town = ui.area_name(app, area_id, fallback="この街", limit=None)
             lines.append(LAW_TEXT.format(town=town, before=before, after=before - loss))
         write("rescue: escaped (quest {}); gold {} -> {} kept {}".format(
             rescue.get("quest"), before_gold, after_gold, before_gold))
@@ -367,17 +350,23 @@ def install(env):
         screen.when_idle(app, tell, proceed_on_timeout=True, tag="rescue free")
         env.prison_event("exit", app, how="rescue")     # 自分の本文を予約した後に知らせる（受ける側の本文が後に出る）
 
-    @ctx.wrap("__main__:QuestRetireManager.execute", required=False, safe=True)
-    def quest_retire(orig, self, *args, **kwargs):
-        app = getattr(self, "app", None) or ui.find_app()
+    def quest_retire_before(call):
+        """撤退する前。こちらの脱出の依頼なら控えを `after` に渡す（違えば何もしない）。"""
+        app = call.app
         rescue = load_rescue(app) if app is not None else None
-        if not is_ours(app, rescue):
-            return orig(self, *args, **kwargs)
-        result = orig(self, *args, **kwargs)
-        save_rescue(app, dict(rescue, retired=True))
+        return rescue if is_ours(app, rescue) else None
+
+    def quest_retire_after(call):
+        """脱出から撤退した。処刑を予約する（ローダの窓口 `quest_ends.on_retire`）。"""
+        rescue = call.memo
+        if rescue is None:
+            return
+        save_rescue(call.app, dict(rescue, retired=True))
         write("rescue: retreated from quest {}; the execution goes ahead".format(rescue.get("quest")))
-        schedule_execution(app)
-        return result
+        schedule_execution(call.app)
+
+    quest_ends.on_retire(env.owner + ":rescue", ctx, before=quest_retire_before, after=quest_retire_after,
+                         write=write)
 
     env.on_refresh(on_refresh)
     env.on_offer(offer)

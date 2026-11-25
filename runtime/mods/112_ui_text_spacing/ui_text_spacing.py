@@ -76,6 +76,8 @@ import re
 import weakref
 
 from instantale_modloader import frames, ui
+# MOD の中に hud という名前の引数が多いので、窓口のモジュールは別名で持つ。
+from instantale_modloader import hud as hud_window
 
 LOG_BASENAME = "text_spacing.log"
 
@@ -122,7 +124,7 @@ DESIGN_ATTR = "_instantale_line_height"
 
 def apply(ctx):
     # `scripts.hud.new_hud` が未 import でも自分では降りない。
-    # `ctx.wrap` が保留に積み、モジュールが現れた時点でローダが当て直す（TECH.md
+    # 窓口 `hud` の包みは `ctx.wrap` を通るので保留に積まれ、モジュールが現れた時点でローダが当て直す（TECH.md
     # §3.5）。
     # 設計値の控え（ラベルが捨てられたら一緒に消えるよう弱参照で持つ）。
     # 本命はラベル自身に付ける DESIGN_ATTR で、こちらはそれが書けなかったとき用。
@@ -132,9 +134,10 @@ def apply(ctx):
     # 画面を作り直されたときに古い
     # HUD のラベルを塗り続けないようにするため（親が居るかどうかだけでは「まだ生きているが別の画面のもの」を見分けられない）。
     labels = weakref.WeakKeyDictionary()
-    state = {"tries": 0, "warned": False, "pending": False}
+    state = {"tries": 0, "warned": False}
 
     write = ctx.logger(LOG_BASENAME)
+    owner = ctx.mod_name or "112_ui_text_spacing"
 
     # -- ラベルかどうか ------------------------------------------------------
     def is_label(widget):
@@ -291,51 +294,19 @@ def apply(ctx):
     def settle(hud, label):
         """行間と本文を変えた後で、ゲームに本文の高さを決め直させる。
 
-        次のフレームに1回だけにする。
+        次のフレームに1回だけにする（ローダの `hud.settle_text`。TECH.md §3.3.21）。
         本文は1文字ずつ増えるので（`InstantaleApp.add_text_display`）、
         その場で呼ぶと1文字ごとに仕事が1回増える。
-        予約済みなら積まない。
+        同じ HUD への予約は、`113_` / `117_` からの分も含めてローダが1つにまとめる。
 
         ここでやるのは高さの計算だけ。
-        テクスチャの作り直しは Kivy に任せる（下の `run` を参照。
-        ここを自分で呼んでいたのが表示が遅い原因だった）。
+        `texture_update()` は呼ばない。
+        呼ぶと本文が1文字進むたびにラベルを余計に作り直し、1回 15ms でティックの間隔の 3分の2 を食う
+        （VERIFICATION_LOG.md §2.34）。
+        Kivy の作り直しはテキストを変えた時点で予約されてこちらより先に走るので、
+        高さを出す時点の `texture_size` は新しい行間のものになっている。
         """
-        if state.get("pending"):
-            return
-
-        def run(_dt=None, hud=hud, label=label):
-            state["pending"] = False
-            try:
-                # `texture_update()` は呼ばない。
-                # 「ゲームは `texture_size` を見て高さを出すので、
-                # 新しい行間で測り直させる」つもりで呼ぶと、**本文が1文字進むたびにラベルを余計に作り直す**ことになる。
-                # 1回 15ms で、ティックの間隔の 3分の2 をここで食う（VERIFICATION_LOG.md §2.34。`112_` と `117_` の 2本を外して 1文字 42.6ms →
-                # 8.1ms）。
-                # 外しても困らない。
-                # Kivy の作り直しはこの予約より先に走る（テキストを変えた時点で予約されるので、
-                # こちらより早い）ので、高さを出す時点の
-                # `texture_size` は新しい行間のものになっている。
-                # 万一順序が入れ替わっても、遅れるのは1フレームぶんだけで、
-                # 次の文字で必ず組み直される。
-                update_height = frames.attr(hud, "update_label_height")
-                if callable(update_height):
-                    update_height()
-            except Exception:
-                # 高さのためにゲームを落とさない。
-                # 次の文字で組み直される。
-                ctx.log_exc("text spacing: could not settle the label height")
-
-        try:
-            from kivy.clock import Clock
-        except Exception:
-            run()                     # ゲームの外（オフライン検証）ではその場で
-            return
-        state["pending"] = True
-        try:
-            Clock.schedule_once(run, 0)
-        except Exception:
-            state["pending"] = False
-            ctx.log_exc("text spacing: could not schedule the height update")
+        hud_window.settle_text(hud, write=write)
 
     # -- 当てる --------------------------------------------------------------
     def restyle(hud, value):
@@ -363,15 +334,14 @@ def apply(ctx):
         if changed:
             settle(hud, label)
 
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_display_text", safe=True)
-    def update_display_text(orig, self, instance=None, value=None, *args, **kwargs):
-        # 先にゲームに塗らせる。
-        # こちらは塗り終わった後の見た目だけを整えるので、
-        # ここから先で壊れても safe=True が orig の結果を返せる。
-        result = orig(self, instance, value, *args, **kwargs)
-        if isinstance(value, str):
-            restyle(self, value)
-        return result
+    def painted(call):
+        # 先にゲームに塗らせ、塗り終わった後の見た目だけを整える。
+        # 本文の塗り直しはローダの窓口 `hud` が1枚だけ包む（TECH.md §3.3.21）。
+        # ここで壊れても窓口が握って記録し、ゲームの結果はそのまま返る。
+        if isinstance(call.value, str):
+            restyle(call.obj, call.value)
+
+    hud_window.on(owner, ctx, (hud_window.TEXT,), after=painted, write=write)
 
     ctx.log("text spacing: LINE_SCALE={!r} BLANK_LINES={!r}; measurements go to out/{}"
             .format(LINE_SCALE, BLANK_LINES, LOG_BASENAME))

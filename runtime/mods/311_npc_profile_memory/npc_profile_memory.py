@@ -60,12 +60,8 @@ mod の2欄も書き換えで更新される以上、**追記でしか伸びな�
 `out/` は世界を跨いで残るので、
 世界ごとにファイルを分けないと別の世界の人物像が湧く（`306_` と同じ）。
 
-注入は NPC の複製の `profile` にだけ足す。
-`conversation_starter` / `conversation_facilitator` / `..._after_retrieval` /
-`..._in_quest` /
-`conversation_starter_in_quest` は先頭4引数が同じ並び（`messages, character_life_log, player, character_instance`）なので、
-第4引数の NPC を浅く複製し、複製の `profile` を拡張すれば全経路を賄える。
-ゲーム世界に居る NPC 本体も `messages` も触らない。
+会話5関数へ足す文は、ローダの `modnpc` の notes に預ける（TECH.md §5.7）。
+NPC の複製と `profile` への差し込みは関所が行い、NPC 本体も `messages` も触らない。
 本体を書き換えるとセーブや別スレッドへ漏れ、
 履歴を書き換えると要約・関係性の更新に波及する。
 
@@ -116,19 +112,16 @@ mod どうしは同じ場所を読むことで繋がる。
 読む側はファイルが無ければ何も足さない。
 この mod を切っていても、まだ一度も会話していなくても成立する。
 
-版8: 会話の1ターンのフック2本は、引数を受け取った形のまま元の関数へ渡す
-（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
-同じ版で、依頼の報告の手続きをその場で作った発言が、変わらない決まりとして残らないようにした（VERIFICATION.md §3.115）。
+依頼の報告の手続きをその場で作った発言は、変わらない決まりとして残さない（VERIFICATION.md §3.115）。
 記録係に片付いた依頼を渡し、依頼の報告と報酬の手続きの話を事実にしないよう指示する。
 """
 
 import datetime
-import os
 import sys
-import threading
 
-from instantale_modloader import board, frames, jobs, llm, modnpc, quest_claims, ui
+from instantale_modloader import board, frames, jobs, llm, modnpc, quest_claims, talks, ui
 from instantale_modloader.state import WorldStore, world_key
+from instantale_modloader.state import ordered as state_ordered
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
@@ -156,8 +149,7 @@ LOG_BASENAME = "npc_profile.log"
 
 # 世界ごとの控えを置くフォルダ。
 # `state/` の下（`ctx.state_path`）。
-# ログと同じ `out/` に置いていたが、あちらは消してよい場所なので、
-# 掃除のつもりで消した人の「覚えていたはずの人物像」まで飛んでいた。
+# `out/` は消してよい場所なので、遊びの続きである人物像は置かない。
 # `301_` も同じ名前でここを読む。
 STATE_DIRNAME = "npc_profiles"
 
@@ -235,7 +227,7 @@ ABOUT_PLAYER_RATIO = 2
 # 設定にはしない。
 # 増やすほど落ちた事実が戻りやすいが、抽出の頼み文が伸びる。
 # 1人あたりの `facts` は数件〜20件程度なので、40件あればほぼ全部が載る。
-# 版9 で文字数の上限（1500字）は外した（1件は抽出が書く短い文。VERIFICATION.md §3.95）。
+# 文字数では切らない（1件は抽出が書く短い文。VERIFICATION.md §3.95）。
 FACT_RECALL = 40
 FACTS_HEADING = "【既に記録した事実】"
 
@@ -280,14 +272,9 @@ def ordered_record(record):
     人物ごとに鍵の順が違うと、差分を見たときに何が増えたのか分からない。
     旧版の `slots` のような知らない鍵を捨てないのは、
     移行を1度きりにせず何度でもやり直せるようにするため。
+    並べ方はローダの `state.ordered`（同じ答え）。
     """
-    if not isinstance(record, dict):
-        return {}
-    out = {key: record[key] for key in RECORD_KEYS if key in record}
-    for key, value in record.items():
-        if key not in out:
-            out[key] = value
-    return out
+    return state_ordered(record, RECORD_KEYS)
 
 
 def elapsed_days(record, today):
@@ -453,13 +440,12 @@ def apply(ctx):
             "worlds": WorldStore(ctx, STATE_DIRNAME, order=ordered_bucket),
             # 抽出を回す背景スレッド。作るのは `extract` が出来てから。
             "worker": None,
-            "log_lock": threading.Lock(),
         }
         setattr(sys, STATE_STORE_ATTR, store)
     state = store["state"]
 
     write = ctx.logger(LOG_BASENAME)
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "311_npc_profile_memory"
+    owner = ctx.mod_name or "311_npc_profile_memory"
     worlds = store["worlds"].rebind(ctx, write)
     data_lock = worlds.lock
 
@@ -587,10 +573,6 @@ def apply(ctx):
                     npc_name, npc_id, len(profile)))
             return record
 
-    def profile_for(key, npc_id, npc_name):
-        """人物像の本文だけ。"""
-        return _field(record_for(key, npc_id, npc_name), "profile")
-
     def _field(record, name):
         value = record.get(name) if isinstance(record, dict) else None
         return value.strip() if isinstance(value, str) and value.strip() else ""
@@ -672,8 +654,8 @@ def apply(ctx):
                           len(update.get(KEY_NEW_FACTS) or ())))
 
     def player_name_of(app):
-        name = getattr(getattr(app, "player", None), "name", None)
-        return frames.short(name, 40) or "冒険者"
+        # 読み方はローダの `ui.player_name`。代わりの語は頼みの文に入るので、この MOD の語を渡す。
+        return ui.player_name(app, "冒険者", limit=40)
 
     def game_day(app):
         """いまのゲーム内日数。読めなければ `None`（そのときは何も言わない）。
@@ -762,8 +744,7 @@ def apply(ctx):
         """`send_request_with_no_structure` を1回。`str` が返る（GAME.md §2.12）。
 
         送信モジュールを名指ししない。
-        以前はローカルの `llama_cpp` と `any_server` の2つだけを見ていたが、
-        Gemini / OpenAI / Claude ではどちらも載らないので毎回空振りしていた。
+        プロバイダのモジュールは使う1つだけが import される（GAME.md §2.12）。
         `llm.ask` が `llm_manager` の別名から引く（TECH.md §5.3）。
 
         `timeout` も必ず渡す。
@@ -844,8 +825,8 @@ def apply(ctx):
             done = []
             for quest_id in ui.quest_ids(app):
                 quest = ui.quest_of(app, quest_id)
-                config = ui.quest_value(quest, "config", None) if quest is not None else None
-                if isinstance(config, dict) and config.get("status") == "completed" \
+                status = ui.quest_status(quest) if quest is not None else None
+                if status == ui.QUEST_COMPLETED \
                         and str(quest_id) not in hidden and str(quest_id) not in others:
                     done.append((quest_id, frames.short(ui.quest_value(quest, "quest_title", "依頼"), 60)))
             done.sort(key=lambda pair: ui.id_sort_key(pair[0]))
@@ -879,7 +860,7 @@ def apply(ctx):
             "npc_id": str(npc_id),
             "npc_name": name_of(app, npc_id),
             "player_name": player_name_of(app),
-            # ゲームの欄は切らない（版9。VERIFICATION.md §3.95）。書き起こしの長さは `CONVERSATION_TURNS` で決まる。
+            # ゲームの欄は切らない（VERIFICATION.md §3.95）。書き起こしの長さは `CONVERSATION_TURNS` で決まる。
             "game_profile": frames.short(getattr(npc, "profile", ""), None),
             "personality": frames.short(getattr(npc, "personality", ""), None),
             "job": frames.short(getattr(npc, "job", ""), None),
@@ -1057,27 +1038,18 @@ def apply(ctx):
             note_extract_skip("could not schedule next-frame snapshot")
 
     # ============================================================ フック
-    @ctx.wrap("__main__:ConversationPhaseManager.conversation_continued",
-              required=False)
-    def conversation_continued(orig, self, *args, **kwargs):
-        """1ターンが終わったところ。ターンの結果には手を触れない。"""
-        result = orig(self, *args, **kwargs)
-        try:
-            schedule_extract(getattr(self, "app", None))
-        except Exception:
-            ctx.log_exc("npc profile: cannot schedule extraction")
-        return result
+    def turn_done(call):
+        """1ターンが終わったところ（依頼中の会話も同じ扱い。相手は同じ NPC）。ターンの結果には手を触れない。
 
-    @ctx.wrap("__main__:ConversationInQuestPhase.conversation_continued",
-              required=False)
-    def conversation_in_quest_continued(orig, self, *args, **kwargs):
-        """クエスト中の会話も同じ扱い（相手は同じ NPC）。"""
-        result = orig(self, *args, **kwargs)
+        相手は返答が描かれた後の `in_conversation` を `schedule_extract` が読む（`call.partner` は orig の前の値）。
+        """
         try:
-            schedule_extract(getattr(self, "app", None))
+            schedule_extract(call.app)
         except Exception:
             ctx.log_exc("npc profile: cannot schedule extraction")
-        return result
+
+    # 会話の1手の後はローダの窓口 `talks` が1枚だけ包む（TECH.md §3.3.21）。
+    talks.on(owner, ctx, (talks.TURN, talks.TURN_IN_QUEST), after=turn_done, write=write)
 
     # 会話5関数へ足す文は、ローダの `modnpc` の notes に預ける（自分で包まない）。
     # 足す順は前に自分で包んでいたときの重なりと同じ（`NOTES_PRIORITY`）。

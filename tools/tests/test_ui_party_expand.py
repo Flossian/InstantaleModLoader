@@ -631,6 +631,8 @@ class FakeCtx(object):
     # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
+    # 本物の `ctx.mod_name` と同じく mod のフォルダ名（窓口に名乗る持ち主）
+    mod_name = "116_ui_party_expand"
 
     def logger(self, name, **kw):
         import instantale_modloader as _ml
@@ -663,6 +665,10 @@ def install(mod, ctx):
     (FakeHUD.update_party_display, FakeHUD.update_display_text,
      FakeHUD.update_button_texts) = PRISTINE
     FakeApp.add_party_member, FakeApp.remove_party_member = PRISTINE_APP
+    # 本文と選択肢の塗り直しはローダの窓口 `hud` の包み。包みは世代ごとに1枚なので、
+    # 素へ戻したメソッドにもう一度包みが渡るよう、窓口の登録と包みの印も忘れさせる
+    from instantale_modloader import gates
+    gates.reset_all()
     mod.apply(ctx)
 
 

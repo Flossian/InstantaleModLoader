@@ -126,20 +126,18 @@ def _read_overview(response):
 
     pydantic のモデルで来るが、辞書で来ても読めるようにしておく
     （本体が構造の受け取り方を変えても、こちらが黙って空振りしないため）。
+    両方の形の読みはローダの `frames.field`。
     """
-    if isinstance(response, dict):
-        value = response.get(OVERVIEW_FIELD)
-    else:
-        value = frames.attr(response, OVERVIEW_FIELD, None)
+    value = frames.field(response, OVERVIEW_FIELD)
     return value if isinstance(value, str) else None
 
 
 def _write_overview(response, text):
-    """`overview` を差し替える。"""
-    if isinstance(response, dict):
-        response[OVERVIEW_FIELD] = text
-    else:
-        setattr(response, OVERVIEW_FIELD, text)
+    """`overview` を差し替える。書けたかを返す（ローダの `frames.set_field`）。
+
+    書けなかったときは、呼ぶ側の読み返しの照合が WARN に残す。
+    """
+    return frames.set_field(response, OVERVIEW_FIELD, text)
 
 
 def _is_world_data(path):

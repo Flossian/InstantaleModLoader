@@ -20,13 +20,10 @@ MOD は関数の名前だけを渡し、どの方式かは意識しない:
 
 後半は、描き直すときの描き方（txt2img / img2img / txt2img→img2img）を MOD どうしで分け合う窓口（TECH.md §3.3.24）。
 """
-import io
-import json
-import os
 import sys
 import threading
 
-from . import alive, saves
+from . import saves, state, window_call, window_entries, window_put
 
 #: `sd_backend.name` → `image_generation.` の下のパッケージ名。
 FAMILIES = {
@@ -45,11 +42,9 @@ _READ = object()
 
 def backend(path=None):
     """ゲームが選んでいる画像生成の方式（`sd_backend.name`）。読めなければ None。"""
-    path = path or os.path.join(saves.data_dir(), "config.json")
+    setting = saves._game_ai_setting(path)
     try:
-        with io.open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-        return data["ai_setting"]["local_model_setting"]["sd_backend"]["name"]
+        return setting["local_model_setting"]["sd_backend"]["name"]
     except Exception:
         return None
 
@@ -137,16 +132,12 @@ _DRAWING = threading.local()
 
 
 def _method_store():
-    store = getattr(sys, METHODS_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"providers": {}, "errors": []}
-        setattr(sys, METHODS_ATTR, store)
-    return store
+    return state.process_store(METHODS_ATTR, {"providers": {}, "errors": []})
 
 
 def declare_methods(owner, ctx, fn):
-    """`owner` が出せる描き方を返す関数を登録する。同じ持ち主の登録は差し替える。"""
-    _method_store()["providers"][str(owner)] = (ctx, fn)
+    """`owner` が出せる描き方を返す関数を登録する。同じ持ち主の登録は差し替える（新しい登録として後ろへ）。"""
+    window_put(_method_store()["providers"], owner, (ctx, fn))
 
 
 def withdraw_methods(owner):
@@ -161,14 +152,10 @@ def methods(kind):
     """
     store = _method_store()
     found = set()
-    for owner, (ctx, fn) in list(store["providers"].items()):
-        if not alive(ctx):
-            continue
-        try:
-            found.update(str(method) for method in (fn(kind) or ()))
-        except Exception as exc:
-            store["errors"].append("{}: {}: {}".format(owner, type(exc).__name__, exc))
-            del store["errors"][:-20]
+    for owner, (_ctx, fn) in window_entries(store["providers"]):
+        ok, got = window_call(store, owner, lambda: [str(method) for method in (fn(kind) or ())])
+        if ok:
+            found.update(got)
     return ["txt2img"] + [method for method in METHODS[1:] if method in found]
 
 

@@ -23,19 +23,13 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
 """
 import sys
 
-from . import window_call, window_entries, window_put
+from . import state, window_call, window_entries, window_put
 
 STORE_ATTR = "_instantale_quest_clients"
 
 
 def _store():
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"clients": {}, "errors": []}
-        setattr(sys, STORE_ATTR, store)
-    store.setdefault("clients", {})
-    store.setdefault("errors", [])
-    return store
+    return state.process_store(STORE_ATTR, {"clients": {}, "errors": []})
 
 
 def declare(owner, ctx, fn):

@@ -152,7 +152,9 @@ try:
 finally:
     gates.defer_outermost(False)
 built = ml._install_outer_windows(layered)
-check("適用の後にローダが4つとも立てる", built == ["quest_generation", "quest_ends", "text_filters", "saving"], built)
+check("適用の後にローダが外側の窓口を全部立てる", built == ["quest_generation", "quest_ends", "quest_ends.retire", "text_filters",
+                                             "saving", "shopping", "items", "arrivals.opening", "llm.on_request",
+                                             "choices.listing"], built)
 check("→ 4つの対象を包む", all(t in layered.hooks for t in (
     saving.TARGET, quest_ends.TARGET, quest_generation.TARGET, text_filters.TARGET)))
 layered.hooks[saving.TARGET](lambda self: order.append("保存"), App())

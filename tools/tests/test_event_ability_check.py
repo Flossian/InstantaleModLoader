@@ -272,16 +272,47 @@ def main():
     check("注入時の自己検証が通っている",
           not [level for level, _ in ctx.logs if level == "ERROR"], ctx.logs)
 
-    print("自己検証は設定に左右されない")
+    print("式（既定の値を明示で渡す。設定を変えても答えは同じ）")
+    # 既定 15 / 3点 / 1段4% / 上限20% / 減点なし / 底上げ0 / 10% 未満の刻みあり。
+    base = {"flat": 0, "fine": True, "pivot": 15, "step": 3, "per_step": 4,
+            "bonus_cap": 20, "penalty_cap": 0}
+    cases = (
+        # (能力値, 説得力, 既定から変える値, 期待する新しい説得力, 何を見るか)
+        (15, 5, {}, 5, "基準ちょうどは変えない"),
+        (16, 5, {}, 5 + 4 / 10.0, "基準を超えれば1段"),
+        (1, 5, {}, 5, "低くても減点しない（減点上限0）"),
+        (99, 5, {}, 5 + 20 / 10.0, "加点は上限まで"),
+        (99, 10, {}, module.CREDIBILITY_MAX, "説得力の上限で頭打ち"),
+        (None, 5, {"flat": 10}, 5 + 10 / 10.0, "読めない能力値は底上げだけ"),
+        (16, 5, {"fine": False}, 5, "刻みを切れば整数へ丸める"),
+        (1, 5, {"penalty_cap": 8}, 5 - 8 / 10.0, "減点を許せば下がる"),
+    )
     for label, settings in (
+            ("既定のまま", {}),
             ("刻みを切る", {"FINE_STEPS": False}),
             ("基準と段の幅を変える", {"PIVOT": 10, "STEP": 5}),
             ("1段と上限を変える", {"BONUS_PER_STEP": 10, "MAX_BONUS": 50}),
             ("減点を許す", {"MAX_PENALTY": 20}),
             ("底上げを付ける", {"FLAT_BONUS": 10})):
         module, ctx = fresh_mod(**settings)
-        check("{}でも VERIFY FAILED が出ない".format(label),
+        bad = [(note, want, module.adjusted(cred, score, **dict(base, **change))[0])
+               for score, cred, change, want, note in cases
+               if module.adjusted(cred, score, **dict(base, **change))[0] != want]
+        check("{}: 式の8件".format(label), not bad, bad)
+        check("{}: 起動のログに ERROR が無い".format(label),
               not [msg for level, msg in ctx.logs if level == "ERROR"], ctx.logs)
+
+    print("語句の表")
+    for text, want in (("", None),
+                       ("崩れた瓦礫をこじ開けて押し破る", "strength"),
+                       ("物陰に隠れてこっそり忍び寄る", "dexterity"),
+                       ("古代文字を解読し、術式の構造を分析する", "intelligence"),
+                       ("周囲の気配を探り、罠の痕跡を見抜く", "wisdom"),
+                       ("店主を説得して値切る", "charisma"),
+                       ("毒に耐えながら踏ん張る", "constitution"),
+                       ("ただ歩く", None)):
+        got = module.infer_by_keywords(text)
+        check("{!r} -> {}".format(text, want), got == want, got)
 
     print("減点")
     module, ctx = fresh_mod(PIVOT=15, STEP=3, BONUS_PER_STEP=4, MAX_PENALTY=8,
@@ -416,8 +447,8 @@ def main():
           llm.asked and llm.asked[0][0] == module.MANAGER_INFER, llm.asked)
     check("message はリストで渡す",
           llm.asked and isinstance(llm.asked[0][1], list), llm.asked)
-    check("timeout を必ず渡す",
-          llm.asked and llm.asked[0][2].get("timeout"), llm.asked)
+    check("timeout は送り口へ渡さない（llm.ask の目安。VERIFICATION.md §3.101）",
+          llm.asked and "timeout" not in llm.asked[0][2], llm.asked)
     roll = Roll(95)
     free_call(ctx, Master([roll]), Player({"dexterity": 28}), "物陰に隠れる")
     check("100 を超えない", roll.chance_percent == 100, roll.chance_percent)

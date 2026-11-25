@@ -172,9 +172,16 @@ class Ctx(object):
         self.lines = []
         self.root = root
         self.state_dir = root
+        # mod_dir を持たない偽物なので、本物の apply() の外と同じく None（持ち主は MOD の予備の名前になる）。
+        self.mod_name = None
 
     def logger(self, name, **kw):
         return self.lines.append
+
+    def once(self, write, prefix="", limit=None, *, store=None):
+        # 本物の `ctx.once` をそのまま借りる（検査だけが別の抑え方を通らないように）
+        from instantale_modloader import ModContext
+        return ModContext.once(self, write, prefix, limit, store=store)
 
     def log(self, line):
         self.lines.append(line)

@@ -73,18 +73,19 @@ def owner_ids(app, max_areas=40):
     for _area_id, area in areas:
         for node in ui.nodes_of(area):
             for _fid, facility in ui.facilities_of(node).items():
-                owner = frames.attr(facility, "owner")
-                if owner not in (None, frames.MISSING, ""):
-                    owners.add(ui.element_id(owner))
+                owner = _owner_of(facility, app)
+                if owner:
+                    owners.add(owner)
     return owners
 
 
-def _owner_of(facility):
-    """施設の主の id。居なければ空文字。"""
-    owner = frames.attr(facility, "owner")
-    if owner in (None, frames.MISSING, ""):
-        return ""
-    return ui.element_id(owner) or ""
+def _owner_of(facility, app=None):
+    """施設の主の id。居なければ空文字。
+
+    読み方はローダの `ui.facility_owner`（空白だけ・真偽値・辞書の owner も主なしとみなす）。
+    `app` は主の人物を引くためだけに使うので、id だけ要るここでは無くてよい。
+    """
+    return ui.facility_owner(app, facility)[0] or ""
 
 
 def _spot(area, facility_type):
@@ -161,11 +162,12 @@ def _short(value, limit):
 
     渡ってくるのはセーブから読んだ値なので、`MISSING`・`None`・辞書・リストのどれでもありうる。
     ここで受け止めておかないと、頼み文を組む途中で落ちて事件が始まらなくなる（描写の都合で遊びが止まる）。
+    詰め方はローダの `frames.short(collapse=True)`（空白を畳み、切ったら「…」）。
+    文字列でないものを `str()` にせず空文字に倒すのはこちらの判断。
     """
     if not isinstance(value, str) or value == frames.MISSING:
         return ""
-    got = " ".join(value.split())
-    return got if len(got) <= limit else got[:limit] + "…"
+    return frames.short(value, limit, collapse=True)
 
 
 def area_name(app, target_area_id, limit=40):
@@ -173,11 +175,9 @@ def area_name(app, target_area_id, limit=40):
 
     以前は「町」として `place_name(..., 'guild')` を渡していた。
     それはギルドの名前で、実機の頼み文に `【町】鉄錆の徴収所` と出ていた。
-    町の名前は `Area.name` にある。
+    町の名前は `Area.name` にある（引き方はローダの `ui.area_name`）。
     """
-    area = ui.world_areas(app).get(str(target_area_id))
-    value = frames.attr(area, "name") if area is not None else None
-    return _short(value, limit)
+    return ui.area_name(app, target_area_id, fallback="", limit=limit)
 
 
 def area_notes(app, target_area_id, limit=240):
@@ -229,9 +229,7 @@ def facility_notes(app, target_area_id, limit=12):
             name = _short(frames.attr(facility, "name"), 40)
             if not name:
                 continue
-            owner = frames.attr(facility, "owner")
-            owner_id = (ui.element_id(owner)
-                        if owner not in (None, frames.MISSING, "") else "")
+            owner_id = _owner_of(facility, app)
             out.append((name, ui.facility_type_of(facility) or "",
                         name_of(app, owner_id) if owner_id else ""))
             if len(out) >= limit:
@@ -313,8 +311,8 @@ def config_of(character):
 
 
 def is_dead(character):
-    config = config_of(character)
-    return bool(config.get("is_dead")) if config else False
+    """死んでいるか。見方はローダの `npcs.is_dead`（modnpc の人物の属性 `is_dead` も見る）。"""
+    return _npcs.is_dead(character)
 
 
 def set_dead(app, npc_id, value=True):

@@ -172,6 +172,8 @@ OUT = tempfile.mkdtemp()
 class FakeCtx:
     def __init__(self):
         self.mod_dir = MOD_DIR
+        # 窓口に名乗る持ち主の名前（本物は apply() の間だけフォルダ名）。
+        self.mod_name = os.path.basename(self.mod_dir)
         self.hooks = {}
         self._mod = None
 
@@ -286,7 +288,17 @@ try:
     os.makedirs(os.path.dirname(new_src))
     io.open(new_src, "wb").write(b"png")
     shown_ctx = FakeCtx()
+    # 品を組むところ（`Item.__init__`）はローダの窓口 `items` の BUILD が包む。偽の ctx は世代を持たないので、
+    # 包みの印と登録を忘れさせてから当てる（印が残ると、この ctx に包みが渡らない）
+    from instantale_modloader import items as items_window
+    items_window.reset()
     mod.apply(shown_ctx)
+    built = types.SimpleNamespace()
+
+    def item_init(self, *a, **k):
+        self.image_src = gone_src
+    shown_ctx.hooks[items_window.TARGETS[items_window.BUILD]](item_init, built)
+    check("品を組んだ後に外した鍵の絵を付け替える", built.image_src == new_src, built.image_src)
     shown = shown_ctx.hooks["scripts.hud.new_hud:InventoryItem.__init__"]
     drawn = []
     item = types.SimpleNamespace(image_src=gone_src)

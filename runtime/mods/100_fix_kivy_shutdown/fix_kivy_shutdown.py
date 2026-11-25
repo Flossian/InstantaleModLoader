@@ -26,13 +26,8 @@ handling of the above exception, another exception occurred" で始まる）。
 つまり握り潰しても安全。
 
 パッチの中身は、元の処理をそのまま呼び、失敗したら引数の型をログに出して諦める。
-
-版3: 失敗したときにハンドラを整数のアドレスに直して `SetWindowLongPtrW` で呼び直す仕掛けを外した。
-10-16〜11-01 の失敗72回は全部 `hWnd=None`（ウィンドウが先に消えている）で、
-戻す相手が無く、呼び直しは一度も走らなかった。
-呼ばれるたびに書いていた2行もやめ、失敗の行だけにした。
-毎回書いていたのは「ガードが効いた」と「今回は踏まなかった」を区別するためで（§2.1）、
-その区別は失敗の行の有無で付く。
+失敗はどれもウィンドウが先に消えた後で、戻す相手が無い。
+なので呼び直さずに諦める（VERIFICATION_LOG.md §2.1）。
 
 なお wm_pen と wm_touch はどちらも
 `from ... import SetWindowLong_WndProc_wrapper` で関数を取り込んでいる。
@@ -46,7 +41,7 @@ Nuitka 環境でパッチが「効かない」ときは、まずここを疑う�
 def apply(ctx):
     import sys
 
-    from instantale_modloader import patch
+    from instantale_modloader import frames, patch
 
     # 無ければローダの保留に積んで降りる（`patch.await_module`）。来たらローダが当て直す。
     # `sys.modules` を見て自分で降りると保留に載らず、ほかに保留が無い構成ではその起動で一度も当たらない。
@@ -56,12 +51,14 @@ def apply(ctx):
         return
 
     @ctx.wrap("kivy.input.providers.wm_common:SetWindowLong_WndProc_wrapper")
-    def guarded(orig, hWnd, wndProc):
+    def guarded(orig, *args, **kwargs):
         try:
-            return orig(hWnd, wndProc)
+            return orig(*args, **kwargs)
         except Exception as exc:
             # 直後に破棄されるウィンドウの WndProc を戻しているだけなので、諦めても影響は無い。
-            # 引数の値と型は残す（記録の失敗はどれも hWnd=None だった。版3の註）。
+            # 引数の値と型は残す（VERIFICATION_LOG.md §2.1）。
+            hWnd = frames.arg(args, kwargs, "hWnd", 0)
+            wndProc = frames.arg(args, kwargs, "wndProc", 1)
             ctx.log(
                 "SetWindowLong_WndProc_wrapper failed: {}: {} | "
                 "hWnd={!r} ({}) wndProc={!r} ({}) -- swallowed (window is being "

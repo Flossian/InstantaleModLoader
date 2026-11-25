@@ -32,7 +32,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
-from instantale_modloader import abilities, equipment, ui  # noqa: E402
+from instantale_modloader import abilities, battles, equipment, items, stays, ui  # noqa: E402
 
 failures = []
 
@@ -79,6 +79,8 @@ class Person(object):
 
 class FakeCtx:
     _mod = "410_weapon_skill_chance"
+    # 窓口に名乗る持ち主の名前（本物は apply() の間だけフォルダ名）。
+    mod_name = _mod
 
     def __init__(self, out_dir):
         self.out_dir = out_dir
@@ -129,6 +131,9 @@ spec.loader.exec_module(mod)
 for attr in (mod.STORE_ATTR, abilities._REGISTRY_ATTR):
     if hasattr(sys, attr):
         delattr(sys, attr)
+# 品の入口・戦闘・宿泊はローダの窓口が包む。偽の ctx は世代を持たないので、包みの印と登録も忘れさせる
+for window in (items, battles, stays):
+    window.reset()
 
 player = Person("主人公", intelligence=16, dexterity=16)
 ally = Person("仲間", ident=95)
@@ -156,10 +161,11 @@ shutil.rmtree(OUT_DIR, ignore_errors=True)
 ctx = FakeCtx(OUT_DIR)
 mod.CHANCE_CRAFT, mod.CHANCE_OTHER, mod.CHANCE_SHOP = 100.0, 100.0, 0.0
 mod.apply(ctx)
-generated = ctx.hooks["__main__:InstantaleApp.generate_item_from_item_data"]
+# 生成の入口と Item.__init__ は窓口 `items` の包み（同じ対象名で ctx.wrap に渡る）
+generated = ctx.hooks[items.TARGETS[items.FROM_ITEM_DATA]]
 craft = ctx.hooks["__main__:ItemCraftManager.execute"]
 shopping = ctx.hooks["__main__:ShoppingStartManagerRemake.generate_item_in_shopping"]
-item_init = ctx.hooks["scripts.items:Item.__init__"]
+item_init = ctx.hooks[items.TARGETS[items.BUILD]]
 
 
 def make(name):
@@ -230,6 +236,24 @@ again = len(generated_for)
 in_worker(lambda: generated(lambda self, *a: hero_item, app, "主人公の剣", "", "weapon", "", 40, "", "rare", player))
 check("スキルのある品は引き直さない", len(generated_for) == again)
 
+# テキストで頼んだ品: マスターAIが名付けた武器が入口の外で組まれたら other（窓口 `items` の named）
+master = ctx.hooks[items.TARGETS[items.MASTER_ITEM]]
+
+
+def name_and_build(name):
+    master(lambda *a, **k: {"item_name": name, "item_category": {"type": "weapon"}})
+    item = Item(name)
+    item_init(lambda s, *a, **k: None, item)
+    return item
+
+
+named_item = in_worker(lambda: name_and_build("名付けた剣"))
+check("名付けた武器は入口の外で組まれたら other", bool(named_item.skill))
+stray = in_worker(lambda: (lambda item: (item_init(lambda s, *a, **k: None, item), item)[1])(Item("名の無い剣")))
+check("名付けていない品は入口の外で組まれても見ない（セーブの組み直し）", stray.skill is None)
+in_craft = in_worker(lambda: craft(lambda self, *a: name_and_build("クラフト中に名付けた剣"), None))
+check("クラフトの最中に名付けた品は named では引かない", in_craft.skill is None)
+
 print("説明欄")
 shown = mod.ShownEffect(hero_item)
 with shown:
@@ -246,11 +270,29 @@ check("内側が書いた売価は抜けても残す",
 hero_item.attributes["売価"] = price_before
 check("効果の文（自前の言い方）", "敵単体に中威力のダメージを与える。" in mod.effect_text(hero_item.skill))
 
+# 説明欄の包みを通す（`109_` の内側に居るため、窓口 `items` の DETAIL には載せず自分で包む）
+detail = ctx.hooks["scripts.hud.new_hud:ItemDetailBox.update_content"]
+painted = []
+
+
+def paint(box, item):
+    painted.append(list(item.attributes))
+    box.attributes_label.text = "スキル: 主人公の剣の技\n効果: 敵単体に中威力のダメージを与える。"
+
+
+box = types.SimpleNamespace(attributes_label=types.SimpleNamespace(text=""))
+detail(paint, box, hero_item)
+check("説明欄を描く間だけ効果と使用回数（包み）",
+      painted == [["item_detail", "攻撃力", "スキル", "効果", "使用回数", "売価"]], painted)
+check("描いた後は戻し、効果の行を詰める",
+      list(hero_item.attributes) == ["item_detail", "攻撃力", "スキル", "売価"]
+      and "効果：敵単体" in box.attributes_label.text, (hero_item.attributes, box.attributes_label.text))
+
 print("仲間")
 worn = {id(ally): [("right_hand", hero_item), ("free1", crafted)]}
 equipment.gear = lambda _app, holder: worn.get(id(holder))
 ally.skills = {"作った剣の技": {"name": "本人の技"}}
-start = ctx.hooks[mod.BATTLE_START_TARGET]
+start = ctx.hooks[battles.TARGETS[battles.START]]
 start(lambda self, *a: None, types.SimpleNamespace(app=app))
 check("戦闘の間だけ技に足す（自由枠は数えない）", ally.skills.get("主人公の剣の技") is hero_item.skill
       and len(ally.skills) == 2)
@@ -259,13 +301,17 @@ seen = []
 save(lambda self: seen.append(dict(ally.skills)), app)
 check("保存の間は外す", "主人公の剣の技" not in seen[0] and "主人公の剣の技" in ally.skills)
 hero_item.skill["current_uses"] = 0
-rest = ctx.hooks[mod.REST_TARGET]
+rest = ctx.hooks[stays.TARGETS[stays.REST]]
 rest(lambda self, *a: None, types.SimpleNamespace(app=app))
 check("休養で回数を戻す", hero_item.skill["current_uses"] == 3)
-end = ctx.hooks[mod.BATTLE_END_TARGETS[0]]
+end = ctx.hooks[battles.TARGETS[battles.END_NORMAL]]
 end(lambda self: None, None)
 check("戦闘の終わりで外す（本人の技は残る）", list(ally.skills) == ["作った剣の技"])
 check("例外が出ていない", not ctx.errors, ctx.errors)
+# 窓口は前後の処理の例外を握り、MOD のログへ WARN の1行を書く（ctx.log_exc は通らない）
+log = io.open(os.path.join(OUT_DIR, mod.LOG_BASENAME), encoding="utf-8").read()
+check("窓口の中で前後の処理が投げていない", "WARN " not in log,
+      [line for line in log.splitlines() if "WARN " in line][:1])
 
 if failures:
     print("{} failed: {}".format(len(failures), failures))

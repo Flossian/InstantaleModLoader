@@ -289,6 +289,8 @@ class FakeCtx(object):
     # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
+    # 窓口に名乗る持ち主の名前（本物は apply() の間フォルダ名を返す）。
+    mod_name = os.path.basename(os.path.dirname(MOD))
 
     def logger(self, name, **kw):
         import instantale_modloader as _ml
@@ -320,6 +322,10 @@ def load_mod():
 def install(mod, ctx):
     """注入をやり直す。**ラッパを重ねない**（本物は世代管理で置き換える）。"""
     FakeHUD.update_display_text, FakeHUD.update_button_texts = PRISTINE
+    # 包みはローダの窓口 hud が1つの世代に1枚立てる。偽の ctx は世代を持たないので、
+    # 包みを外した後は窓口の覚えも消して立て直させる。
+    from instantale_modloader import gates
+    gates.reset_all()
     mod.apply(ctx)
 
 

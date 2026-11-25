@@ -15,8 +15,9 @@
 
 勢力が2つ以上書かれていない世界（統一された世界・勢力の話が無い世界）では台帳を作らない（VERIFICATION.md §3.98「勢力は設定に書かれたものだけ」）。
 
-版7: 刺客の会話の始まり（`hunter.py` の `conversation_starter`）のフックは、引数を受け取った形のまま元の関数へ渡し、
-`messages` だけを来た側に合わせて差し替える（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
+ゲームの関数を包む場面（戦闘の組み立てと終わり・会話の第一声・世界の生成の頼み・ロード・日数）は、
+ローダの窓口（`battles` / `arrivals.opening` / `llm.on_request` / `loads` / `durations`）に前後の処理を預ける（TECH.md §3.3.21）。
+世界の書き出し（`write_world`）だけは、`orig` の前にファイルがあったかを見て新しい世界を見分けるので自分で包む。
 """
 
 import json
@@ -25,9 +26,9 @@ import random
 import sys
 import types
 
-from instantale_modloader import choices, durations, frames, hudicons, jobs, llm, loads, modnpc, talk_summary, ui
+from instantale_modloader import choices, durations, frames, hudicons, jobs, llm, loads, modnpc, panels, talk_summary, ui
 from instantale_modloader import state as loader_state
-from instantale_modloader.state import UNKNOWN_WORLD, WorldStore, world_key
+from instantale_modloader.state import UNKNOWN_WORLD, WorldStore
 
 from . import hunter, material, rules, view, window
 
@@ -64,6 +65,7 @@ SETTING_NAMES = ("ENABLED", "ADD_ORGANIZATIONS", "GAIN_PER_STEP", "LOSS_PER_STEP
                  "HUNTER_WANTED_LOSS")
 
 # ---- 設定にしない定数 ----------------------------------------------------
+#: 窓口に名乗る持ち主の名前の予備（`apply()` の中は `ctx.mod_name` を先に使う）。
 OWNER = "339_town_factions"
 LOG_BASENAME = "town_factions.log"
 #: 周回の控え（世界×主人公）。ワールド個別の設定とは別のフォルダに置く
@@ -80,10 +82,10 @@ MANAGER_STANDING = "mod_town_factions_standing"
 MANAGER_TREND = "mod_town_factions_trend"
 MANAGER_DESIGN = "mod_town_factions_design"
 MANAGER_PEOPLE = "mod_town_factions_people"
-SEND_TARGET = "scripts.llm.llm_manager:send_request"
 # 世界の生成の頼みは `llm_manager_world_generate` から送られる。main_026 から部品ごとに別の関数になり、
-# `llm_manager` だけを包む形では届かなくなった（VERIFICATION.md §3.100）。同じ関数なら二重には包まない（llm.watch_aliases）。
-GENERATE_TARGETS = (SEND_TARGET, "scripts.llm.llm_manager_world_generate:send_request")
+# `llm_manager` だけを包む形では届かなくなった（VERIFICATION.md §3.100）。両方の構造つきの送り口に当てる
+# （ローダの送り口の窓口 `llm.on_request` の `targets`）。
+GENERATE_TARGETS = llm.send_targets("llm_manager", "llm_manager_world_generate", ns=False)
 WORLD_MANAGER = "create_world_overview"       # 世界の生成の頼み（概要の有無によらずこの名前。GAME.md §2.27）
 WORLD_SAVE_TARGET = "save_world_json:write_obfuscated_json_file"
 WORLD_FILE = "world_data.json"
@@ -132,21 +134,16 @@ def json_copy(value):
 
 
 def _store():
-    """世代をまたぐ入れ物。プロセスに1つ（TECH.md §3.5）。"""
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"worlds": None, "incidents": None, "worker": None, "busy": set(), "failed": set(),
-                 "structures": {}}
-        setattr(sys, STORE_ATTR, store)
-    return store
+    """世代をまたぐ入れ物。プロセスに1つ（TECH.md §3.5）。足りない鍵と型の変わった鍵は埋め直す（`state.process_store`）。"""
+    return loader_state.process_store(STORE_ATTR, {
+        "worlds": None, "incidents": None, "worker": None, "busy": set(), "failed": set(), "structures": {}})
 
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     quiet = ctx.logger(LOG_BASENAME, dedup=True)
+    owner = ctx.mod_name or OWNER
     store = _store()
-    store.setdefault("busy", set())
-    store.setdefault("failed", set())
     if store["worlds"] is None:
         store["worlds"] = loader_state.WorldStore(ctx, STATE_DIRNAME, default=rules.empty_ledger,
                                                   write=write)
@@ -156,6 +153,7 @@ def apply(ctx):
     incidents_store = store["incidents"].rebind(ctx)
 
     # ------------------------------------------------------------ ワールド個別の設定
+    # 書くのは組織を設けて作った世界の ENABLED だけ（`write_world`）。この器は書く側で、読むのは下の `world_settings`。
     settings_store = getattr(sys, SETTINGS_STORE_ATTR, None)
     if not isinstance(settings_store, WorldStore):
         settings_store = WorldStore(ctx, SETTINGS_DIRNAME, default=dict, write=write)
@@ -163,25 +161,12 @@ def apply(ctx):
     else:
         settings_store.rebind(ctx, write)
     # 注入のたびにモジュールは作り直され、一括設定を注入してからここへ来る（TECH.md §3.8）。
-    base_settings = {name: globals()[name] for name in SETTING_NAMES}
-
-    def refresh_world(app):
-        """いまの世界の個別設定を読み直して反映する（332 と同じ形）。"""
-        record = {}
-        try:
-            current = world_key(app) if app is not None else UNKNOWN_WORLD
-            if isinstance(current, str) and current != UNKNOWN_WORLD:
-                loaded = settings_store.load(current, fresh=True)
-                record = loaded if isinstance(loaded, dict) else {}
-        except Exception:
-            ctx.log_exc("town factions: cannot read world settings")
-        for name in SETTING_NAMES:
-            default = base_settings[name]
-            value = record.get(name, default)
-            globals()[name] = value if type(value) is type(default) else default
+    # 読み手はローダの `state.WorldSettings`（型の照合と読み直しの決まりはそちら）。
+    world_settings = loader_state.WorldSettings(ctx, SETTINGS_DIRNAME, SETTING_NAMES, globals(), write=write)
 
     def enabled(app):
-        refresh_world(app)
+        """いまの世界の個別設定をモジュールの定数へ反映してから、有効かを返す。"""
+        world_settings.refresh(app, globals())
         return bool(ENABLED)
 
     # ------------------------------------------------------------ 型（構造化出力）
@@ -626,11 +611,11 @@ def apply(ctx):
         return "\n\n".join(lines) or None
 
     modnpc.install(ctx, write=write)
-    modnpc.register(OWNER, modnpc.ANY, notes=notes, write=write)
+    modnpc.register(owner, modnpc.ANY, notes=notes, write=write)
 
     # ------------------------------------------------------------ 勢力の刺客（hunter.py）
     hunter_note = hunter.install(types.SimpleNamespace(
-        ctx=ctx, write=write, worlds=worlds, ensure=ensure, rules=rules, owner=OWNER, rng=RNG,
+        ctx=ctx, write=write, worlds=worlds, ensure=ensure, rules=rules, owner=owner, rng=RNG,
         cfg=lambda: {name: globals()[name] for name in SETTING_NAMES},
         notify=lambda key: hudicons.notify(ICON_KEY, playthrough=key)))
 
@@ -707,7 +692,7 @@ def apply(ctx):
             reason))
 
     talk_summary.install(ctx, write)
-    talk_summary.ride(OWNER, ctx, begin, settle,
+    talk_summary.ride(owner, ctx, begin, settle,
                       {CHANGE_FIELD: int, REASON_FIELD: str, RECONCILE_FIELD: str})
 
     # ------------------------------------------------------------ 日数が進んだ後
@@ -780,21 +765,16 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("town factions: after elapse_days failed")
 
-    durations.on_days(OWNER, ctx, after=days_end, write=write)
+    durations.on_days(owner, ctx, after=days_end, write=write)
 
     # ------------------------------------------------------------ 勢力と情勢の窓
     # 絵のパスは apply() の間に組む（`ctx.mod_dir` はフックの中では読めない）。
     icon_dir = getattr(ctx, "mod_dir", None) or os.path.dirname(os.path.abspath(__file__))
     icon_images = tuple(os.path.join(icon_dir, name) for name in ICON_FILES)
 
-    def close_view():
-        current = store.get("view")
-        store["view"] = None
-        if current is not None:
-            try:
-                current.dismiss()
-            except Exception:
-                ctx.log_exc("town factions: could not close the window")
+    # 画面は `store["view"]` に1枚だけ持ち、もう一度押したら閉じる（ローダの `panels.Toggle`）。
+    view_toggle = panels.Toggle(store, "view", log_exc=lambda text: ctx.log_exc("town factions: " + text))
+    close_view = view_toggle.close
 
     def view_model(app):
         key = worlds.playthrough(app)
@@ -805,19 +785,11 @@ def apply(ctx):
         return view.build(ledger, day=ui.game_day(app), here=ui.area_id_of(ui.current_area(app)),
                           area_names=names, laws=ui.lawfulness_by_area(getattr(app, "player", None)))
 
-    def toggle_view(app):
-        if store.get("view") is not None:
-            close_view()
-            return
-        if app is None:
-            return
-        ensure(app)
-        try:
-            store["view"] = window.open_window(app, view_model(app), write=write,
-                                               on_dismiss=lambda: store.update({"view": None}))
-        except Exception:
-            store["view"] = None
-            ctx.log_exc("town factions: could not open the window")
+    def open_view(app, on_dismiss):
+        ensure(app)                     # 台帳が無ければ作り始めてから開く
+        return window.open_window(app, view_model(app), write=write, on_dismiss=on_dismiss)
+
+    toggle_view = view_toggle.on_press(open_view)
 
     def listed(app):
         """一覧に「勢力と情勢」の行を出すか（いまの世界で有効か）。ローダが並べるたびに聞く。
@@ -854,7 +826,7 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("town factions: cannot check the ledger after loading")
 
-    loads.on(OWNER, ctx, LOAD_KINDS, after=on_load, write=write)
+    loads.on(owner, ctx, LOAD_KINDS, after=on_load, write=write)
 
     def refresh_choice_buttons(app, _buttons):
         """読み込みの包みが読み込みを拾えなかったときの保険。
@@ -869,46 +841,32 @@ def apply(ctx):
         store["checked"] = key
         ensure(app)
 
-    choices.provide(ctx, None, refresh=refresh_choice_buttons, owner=OWNER)
+    choices.provide(ctx, None, refresh=refresh_choice_buttons, owner=owner)
 
     # ------------------------------------------------------------ 世界を作るとき
-    def install_generate(target):
-        @ctx.wrap(target, required=False)
-        def send_request(orig, *args, **kwargs):
-            """世界の生成の頼みに【勢力】の段を足す（設定を入れているときだけ）。"""
-            manager_name = args[0] if args else kwargs.get("manager_name")
-            if manager_name == WORLD_MANAGER:
-                # 印は世界を作るたびに付け直す（前の生成が途中で止まった印を、次に書く世界へ持ち越さない）
-                store["organized"] = False
-            if not ORGANIZE_NEW_WORLDS or manager_name != WORLD_MANAGER:
-                return orig(*args, **kwargs)
-            try:
-                message = args[1] if len(args) > 1 else kwargs.get("message")
-                changed = False
-                if isinstance(message, list):
-                    copied = []
-                    for turn in message:
-                        text = turn.get("content") if isinstance(turn, dict) else None
-                        added = material.with_world_organizations(text) \
-                            if isinstance(turn, dict) and turn.get("role") == "user" else None
-                        if added is not None and not changed:
-                            turn, changed = dict(turn, content=added), True
-                        copied.append(turn)
-                    if changed:
-                        if len(args) > 1:
-                            args = (args[0], copied) + tuple(args[2:])
-                        else:
-                            kwargs = dict(kwargs, message=copied)
-                        store["organized"] = True
-                        write("generate: asked the world generation for 2-4 organizations")
-                if not changed:
-                    write("generate: WARN the world generation prompt had no place for the "
-                          "organizations (left untouched)")
-            except Exception:
-                ctx.log_exc("town factions: cannot add the organizations to the world generation")
-            return orig(*args, **kwargs)
+    def generate_request(req):
+        """世界の生成の頼みに【勢力】の段を足す（設定を入れているときだけ。ローダの送り口の窓口 `llm.on_request`）。
 
-    llm.watch_aliases(ctx, list(GENERATE_TARGETS), install_generate, label="town factions")
+        足すのは最初に段を足せた user の発言1件だけ（`llm.edit_turn`。ゲームの messages は書き換えず写しを送る）。
+        """
+        # 印は世界を作るたびに付け直す（前の生成が途中で止まった印を、次に書く世界へ持ち越さない）
+        store["organized"] = False
+        if not ORGANIZE_NEW_WORLDS:
+            return None
+        try:
+            copied = llm.edit_turn(req.message, material.with_world_organizations, role="user")
+        except Exception:
+            ctx.log_exc("town factions: cannot add the organizations to the world generation")
+            return None
+        if copied is None:
+            write("generate: WARN the world generation prompt had no place for the "
+                  "organizations (left untouched)")
+            return None
+        store["organized"] = True
+        write("generate: asked the world generation for 2-4 organizations")
+        return copied
+
+    llm.on_request(owner, ctx, generate_request, managers=WORLD_MANAGER, targets=GENERATE_TARGETS, write=write)
 
     @ctx.wrap(WORLD_SAVE_TARGET, required=False, safe=True)
     def write_world(orig, *args, **kwargs):

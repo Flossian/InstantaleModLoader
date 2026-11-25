@@ -66,6 +66,19 @@ Gemini / OpenAI / Claude で毎回空振りしていた）。
 `resolve_send()` は `llm_manager` の別名を先に見て、
 無ければ**前置きで**送信モジュールを走査する。
 
+## 頼みの名前で振り分けて書き換える（`on_request`）
+
+`wrap_outgoing` は本文の文字列だけを渡し、頼みの名前（`manager_name`）と返却型を渡さない。
+頼みの名前で選んで messages の1件に文を足す・返却型に欄を足す MOD は、送り口を各自で包んでいた
+（136 / 334 / 336 / 339 / 342 / 347 / 401）。包むのはここの1か所にし、MOD は登録する:
+
+    llm.on_request(owner, ctx, fn, managers=("referee_attack",), after=fn2, write=write)
+    fn(req)    -> 新しい messages / None（`req.structure` に型を入れれば返却型も替わる）
+    fn2(req)   `orig` の後（`req.result`）
+
+書き換えの部品は `edit_turn`（messages の1件の本文）と `extend_structure`（返却型に欄を足した子の型）。
+決まりは `on_request` の説明にある。
+
 ## 印だけでは足りない場合は MOD 側で止める
 
 印はスレッドに立つので、`chat` が返った後に**別のスレッド**が送る経路には届かない。
@@ -237,17 +250,14 @@ def game_choice(path=None):
 
     `inference` は `local` / `cloud_api_key` など、`provider` は `OpenAI API` / `Claude API` など
     （ゲームの設定画面の表記そのまま）、`model` はゲームの一覧の名前。
-    切り替えるとゲームが起動し直すので、注入の時に1回読めば足りる（`imagegen.backend` と同じ読み方）。
+    切り替えるとゲームが起動し直すので、注入の時に1回読めば足りる（`imagegen.backend` と同じ読み方。`saves._game_ai_setting`）。
     """
-    import io
-    import os
-
     from . import saves
 
-    path = path or os.path.join(saves.data_dir(), "config.json")
+    setting = saves._game_ai_setting(path)
+    if setting is None:
+        return None
     try:
-        with io.open(path, encoding="utf-8-sig") as fh:
-            setting = json.load(fh)["ai_setting"]
         cloud = setting.get("cloud_model_setting") or {}
         return {"inference": setting.get("llm_inference"),
                 "provider": cloud.get("cloud_llm_provider"),
@@ -380,6 +390,145 @@ def create_structure(ctx, name: str, fields: dict, *, label: str = "llm"):
         return None
 
 
+def edit_turn(message, edit, *, role="system", last=False, unless=None):
+    """messages の1件の本文を `edit` で書き換えた写しを返す。書き換えなければ None。
+
+        rule = lambda text: text.rstrip() + "\\n\\n" + RULE
+        llm.edit_turn(message, rule)                                   # 先頭の system の末尾に足す
+        llm.edit_turn(message, lambda text: text + NOTE, role="user", last=True, unless=MARK)
+
+    | 引数 | |
+    |---|---|
+    | `edit(content)` | 本文（str）を受けて、新しい本文か None を返す。None ならその発言は飛ばして次の候補を試す |
+    | `role` | 対象の発言の role。None なら role を問わない |
+    | `last` | 真なら後ろから探す（最後の user に足す形） |
+    | `unless` | この文字列がどれかの発言の本文に入っていたら何もしない（二重に足さない印） |
+
+    `edit` が新しい本文を返した最初の発言（`last` なら最後の発言）だけを差し替える。
+    「決まった行の直後に差し込み、その行が無ければ次の発言を見る」形（`342_` の手引き・`339_` の勢力の段）は、
+    行が無いときに `edit` が None を返せばよい。
+    次の場合は None を返す: `message` が list でない・対象の発言が無い・`edit` が全部 None を返した・
+    返した本文が元と同じ・`unless` の印がもう入っている。
+    `edit` が str と None 以外を返したら `TypeError`（呼ぶ側の書き間違い）。
+
+    ゲームが持つ list と dict は書き換えない（list を浅く写し、差し替える1件だけ dict を写す）。
+    ゲームは同じ list を使い回すことがあり、書き換えると頼むたびに文が積み上がる。
+    写しは `talk_summary.with_instruction`・`334_` の `append_note`・`342_` の `with_vfx_guide`・`336_` の
+    `with_instruction` にあった（足す場所と区切りがそれぞれ違うので、場所は `role` / `last` で、区切りは `edit` で決める）。
+    """
+    if not isinstance(message, list) or not callable(edit):
+        return None
+    if unless:
+        for turn in message:
+            content = content_of(turn)
+            if content is not None and unless in content:
+                return None
+    indexes = range(len(message) - 1, -1, -1) if last else range(len(message))
+    for index in indexes:
+        turn = message[index]
+        if not isinstance(turn, dict):
+            continue
+        content = content_of(turn)
+        if content is None or (role is not None and turn.get("role") != role):
+            continue
+        new = edit(content)
+        if new is None:
+            continue
+        if not isinstance(new, str):
+            raise TypeError("edit_turn: edit() returned {!r} (a str or None)".format(type(new)))
+        if new == content:
+            return None
+        copied = list(message)
+        copied[index] = dict(turn, content=new)
+        return copied
+    return None
+
+
+#: `extend_structure` が作った型の控えの数。直近のこれだけを強く持つ。
+#: 返却型を頼むたびに作り直す送り口（戦闘の審判。`342_`）があり、型ごとに持ち続けると溜まる。
+#: 子の型は `__bases__` から元の型を強く掴むので、弱い鍵の辞書にしても元の型が回収されない（`342_` が踏んだ）。
+#: 数で止めれば、定数の型（会話の返事。`347_`）は使い回し、作り直される型は古い順に落ちる。
+EXTENDED_LIMIT = 64
+_EXTENDED = {}
+_EXTENDED_LOCK = threading.Lock()
+
+
+def model_factory():
+    """pydantic の `create_model`。pydantic を先に、無ければ `llm_manager` から引く。どちらも無ければ None。
+
+    ゲームの `llm_manager` は pydantic の同じ関数を import しているので、どちらでも同じ型ができる。
+    `342_` / `347_` は pydantic から、`talk_summary` / `336_` は `llm_manager` から引いていた。
+    """
+    pydantic_module = sys.modules.get("pydantic")
+    factory = getattr(pydantic_module, "create_model", None) if pydantic_module is not None else None
+    if callable(factory):
+        return factory
+    module = manager()
+    factory = getattr(module, "create_model", None) if module is not None else None
+    return factory if callable(factory) else None
+
+
+def structure_fields(structure):
+    """pydantic の型の欄の辞書（`model_fields`、古い版は `__fields__`）。型でなければ None。"""
+    for attr in ("model_fields", "__fields__"):
+        fields = getattr(structure, attr, None)
+        if isinstance(fields, dict):
+            return fields
+    return None
+
+
+def extend_structure(structure, fields, *, replace=False, name=None):
+    """返却型 `structure` に欄を足した子の型（`__base__=structure`）。足せなければ None。
+
+        child = llm.extend_structure(structure, {"expression": (str, Field(..., description="..."))})
+
+    | 引数 | |
+    |---|---|
+    | `fields` | `{"欄の名前": 型}` か `{"欄の名前": (型, 既定値か Field)}`。型だけなら必須（`...`） |
+    | `replace` | 偽（既定）なら、`structure` に既にある欄の名前が来たら None（足さない。`347_` の形）。真なら上書きする（`342_` の `vfx` の選択肢を広げる形。元の説明・既定値を引き継ぐかは呼ぶ側が Field で決める） |
+    | `name` | 子の型の名前。省けば `structure` と同じ名前（スキーマ文に出る名前を変えない） |
+
+    子の型は元の型の子なので、ゲームは足した欄を無視してそのまま読める。
+    足した欄はスキーマ文と grammar の両方に出る（`send_request` の中で型から作られる）。
+    答えから足した欄を抜いて元の型に戻すのは `talk_summary.restore`。
+
+    同じ型に同じ `fields`（`repr` で比べる。説明が変われば別の組）なら、前に作った子の型を返す。
+    控えは直近 `EXTENDED_LIMIT` 組（定数のところに理由）。
+    `structure` が pydantic の型でない・`create_model` が引けない・作るのに失敗したら None（失敗はローダのログに残す）。
+    写しは `342_` の `extend_structure`・`347_` の `widen`・`336_` と `talk_summary` の `extended` にあった。
+    """
+    have = structure_fields(structure)
+    if not isinstance(structure, type) or have is None or not isinstance(fields, dict) or not fields:
+        return None
+    if not replace and any(field in have for field in fields):
+        return None
+    specs = {}
+    for field, spec in fields.items():
+        specs[str(field)] = spec if isinstance(spec, tuple) and len(spec) == 2 else (spec, ...)
+    key = (id(structure), bool(replace), name, tuple((field, repr(spec)) for field, spec in specs.items()))
+    with _EXTENDED_LOCK:
+        known = _EXTENDED.get(key)
+        if known is not None and known[0] is structure:
+            _EXTENDED[key] = _EXTENDED.pop(key)        # 使った組を新しい側へ
+            return known[1]
+    factory = model_factory()
+    if factory is None:
+        return None
+    try:
+        child = factory(name or getattr(structure, "__name__", "Structure"), __base__=structure, **specs)
+    except Exception:
+        from . import log_exc
+        log_exc("llm: cannot extend the structure {!r} with {}".format(
+            getattr(structure, "__name__", structure), ", ".join(specs)))
+        return None
+    with _EXTENDED_LOCK:
+        _EXTENDED.pop(key, None)
+        _EXTENDED[key] = (structure, child)
+        while len(_EXTENDED) > EXTENDED_LIMIT:
+            _EXTENDED.pop(next(iter(_EXTENDED)))
+    return child
+
+
 def as_dict(raw):
     """返ってきたものを辞書にする。**形を決めつけない。**
 
@@ -441,6 +590,45 @@ def truthy(value, *, unknown: bool = True) -> bool:
             return True
         return unknown
     return bool(value)
+
+
+def whole(value, low=None, high=None, *, choices=None):
+    """モデルが返した整数（段・尺度・増減）を読む。読めなければ None。
+
+    `truthy` と並ぶ「LLM の答えを均す」口。写しの `336_` の `clamp_scale`・`337_` の `clamp_step`・
+    `339_` の `to_int` と同じ答えにそろえた:
+
+    - 真偽値は None（`int` の仲間だが、段の答えではない）
+    - 文字列は前後の空白と先頭の `+` を外す（`"+2"` / `" 3 "`）
+    - `int(float(...))` で整数にする。小数は 0 の方向へ切り捨てる（`"2.7"` は 2、`-2.7` は -2）
+    - 数にならない・NaN・inf は None
+    - `low` / `high` を渡したら、その範囲に止める（None の側は止めない）
+
+    `choices` を渡すと、範囲に止めた後の値がその中に無ければ None にする（`341_` の `clamp_stance` の形）。
+    このときは整数でない小数を切り捨てずに None にする（決まった値のどれかを選ぶ答えで、
+    1.5 を 1 と読むと別の選択になるため。`341_` と同じ）。
+    `346_` の写しは四捨五入していたので、寄せると 0.5 以上の端数の読み方が変わる。
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        value = value.strip().lstrip("+")
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if number != number or number in (float("inf"), float("-inf")):
+        return None
+    if choices is not None and not number.is_integer():
+        return None
+    result = int(number)
+    if low is not None:
+        result = max(low, result)
+    if high is not None:
+        result = min(high, result)
+    if choices is not None and result not in choices:
+        return None
+    return result
 
 
 def strip_fence(text) -> str:
@@ -531,12 +719,9 @@ def ask(ctx, manager_name: str, message, *, timeout, structure=None,
     | `write` | MOD 自身のログ関数（かかった秒数と結果を1行）。無くてよい |
     | `errors` | list を渡すと、送信が投げた例外をそこへ積む。None の理由（呼べなかった `TypeError` か、通信エラーか）を呼び側で分けたいときに使う。無くてよい |
 
-    `timeout` を受け付けない未実測のプロバイダでは `TypeError` で失敗して
-    None を返す（呼び側は LLM を使わない道へ降りる）。
-    渡さずに呼び直さないのは、**止まらないことのほうが大事**だから。
-
-    ゲームの送り口は `timeout` を受け取るが、待ちを打ち切らない（main_026 で、クラウドもローカルも
-    `timeout=0.5` で返事を最後まで待った。VERIFICATION.md §3.101）。
+    `timeout` はゲームの送り口へは渡さない。送り口は受け取っても待ちを打ち切らない
+    （main_026 で、クラウドもローカルも `timeout=0.5` で返事を最後まで待った。VERIFICATION.md §3.101）が、
+    守るプロバイダでは打ち切られ、下の「打ち切らない」と逆になるため。
     ここでも打ち切らない。`timeout` 秒を過ぎたら WARN を1行出し、返事が来るまで待ち続ける。
     ローカルの速さは GPU で何倍も違い、上限は限られた環境の実測から決めているので、打ち切ると遅い環境で
     MOD の働きが毎回黙って消える。止まったきりの頼みは WARN で見分ける（VERIFICATION.md §3.101）。
@@ -548,7 +733,7 @@ def ask(ctx, manager_name: str, message, *, timeout, structure=None,
             write("{}: {} unavailable (no provider module is loaded yet)".format(
                 manager_name, name))
         return None
-    kwargs = {"timeout": timeout}
+    kwargs = {}
     if max_tokens is not None:
         kwargs["max_tokens"] = max_tokens
     args = (manager_name, list(message))
@@ -591,12 +776,17 @@ def ask(ctx, manager_name: str, message, *, timeout, structure=None,
 
 
 #: `watch_aliases` の登録（ctx, label, rearm）。作り直しの後に、並んだ順に包み直す。
-#: boot ごとにローダは読み直されるので sys に置く。遅れて当て直す boot の最中は、前の世代の
-#: `set_ai_models` の包みが据わったままで、そこから今の世代の登録を包み直す。
+#: ローダが読み直されるのは注入し直すたびで、boot ごとではない（遅れて当て直す boot は同じモジュールの
+#: `boot` を呼ぶ。`__init__._state` の説明と `tools/injector.py` の `BOOTSTRAP_TEMPLATE`）。
+#: それでも sys に置くのは、注入し直した後も、前の注入の `set_ai_models` の包み（読み直す前のモジュールの
+#: コード）が走りきるまで、その包みが `rearm_watches` を呼ぶため。モジュール変数にすると、その包みは
+#: 前の注入の登録しか見えない。sys に置けば、前の世代の包みからも今の世代の登録を包み直せる
+#: （用済みの ctx の登録は `_superseded` で外す）。錠も同じ理由で sys に置き、新旧のコードが同じ並びを取り合わないようにする。
 _WATCHES = vars(sys).setdefault("__instantale_llm_watches__", [])
 _WATCHES_LOCK = vars(sys).setdefault("__instantale_llm_watches_lock__", threading.Lock())
 
-#: `set_ai_models` が走っている間の旗。遅れて当て直す boot は別の世代のローダから走るので、sys に置く。
+#: `set_ai_models` が走っている間の旗。注入し直した後は、前の注入の包みが立てた旗を
+#: 読み直した後のモジュールのコードが読むので、sys に置く（`_WATCHES` と同じ理由）。
 _REBUILDING_ATTR = "__instantale_llm_rebuilding__"
 
 #: `watch_aliases` の当て方が「作り直しの最中なので後で当てる」と返すときの値。
@@ -688,7 +878,7 @@ def rearm_watches(ctx):
 
 
 def install_rebuild_hook(ctx):
-    """`set_ai_models` の直後に `rearm_watches` を呼ぶ。boot が MOD の適用の後に1回呼ぶ。
+    """`set_ai_models` の直後に `rearm_watches` を呼ぶ。boot が MOD の適用の前に1回呼ぶ。
 
     `set_ai_models` が走っている間は旗（`rebuilding`）を立て、boot の錠も取れれば持つ。旗の間は、
     遅れて当て直す boot の適用も見張りも送り口を包まない（`watch_aliases` の `LATER`）。
@@ -1122,3 +1312,285 @@ def wrap_outgoing(ctx, rewrite, *, label="llm", local=True, cloud=True,
                   lambda target: hook_manager_send(target, ns_of[target]),
                   label=label, on_arm=on_arm)
     return hooks
+
+
+# --------------------------------------------------------------------------
+# 送り口の窓口: 頼みの名前で振り分けて、送る messages と返却型を書き換える
+# --------------------------------------------------------------------------
+#: 窓口の置き場（`sys` の属性）。注入し直しをまたいで残る。
+REQUESTS_ATTR = "_instantale_llm_requests"
+_REQUESTS_LOCK = threading.Lock()
+REQUESTS_LABEL = "llm requests"
+
+
+class Request(object):
+    """送り口の1回の頼み。この頼みに当たる登録の全部の `fn` と `after` に、同じものが1つ渡る。
+
+    | 属性 | |
+    |---|---|
+    | `manager_name` | 頼みの名前（送り口の1つ目の引数）。文字列でなければ None |
+    | `message` | 送る messages。`fn` が新しい並びを入れる（か返す）と、それが送られ、次の MOD はそれを見る |
+    | `structure` | 返却型（`send_request` の3つ目の引数）。`fn` が型を入れると、それで送る。`ns` の頼みでは None で、入れると WARN を出して戻す |
+    | `ns` | `send_request_with_no_structure` か |
+    | `target` | 包んだ送り口（`MANAGER_SEND_TARGETS` の1つ） |
+    | `provider` | 送り口の持ち主から採ったプロバイダ名（`provider_of`） |
+    | `result` | `orig` の戻り値（`after` から読む） |
+    | `memo` | 前と後で控えを受け渡す辞書（鍵は持ち主の名前にする） |
+    | `app` | 走っている app（読んだ時に引く。読めなければ None） |
+    """
+
+    def __init__(self, manager_name, message, structure, ns, target, provider):
+        self.manager_name = manager_name
+        self.message = message
+        self.structure = structure
+        self.ns = bool(ns)
+        self.target = target
+        self.provider = provider
+        self.result = None
+        self.memo = {}
+
+    @property
+    def app(self):
+        from . import ui
+        try:
+            return ui.find_app()
+        except Exception:
+            return None
+
+
+def _requests_store():
+    from . import state
+    return state.process_store(REQUESTS_ATTR, {"hooks": {}, "seq": 0, "installed": None})
+
+
+def send_targets(*modules, ns=None):
+    """`MANAGER_SEND_TARGETS` のうち、部品と構造の有無で選んだ送り口のタプル（`on_request` の `targets` に渡す）。
+
+        llm.send_targets("llm_manager_battle")              # 戦闘の2つ
+        llm.send_targets("llm_manager", ns=False)           # llm_manager の send_request だけ
+
+    `modules` は部品のモジュール名の末尾（`llm_manager` / `llm_manager_battle` / `llm_manager_world_generate` /
+    `llm_manager_character_create`）。省けば全部。`ns` は None なら両方、True なら `send_request_with_no_structure`
+    だけ、False なら `send_request` だけ。知らない部品の名前は `ValueError`。
+    MOD が送り口の文字列を自分で書かずに済む（`tools/check_mods.py` は窓口が包む対象の文字列を MOD の中で探す）。
+    """
+    parts = {}
+    for target, target_ns in MANAGER_SEND_TARGETS:
+        part = target.partition(":")[0].rpartition(".")[2]
+        parts.setdefault(part, []).append((target, target_ns))
+    unknown = sorted(name for name in modules if name not in parts)
+    if unknown:
+        raise ValueError("llm.send_targets: unknown modules {} (known: {})".format(unknown, ", ".join(parts)))
+    chosen = modules or tuple(parts)
+    return tuple(target for target, target_ns in MANAGER_SEND_TARGETS
+                 if target.partition(":")[0].rpartition(".")[2] in chosen and (ns is None or target_ns == bool(ns)))
+
+
+def _manager_filter(managers):
+    """`managers` の受け方を1つにする。None（全部）・呼べるもの・名前の集まり。"""
+    if managers is None or callable(managers):
+        return managers
+    if isinstance(managers, str):
+        return frozenset((managers,))
+    names = frozenset(name for name in managers if isinstance(name, str))
+    if not names:
+        raise ValueError("llm.on_request: managers has no names: {!r}".format(managers))
+    return names
+
+
+def on_request(owner, ctx, fn=None, *, managers=None, targets=None, after=None, write=None):
+    """送り口（`MANAGER_SEND_TARGETS`）を通る頼みの messages と返却型を、頼みの名前で振り分けて書き換える。
+
+        def add_rule(req):                       # 送る前。req は Request
+            return llm.edit_turn(req.message, lambda text: text.rstrip() + "\\n\\n" + RULE)
+        llm.on_request(OWNER, ctx, add_rule, managers=("referee_attack",), write=write)
+
+    | 引数 | |
+    |---|---|
+    | `fn(req)` | 送る前。新しい messages の並びを返す（か `req.message` に入れる）と、それを送る。返却型は `req.structure` に入れる。None を返せばそのまま |
+    | `managers` | 当てる頼みの名前。None（全部）・名前1つ・名前の集まり・`fn(manager_name) -> bool` |
+    | `targets` | 当てる送り口（`send_targets(...)` で選ぶ。`MANAGER_SEND_TARGETS` の対象の文字列の集まり）。None なら全部。前に自分で包んでいた送り口と同じにすると、届く範囲が変わらない |
+    | `after(req)` | `orig` が返った後（投げたときは来ない）。`req.result` が答え。戻り値は変えられない（答えの中身を読む・その場で直すまで） |
+    | `write` | MOD のログ関数。`fn` / `after` が投げたときの WARN を書く |
+
+    呼ぶ順は、MOD が自分で送り口を包んでいたときの重なりと同じにする（gates の決まり。TECH.md §3.3.21）。
+    `fn` は登録の新しい順で、前の MOD が書き換えた messages と型を次の MOD が見る。`after` は登録の古い順。
+
+    | 決まり | 理由 |
+    |---|---|
+    | 包むのはローダの1か所。全 MOD の適用の後に一番外側に立てる（`install_requests`・`gates.defer_outermost`） | 9本の MOD が同じ送り口を包み、引数の読み方・頼みの名前での振り分けを写していた |
+    | 1回の頼みに1度だけ当てる。同じスレッドで送り口の中からもう一度送り口が呼ばれたら素通し | 送り口は言語の包みと別名で入れ子に通ることがある。送り直す MOD（`talk_summary`）の2回目にも、外で書き換えた引数がそのまま渡る |
+    | `fn` / `after` の例外は握って記録し、その MOD は何もしなかったことにして続ける（`fn` が入れた値も戻す） | 1本の不具合で頼みごと落とさない |
+    | messages は list、返却型は型（`type`）だけを受ける。違う値は WARN を出して戻す | ゲームの送り口に渡ると、頼みの最中に落ちる |
+    | 引数は来た側（位置かキーワード）に合わせて差し替える（`frames.replace_arg`） | 呼び手の渡し方を決め打ちしない |
+    | 登録は持ち主ごとに1つ（同じ持ち主は差し替える）。登録した ctx が用済みなら呼ばない | 注入し直すたびに `apply()` が走る |
+    | ローカル実行でも当てる | 前に自分で包んでいた MOD は、どれもローカルでも書き換えていた（クラウドだけに当てる MOD は `fn` の中で `is_local_runtime()` を見る） |
+
+    `orig` を2回呼ぶ（足した形が失敗したら元の頼みで送り直す）・答えそのものを差し替える形は窓口に載らない。
+    その形は自分で送り口を包む（`talk_summary` と `336_` の盗みの判定）。
+    """
+    if fn is None and after is None:
+        raise ValueError("llm.on_request: needs fn or after=")
+    for value in (fn, after):
+        if value is not None and not callable(value):
+            raise TypeError("llm.on_request needs callables, got {!r}".format(type(value)))
+    known = dict(MANAGER_SEND_TARGETS)
+    if targets is not None:
+        targets = frozenset([targets] if isinstance(targets, str) else targets)
+        unknown = sorted(target for target in targets if target not in known)
+        if unknown or not targets:
+            raise ValueError("llm.on_request: unknown targets {} (use MANAGER_SEND_TARGETS)".format(unknown))
+    entry = {"ctx": ctx, "fn": fn, "after": after, "managers": _manager_filter(managers),
+             "targets": targets, "write": write}
+    from . import window_put
+    with _REQUESTS_LOCK:
+        store = _requests_store()
+        store["seq"] += 1
+        entry["seq"] = store["seq"]
+        window_put(store["hooks"], owner, entry)
+    install_requests(ctx, write)
+
+
+def off_request(owner):
+    """`on_request` の登録を下げる。下げたら True。"""
+    with _REQUESTS_LOCK:
+        return _requests_store()["hooks"].pop(str(owner), None) is not None
+
+
+def _request_entries():
+    from . import alive
+    with _REQUESTS_LOCK:
+        rows = sorted(_requests_store()["hooks"].items(), key=lambda row: row[1]["seq"])
+    return [(owner, entry) for owner, entry in rows if alive(entry["ctx"])]
+
+
+def request_owners():
+    """`on_request` の生きている登録の持ち主（登録の古い順）。ログと検査用。"""
+    return [owner for owner, _entry in _request_entries()]
+
+
+def reset_requests():
+    """`on_request` の登録と包みの印を全部忘れる（検査用）。"""
+    setattr(sys, REQUESTS_ATTR, {"hooks": {}, "seq": 0, "installed": None})
+
+
+def _wants(entry, target, manager_name):
+    if entry["targets"] is not None and target not in entry["targets"]:
+        return False
+    managers = entry["managers"]
+    if managers is None:
+        return True
+    if manager_name is None:
+        return False
+    if callable(managers):
+        return bool(managers(manager_name))
+    return manager_name in managers
+
+
+def _request_oops(owner, entry, side, exc):
+    from . import log_exc
+    log_exc("{}: the {} of {} failed".format(REQUESTS_LABEL, side, owner))
+    write = entry.get("write")
+    if callable(write):
+        try:
+            write("WARN {}: the {} raised {}: {}".format(REQUESTS_LABEL, side, type(exc).__name__, exc))
+        except Exception:
+            pass
+
+
+def send_through(target, ns, orig, args, kwargs, provider=None):
+    """送り口の包みの中身。登録に当てて `orig` を呼び、`orig` の戻り値を返す（例外はそのまま流す）。
+
+    包みの中と検査から呼ぶ。
+    """
+    from . import frames
+    rows = _request_entries()
+    if not rows:
+        return orig(*args, **kwargs)
+    manager_name = frames.arg(args, kwargs, "manager_name", 0)
+    manager_name = manager_name if isinstance(manager_name, str) else None
+    picked = []
+    for owner, entry in rows:
+        try:
+            if _wants(entry, target, manager_name):
+                picked.append((owner, entry))
+        except Exception as exc:
+            _request_oops(owner, entry, "managers filter", exc)
+    if not picked:
+        return orig(*args, **kwargs)
+    message = frames.arg(args, kwargs, "message", 1)
+    structure = None if ns else frames.arg(args, kwargs, "structure", 2)
+    req = Request(manager_name, message, structure, ns, target,
+                  provider if provider is not None else provider_of(orig))
+    for owner, entry in reversed(picked):
+        if entry["fn"] is None:
+            continue
+        kept = (req.message, req.structure)
+        try:
+            got = entry["fn"](req)
+            if got is not None:
+                if not isinstance(got, list):
+                    raise TypeError("fn returned {!r} (a list of messages or None)".format(type(got)))
+                req.message = got
+            if req.message is not kept[0] and not isinstance(req.message, list):
+                raise TypeError("req.message became {!r} (a list)".format(type(req.message)))
+            if req.structure is not kept[1]:
+                if ns:
+                    raise TypeError("req.structure was set on {} (it sends no structure)".format(target))
+                if not isinstance(req.structure, type):
+                    raise TypeError("req.structure became {!r} (a type)".format(type(req.structure)))
+        except Exception as exc:
+            req.message, req.structure = kept
+            _request_oops(owner, entry, "request hook", exc)
+    if req.message is not message:
+        args, kwargs, _ = frames.replace_arg(args, kwargs, "message", 1, req.message)
+    if not ns and req.structure is not structure:
+        args, kwargs, _ = frames.replace_arg(args, kwargs, "structure", 2, req.structure)
+    req.result = orig(*args, **kwargs)
+    for owner, entry in picked:
+        if entry["after"] is None:
+            continue
+        try:
+            entry["after"](req)
+        except Exception as exc:
+            _request_oops(owner, entry, "after hook", exc)
+    return req.result
+
+
+def install_requests(ctx, write=None):
+    """`on_request` の包みを、送り口の全部（`MANAGER_SEND_TARGETS`）に立てる。1つの世代につき1回。立てたら True。
+
+    MOD を適用している間は立てない。`boot()` が全 MOD の後にローダの ctx で一番外側に立てる
+    （`gates.defer_outermost`。TECH.md §3.3.21）。送り口は後から生え、ゲームが作り直すので、
+    当て方は `watch_aliases` に任せる（作り直しの後は登録の順に包み直すので、後に立てたこの包みが外側のまま）。
+    """
+    from . import alive, gates
+    gates.track_install_attr(REQUESTS_ATTR)
+    # 用済みの ctx（前の世代）からは立てない。立てると今の世代の包みの印を前の世代で上書きし、次の登録で二重に立つ
+    if gates.deferring() or not alive(ctx):
+        return False
+    generation = getattr(ctx, "generation", None)
+    with _REQUESTS_LOCK:
+        store = _requests_store()
+        done = store.get("installed")
+        if isinstance(done, dict) and done.get("generation") == generation:
+            return False
+        store["installed"] = {"generation": generation}
+    passing = threading.local()
+
+    def hook(target, ns):
+        @ctx.wrap(target, required=False, safe=True)
+        def request_send(orig, *args, **kwargs):
+            if getattr(passing, "active", False):
+                return orig(*args, **kwargs)
+            passing.active = True
+            try:
+                return send_through(target, ns, orig, args, kwargs)
+            finally:
+                passing.active = False
+
+    ns_of = dict(MANAGER_SEND_TARGETS)
+    watch_aliases(ctx, list(ns_of), lambda target: hook(target, ns_of[target]), label=REQUESTS_LABEL)
+    if write:
+        write("{}: the window was declared on {} sender(s)".format(REQUESTS_LABEL, len(ns_of)))
+    return True

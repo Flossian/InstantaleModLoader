@@ -7,12 +7,11 @@
 この MOD は分類ごとに効き方を決め直す。
 ファイルは分類ごとに分け、この入口が方針（設定・文言・フックの設置）を持つ。
 
-| ファイル | 分類 | 状態 |
-| --- | --- | --- |
-| `healing.py` | 回復アイテム（`healing_item` / `consumable` の食料・飲み物・医薬品・ポーション・薬草・きのこ） | この版 |
-| （未着手） | 武器・防具の付加効果、道具・書物・素材の効果 | 次以降 |
+| ファイル | 分類 |
+| --- | --- |
+| `healing.py` | 回復アイテム（`healing_item` / `consumable` の食料・飲み物・医薬品・ポーション・薬草・きのこ） |
 
-## 回復アイテム（この版）
+## 回復アイテム
 
 素のゲームの回復アイテムは細分に関係なく全部同じ動きをする。
 `attributes` の `疲労負荷`（スタミナ。`physical_integrity`）を払って `回復` ぶん HP を戻す。
@@ -80,13 +79,12 @@ HP は**最大 HP に対する割合**で書く（`回復: 25%`）。
 `scroll`（巻物）と、細分の無い品（本体同梱の `healing_herb`）は素のまま。
 値段は `129_` が付ける（食料は `回復` を失うので価値段階の軸に落ちる。それでよい）。
 ポーションの**バフ**は、能力値の実行時の持ち方（`ability_scores` / `original_ability_scores` /
-`update_ability_scores` の関係）が測れていないので、この版では状態異常の解除だけ。
+`update_ability_scores` の関係）が測れていないため入れず、ポーションは状態異常の解除だけ。
 """
 
-import sys
 import threading
 
-from instantale_modloader import frames, items, saving, text_filters, ui
+from instantale_modloader import frames, items, saving, state, text_filters, ui
 
 from . import healing
 
@@ -146,9 +144,10 @@ def labels_of():
 def rules_of():
     """設定を分類ごとのファイルへ渡す形にまとめる（設定はこの入口だけが読む）。"""
     return {
-        "rarity": {"common": float(RARITY_COMMON), "rare": float(RARITY_RARE),
-                   "magical": float(RARITY_MAGICAL), "epic": float(RARITY_EPIC),
-                   "legendary": float(RARITY_LEGENDARY), "mythic": float(RARITY_MYTHIC)},
+        # レア度の6段の並びはローダの `items.RARITIES`（common〜mythic）
+        "rarity": dict(zip(items.RARITIES, (
+            float(RARITY_COMMON), float(RARITY_RARE), float(RARITY_MAGICAL),
+            float(RARITY_EPIC), float(RARITY_LEGENDARY), float(RARITY_MYTHIC)))),
         "stamina_base": float(STAMINA_BASE),
         "stamina_per_value": float(STAMINA_PER_VALUE),
         "drink_rate": float(DRINK_RATE),
@@ -190,23 +189,15 @@ def compose(item_name, planned, clear):
 
 
 def apply(ctx):
-    blanks = {"logged": 0, "reworked": 0, "consumed": 0, "refused": 0}
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = dict(blanks)
-        setattr(sys, STORE_ATTR, store)
-    else:
-        for name, blank in blanks.items():
-            store.setdefault(name, blank)
+    mod_owner = ctx.mod_name or "134_balance_item_effects"
+    # 件数は注入をまたいで数える（ローダの `state.process_store`。足りない鍵と型の変わった鍵だけを埋める）
+    store = state.process_store(STORE_ATTR, {"reworked": 0, "consumed": 0, "refused": 0})
 
     write = ctx.logger(LOG_BASENAME, stamp=False)
-
-    def note(text):
-        store["logged"] += 1
-        if store["logged"] <= LOG_LIMIT:
-            write(text)
-        elif store["logged"] == LOG_LIMIT + 1:
-            write("... 以降は件数だけ数える（LOG_LIMIT={}）".format(LOG_LIMIT))
+    # 品ごとの記録は LOG_LIMIT 行で打ち切り、超えたら1回だけ断りを書く。
+    # 数は注入の間ずっと持ち、手で注入し直したら新しいログで数え直す（ctx.logger の span="injection"）
+    note = ctx.logger(LOG_BASENAME, stamp=False, cap=LOG_LIMIT, span="injection",
+                      cap_notice="... 以降は件数だけ数える（LOG_LIMIT={}）".format(LOG_LIMIT))
 
     def name_of(item):
         field, attributes = healing.read_item(item)
@@ -235,7 +226,7 @@ def apply(ctx):
             if entry in silenced.values():
                 entry.silence()
 
-    saving.on("134_balance_item_effects", ctx, before=save_before, after=save_after, always=True)
+    saving.on(mod_owner, ctx, before=save_before, after=save_after, always=True)
 
     # ---- 品を作り直す --------------------------------------------------
     def rework_one(item, why, rng=None):
@@ -246,65 +237,35 @@ def apply(ctx):
             return True
         return False
 
-    def rework_inventory(obtainer, why):
-        inventory = frames.attr(obtainer, "inventory", None)
-        if isinstance(inventory, dict):
-            held = list(inventory.values())
-        elif isinstance(inventory, (list, tuple)):
-            held = list(inventory)
-        else:
-            return 0
-        return sum(1 for item in held if rework_one(item, why))
-
-    # ---- 生成の経路（`129_` と同じ3本）---------------------------------
-    # 戻り値は入口で違う（`(Item, 鍵)` か None）。品は `items.made_item` で取り出す。
-    @ctx.wrap("__main__:InstantaleApp.generate_item_from_item_data", safe=True)
-    def generated_from_data(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
-        rework_one(items.made_item("generate_item_from_item_data", result, args, kwargs),
-                   "generated")
-        return result
-
-    @ctx.wrap("__main__:InstantaleApp.generate_item_from_dict", safe=True)
-    def generated_from_dict(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
-        rework_one(items.made_item("generate_item_from_dict", result, args, kwargs),
-                   "generated/dict")
-        return result
-
-    @ctx.wrap("__main__:InstantaleApp.generate_item_from_ready_made_data",
-              safe=True, required=False)
-    def generated_ready_made(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
-        rework_one(items.made_item("generate_item_from_ready_made_data", result, args, kwargs),
-                   "generated/ready_made")
-        return result
-
-    # ---- 既にセーブに在る品 ----------------------------------------------
-    if REWORK_ON_SIGHT:
-        @ctx.wrap("__main__:InstantaleApp.toggle_twin_inventory_window", safe=True)
-        def twin_window(orig, self, left_inventory_obtainer=None,
-                        right_inventory_obtainer=None, left_label_text=None,
-                        situation=None, *args, **kwargs):
-            rework_inventory(left_inventory_obtainer, "window/left")
-            rework_inventory(right_inventory_obtainer, "window/right")
-            return orig(self, left_inventory_obtainer, right_inventory_obtainer,
-                        left_label_text, situation, *args, **kwargs)
-
-        @ctx.wrap("__main__:InstantaleApp.toggle_center_inventory_window",
-                  safe=True, required=False)
-        def center_window(orig, self, *args, **kwargs):
-            rework_inventory(frames.attr(self, "player", None), "window/center")
-            return orig(self, *args, **kwargs)
+    # ---- 生成の経路（`129_` と同じ3本。ローダの窓口 `items.on_made`）-------
+    # 戻り値が品でない入口（`(Item, 鍵)` か None）も、窓口が品を取り出して1品ずつ渡す。
+    # 出どころは生成の3入口だけに絞る（クラフトの置き場とマスターAIの名付けは今までどおり画面に出た時点で直す）。
+    items.on_made(ctx, lambda call: rework_one(call.item, call.source), owner=mod_owner, write=write,
+                  sources=(items.GENERATED, items.GENERATED_DICT, items.GENERATED_READY_MADE))
 
     # ---- 説明欄: 作り直し済みの品の `疲労負荷: 0` を伏せる -----------------
-    @ctx.wrap("scripts.hud.new_hud:ItemDetailBox.update_content", safe=True)
-    def detail_box(orig, self, item=None, *args, **kwargs):
-        if REWORK_ON_SIGHT:
-            rework_one(item, "detail")
-        _field, attributes = healing.read_item(item)
-        with healing.Hidden(attributes):
-            return orig(self, item, *args, **kwargs)
+    # 描く間だけ伏せ、描き終えたら（投げた回も）並びごと戻す（ローダの窓口 `items.on` の DETAIL）。
+    # 画面に出た時点の作り直し（下の `on_sight`）より先に登録する。before は登録の新しい順に呼ばれるので、
+    # 作り直してから伏せる順になる。
+    def hide_burden(call):
+        _field, attributes = healing.read_item(call.item)
+        hidden = healing.Hidden(attributes)
+        hidden.__enter__()
+        return hidden
+
+    def show_burden(call):
+        if call.memo is not None:
+            call.memo.__exit__(None, None, None)
+
+    items.on(mod_owner, ctx, (items.DETAIL,), before=hide_burden, after=show_burden, always=True,
+             write=write)
+
+    # ---- 既にセーブに在る品（画面に出た時点で直す。`items.on_sight`）---------
+    # 2列の画面（左右の持ち主）・所持品の画面・説明欄。`call.where` は window/left など。
+    if REWORK_ON_SIGHT:
+        items.on_sight(ctx, lambda call: rework_one(call.item, call.where), owner=mod_owner, write=write)
+    else:
+        items.off_sight(mod_owner)
 
     # ---- 使う ------------------------------------------------------------
     def refresh(app):
@@ -312,10 +273,12 @@ def apply(ctx):
         ui.refresh_status(app, later=True)
 
     @ctx.wrap("__main__:ItemConsumeManager.consume_item", safe=True)
-    def consume_item(orig, self, item_instance=None, usable=None, *args, **kwargs):
+    def consume_item(orig, self, *args, **kwargs):
+        # 並びは (self, item_instance, usable)
+        item_instance = frames.arg(args, kwargs, "item_instance", 0)
         kind = kind_of(item_instance)
         if kind is None:
-            return orig(self, item_instance, usable, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         field, attributes = healing.read_item(item_instance)
         if not is_reworked(attributes):
             rework_one(item_instance, "consume")
@@ -332,14 +295,16 @@ def apply(ctx):
                   "text": compose(item_name, planned, clear)}
         before = healing.inventory_size(owner)
 
-        # 本体には何も回復させない。`回復` を間だけ 0 に、`usable` は真で通す。
+        # 本体には何も回復させない。`回復` を間だけ 0 に、`usable` は真で通す
+        # （渡されていなかった呼び方でも真にするので insert=True）。
+        call_args, call_kwargs, _ = frames.replace_arg(args, kwargs, "usable", 1, True, insert=True)
         ident = threading.get_ident()
         active[ident] = ticket
         try:
             with healing.Silenced(attributes, labels_of()) as quiet:
                 silenced[ident] = quiet
                 try:
-                    result = orig(self, item_instance, True, *args, **kwargs)
+                    result = orig(self, *call_args, **call_kwargs)
                 finally:
                     silenced.pop(ident, None)
         finally:
@@ -379,7 +344,7 @@ def apply(ctx):
             return ticket["text"]
         return None
 
-    text_filters.on("134_balance_item_effects", ctx, use_text)
+    text_filters.on(mod_owner, ctx, use_text)
 
     write("---- installed  healing: stamina={:g}+{:g}*value drink={:g} var={:g} | "
           "hp={:g}%+{:g}%*value var={:g} potion={:g} | rarity={} herb good={:g} min={:g} "

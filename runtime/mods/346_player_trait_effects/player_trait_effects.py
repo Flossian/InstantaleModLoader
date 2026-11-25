@@ -15,15 +15,16 @@
              物語を始めたときの照合で、同じ印の特質はその効果を引き継ぐ
 
 変換は読み込みの後と人物欄の開閉の後に、背景のスレッドで行う（LLM を待つのでゲームのスレッドでは回さない）。
+読み込み・人物欄・店に入る契機はローダの窓口（`loads` / `hud` / `shopping`。TECH.md §3.3.21）から受ける。
 severity の扱い（目安として渡す・寄せる・渡さない）は設定 `SEVERITY_MODE`。どれでも、効果の重さと
 severity の差をログに残す（扱いを決める材料。DOC.md）。
 """
 
 import datetime
 import os
-import sys
 
-from instantale_modloader import abilities, battle_effects, frames, jobs, llm, loads, prices, ui
+from instantale_modloader import abilities, battle_effects, frames, jobs, llm, loads, prices, shopping, state, ui
+from instantale_modloader import hud as hud_window
 from instantale_modloader.llm import wrap_outgoing
 from instantale_modloader.state import WorldStore
 
@@ -84,11 +85,12 @@ def stored_bucket(bucket):
 
 
 def process_store(ctx):
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"worlds": WorldStore(ctx, STATE_DIRNAME, normalize=as_bucket, order=stored_bucket),
-                 "worker": None, "noted": set(), "price_seen": None}
-        setattr(sys, STORE_ATTR, store)
+    # 入れ物はローダの `state.process_store`（足りない鍵と型の変わった鍵だけを埋める）。
+    # 控えの器は既定値に置かない。置くと注入のたびに作られ、ローダの控えの台帳が使わない器を指す
+    store = state.process_store(STORE_ATTR, {"worlds": None, "worker": None, "noted": set(),
+                                             "price_seen": None})
+    if store["worlds"] is None:
+        store["worlds"] = WorldStore(ctx, STATE_DIRNAME, normalize=as_bucket, order=stored_bucket)
     return store
 
 
@@ -96,26 +98,18 @@ def apply(ctx):
     store = process_store(ctx)
     write = ctx.logger(LOG_BASENAME)
 
-    def note_once(line):
-        """同じ中身の行は1回だけ書く（戦闘の1手ごと・頼みごとに来る行を溢れさせない）。
-
-        `dedup=True` の記録は直前の行としか比べないので、2種類の行が交互に来ると毎回書いていた（実機）。
-        """
-        noted = store["noted"]
-        if line in noted:
-            return
-        if len(noted) >= NOTED_LIMIT:
-            noted.clear()
-        noted.add(line)
-        write(line)
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "346_player_trait_effects"
+    # 同じ中身の行は1回だけ書く（戦闘の1手ごと・頼みごとに来る行を溢れさせない）。
+    # `dedup=True` の記録は直前の行としか比べないので、2種類の行が交互に来ると毎回書いていた（実機）。
+    # 覚えは sys の器に置き、注入をまたいで残す（TECH.md §3.2.3 の ctx.once）。
+    note_once = ctx.once(write, limit=NOTED_LIMIT, store=store["noted"])
+    owner = ctx.mod_name or "346_player_trait_effects"
     worlds = store["worlds"].rebind(ctx, write)
     lock = worlds.lock
 
     # ------------------------------------------------------------ 読む
     def player_of(app):
-        player = frames.attr(app, "player", None) if app is not None else None
-        return None if player is frames.MISSING else player
+        # 読めなかった番人（MISSING と「<X while reading>」）は None（ローダの `frames.field`）
+        return frames.field(app, "player") if app is not None else None
 
     def current_traits(player):
         return rules.read_traits(frames.attr(player, "traits", None))
@@ -194,12 +188,8 @@ def apply(ctx):
                                         previous=job.get("previous"))
         raw = llm.ask(ctx, rules.MANAGER, messages, timeout=CONVERT_TIMEOUT,
                       label="trait effects", write=write)
-        data = None
-        if isinstance(raw, str):
-            data = llm.parse_json(llm.strip_fence(raw))
-        elif raw is not None:
-            data = llm.as_dict(raw)
-        parsed = rules.normalize(data, traits)
+        # 文章なら囲みを剥がして読み、物（辞書・モデル）ならそのまま均す（どちらも `llm.parse_json`）
+        parsed = rules.normalize(llm.parse_json(raw), traits)
         if parsed is None:
             write("変換: 読めなかったので控えない（{}）: {!r}".format(
                 "作成画面の効果を再生成で頼み直せる" if job.get("creation") else "次の読み込みで頼み直す",
@@ -323,7 +313,7 @@ def apply(ctx):
 
     def price_layer(_item, key, price):
         """店の買値・売値に、主人公の特質の割合を掛ける。触らないなら None。"""
-        if not USE_PRICES or not isinstance(price, (int, float)) or isinstance(price, bool):
+        if not USE_PRICES or not frames.is_number(price):
             return None
         app = ui.find_app()
         if app is None:
@@ -347,12 +337,12 @@ def apply(ctx):
     prices.install(ctx, write)
     prices.adjust(owner, price_layer, temporary=True, write=write)
 
-    @ctx.wrap("__main__:ShoppingStartManagerRemake.execute", required=False, safe=True)
-    def shop_start(orig, self, *args, **kwargs):
-        """特質が変わった後に店へ入ったら、古い額が残らないように組み直す。"""
+    def shop_start(call):
+        """特質が変わった後に店へ入ったら、古い額が残らないように組み直す（店に入る前。窓口 `shopping`）。"""
         if USE_PRICES:
             refresh_prices("shop")
-        return orig(self, *args, **kwargs)
+
+    shopping.on(owner, ctx, (shopping.ENTER,), before=shop_start, write=write)
 
     # ------------------------------------------------------------ LLM へ足す文
     def rewrite(texts, site):
@@ -393,40 +383,24 @@ def apply(ctx):
     wrap_outgoing(ctx, rewrite, label="trait effects")
 
     # ------------------------------------------------------------ 変換の契機
+    # 起動直後は注入のやり直しと読み込みが重なり、読み込みの包みが効く前に世界が読み込まれることがある。
+    # `catch_up=True` で、そうした回は注入の後に窓口が1回だけ `after_load` を呼び直す（call.label が "inject"）。
     def after_load(call):
         try:
-            check(call.app, "読み込み")
+            check(call.app, "注入" if call.label == "inject" else "読み込み")
             refresh_prices("load")
         except Exception:
             ctx.log_exc("trait effects: 読み込みの後の照合で失敗した")
 
-    loads.on(owner, ctx, (loads.LOAD, loads.NEW_GAME), after=after_load, write=write)
+    loads.on(owner, ctx, (loads.LOAD, loads.NEW_GAME), after=after_load, write=write, catch_up=True)
 
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.toggle_character_sheet_visibility",
-              required=False, safe=True)
-    def character_sheet_toggled(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
+    def character_sheet_toggled(call):
         try:
-            check(ui.find_app(), "人物欄")
+            check(call.app, "人物欄")
         except Exception:
             ctx.log_exc("trait effects: 人物欄の開閉で失敗した")
-        return result
 
-    # 起動直後は注入のやり直しと読み込みが重なり、読み込みの包みが効く前に世界が読み込まれることがある
-    # （317_ と同じ）。注入が済んだ時点で主人公が居れば1回照合する。
-    def after_inject(_dt=None):
-        try:
-            app = ui.find_app()
-            if app is not None and player_of(app) is not None and ui.world_areas(app):
-                check(app, "注入")
-        except Exception:
-            ctx.log_exc("trait effects: 注入の後の照合で失敗した")
-
-    try:
-        from kivy.clock import Clock
-        Clock.schedule_once(after_inject, 1.0)
-    except Exception:
-        pass        # ゲームの外（検査）には Kivy が無い
+    hud_window.on(owner, ctx, (hud_window.SHEET,), after=character_sheet_toggled, write=write)
 
     write("installed abilities={} battle={} prices={} notes={} severity={} cap={} price_cap={}".format(
         USE_ABILITIES, USE_BATTLE, USE_PRICES, NOTES_TO_AI, severity_mode(), STAT_CAP, PRICE_CAP))

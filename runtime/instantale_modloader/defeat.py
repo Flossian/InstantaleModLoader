@@ -32,7 +32,8 @@
 import sys
 import time
 
-from . import alive, log, log_exc, ui
+from . import WINDOW_ERRORS_KEEP, _log_line, frames, log_exc, state, ui
+from . import window_call, window_entries, window_put
 
 END_MANAGER_CLS = "BattleEndManager"
 ESCAPED_END_TYPE = "escaped"
@@ -52,31 +53,24 @@ _GATE_ATTR = "_instantale_defeat_gate"
 
 
 def _state():
-    state = getattr(sys, _STATE_ATTR, None)
-    if not isinstance(state, dict):
-        state = {"owners": {}, "errors": [], "removed_player": None, "surrendering": False,
-                 "surrendered_at": None, }
-        setattr(sys, _STATE_ATTR, state)
-    return state
+    return state.process_store(_STATE_ATTR, {"owners": {}, "errors": [], "removed_player": None,
+                                             "surrendering": False, "surrendered_at": None})
 
 
-def _write(text):
-    """窓口の記録は `modloader.log` へ（どの MOD が先に包んだかで行き先を変えない）。"""
-    try:
-        log(text, level="WARN" if text.startswith("WARN") else "INFO")
-    except Exception:
-        pass
+#: 窓口の記録は `modloader.log` へ（どの MOD が先に包んだかで行き先を変えない。`_log_line`）。
+_write = _log_line
 
 
 def _error(owner, exc):
+    """登録の関数が投げた例外を `errors` の末尾に残す（`window_call` と同じ形）。"""
     errors = _state()["errors"]
     errors.append("{}: {}: {}".format(owner, type(exc).__name__, exc))
-    del errors[:-20]
+    del errors[:-WINDOW_ERRORS_KEEP]
 
 
 def declare(owner, ctx, decide):
-    """倒れた戦闘を引き受けるかを決める関数を登録する。同じ持ち主の登録は差し替える。"""
-    _state()["owners"][str(owner)] = (ctx, decide)
+    """倒れた戦闘を引き受けるかを決める関数を登録する。同じ持ち主の登録は差し替える（新しい登録として後ろへ）。"""
+    window_put(_state()["owners"], owner, (ctx, decide))
 
 
 def withdraw(owner):
@@ -91,20 +85,15 @@ def surrendering():
 def fallen(app):
     """主人公の体力が 0 以下か。"""
     hp = getattr(getattr(app, "player", None), "current_hp", None)
-    return isinstance(hp, (int, float)) and not isinstance(hp, bool) and hp <= 0
+    return frames.is_number(hp) and hp <= 0
 
 
 def _claim(app):
     """`(持ち主, 答え)`。どの登録も引き受けなければ `(None, None)`。"""
-    for owner, (ctx, decide) in list(_state()["owners"].items()):
-        if not alive(ctx):
-            continue
-        try:
-            answer = decide(app)
-        except Exception as exc:
-            _error(owner, exc)
-            continue
-        if isinstance(answer, dict):
+    store = _state()
+    for owner, (_ctx, decide) in window_entries(store["owners"]):
+        ok, answer = window_call(store, owner, decide, app)
+        if ok and isinstance(answer, dict):
             return owner, answer
     return None, None
 

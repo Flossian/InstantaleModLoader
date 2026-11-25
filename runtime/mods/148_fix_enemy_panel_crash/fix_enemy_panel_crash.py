@@ -14,7 +14,7 @@
 敵が居ないときは戦闘が終わっているので触らない（切り上げの直後の扱いは `instantale_modloader.defeat`）。
 """
 
-from instantale_modloader import ui
+from instantale_modloader import frames, ui
 
 LOG_BASENAME = "enemy_panel_crash.log"
 
@@ -39,7 +39,7 @@ def apply(ctx):
         """戦闘の途中で畳まれている欄。畳まれていない・敵が居ないなら None。"""
         panel = getattr(hud, PANEL_ATTR, None)
         height = getattr(panel, "height", None)
-        if not isinstance(height, (int, float)) or height > 0:
+        if not frames.is_number(height) or height > 0:
             return None
         return panel if enemies_left() else None
 

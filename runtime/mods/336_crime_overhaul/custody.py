@@ -10,12 +10,10 @@
   （`prison_event("exit")`）は、ローダの窓口 `confinement` に閉じ込めていると返す（返すのは `cellmate` の登録）。
   ロードをまたいでも続くよう、世界×主人公の控え（`custody`）に持つ
 """
-from instantale_modloader import ui
+from instantale_modloader import modnpc, ui
 
 TRIAL_TARGET = "__main__:TrialStartManager.execute"
 PARTED_TEXT = "{names}とは引き離され、パーティは解散した。"
-#: MOD の人物の id の頭。置き先をゲームが引けないので外さない。
-MOD_NPC_PREFIX = "mod:"
 
 
 def install(env):
@@ -51,7 +49,8 @@ def install(env):
             write("WARN custody: the game's party removal is not available")
             return None
         character = ui.character_of(app, member_id)
-        if character is None or str(member_id).startswith(MOD_NPC_PREFIX):
+        # MOD の人物（`modnpc.is_mod_npc`）は置き先をゲームが引けないので外さない。
+        if character is None or modnpc.is_mod_npc(str(member_id)):
             write("custody: kept {} in the party (no place to send)".format(member_id))
             return None
         try:

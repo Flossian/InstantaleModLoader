@@ -110,26 +110,12 @@
 （クリア回数と素の難易度）。ここが消えると進みが戻る ―
 `state/` の約束どおり（TECH.md §3.11）。
 
-版4: 受注の直前の寄せ直しを、`quest_type` が `'settlement_quest'` の回だけにした。
-版3までは `quest_type` を見ずに `world.quests` を同じ id で引いていた。
-`QuestChoiceManager` は `'settlement_quest'` なら `world.quests`、
-それ以外なら `story_quests` を引く（`206_` の総当たりで `world.quests` の id は
-`'settlement_quest'` でしか通らず、`story_quests` の id は全候補で通った）ので、
-物語の依頼（id 0〜4）を受けると、同じ id の通常依頼の土地を寄せ直していた
-（通常依頼の id は訪ねた順に振られるので、id 0〜4 は最初の2つの町の初期依頼に当たることが多い）。
-物語の依頼の土地は掲示板を開いた時点で寄せ直してあるので、受注の直前には何もしない。
-あわせて、物語の依頼を片付けてもクリア回数に数えないようにした。
-版3までは `current_quest_data` の `neighboring_settlement_id` だけを見て、物語の依頼もその土地の1回に数えていた。
-控えの鍵も世界名から周回の鍵（世界×主人公。`WorldStore.playthrough`）へ移した。
-世界名だけの鍵では、主人公が死んで同じ世界で作り直すと前の主人公のクリア回数と素の難易度（`base`）を引き継ぎ、
-`base` の依頼 id が今の遊びの別の依頼を指していた。
+物語の依頼は、受注の直前に土地を寄せ直さず（その土地は掲示板を開いた時点で寄せ直してある）、
+クリア回数にも数えない（`quest_choice` と `story_reason`。VERIFICATION.md §3.38）。
+控えの鍵は周回（世界×主人公。`WorldStore.playthrough`）。
 世界名だけの控えは、見つかったときに遊んでいる主人公の周回へ移す（ローダの `adopt`）。
-
-版7: 掲示板・受注・生成のフックは、引数を受け取った形のまま元の関数へ渡す
-（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。生成へ渡す難易度は来た側に合わせて差し替える。
 """
 
-import os
 import random
 import sys
 import threading
@@ -173,19 +159,6 @@ ANNOUNCE = "この地に貼り出される依頼は、以前より歯応えの�
 TOWN_BANDS_ENABLED = True
 
 
-class _Settings(object):
-    """入口のモジュールの定数を、その場で読む窓（`town_bands.py` へ渡す）。
-
-    ローダは apply() の前に設定を定数へ書き込む。部品は値を控えず、使うたびにここから読む。
-    """
-
-    def __getattr__(self, name):
-        try:
-            return globals()[name]
-        except KeyError:
-            raise AttributeError(name)
-
-
 def by_area_id(bucket):
     """控えを書く前に土地 id で並べ直す。
 
@@ -196,7 +169,7 @@ def by_area_id(bucket):
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "318_area_difficulty_growth"
+    owner = ctx.mod_name or "318_area_difficulty_growth"
     screen = ui.Screen(ctx, write, tag="area difficulty")
 
     # 控えはゲームのスレッドと Clock コールバックの両方から触る。
@@ -294,11 +267,8 @@ def apply(ctx):
         return str(value) if value is not None else None
 
     def is_incomplete(quest):
-        """片付いていない依頼か。`config['status']` はゲーム自身の鍵（GAME.md §2.9）。"""
-        config = ui.quest_value(quest, "config", None)
-        if not isinstance(config, dict):
-            return True
-        return config.get("status") != "completed"
+        """片付いていない依頼か。状態が読めない依頼も片付いていないとみなす（`ui.quest_status`。GAME.md §2.9）。"""
+        return ui.quest_status(quest) != ui.QUEST_COMPLETED
 
     def live_store(world):
         """難易度を読み書きする先 ＝ **生きた一覧だけ**（`world.quests`）。
@@ -682,7 +652,9 @@ def apply(ctx):
                 ", ROLLBACK" if ROLLBACK else "", LOG_BASENAME))
 
     # 街ごとの範囲。育ちのフックより後に当てる（922 の頃と同じく、ゲームの関数を包む層が外側）。
-    town_bands.install(ctx, _Settings(), owner)
+    # 設定はこのモジュールそのものを渡す。ローダは apply() の前に設定を定数へ書き込むので、
+    # 部品は値を控えず、使うたびに属性として今の値を読む
+    town_bands.install(ctx, sys.modules[__name__], owner)
 
 
 def _int(value, fallback):

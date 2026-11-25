@@ -10,16 +10,15 @@
 `on_screen`）で組み直しのたびに状態から作り、ゲームの一覧を直すもの（判決の書き換え・掲示板の間引き）だけ
 `on_refresh` に残す。本文（`add_text`）は入口が1枚だけ包んで配る。
 """
-import os
 import sys
 
-from instantale_modloader import choices, guards, ui
+from instantale_modloader import choices, frames, guards, npcs, ui
 from instantale_modloader import state as loader_state
 
 LOG_BASENAME = "crime_overhaul.log"
 FUNCTIONS_MODULE = "scripts.functions"
-#: 人生の記録の文を作るゲーム自身の関数（`get_life_log_text`）のモジュール。
-LIFE_LOG_MODULE = "scripts.llm.context_manager"
+#: 人生の記録の文を作るゲーム自身の関数（`get_life_log_text`）のモジュール。読むのはローダの `npcs.life_log_text`。
+LIFE_LOG_MODULE = npcs.LIFE_LOG_MODULE
 STATE_DIRNAME = "crime_overhaul"
 STORE_ATTR = "_instantale_crime_incentive"
 #: 版2までの自前のボタンの印のキー（他の MOD と別のキー）。いまは宣言型の口で組むので付けない。
@@ -33,16 +32,7 @@ GUARD_CHOICE_TEXT = "衛兵"
 
 def life_log_text(app, character, limit):
     """ゲーム自身の作り方の人生の記録を、頼みに載せる文にする。読めなければ空。`limit` 字で切る（None は切らない）。"""
-    module = sys.modules.get(LIFE_LOG_MODULE)
-    build = getattr(module, "get_life_log_text", None)
-    try:
-        value = build(app, character) if callable(build) else None
-    except Exception:
-        value = None
-    if not value:
-        return ""
-    text = str(value)
-    return text if limit is None or len(text) <= limit else text[:limit] + "…"
+    return npcs.life_log_text(app, character, limit)
 
 
 #: 片付いた裏の仕事と処刑場からの脱出の控え（`state\` の周回の鍵の下）。
@@ -81,12 +71,8 @@ def past_of(app, bucket):
 
 
 def _store():
-    """世代をまたぐ入れ物。プロセスに1つ（TECH.md §3.5）。"""
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"worlds": None}
-        setattr(sys, STORE_ATTR, store)
-    return store
+    """世代をまたぐ入れ物。プロセスに1つ（TECH.md §3.5。`state.process_store`）。"""
+    return loader_state.process_store(STORE_ATTR, {"worlds": None})
 
 
 is_facility_screen = ui.is_facility_screen
@@ -122,7 +108,7 @@ class Env(object):
         self.ctx = ctx
         self.cfg = cfg
         self.write = ctx.logger(LOG_BASENAME)
-        self.owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "336_crime_overhaul"
+        self.owner = ctx.mod_name or "336_crime_overhaul"
         self.screen = ui.Screen(ctx, self.write, tag="crime incentive", mark=MARK)
         # 控えは `state\crime_overhaul\<世界×主人公>.json` に1つ。機能ごとに鍵を分ける
         # （`away` 時効 / `theft` 店で盗む / `underworld` 裏の仕事 / `jail` 脱獄）。
@@ -253,7 +239,7 @@ class Env(object):
         if not callable(average) or area is None:
             return None
         value = average(area, getattr(app, "world", None))
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
+        if not frames.is_number(value):
             return None
         return max(1, int(round(value)))
 
@@ -264,7 +250,7 @@ class Env(object):
         if not callable(reward) or difficulty is None:
             return None
         value = reward(difficulty)
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
+        if not frames.is_number(value):
             return None
         return int(value)
 
@@ -275,8 +261,8 @@ class Env(object):
         return ui.lawfulness_of(ui.area_record(player, area_id)) if area_id else None
 
     def area_label(self, app, area_id):
-        name = getattr(ui.world_areas(app).get(area_id), "name", None)
-        return name if isinstance(name, str) and name else area_id
+        """土地の名前。読めなければ土地の id（`ui.area_name`。切らない）。"""
+        return ui.area_name(app, area_id, fallback=area_id, limit=None)
 
     def refresh_gold(self, app):
         ui.refresh_status(app)

@@ -10,7 +10,7 @@
     "en": "Tightens the line spacing of the main text and drops the blank line between paragraphs",
     "ja": "本文（LLM の応答・システムメッセージ）の行間を詰め、段落の間の空行を減らす"
   },
-  "version": "1",
+  "version": "2",
   "author": "R01/Flossian",
   "settings": {
     "LINE_SCALE": {

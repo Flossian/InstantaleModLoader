@@ -8,7 +8,7 @@
 `lbpcascade_animeface.xml` → `haarcascade_frontalface_alt.xml` の順に2回呼ぶ
 （手元の再現で 93% 一致。VERIFICATION.md §3.43）。
 ここにあるのはその再現と、外れた絵を拾い直すための前処理・位置の絞り、
-それより先に掛ける YuNet（OpenCV の深層学習の顔検出。版19）。
+それより先に掛ける YuNet（OpenCV の深層学習の顔検出）。
 
 YuNet は opencv_zoo の `face_detection_yunet_2023mar.onnx`（MIT。`models/` に同梱、NOTICE）。
 手元の 695 体で、カスケードが服や鎧を顔として拾う絵・外す絵の大半で顔を当て、

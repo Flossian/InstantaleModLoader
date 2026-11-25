@@ -40,7 +40,8 @@ GM が `finished=false` で何度回っても同じ材料が載り、次の1手�
 import re
 import typing
 
-from instantale_modloader import frames, llm, ui
+from instantale_modloader import frames, llm, loads, talks, ui
+from instantale_modloader.items import inventory_of
 
 # ---------------------------------------------------------------- 設定（mod.json と同じ既定値）
 
@@ -147,26 +148,21 @@ def last_player_input(messages):
     return None
 
 
-def _get(obj, name, default=None):
-    """辞書でも属性でも読む。無ければ `default`。"""
-    if isinstance(obj, dict):
-        return obj.get(name, default)
-    value = frames.attr(obj, name, default)
-    if isinstance(value, str) and value.endswith(" while reading>"):
-        return default
-    return value
+#: 辞書でも属性でも読む。無ければ、または読むと投げる属性なら `default`（ローダの `frames.field`）。
+_get = frames.field
 
 
 # ---------------------------------------------------------------- 所持品
 
 def inventory_items(player, limit):
-    """`{名前: 説明}`。読めなければ空。並びは持ち物の辞書の順、`limit` で切る。"""
+    """`{名前: 説明}`。読めなければ空。並びは持ち物の辞書の順、`limit` で切る。
+
+    持ち物の辞書は入れ物（`ItemContainer`）の中まで降りて引く（ローダの `items.inventory_of`）。
+    """
     items = {}
     if player is None or limit <= 0:
         return items
-    inv = frames.attr(player, "inventory", None)
-    if not isinstance(inv, dict):
-        inv = frames.attr(inv, "inventory", None)
+    inv = inventory_of(player)
     if not isinstance(inv, dict):
         return items
     for item in inv.values():
@@ -264,7 +260,7 @@ def apply(ctx):
     def make_facilitator(name):
         @ctx.wrap("scripts.llm.llm_manager:{}".format(name), required=False, safe=True)
         def facilitate(orig, *args, **kwargs):
-            messages = kwargs.get("messages", args[0] if args else None)
+            messages = frames.arg(args, kwargs, "messages", 0)
             action = extract_action(last_player_input(messages), ACCEPT_PAREN)
             # 新しい1手。前の手の控えはここで消える（retrieve → after_retrieval の
             # 2回目も同じ入力なので、読み直せば同じ値になる）。
@@ -327,15 +323,11 @@ def apply(ctx):
             write("cleared ({})".format(reason))
         st["pending"] = None
 
-    @ctx.wrap("__main__:ConversationEndManager.execute", required=False, safe=True)
-    def end_conversation(orig, self, *args, **kwargs):
-        clear("conversation end")
-        return orig(self, *args, **kwargs)
-
-    @ctx.wrap("__main__:InstantaleApp.return_to_title", required=False, safe=True)
-    def return_to_title(orig, self, *args, **kwargs):
-        clear("return to title")
-        return orig(self, *args, **kwargs)
+    # 「会話を終了する」とタイトルへ戻るときの片付けは、ローダの窓口（`talks` の END・`loads` の TITLE）の
+    # 前の処理に預ける（自分で包まない。TECH.md §3.3.21）。
+    owner = ctx.mod_name or "910_conversation_action"
+    talks.on(owner, ctx, (talks.END,), before=lambda call: clear("conversation end"), write=write)
+    loads.on(owner, ctx, (loads.TITLE,), before=lambda call: clear("return to title"), write=write)
 
     ctx.log("910_conversation_action: installed (paren={}, inventory={}, max_items={})".format(
         ACCEPT_PAREN, SHOW_INVENTORY, MAX_ITEMS))

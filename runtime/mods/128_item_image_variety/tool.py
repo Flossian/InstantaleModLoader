@@ -2,7 +2,7 @@
 """`128_item_image_variety` の設定画面。
 
 設定は2段（一括設定とワールド個別設定。ローダの共通の窓 `modtool.build_world_settings_window`）。
-その後ろに「画像一覧」と「ジャンル内の重み」のタブを足す。画像一覧は分類（元画像1枚ごと）と部位を選ぶと、その絵を並べる。部位は「全て」も選べる。
+その後ろに「画像一覧」と「ジャンル内の重み」のタブを足す。画像一覧は分類と小分類（元の一枚絵）と部位を選ぶと、その絵を並べる。部位は「全て」も選べる。
 画像一覧は見るだけで、何も書かない。キャプション（選ぶときに外見文と比べる英語の一文）は
 `build/*_captions.txt` から読み、絵にマウスを載せると出す。
 ジャンル内の重みは、既定（`genres.json`）と違う値だけを `state/item_image_genres/weights.json` に書く（本体が読み直す）。
@@ -15,17 +15,27 @@ MOD_DIR = os.path.dirname(os.path.abspath(__file__))
 _IML_ROOT = os.environ.get("IML_ROOT") or ""
 for _tools in ([os.path.join(_IML_ROOT, "tools")] if _IML_ROOT else []) + [
         os.path.normpath(os.path.join(MOD_DIR, os.pardir, os.pardir, os.pardir, "tools"))]:
-    if os.path.isfile(os.path.join(_tools, "modtool.py")) and _tools not in sys.path:
-        sys.path.insert(0, _tools)
+    # 見つかった最初の候補で止める（両方を先頭へ足すと、後の3つ上が IML_ROOT より先になる）
+    if os.path.isfile(os.path.join(_tools, "modtool.py")):
+        if _tools not in sys.path:
+            sys.path.insert(0, _tools)
+        break
 import modtool  # noqa: E402
 
-def load_categories(mod_dir=MOD_DIR):
-    """[(分類, 表示名), ...]（`categories.json`。版10 で同じ種類の元画像を1分類にまとめた）。表示名は「まとまり：分類の名前」。"""
+def read_categories(mod_dir=MOD_DIR):
+    """`categories.json` の中身（分類の並び）。読めなければ None。"""
     import json
     try:
         with io.open(os.path.join(mod_dir, "categories.json"), encoding="utf-8") as fh:
-            found = json.load(fh)
+            return json.load(fh)
     except (OSError, ValueError):
+        return None
+
+
+def load_categories(mod_dir=MOD_DIR):
+    """[(分類, 表示名), ...]（`categories.json`。分類は同じ種類の元画像をまとめた単位）。表示名は「まとまり：分類の名前」。"""
+    found = read_categories(mod_dir)
+    if found is None:
         return []
     out = []
     for c in found:
@@ -86,11 +96,8 @@ def list_images(mod_dir, set_name, folder):
 def load_sources(mod_dir=MOD_DIR):
     """{分類: [(一枚絵の呼び名, 表示名), ...]}。分類にまとめた元の一枚絵（`categories.json` の `sources`）。
     表示名は元の分類の名前から頭のまとまりの名前を外したもの（「食料_菓子」→「菓子」）。"""
-    import json
-    try:
-        with io.open(os.path.join(mod_dir, "categories.json"), encoding="utf-8") as fh:
-            found = json.load(fh)
-    except (OSError, ValueError):
+    found = read_categories(mod_dir)
+    if found is None:
         return {}
     out = {}
     for c in found:
@@ -348,7 +355,6 @@ def genre_diff(stock, weights, base_stock, base_weights):
 
 def genre_tab(tabs, root_dir):
     """「ジャンル内の重み」のタブ。分類ごとに、そのジャンルの世界にどれだけ合うか（0〜1）を変える。"""
-    import json
     import tkinter as tk
     from tkinter import messagebox, ttk
 
@@ -409,15 +415,9 @@ def genre_tab(tabs, root_dir):
             messagebox.showerror("ジャンル内の重み", "0〜1 の数でない欄があります。", parent=page)
             return
         diff = genre_diff(got[0], got[1], base_stock, base_weights)
-        # 別のファイルに書いてから差し替える。本体は品を選ぶたびに読み直すので、書きかけを読ませない
-        tmp = user_path + ".tmp"
-        try:
-            os.makedirs(os.path.dirname(user_path), exist_ok=True)
-            with io.open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-                json.dump(diff, fh, ensure_ascii=False, indent=1)
-            os.replace(tmp, user_path)
-        except OSError as e:
-            messagebox.showerror("ジャンル内の重み", "保存できませんでした: {}".format(e), parent=page)
+        # 別のファイルに書いてから差し替える（`modtool.write_json`）。本体は品を選ぶたびに読み直すので、書きかけを読ませない
+        if not modtool.write_json(root_dir, user_path, diff):
+            messagebox.showerror("ジャンル内の重み", "保存できませんでした: {}".format(user_path), parent=page)
             return
         changed = sum(len(t) for t in diff.get("weights", {}).values()) + len(diff.get("stock", {}))
         status.configure(text="保存しました（既定と違う値 {} 件）".format(changed))

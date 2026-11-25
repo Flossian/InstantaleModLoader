@@ -350,7 +350,9 @@ class Creation(object):
 
 
 def _escape(text):
-    return str(text).replace("&", "&amp;").replace("[", "&bl;").replace("]", "&br;")
+    # Kivy の markup のエスケープ（& と角括弧）。呼ぶのは作成画面だけなので Kivy はここで読む
+    from kivy.utils import escape_markup
+    return escape_markup(str(text))
 
 
 def install(ctx, store, write, worker, make_job, language, enabled=True):

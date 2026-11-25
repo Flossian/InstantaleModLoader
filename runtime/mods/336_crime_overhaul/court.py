@@ -24,7 +24,9 @@ from instantale_modloader import choices, llm, ui, wanted
 from . import common, trial
 
 HINT_TEXT = "入力欄に書いて送った言葉が、そのまま判事への釈明になる。\nボタンを押せば、その文言が釈明になる。"
-SEND_TARGET = "scripts.llm.llm_manager:send_request"
+#: 裁判の頼みが通る送り口（ローダの窓口 `llm.on_request` が1か所で包む）。
+SEND_TARGETS = llm.send_targets("llm_manager", ns=False)
+SEND_TARGET = SEND_TARGETS[0]
 #: 置き換える人生の記録の上限（字）。None は切らない（版6。ゲームがまとめ直して伸びすぎない。VERIFICATION.md §3.95）。
 LIFE_LOG_LIMIT = None
 
@@ -335,28 +337,21 @@ def install(env):
             break
         return copied if changed else None
 
-    def install_send(target):
-        @ctx.wrap(target, required=False)
-        def send_request(orig, *args, **kwargs):
-            message = args[1] if len(args) > 1 else kwargs.get("message")
-            blob = str(message) if isinstance(message, list) else ""
-            judge = trial.JUDGE_MARK in blob
-            if not judge and trial.PROSECUTOR_MARK not in blob:
-                return orig(*args, **kwargs)
-            try:
-                rewritten = rewrite_message(message, ui.find_app(), judge)
-            except Exception:
-                ctx.log_exc("crime incentive: cannot add to the trial request")
-                rewritten = None
-            if rewritten is None:
-                return orig(*args, **kwargs)
-            if len(args) > 1:
-                args = (args[0], rewritten) + tuple(args[2:])
-            else:
-                kwargs = dict(kwargs, message=rewritten)
-            return orig(*args, **kwargs)
+    def trial_request(req):
+        """検察と判事の頼みに文を足す（ローダの窓口 `llm.on_request`。頼みの名前ではなく本文の印で見分ける）。"""
+        message = req.message
+        blob = str(message) if isinstance(message, list) else ""
+        judge = trial.JUDGE_MARK in blob
+        if not judge and trial.PROSECUTOR_MARK not in blob:
+            return None
+        try:
+            return rewrite_message(message, ui.find_app(), judge)
+        except Exception:
+            ctx.log_exc("crime incentive: cannot add to the trial request")
+            return None
 
-    llm.watch_aliases(ctx, [SEND_TARGET], install_send, label="crime incentive court")
+    # 送り口は前に自分で包んでいたもの（`llm_manager` の `send_request`）だけに当てる。
+    llm.on_request(env.owner + ":court", ctx, trial_request, targets=SEND_TARGETS, write=write)
     env.on_refresh(on_refresh)
     env.on_offer(offer)
     env.on_claim(claim)

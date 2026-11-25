@@ -33,7 +33,7 @@
 足す先は本文の待ち行列（`ui.Screen.say` → `app.add_text`）。
 `122_ui_conversation_log` は本文の打ち出しを拾っているので、読み返しにも同じ行が残る。
 """
-from instantale_modloader import ui
+from instantale_modloader import frames, ui
 
 LOG_BASENAME = "free_input_echo.log"
 
@@ -61,22 +61,8 @@ def echo_line(text, speaker=None):
     return "{}: {}".format(speaker, text) if speaker else text
 
 
-def player_name(app):
-    player = getattr(app, "player", None)
-    name = getattr(player, "name", None)
-    return name if isinstance(name, str) and name.strip() else None
-
-
 def apply(ctx):
-    append = ctx.logger(LOG_BASENAME)
-    log_state = {"lines": 0}
-
-    def write(text):
-        if log_state["lines"] >= MAX_LINES:
-            return
-        log_state["lines"] += 1
-        append(text)
-
+    write = ctx.logger(LOG_BASENAME, cap=MAX_LINES)
     screen = ui.Screen(ctx, write, tag="free input echo")
     # 入力欄の送信の最中か。送信は Kivy のメインスレッドで1本ずつ来る。
     sending = {"on": False, "dispatched": False}
@@ -94,13 +80,15 @@ def apply(ctx):
             sending["dispatched"] = False
 
     @ctx.wrap("__main__:InstantaleApp.process_choice", required=False)
-    def process_choice(orig, self, function, *args, **kwargs):
+    def process_choice(orig, self, *args, **kwargs):
         if sending["on"] and not sending["dispatched"]:
             sending["dispatched"] = True
             try:
-                text = args[0] if args else kwargs.get("choice_text", "")
+                # 引数は process_choice(self, function, choice_text='')（recon の targets.txt）。
+                function = frames.arg(args, kwargs, "function", 0)
+                text = frames.arg(args, kwargs, "choice_text", 1, "")
                 cls_name = type(function).__name__
-                speaker = player_name(self) if cls_name in NAMED_CLASSES else None
+                speaker = ui.player_name(self, None) if cls_name in NAMED_CLASSES else None
                 line = echo_line(text, speaker) if isinstance(text, str) else None
                 if cls_name in SELF_ECHO_CLASSES:
                     write("{}: the game shows it".format(cls_name))
@@ -111,6 +99,6 @@ def apply(ctx):
                     write("{}: echoed".format(cls_name))
             except Exception:
                 ctx.log_exc("free input echo: cannot echo the sent text")
-        return orig(self, function, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     ctx.log("free input echo: shows sent text outside conversations")

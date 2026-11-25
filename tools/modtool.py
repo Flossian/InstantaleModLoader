@@ -24,8 +24,10 @@ r"""MOD 同梱の設定画面（`mod.json` の `"tool"`）が共有する土台�
     _ROOT = os.environ.get("IML_ROOT") or ""
     for _tools in ([os.path.join(_ROOT, "tools")] if _ROOT else []) + [
             os.path.normpath(os.path.join(MOD_DIR, os.pardir, os.pardir, os.pardir, "tools"))]:
-        if os.path.isfile(os.path.join(_tools, "modtool.py")) and _tools not in sys.path:
-            sys.path.insert(0, _tools)
+        if os.path.isfile(os.path.join(_tools, "modtool.py")):     # 見つかった最初の候補で止める
+            if _tools not in sys.path:
+                sys.path.insert(0, _tools)
+            break
 
     import modtool
 

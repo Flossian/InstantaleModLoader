@@ -133,8 +133,8 @@ def _classes():
     return _CLASSES
 
 
-def _hex(color):
-    return panels.hex_of(color)
+#: 色を markup の16進にする（ローダの `panels.hex_of`）。
+_hex = panels.hex_of
 
 
 def _escape(text):

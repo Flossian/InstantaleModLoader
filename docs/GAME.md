@@ -236,6 +236,10 @@ Epic の `AppVersion` は
   （`apply()` が例外を出さなければその数になる）。
   見るのは次の行の `patches: N applied on M target(s)`
 - 再注入は安全（`replacing a previous patch layer` が出て二重には掛からない）
+- `__main__` の関数は、組み立ての途中だとまだ無い。
+  `001_crash_recorder` が初回の `apply()` で `__main__.report_crash` を引けなかったのは 89セッション中77。
+  その場で降りていた頃は、ブートが1回きりだった2つの pid で最後まで載らなかった。
+  なので `001_` は現れるまで自分で待つ
 
 ### 1.8 クラウド LLM 経路ではプロンプト系 MOD が効かない
 
@@ -2121,10 +2125,11 @@ generate_item_in_shopping(item_data, shop_owner_instance, item_stock_tier=2)
 - `tier` は整数（実測 2）。施設の `basic` / `standard` / `advanced` ではない。
   返った 33 は `get_quest_difficulties` の並び `[35,34,33,…]` の3番目と一致するが、
   実測1点なので式は確定していない
-- 品揃えを作っているのは `generate_item_in_shopping`
-  （`set_item_from_world_data` ではない）。
-  `312_` が `set_item_from_world_data` の `tier` を記録しようとして
-  `null` しか取れなかったのはこのため
+- 品揃えを作る経路は2つある。
+  雛形（品揃えの表）を持つ店では `set_item_from_world_data` が段を受けて作り、
+  `generate_item_in_shopping` も `generate_item_from_dict` も通らない（VERIFICATION.md §3.114）。
+  それ以外の店では `generate_item_in_shopping` が作る。
+  `312_` の `tier:` の記録は前の経路でだけ出る（段は 1 と 2 が出ている）
 - `generate_item_in_shopping` は `None` を返す。
   作った品は戻り値ではなく主の持ち物へ入る
   （`generate_enemy_instance_from_quest_dict` と同じ形。§2.20）

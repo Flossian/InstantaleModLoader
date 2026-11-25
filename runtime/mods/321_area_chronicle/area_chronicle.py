@@ -34,7 +34,7 @@
 
 `world_data.json` はゲームが書き戻さない世界の骨格で、MOD も書かない
 （`app.world_dict` へ書くと世界のファイルに焼かれ、同じ世界で新しく始めた
-別のキャラクタにまで乗る。GAME.md §2.9.1、`318_` が初版で踏んだ）。
+別のキャラクタにまで乗る。GAME.md §2.9.1）。
 実行時の `Area.descriptions` の dict は骨格側と共有されている可能性があるので、
 **中身を書き換えず、新しい dict を作って属性ごと差し替える**。
 
@@ -48,7 +48,7 @@
 控え（`done`）より後に増えた achievements だけを渡す。
 古い功績は前回の編纂で既に文面へ織り込まれているので、
 毎回全部渡すと同じ変化が何度も適用され、頼み文も際限なく伸びる
-（achievements は追記され続ける。観測最大8件、上限管理の形跡なし）。
+（achievements は追記され続ける。GAME.md §2.20、VERIFICATION.md §3.40）。
 一度に増えた分が多いときは直近 `RECENT_DEEDS` 件に絞り、絞ったことをログに書く。
 
 編纂が走らないまま終了しても巻き戻らない。
@@ -64,11 +64,10 @@
 """
 
 import datetime
-import os
 import sys
 import time
 
-from instantale_modloader import arrivals, durations, frames, jobs, llm, loads, modnpc, quest_ends, ui
+from instantale_modloader import arrivals, durations, frames, jobs, llm, loads, modnpc, quest_ends, state as state_parts, ui
 from instantale_modloader.state import WorldStore
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
@@ -79,7 +78,6 @@ MENTION_IN_STARTER = False  # 会話の第一声に「近況に触れてよい�
 #: 自分で包んでいたときの重なり（外側から 321・317・403・311・326・301）を保つ。TECH.md §3.3.21。
 NOTES_PRIORITY = -6
 MENTION_TEXT = "この土地の近況は【土地情報】に書かれているとおりで、あなたも見聞きしている。会話の中で自然に触れてよい。"
-LOG_MATERIAL = True       # descriptions の実行時の形を1回だけログに残すか
 
 # ---- 以下は設定にしない値 -------------------------------------------------
 
@@ -207,14 +205,8 @@ def by_area_id(bucket):
 
 
 def ordered_record(record):
-    """控え1件を `RECORD_KEYS` の並びに直す。知らない鍵は落とさず後ろへ回す。"""
-    if not isinstance(record, dict):
-        return {}
-    out = {key: record[key] for key in RECORD_KEYS if key in record}
-    for key, value in record.items():
-        if key not in out:
-            out[key] = value
-    return out
+    """控え1件を `RECORD_KEYS` の並びに直す。知らない鍵は落とさず後ろへ回す（ローダの `state.ordered`）。"""
+    return state_parts.ordered(record, RECORD_KEYS)
 
 
 def bullet_list(items, empty="（記録なし）"):
@@ -281,15 +273,12 @@ def apply(ctx):
     state = store["state"]
 
     write = ctx.logger(LOG_BASENAME)
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "321_area_chronicle"
+    owner = ctx.mod_name or "321_area_chronicle"
     worlds = store["worlds"].rebind(ctx, write)
     data_lock = worlds.lock
 
-    def note_once(key, message):
-        if key in state["noted"]:
-            return
-        state["noted"].add(key)
-        write(message)
+    # 覚えは sys の器の集合に置き、注入をまたいで同じ知らせを繰り返さない（TECH.md §3.2.3 の ctx.once）
+    note_once = ctx.once(write, store=state["noted"])
 
     #: 注入の結末。直前と同じ内容なら書かない（会話は1ターンに何度も回る）。
     note_inject = ctx.logger(LOG_BASENAME, dedup=True)
@@ -327,7 +316,7 @@ def apply(ctx):
 
         world_data.json では `{overview, facilities}` の dict。
         実行時に同じ形かは版で変わりうるので、決めつけずに形で見る。
-        読めない形は `LOG_MATERIAL` が1回だけ記録する（追う手がかり）。
+        読めない形は、差し替えや編纂を見送るときに土地ごとに1回だけ記録する（追う手がかり）。
         """
         value = getattr(area, "descriptions", None)
         return value if isinstance(value, dict) else None
@@ -357,7 +346,7 @@ def apply(ctx):
         **中身を書き換えず、新しい dict を作って属性ごと差し替える。**
         いまの dict は世界の骨格（`app.world_dict`）と共有されている可能性があり、
         あちらへ書くと `worlds/<世界名>/world_data.json` に焼かれる
-        （GAME.md §2.9.1。`318_` が初版で踏んだ轍）。
+        （GAME.md §2.9.1）。
         """
         desc = descriptions_of(area)
         if desc is None:
@@ -430,9 +419,6 @@ def apply(ctx):
         area_id = ui.area_id_of(ui.current_area(app))
         if not area_id:
             return
-        if LOG_MATERIAL:
-            note_once("shape", "実行時の形: 土地 {} の {}".format(
-                area_id, describe_shape(ui.current_area(app))))
         key = worlds.playthrough(app)
         total, done = pending_deeds(app, key, area_id)
         if total > done:
@@ -488,7 +474,7 @@ def apply(ctx):
             return
         overview = clean_text(text_of(desc, OVERVIEW_KEY))
         facilities = clean_text(text_of(desc, FACILITIES_KEY))
-        name = frames.short(getattr(area, "name", ""), 40) or ""
+        name = ui.area_name(app, area, "", 40)
 
         messages = build_messages({
             "area_name": name,
@@ -606,34 +592,26 @@ def apply(ctx):
         差し替えはセーブに残らないので、ここが素へ戻った状態の始点になる
         （`318_` と同型）。世界の鍵はセーブの辞書から取る ―
         この時点では `app.world` がまだ埋まっていない。
+        例外は窓口が記録する（TECH.md §3.3.21）。下の2つも同じ。
         """
         self, save_data_dict, app = call.obj, call.save_data, call.app
-        try:
-            key = worlds.playthrough(app, save_data_dict)
-            if key:
-                applied = reapply_world(self, key, "load")
-                if applied:
-                    write("load: 周回 {!r} の案内文を当て直した（{}件）".format(
-                        key, applied))
-        except Exception:
-            ctx.log_exc("area chronicle: ロード直後に当て直せなかった")
+        key = worlds.playthrough(app, save_data_dict)
+        if key:
+            applied = reapply_world(self, key, "load")
+            if applied:
+                write("load: 周回 {!r} の案内文を当て直した（{}件）".format(
+                    key, applied))
 
     loads.on(owner, ctx, (loads.WORLD,), after=world_loaded, write=write)
 
     # 街に着いた後・日数が進んだ後はローダの窓口（`arrivals` / `durations.on_days`。TECH.md §3.3.21）
     def area_arrival(call):
-        try:
-            check(call.app, "到着")
-        except Exception:
-            ctx.log_exc("area chronicle: 土地への到着で失敗した")
+        check(call.app, "到着")
 
     arrivals.on(owner, ctx, (arrivals.AREA,), after=area_arrival, write=write)
 
     def after_days(call):
-        try:
-            check(call.app, "日数経過")
-        except Exception:
-            ctx.log_exc("area chronicle: 日数の経過で失敗した")
+        check(call.app, "日数経過")
 
     durations.on_days(owner, ctx, after=after_days, write=write)
 

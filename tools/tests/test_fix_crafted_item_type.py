@@ -9,9 +9,10 @@
   鍵を足す   … 回復も疲労負荷も無い品に本体の関数の値を足す。並びは item_detail → 回復 → 疲労負荷 → 残り
   足さない   … 134_ が作り直した品（疲労負荷 0 が在る）・本体の関数が引けないとき
   英語       … 表示言語が en なら recovery / fatigue の綴りで足す
-  入口       … 生成3本・クラフトの置き場・窓2種（持ち主でも入れ物でも）・説明欄。引数は素通し
+  入口       … 生成3本・クラフトの置き場・窓2種（持ち主でも入れ物でも）・説明欄。引数は素通し。
+               どれもローダの窓口（`items.on_made` / `items.on_sight`）の包みを通して確かめる
   134_ と    … 足した品を 134_ が作り直すと、134_ の効き目だけが残る
-  設定       … FIX_ON_SIGHT を切ると画面の入口は包まない
+  設定       … FIX_ON_SIGHT を切ると画面の窓口に載らない
 """
 import importlib.util
 import io
@@ -30,6 +31,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
+from instantale_modloader import gates, items, twin_windows  # noqa: E402
 
 
 def find_mod(suffix):
@@ -84,6 +86,8 @@ class Character(object):
 
 class FakeCtx:
     _mod = "409_fix_crafted_item_type"
+    # 本物の `ctx.mod_name` と同じく mod のフォルダ名（窓口に名乗る持ち主）
+    mod_name = _mod
 
     def __init__(self, out_dir):
         self.out_dir = out_dir
@@ -142,6 +146,10 @@ def load(name, folder, path):
 def fresh(on_sight=True):
     if hasattr(sys, "_instantale_crafted_item_type_store"):
         delattr(sys, "_instantale_crafted_item_type_store")
+    # 窓口の登録と包みの印を素へ戻す（偽の ctx を作り直すと、同じ世代とみなされて包みが渡らない）
+    gates.reset_all()
+    items.reset()
+    twin_windows.reset()
     module = load("fix_crafted_item_type_mod", *find_mod("_fix_crafted_item_type"))
     module.FIX_ON_SIGHT = on_sight
     ctx = FakeCtx(OUT_DIR)
@@ -290,11 +298,17 @@ try:
 
     print("設定")
     mod, ctx = fresh(on_sight=False)
-    check("FIX_ON_SIGHT を切ると画面の入口は包まない",
+    # 説明欄・所持品の画面は生成の入口と同じ関所の組で包まれるので、包みの有無ではなく登録と効き目で見る
+    check("FIX_ON_SIGHT を切ると画面の窓口に載らない",
           "__main__:InstantaleApp.toggle_twin_inventory_window" not in ctx.hooks
-          and "scripts.hud.new_hud:ItemDetailBox.update_content" not in ctx.hooks
+          and FakeCtx.mod_name not in items.sight_owners()
+          and FakeCtx.mod_name in items.made_owners()
           and "__main__:InstantaleApp.generate_item_from_item_data" in ctx.hooks,
-          list(ctx.hooks))
+          (list(ctx.hooks), items.sight_owners(), items.made_owners()))
+    shown = []
+    ctx.hooks["scripts.hud.new_hud:ItemDetailBox.update_content"](
+        lambda self, item: shown.append(item.item_type), object(), food("drink"))
+    check("FIX_ON_SIGHT を切ると説明欄では直さない", shown == ["consumable"], shown)
 finally:
     for name, module in saved.items():
         if module is None:

@@ -67,7 +67,7 @@ import random
 import sys
 import threading
 
-from . import durations, frames, log, log_exc, ui
+from . import _kinds, durations, frames, log, log_exc, ui
 
 # ---------------------------------------------------------------------------
 # 種類と決まり
@@ -172,9 +172,12 @@ _REGISTRY_ATTR = "_instantale_battle_effects"
 
 
 def _num(value):
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return value
+    """数ならその値、そうでなければ None（`abilities._number` と同じ答え）。
+
+    `frames.to_number` にしないのは、文字列の数（`"3"`）を数にしないため。
+    効果の値も人物の体力も、型の崩れた値は数えない（写しのときの答えのまま）。
+    """
+    return value if frames.is_number(value) else None
 
 
 #: ゲームの表示言語（`ui.language`。名前はこのモジュールから引く側のために残す）。
@@ -344,13 +347,10 @@ def healed(amount, rate):
 # ---------------------------------------------------------------------------
 # 置く側
 # ---------------------------------------------------------------------------
-def _registry():
-    """`{持ち主: {"fn", "on_kill"}}`（置いた順）。`sys` に置いて注入し直しをまたぐ。"""
-    found = getattr(sys, _REGISTRY_ATTR, None)
-    if not isinstance(found, dict):
-        found = {}
-        setattr(sys, _REGISTRY_ATTR, found)
-    return found
+#: `{持ち主: {"fn", "on_kill"}}`（置いた順）の登録簿（`_kinds`。`abilities` と同じ形）。
+#: 倒した時の行（`on_kill`）はこの順に並ぶ。
+_owners = _kinds.OwnerRegistry(_REGISTRY_ATTR, "battle_effects")
+_registry = _owners.table
 
 
 def declare(owner, fn, on_kill=None, write=None):
@@ -365,18 +365,17 @@ def declare(owner, fn, on_kill=None, write=None):
         raise TypeError("declare() needs a callable, got {!r}".format(type(fn)))
     if on_kill is not None and not callable(on_kill):
         raise TypeError("on_kill must be callable, got {!r}".format(type(on_kill)))
-    _registry()[str(owner or "")] = {"fn": fn, "on_kill": on_kill}
+    _owners.put(owner, {"fn": fn, "on_kill": on_kill})
     if write:
         write("battle effects: {!r} answers the battle effects".format(owner))
 
 
 def forget(owner, write=None):
     """その持ち主の `declare` を外す。外した種類を返す（`durations.forget` の片付け）。"""
-    if _registry().pop(str(owner), None) is None:
-        return []
-    if write:
+    gone = _owners.drop(owner)
+    if gone and write:
         write("battle effects: {!r} no longer answers the battle effects".format(owner))
-    return ["battle_effects"]
+    return gone
 
 
 # 片付けの入口は `durations.forget` の1本に保つ（`combat` / `abilities` と同じ）。
@@ -384,7 +383,7 @@ durations.on_forget(forget)
 
 
 def owners():
-    return list(_registry())
+    return _owners.owners()
 
 
 _failed = set()

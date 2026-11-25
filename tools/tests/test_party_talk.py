@@ -254,6 +254,8 @@ class Ctx(object):
         self.hooks = {}
         self.errors = []
         self.notes = []
+        # 本物の ctx.mod_name と同じく MOD のフォルダ名（窓口に名乗る持ち主名）
+        self.mod_name = os.path.basename(os.path.dirname(MOD_PATH))
 
     _mod = None
 
@@ -311,6 +313,8 @@ def fresh():
     if hasattr(sys, MOD.STORE):
         delattr(sys, MOD.STORE)
     choices.reset()          # 窓口の置き場（開いた画面・印の控え）は `sys` に在って検査をまたぐ
+    # 窓口（talks / loads）の包みは1つの世代に1枚。世代を持たない偽の ctx を作り直すたびに忘れさせる。
+    ml.gates.reset_all()
     ctx = Ctx(tempfile.mkdtemp(prefix="party_talk_test_"))
     MOD.apply(ctx)
     return ctx
@@ -525,6 +529,11 @@ ctx.hooks["__main__:InstantaleApp.start_battle_with_in_conversation"](lambda sel
 FakeClock.run_all()
 check("戦闘に入ると枠を外して会話も畳む",
       [c for c in hud.layer.children if hasattr(c, MOD.PORTRAIT_ATTR)] == [] and store["active"] is False)
+
+store.update({"active": True, "anchor": "8"})
+check("タイトルへ戻ると会話を畳む（窓口 loads の TITLE）",
+      ctx.hooks["__main__:InstantaleApp.return_to_title"](lambda self: "TITLE", APP) == "TITLE"
+      and store["active"] is False, store["active"])
 
 store.update({"active": True, "anchor": "8"})
 FakeClock.scheduled = []

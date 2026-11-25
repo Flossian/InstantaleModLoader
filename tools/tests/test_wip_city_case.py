@@ -400,10 +400,17 @@ TRAIT_FACTS = {(a["id"], v["id"]): v["fact"] for a in BOOK["axes"] for v in a["v
 class FakeCtx:
     api = 1
     version = "test"
+    _seq = 0
 
     def __init__(self):
         self.hooks = {}
         self.mod_dir = MOD_DIR
+        # 窓口に名乗る持ち主の名前（本物は apply() の間 MOD のフォルダ名）。
+        self.mod_name = os.path.basename(MOD_DIR)
+        # 注入の世代（本物の `ctx.generation`）。ローダの窓口（`talks`）は世代ごとに1回だけ包むので、
+        # ここが同じ値だと作り直した ctx に包みが渡らない。
+        FakeCtx._seq += 1
+        self.generation = FakeCtx._seq
         self.config = {}
         self.errors = []
 
@@ -1082,6 +1089,9 @@ for target in ("scripts.llm.llm_manager:conversation_starter",
                "scripts.llm.llm_manager:conversation_facilitator_after_retrieval"):
     check("会話に知識を差し込む口がある: {}".format(target.rsplit(":", 1)[-1]),
           target in ctx.hooks, sorted(ctx.hooks))
+from instantale_modloader import talks as _talks  # noqa: E402
+check("会話を閉じた後の処理はローダの窓口 talks の END に預ける",
+      _talks.owners(_talks.END) == [ctx.mod_name], _talks.owners(_talks.END))
 
 print("\n[会話] **知っていることを NPC に喋らせる**")
 # 聞き込みの最中だけ、ゲーム自身の `retrieved_knowledge` に事実を足す。
@@ -1102,6 +1112,13 @@ facilitator(fake_facilitator, "m", "log", "p",
             app.world.characters[places["market"].owner],
             "w", "s", "r", "a", [], [], "instr", retrieved_knowledge="")
 check("キーワードで渡されても事実が載る",
+      "必ず話すこと" in str(seen["kwargs"].get("retrieved_knowledge")),
+      seen["kwargs"])
+seen.clear()
+facilitator(fake_facilitator, "m", "log", "p",
+            character_instance=app.world.characters[places["market"].owner],
+            retrieved_knowledge="")
+check("相手（character_instance）がキーワードで来ても事実が載る",
       "必ず話すこと" in str(seen["kwargs"].get("retrieved_knowledge")),
       seen["kwargs"])
 
@@ -2640,8 +2657,8 @@ check("中身は role/content の形",
       and sent["message"][0].get("role") == "user"
       and sent["message"][0].get("content") == "頼み文",
       sent.get("message"))
-check("timeout を必ず渡す（返らない推論で止まらないため）",
-      sent.get("timeout") == 12.0, sent.get("timeout"))
+check("timeout は送り口へ渡さない（llm.ask の目安。VERIFICATION.md §3.101）",
+      "timeout" in sent and sent.get("timeout") is None, sent)
 check("既にリストならそのまま通す",
       writer.as_messages([{"role": "user", "content": "x"}])
       == [{"role": "user", "content": "x"}])

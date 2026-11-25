@@ -14,13 +14,11 @@ referee は `scripts.llm.llm_manager_battle` の `send_request` と
 `send_request_with_no_structure` のどちらかを通る。
 どの referee がどちらを通るかは manager_name では決まらないので両方を見張り、
 足すかどうかは manager_name（`BATTLE_MANAGERS`）と `app.in_battle` で決める。
-`send_request` はプロバイダ初期化後に生えるので、後生え・別名の対策は
-ローダの `llm.watch_aliases` に任せる（TECH.md §3.4）。
+送り口を包むのはローダの窓口 `llm.on_request` で、この MOD は送る messages の書き換えだけを渡す
+（後生え・別名の対策も窓口が持つ。TECH.md §3.3.21・§3.4）。
 
 戦闘中の判定は `107_fix_battle_flag_stuck` が正常化した `in_battle` だけ。
-`in_boss_battle` / `in_colosseum_battle` は、`in_battle` が落ちているのに
-立っていたら1度だけ記録する。判定を広げるかはその記録が出てから決める
-（ボス戦では出ておらず、`in_battle` で拾えている）。
+ボス戦の `in_boss_battle` も闘技場の `in_colosseum_battle` も `in_battle` と一緒に立つ（GAME.md §2.11「戦闘BGM」の表）。
 
 ## 何を載せるか
 
@@ -49,9 +47,8 @@ NPC の runtime の Character には口調などが載らないことがある�
 タイトルへ戻るときに控えを捨て、別ワールド・別セーブへの持ち越しを防ぐ。
 """
 
-import sys
-
-from instantale_modloader import equipment, frames, llm, ui
+from instantale_modloader import equipment, frames, items, llm, loads, ui
+from instantale_modloader.state import process_store
 
 #: 控えの置き場（`sys` の属性。注入をまたぐ）。
 STATE_ATTR = "_instantale_battle_character_context"
@@ -63,17 +60,10 @@ MARKER = "【パーティーメンバー戦闘情報】"
 LOG_BASENAME = "battle_character_context.log"
 
 # referee がどちらの送り口を通るかは manager_name では決まらない
-# （out/recon/targets.txt にはどちらも在る）。両方を見張り、
+# （out/recon/targets.txt にはどちらも在る）。戦闘の部品の2つ（構造あり・なし）を見張り、
 # 足すかどうかは BATTLE_MANAGERS と in_battle で決める。
-# 先頭2引数は (manager_name, message) で共通。
-BATTLE_SEND_TARGETS = (
-    "scripts.llm.llm_manager_battle:send_request",
-    "scripts.llm.llm_manager_battle:send_request_with_no_structure",
-)
-
-# 戦闘中判定に使うのは in_battle だけ（107 が正常化するのもこれだけ）。
-# 他2つは立っているところをまだ観測していないので、立っていたら記録だけ残す。
-OTHER_BATTLE_FLAGS = ("in_boss_battle", "in_colosseum_battle")
+# 送り口の文字列はローダの `llm.send_targets` が選ぶ（窓口が包む対象を MOD に書かない）。
+BATTLE_SEND_MODULE = "llm_manager_battle"
 
 # referee は1手ごとに呼ばれ、同行者ぶんが毎ターン user message に載る。
 # 1項目ずつの上限を用途で分け、その上で全員ぶんの合計にも蓋をする
@@ -117,42 +107,19 @@ BATTLE_MANAGERS = {
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME, tag="battle context:")
+    owner = ctx.mod_name or "401_battle_character_context"
 
-    # 控え。どちらもタイトルへ戻るときに空にする。
+    # 控え。タイトルへ戻るときに空にする。
     # `sys` に置いて注入をまたぐ（apply() の中に置くと、注入し直したときに次のロードまで補いが効かない。
-    # TECH.md §3.4。`403_` と同じ）。
-    state = getattr(sys, STATE_ATTR, None)
-    if not isinstance(state, dict):
-        state = {
-            "saved_character": {},   # character_id -> ロード時の保存辞書の写し（runtime に欠ける項目の拠り所）
-            "noted_flags": set(),    # `in_battle` 以外の戦闘フラグを記録済みか（同じ NOTE を毎手書かない）
-        }
-        setattr(sys, STATE_ATTR, state)
-
-    def note_other_battle_flags(app):
-        """`in_battle` が立たない戦闘があるかを確かめるための1行。
-
-        107 が正常化するのは `in_battle` だけで、他2つは立っているところを
-        まだ観測していない（107 の記録）。判定を広げる前に、
-        本当に立つ場面があるのかをここで拾う。立ったフラグごとに1度だけ残す。
-        """
-        for flag in OTHER_BATTLE_FLAGS:
-            if flag in state["noted_flags"]:
-                continue
-            if bool(getattr(app, flag, False)):
-                state["noted_flags"].add(flag)
-                write("NOTE {} is set while in_battle is not; "
-                      "party-member context stayed off".format(flag))
+    # TECH.md §3.4。`403_` と同じ）。置き方はローダの `state.process_store`。
+    state = process_store(STATE_ATTR, {
+        "saved_character": {},   # character_id -> ロード時の保存辞書の写し（runtime に欠ける項目の拠り所）
+    })
 
     # ------------------------------------------------------------ 安全な読み取り
 
-    def value_of(obj, name, default=None):
-        """dict / object のどちらでも読む。object はローダ共通 frames.attr を使う。"""
-        if obj is None:
-            return default
-        if isinstance(obj, dict):
-            return obj.get(name, default)
-        return frames.attr(obj, name, default)
+    # dict / object のどちらでも読む（ローダの `frames.field`。読めない番人は default に戻す）。
+    value_of = frames.field
 
     def text_of(obj, name):
         """文字列属性。dictにも対応し、object側は共通部品を使う。"""
@@ -167,22 +134,9 @@ def apply(ctx):
         """「値が入っている」の判定。None と空の入れ物だけを不在とみなす（0 や False は在る）。"""
         return value not in (None, "", [], {}, ())
 
-    def inventory_of(character):
-        """持ち物の実体 `{item_id: item}`。312_shop_restock と同じ読み方。
-
-        runtime の Character では `inventory` が Inventory オブジェクトで、
-        その中の `.inventory` が辞書。保存辞書（ロード時の写し）では
-        `inventory` がそのまま辞書。どちらの形でも辞書を返す。
-        """
-        if character is None:
-            return None
-        inventory = value_of(character, "inventory")
-        if isinstance(inventory, dict):
-            return inventory
-        inner = value_of(inventory, "inventory")
-        if isinstance(inner, dict):
-            return inner
-        return None
+    # 持ち物の実体 `{item_id: item}`（ローダの `items.inventory_of`）。
+    # 読むのは runtime の Character だけ（保存辞書の持ち物は `equipment_sources` が別に引く）。
+    inventory_of = items.inventory_of
 
     def saved_character_of(character):
         """ロード時にゲーム自身が読んだNPC保存辞書。無ければNone。"""
@@ -192,20 +146,19 @@ def apply(ctx):
         return state["saved_character"].get(str(character_id))
 
     def equipment_sources(character):
-        """装備の参照元を4つ揃えて返す: (runtime装備, runtime持ち物, 保存装備, 保存持ち物)。
+        """装備の参照元を3つ揃えて返す: (runtime装備, runtime持ち物, 保存持ち物)。
 
-        新しい runtime 状態を優先し、ロード時の保存辞書は fallback。
+        新しい runtime 状態を優先し、ロード時の保存辞書の持ち物は fallback。
+        保存辞書の装備は見ない（仲間の `equipments` はセーブでは常に `{}`。GAME.md §2.13.3）。
         辞書でなかったものは None にして、読む側の isinstance を減らす。
         """
         runtime_eq = value_of(character, "equipments")
         runtime_inv = inventory_of(character)
         saved = saved_character_of(character) or {}
-        saved_eq = saved.get("equipments")
         saved_inv = saved.get("inventory")
         return (
             runtime_eq if isinstance(runtime_eq, dict) else None,
             runtime_inv if isinstance(runtime_inv, dict) else None,
-            saved_eq if isinstance(saved_eq, dict) else None,
             saved_inv if isinstance(saved_inv, dict) else None,
         )
 
@@ -245,24 +198,16 @@ def apply(ctx):
 
         `equipments[slot]` の値は場面で形が違う:
           - runtime では Item オブジェクトそのもの（402 が装備を書き換えた直後など）
-          - セーブから読んだ直後や保存辞書ではアイテム id の文字列
-          - 保存辞書の中に Item の辞書がそのまま入っている場合
+          - 333 や 402 が書いた後はアイテム id の文字列
+          - Item の辞書がそのまま入っている場合
         オブジェクト／辞書ならそのまま `item_summary` へ。id 文字列なら持ち物から
         実体を引く。runtime の持ち物に無ければ保存辞書の持ち物も見る（そのときは
         どの経路で解決したかをログに1行残す）。どこにも無ければ id だけを載せて、
         「何かを装備している」ことだけは審判へ伝える。
         """
-        runtime_eq, runtime_inv, saved_eq, saved_inv = equipment_sources(character)
+        runtime_eq, runtime_inv, saved_inv = equipment_sources(character)
 
-        # 参照はまず runtime。空なら保存辞書。どちらから取ったかは
-        # fallback のログのために覚えておく。
         ref = runtime_eq.get(slot) if isinstance(runtime_eq, dict) else None
-        source = "runtime"
-        if not present(ref) and isinstance(saved_eq, dict):
-            ref = saved_eq.get(slot)
-            if present(ref):
-                source = "saved"
-
         if not present(ref):
             return None, None
 
@@ -286,10 +231,10 @@ def apply(ctx):
             if item is None:
                 item = inventory.get(str(ref))
             if item is not None:
-                if source == "saved" or inv_source == "saved":
+                if inv_source == "saved":
                     write("equipment fallback: character={!r} slot={} ref={} via {}+{}".format(
                         text_of(character, "name") or value_of(character, "id"),
-                        slot, frames.short(ref, 120), source, inv_source))
+                        slot, frames.short(ref, 120), "runtime", inv_source))
                 return item_summary(item)
 
         return "item_id=" + frames.short(ref, 200), None
@@ -477,33 +422,7 @@ def apply(ctx):
     # ------------------------------------------------------------ 送り口の引数
     # 見張る2つの送り口はどちらも先頭が (manager_name, message, ...) で、
     # message は `[{"role": ..., "content": ...}, ...]` の list。
-    # 呼び側が位置引数で渡すか keyword で渡すかは決め打ちできないので、
-    # 読むときにどちらだったかを控え、書き戻すときに同じ形へ戻す。
-
-    def manager_name_of(args, kwargs):
-        """第1引数の manager_name。位置でも keyword でも読む。"""
-        if args:
-            return args[0]
-        return kwargs.get("manager_name")
-
-    def message_of(args, kwargs):
-        """message の list と、それが "args" / "kwargs" のどちらに在ったかを返す。"""
-        if len(args) >= 2 and isinstance(args[1], list):
-            return args[1], "args"
-        message = kwargs.get("message")
-        if isinstance(message, list):
-            return message, "kwargs"
-        return None, None
-
-    def replace_message(args, kwargs, message, where):
-        """`message_of` が見つけた位置へ差し替え後の message を戻す。元の tuple / dict は触らない。"""
-        if where == "args":
-            return args[:1] + (message,) + args[2:], kwargs
-        if where == "kwargs":
-            new_kwargs = dict(kwargs)
-            new_kwargs["message"] = message
-            return args, new_kwargs
-        return args, kwargs
+    # 引数を来た側（位置かキーワード）のまま読み書きするのは窓口 `llm.on_request`。
 
     def append_block(message, block):
         """最後の user message に追記。呼び出し元のlist/dictは壊さない。
@@ -547,7 +466,7 @@ def apply(ctx):
     # ------------------------------------------------------------ ロード時のNPC保存形
 
     @ctx.wrap("__main__:World.generate_character", required=False, safe=True)
-    def remember_saved_character(orig, self, character_id, character_value, *args, **kwargs):
+    def remember_saved_character(orig, self, *args, **kwargs):
         """ゲームがセーブから NPC を組み立てる入口で、渡された保存辞書を写しておく。
 
         `World.generate_character(character_id, character_value)` はロード時に
@@ -555,15 +474,16 @@ def apply(ctx):
         runtime の Character には載らない項目（口調など）があるので、
         必要な欄だけを `state["saved_character"]` へ控え、`field_with_saved_fallback` /
         `equipment_sources` が runtime に無いときの拠り所にする。
-        本体の処理は一切変えない（控えたあと `orig` をそのまま呼ぶ）。
+        本体の処理は一切変えない（控えたあと、受け取った引数のまま `orig` を呼ぶ）。
+        仲間の `equipments` はセーブでは常に `{}`（GAME.md §2.13.3）なので控えない。
         """
         try:
+            character_id = frames.arg(args, kwargs, "character_id", 0)
+            character_value = frames.arg(args, kwargs, "character_value", 1)
             if isinstance(character_value, dict) and character_id is not None:
-                equipments = character_value.get("equipments")
                 inventory = character_value.get("inventory")
-                # speech_style 等だけを持つNPCもいるため、装備/所持品の有無では絞らない。
+                # speech_style 等だけを持つNPCもいるため、所持品の有無では絞らない。
                 state["saved_character"][str(character_id)] = {
-                    "equipments": dict(equipments) if isinstance(equipments, dict) else {},
                     "inventory": dict(inventory) if isinstance(inventory, dict) else {},
                     "profile": character_value.get("profile"),
                     "personality": character_value.get("personality"),
@@ -575,81 +495,67 @@ def apply(ctx):
                 }
         except Exception:
             ctx.log_exc("battle character context: cannot remember saved NPC character data")
-        return orig(self, character_id, character_value, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     # ------------------------------------------------------------ フック
 
-    @ctx.wrap("__main__:InstantaleApp.return_to_title", required=False, safe=True)
-    def clear_saved_character_cache(orig, self, *args, **kwargs):
+    def clear_saved_character_cache(call):
         """タイトルへ戻るときに控えを全部捨てる。
 
         別のワールドや別のセーブをロードすると character_id が同じでも別人になり得る。
         古い保存辞書を fallback に使うと他所の人物像が混ざるので、境目で空にする。
-        NOTE の印も一緒に戻し、次の遊びでまた1度だけ記録できるようにする。
         """
         state["saved_character"].clear()
-        state["noted_flags"].clear()
-        return orig(self, *args, **kwargs)
 
-    def install_send(target):
-        """送り口1つに包みを掛ける。`llm.watch_aliases` が対象ごとに呼ぶ。
+    # タイトルへ戻る前はローダの窓口 `loads` の TITLE（TECH.md §3.3.21）。
+    loads.on(owner, ctx, (loads.TITLE,), before=clear_saved_character_cache, write=write)
 
-        包みの中の流れ:
-          1. manager_name が戦闘の審判でなければ素通し（会話や生成には触らない）
+    def battle_request(req):
+        """戦闘の審判の頼みに仲間の塊を足す（窓口 `llm.on_request` の書き換え）。
+
+        流れ:
+          1. manager_name が戦闘の審判でなければ来ない（窓口の `managers` で絞る。会話や生成には触らない）
           2. message の list が読めなければ WARN を残して素通し
           3. `app.in_battle` が立っていなければ素通し
-             （他の戦闘フラグだけ立っていたら NOTE を1度だけ残す）
-          4. 仲間の塊を組み、最後の user message の末尾へ足して本体へ渡す
-        失敗はどの段でも本体の呼び出しを止めない（元の引数で `orig` を呼ぶ）。
+          4. 仲間の塊を組み、最後の user message の末尾へ足した新しい list を返す
+        失敗はどの段でも本体の呼び出しを止めない（None を返すと元の引数のまま送られる）。
         """
-        @ctx.wrap(target, required=False, safe=True)
-        def battle_send(orig, *args, **kwargs):
-            manager_name = manager_name_of(args, kwargs)
-            if manager_name not in BATTLE_MANAGERS:
-                return orig(*args, **kwargs)
+        manager_name = req.manager_name
+        message = req.message
+        if not isinstance(message, list):
+            write("WARN {} has no readable message list".format(manager_name))
+            return None
 
-            message, where = message_of(args, kwargs)
-            if message is None:
-                write("WARN {} has no readable message list".format(manager_name))
-                return orig(*args, **kwargs)
+        app = ui.find_app()
+        if app is None:
+            write("WARN {}: app not found".format(manager_name))
+            return None
 
-            app = ui.find_app()
-            if app is None:
-                write("WARN {}: app not found".format(manager_name))
-                return orig(*args, **kwargs)
+        # 107_fix_battle_flag_stuck が終了/ロード時の残骸を片付ける。
+        # 401側ではその正常化済みフラグを戦闘中判定としてそのまま使う。
+        if not bool(getattr(app, "in_battle", False)):
+            return None
 
-            # 107_fix_battle_flag_stuck が終了/ロード時の残骸を片付ける。
-            # 401側ではその正常化済みフラグを戦闘中判定としてそのまま使う。
-            if not bool(getattr(app, "in_battle", False)):
-                note_other_battle_flags(app)
-                return orig(*args, **kwargs)
+        try:
+            block, count = build_block(app)
+            if not block:
+                write("WARN {}: no party-member context built".format(manager_name))
+                return None
 
-            try:
-                block, count = build_block(app)
-                if not block:
-                    write("WARN {}: no party-member context built".format(manager_name))
-                    return orig(*args, **kwargs)
-
-                replaced = append_block(message, block)
-                if replaced is not message:
-                    args, kwargs = replace_message(args, kwargs, replaced, where)
-                    write("{}: appended {} character(s), {} chars".format(
-                        manager_name, count, len(block)))
-            except Exception:
-                ctx.log_exc("battle character context: cannot build/append context")
-                return orig(*args, **kwargs)
-
-            return orig(*args, **kwargs)
+            replaced = append_block(message, block)
+            if replaced is message:
+                return None
+            write("{}: appended {} character(s), {} chars".format(
+                manager_name, count, len(block)))
+            return replaced
+        except Exception:
+            ctx.log_exc("battle character context: cannot build/append context")
+            return None
 
     # send_request はプロバイダ初期化後に生える（apply() の時点では無いことがある）。
-    # 後生え・別名（他 MOD が包んだ後の関数名違い）の対策はローダの共有部品へ任せる。
-    # 対象が現れた時点で `install_send(target)` が呼ばれ、包みが掛かる。
-    llm.watch_aliases(
-        ctx,
-        list(BATTLE_SEND_TARGETS),
-        install_send,
-        label="battle character context",
-    )
+    # 包むのはローダの窓口 `llm.on_request` の1か所で、後生え・別名の対策も窓口が持つ。
+    llm.on_request(owner, ctx, battle_request, managers=BATTLE_MANAGERS,
+                   targets=llm.send_targets(BATTLE_SEND_MODULE), write=write)
 
     ctx.log("battle character context: installed (total {} chars, {} per member at least); log -> {}".format(
         BLOCK_TOTAL_CHARS, MEMBER_MIN_CHARS, ctx.out_path(LOG_BASENAME)))

@@ -21,7 +21,7 @@ import random
 import sys
 import time
 
-from instantale_modloader import arrivals, choices, combat, frames, llm, loads, modfacility, npcs, ui
+from instantale_modloader import arrivals, battles, choices, combat, frames, llm, loads, modfacility, modnpc, npcs, ui
 
 ARRIVAL_PRIORITY = 20           # 300（0）・911（10）より先に呼び止める
 CLAIM_PRIORITY = 50             # 刺客との会話は「受けて立つ」だけ（窓口 `choices` の `claim`）
@@ -59,8 +59,6 @@ WAITING_TTL = IDLE_TIMEOUT + 10.0
 FIGHT_KEYS = ("npc", "faction", "area", "wanted", "faction_name", "title", "name", "base_hp")
 BATTLE_CLS = "BattleStartManager"
 SPECIFIC_ENEMY = "specific"
-BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle", "in_conversation",
-              "in_free_input", "in_action_in_conversation")
 CATEGORIES = npcs.LOOK_CATEGORIES   # 立ち絵の見た目の種類（ローダの npcs が持つ）
 
 PROMPT = (
@@ -106,22 +104,23 @@ def install(env):
     screen = ui.Screen(ctx, write, tag="hunter")
     rng = getattr(env, "rng", None) or random.Random()
     owner = env.owner + ":hunter"
-    state = {"opening": None, "fight": None, "waiting": None, "making": False, "accepting": False}
+    state = {"fight": None, "waiting": None, "making": False, "accepting": False}
     arrivals.install(ctx, write)
+    # 刺客が起こした会話の第一声の差し替えは、ローダの第一声の予約（`arrivals.opening`）に預ける（TECH.md §3.3.21）。
+    arrivals.install_opening(ctx, write)
 
     # ------------------------------------------------------------ 読む
     def character(app, npc_id):
         return ui.character_of(app, npc_id)
 
     def alive(app, npc_id):
+        """引ける人物で、死の印が無い（人物が引けなければ生きていないとみなす）。"""
         found = character(app, npc_id)
-        config = getattr(found, "config", None)
-        return found is not None and not (isinstance(config, dict) and config.get("is_dead"))
+        return found is not None and not npcs.is_dead(found)
 
     def place_of(app):
         """`(土地, 土地の id, 施設の id)`。読めなければ None。"""
-        player = getattr(app, "player", None)
-        facility = getattr(player, "location", None)
+        facility = ui.current_facility(app)     # ロード直後の施設 id の文字列も引き当てる
         facility_id = getattr(facility, "id", None)
         area = ui.current_area(app)
         area_id = ui.area_id_of(area)
@@ -137,7 +136,7 @@ def install(env):
         except Exception:
             ctx.log_exc("town factions: get_area_average_difficulty failed")
             value = None
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
+        if not frames.is_number(value):
             return 20
         return min(DIFFICULTY_MAX, max(1, int(round(value))))
 
@@ -155,8 +154,7 @@ def install(env):
         row = (ledger.get("standing") or {}).get(faction_id) or {}
         return faction, rules.standing_stage(row.get("score", 0))
 
-    def busy(app):
-        return [flag for flag in BUSY_FLAGS if getattr(app, flag, False)]
+    busy = ui.busy_flags                # 立っている忙しさの旗（ゲームの旗の表はローダの ui.BUSY_FLAGS）
 
     def waiting_now():
         """呼び止めを待っている刺客の id。待っていなければ None（取りやめ・時間切れで戻らなかった印は古くなったら捨てる）。"""
@@ -307,11 +305,11 @@ def install(env):
         for attr in ("original_ability_scores", "ability_scores"):
             scores = getattr(made, attr, None)
             if isinstance(scores, dict):
-                setattr(made, attr, {k: int(round(v * boost)) if isinstance(v, (int, float)) and not isinstance(v, bool)
+                setattr(made, attr, {k: int(round(v * boost)) if frames.is_number(v)
                                      else v for k, v in scores.items()})
         for attr in ("original_max_hp", "max_hp", "attack_power", "magic_power"):
             value = getattr(made, attr, None)
-            if isinstance(value, (int, float)) and not isinstance(value, bool):
+            if frames.is_number(value):
                 setattr(made, attr, int(round(value * boost)))
         if isinstance(getattr(made, "max_hp", None), int):
             made.current_hp = made.max_hp
@@ -323,11 +321,12 @@ def install(env):
              "speech_style": (str, ...), "look_description": (str, ...), "category": (str, ...),
              "look": (str, ...)},
             label="faction hunter")
-        player = getattr(getattr(app, "player", None), "name", "") or "主人公"
+        player = ui.player_name(app, "主人公")
         standing = (ledger.get("standing") or {}).get(faction["id"]) or {}
         title_line = "勢力の者たちは主人公を「{}」と呼んでいる。".format(standing["title"]) \
             if standing.get("title") else ""
-        taken = list(npcs_names(app))[-TAKEN_NAMES_MAX:]
+        # 頼みに見せる既存の名前も、答えを弾く判定（下）と同じ集め方にする（`modnpc.names_in_use`）
+        taken = list(modnpc.names_in_use(app))[-TAKEN_NAMES_MAX:]
         prompt = PROMPT.format(
             faction=faction["name"], kind=faction.get("kind") or "勢力", note=faction.get("note") or "",
             player=player, title_line=title_line, town=getattr(area, "name", "") or "",
@@ -339,7 +338,9 @@ def install(env):
             return None
         name = clean_name(data.get("name"))
         title = clean_name(data.get("title"), TITLE_MAX) or "刺客"
-        if not name or name in npcs_names(app):
+        # かぶりは実行時の名簿・セーブの素データ・MOD の人物まで見る（`modnpc.names_in_use`）。
+        # 名簿だけだと、まだ実体になっていない人や 330/331 の主と同じ名前ができ、名前で引く所で別人に当たる
+        if not name or name in modnpc.names_in_use(app):        # 答えを待つ間に増えた名前も見る
             write("hunter: unusable name {!r}".format(data.get("name")))
             return None
         category = clean_category(data.get("category"))
@@ -350,11 +351,6 @@ def install(env):
                 "look_description": clean_text(data.get("look_description")),
                 "category": category, "look": clean_look(data.get("look"), category),
                 "job": "adventure", "age": 30, "experience_level": exp_level_for(difficulty)}
-
-    def npcs_names(app):
-        characters = getattr(getattr(app, "world", None), "characters", None)
-        return [name for name in (getattr(c, "name", None) for c in (characters or {}).values())
-                if isinstance(name, str) and name]
 
     area_notes = npcs.area_notes
 
@@ -418,41 +414,32 @@ def install(env):
                 worlds.save(key)
             name = row.get("name") or ui.character_name(app, npc_id)
             area = ui.current_area(app)
-            state["opening"] = {"npc": npc_id, "at": _now(), "town": getattr(area, "name", "") or "",
-                                "faction": faction.get("name", ""), "title": row.get("title") or "刺客",
-                                "again": again}
+            mark = {"npc": npc_id, "town": getattr(area, "name", "") or "",
+                    "faction": faction.get("name", ""), "title": row.get("title") or "刺客", "again": again}
             screen.say(app, APPEAR_TEXT.format(faction=faction.get("name", ""), title=row.get("title") or "刺客",
                                                name=name))
+            # 第一声は、この刺客との会話（相手の id が同じ）のときだけ「呼び止めて勝負を挑む」に差し替える。
+            # 始まらなかった会話の予約は、次の会話の始まりで窓口が捨てる（別の相手の第一声を書き替えない）
+            arrivals.opening(app, owner, npc_id, lambda call: opening_text(call, mark), ttl=OPENING_TTL,
+                             write=write)
             write("hunter: {} launch process_choice(ConversationStartManager, {!r})".format(npc_id, name))
             try:
                 app.process_choice(manager_cls(app, npc_id), name)
             except Exception:
                 ctx.log_exc("town factions: cannot start the hunter's conversation")
-                state["opening"] = None
+                arrivals.cancel_opening(owner)
                 arrivals.withdraw(app, owner)
 
         screen.when_idle(app, start, timeout=IDLE_TIMEOUT, cancel_if=gone, tag="hunter")
 
-    @ctx.wrap("scripts.llm.llm_manager:conversation_starter", required=False)
-    def conversation_starter(orig, *args, **kwargs):
-        """刺客が起こした会話のときだけ、開始の合図を「呼び止めて勝負を挑む」に差し替える（`300_` と同じ形）。
-
-        引数は受け取った形（位置かキーワード）のまま渡し、`messages` だけを来た側に合わせて差し替える。
-        """
-        mark, state["opening"] = state["opening"], None
-        messages = frames.arg(args, kwargs, "messages", 0)
-        if mark is None or _now() - mark["at"] > OPENING_TTL or not isinstance(messages, list) \
-                or not messages or not isinstance(messages[-1], dict):
-            return orig(*args, **kwargs)
-        app = ui.find_app()
-        player = getattr(getattr(app, "player", None), "name", "") or "旅人"
-        replacement = dict(messages[-1])
+    def opening_text(call, mark):
+        """刺客が起こした会話の第一声（窓口 `arrivals.opening` が差し替えの時に呼ぶ。`300_` と同じ形）。"""
+        player = ui.player_name(call.app, "旅人")
         close = (OPENING_AGAIN if mark.get("again") else OPENING_FIRST).format(player=player)
-        replacement["content"] = OPENING.format(player=player, town=mark["town"] or "この街",
-                                                faction=mark["faction"], title=mark["title"], close=close)
-        write("hunter: opening for {} -> {!r}".format(mark["npc"], replacement["content"][:60]))
-        args, kwargs, _ = frames.replace_arg(args, kwargs, "messages", 0, messages[:-1] + [replacement])
-        return orig(*args, **kwargs)
+        text = OPENING.format(player=player, town=mark["town"] or "この街",
+                              faction=mark["faction"], title=mark["title"], close=close)
+        write("hunter: opening for {} -> {!r}".format(mark["npc"], text[:60]))
+        return text
 
     def note(app, ledger, npc_id, player):
         """会話に足す文（`notes` の中から呼ぶ）。刺客でなければ None。"""
@@ -559,16 +546,16 @@ def install(env):
                     priority=CLAIM_PRIORITY, owner=owner)
 
     # ------------------------------------------------------------ 戦闘
-    @ctx.wrap("__main__:BattleStartManager.__init__", required=False, safe=True)
-    def battle_start(orig, self, *args, **kwargs):
-        """刺客との戦闘を見分ける（受けて立った戦闘も、会話の自由行動から入った戦闘も）。"""
-        result = orig(self, *args, **kwargs)
-        app = args[0] if args else kwargs.get("app")
-        enemy_type = args[1] if len(args) > 1 else kwargs.get("enemy_type")
-        content = args[2] if len(args) > 2 else kwargs.get("enemy_content")
+    def battle_start(call):
+        """戦闘を組んだ後（窓口 `battles` の `BUILD` の after。TECH.md §3.3.21）。
+
+        刺客との戦闘を見分ける（受けて立った戦闘も、会話の自由行動から入った戦闘も）。
+        引数（app・enemy_type・enemy_content）は窓口が名前でも位置でも読んで `call` に載せる。
+        """
+        app, enemy_type, content = call.app, call.enemy_type, call.enemy_content
         state["fight"] = None             # 前の戦闘の印を持ち越さない（ゲームオーバーの後など）
         if enemy_type != SPECIFIC_ENEMY or not isinstance(content, (list, tuple)) or app is None:
-            return result
+            return
         ledger = env.ensure(app)
         for npc_id in content:
             row = rules.hunter_of(ledger or {}, npc_id)
@@ -594,7 +581,8 @@ def install(env):
                 worlds.save(key)
             write("hunter: {} fight armed in area {} (wanted {})".format(npc_id, area_id, state["fight"]["wanted"]))
             break
-        return result
+
+    battles.on(owner, ctx, (battles.BUILD,), after=battle_start, write=write)
 
     def party_factor(app):
         companions = len(list(ui.party_member_ids(app)))
@@ -623,7 +611,7 @@ def install(env):
         current = getattr(found, "current_hp", base)
         boosted = int(round(base * factor))
         found.max_hp = boosted
-        if isinstance(current, (int, float)) and not isinstance(current, bool) and current > 0:
+        if frames.is_number(current) and current > 0:
             found.current_hp = max(1, int(round(boosted * min(1.0, current / float(base)))))
         write("hunter: {} hp x{:.2f} for {} companion(s): {} -> {}".format(npc_id, factor, companions, base, boosted))
         return kept
@@ -641,7 +629,7 @@ def install(env):
         found.max_hp = base
         if isinstance(getattr(found, "original_max_hp", None), int):
             found.original_max_hp = base
-        if not won and isinstance(current, (int, float)) and not isinstance(current, bool) and isinstance(top, (int, float)) and top > 0:
+        if not won and frames.is_number(current) and isinstance(top, (int, float)) and top > 0:
             found.current_hp = max(1, int(round(base * max(0.0, min(1.0, current / float(top))))))
 
     def fighting_hunter(app, enemy):
@@ -723,22 +711,24 @@ def install(env):
 
     loads.on(owner, ctx, (loads.LOAD,), after=after_load, write=write)
 
-    def battle_end(orig, self, *args, **kwargs):
+    # 戦闘の終わり（ふつうの戦闘と自由行動からの戦闘。闘技場は刺客と戦わない）は窓口 `battles` に預ける（TECH.md §3.3.21）。
+    def battle_end_before(call):
         try:
-            rearm(getattr(self, "app", None) or ui.find_app(), "battle end")
+            rearm(call.app, "battle end")
         except Exception:
             ctx.log_exc("town factions: cannot re-arm the hunter's fight at the battle end")
-        result = orig(self, *args, **kwargs)
+
+    def battle_end_after(call):
+        """`orig` が返った後だけ（投げた回は印を残す。前と同じ）。`call.end_type` は `orig` の後に読み直した値。"""
         fight, state["fight"] = state["fight"], None
         if fight is not None:
             try:
-                settle(getattr(self, "app", None) or ui.find_app(), fight, getattr(self, "end_type", None))
+                settle(call.app, fight, call.end_type)
             except Exception:
                 ctx.log_exc("town factions: cannot settle the hunter's battle")
-        return result
 
-    for target in ("__main__:BattleEndManager.end_phase", "__main__:BattleEndInFreeAction.end_phase"):
-        ctx.wrap(target, required=False, safe=True)(battle_end)
+    battles.on(owner, ctx, (battles.END_NORMAL, battles.END_FREE), before=battle_end_before,
+               after=battle_end_after, write=write)
 
     def rewrite_summary(texts, site):
         """刺客との戦闘の締めの頼みを、衛兵との戦闘の決め打ちから刺客との勝負に直す（`SUMMARY_LINES`）。"""
@@ -763,7 +753,7 @@ def install(env):
         npc_id = fight["npc"]
         found = character(app, npc_id)
         hp = getattr(found, "current_hp", None)
-        won = end_type == "won" or (isinstance(hp, (int, float)) and not isinstance(hp, bool) and hp <= 0)
+        won = end_type == "won" or (frames.is_number(hp) and hp <= 0)
         lower_after_fight(found, fight, won)
         key = worlds.playthrough(app)
         cfg = env.cfg()
@@ -786,6 +776,7 @@ def install(env):
                     npc_id, end_type, hp, current, after))
                 return
             row["status"] = rules.HUNTER_DEAD
+            # 印はゲームの人物の config に立てる（刺客は npcs.make_npc で作ったゲームの人物。GAME.md §2.22）
             config = getattr(found, "config", None)
             if isinstance(config, dict):
                 config["is_dead"] = True

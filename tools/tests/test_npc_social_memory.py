@@ -34,6 +34,7 @@ if RUNTIME_DIR not in sys.path:
 import instantale_modloader as ml            # noqa: E402
 from instantale_modloader import llm         # noqa: E402
 from instantale_modloader import modnpc      # noqa: E402
+from instantale_modloader import talks       # noqa: E402
 
 
 # ---------------------------------------------------------------- 偽 Kivy
@@ -203,6 +204,8 @@ class Ctx(object):
         self.notes = []
 
     _mod = None
+    # 窓口に名乗る持ち主の名前（本物は apply() の間だけフォルダ名）。偽物は mod_dir を持たないので None。
+    mod_name = None
 
     def out_path(self, *parts):
         return self._under(self.out_dir, parts)
@@ -263,6 +266,9 @@ def fresh(app):
         if hasattr(sys, attr):
             delattr(sys, attr)
     modnpc.registry().clear()
+    # 1手の後の抽出の予約はローダの窓口 `talks` が1つの世代に1枚だけ包む。偽の ctx は世代を持たないので、
+    # 当て直すたびに包みの印と登録を忘れさせて、新しい ctx の上に包み直させる
+    talks.reset()
     out_dir = tempfile.mkdtemp(prefix="npc_social_test_")
     ctx = Ctx(out_dir)
     MOD.apply(ctx)

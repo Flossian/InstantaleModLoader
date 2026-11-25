@@ -240,6 +240,8 @@ class FakeCtx:
     # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
+    # 窓口に名乗る持ち主の名前（本物は apply() の間だけフォルダ名）。偽物は mod_dir を持たないので None。
+    mod_name = None
 
     def logger(self, name, **kw):
         import instantale_modloader as _ml
@@ -351,6 +353,10 @@ def setup(members=("71",), enemies=None, configure=None, enemy_as_dict=False,
                                                          current_hp=hp, max_hp=hp)
     main.current_app = app
 
+    # 1手と戦闘の始まりはローダの窓口 `battles` が包む。関所の印は sys に残るので、
+    # クラスを作り直すたびに忘れさせて、この ctx の上に包み直させる。
+    from instantale_modloader import battles
+    battles.reset()
     ctx = FakeCtx(OUT_DIR)
     module = load_mod(MOD, "battle_damage_display_mod")
     if configure is not None:
@@ -704,6 +710,11 @@ check("取りこぼしの掃除も包む",
       "__main__:BattlePhaseManager.check_battle_end" in targets, targets)
 check("戦闘開始で台帳を取り直す",
       "__main__:BattleStartManager.start_battle" in targets, targets)
+from instantale_modloader import battles as _battles  # noqa: E402
+check("1手と戦闘の始まりは窓口 battles に登録する（自分で包まない）",
+      _battles.owners(_battles.ACTION) == ["308_battle_damage_display"]
+      and _battles.owners(_battles.START) == ["308_battle_damage_display"],
+      (_battles.owners(_battles.ACTION), _battles.owners(_battles.START)))
 check("HP を書く側（resolve_battle_effect）は包まない ― 地の文より先に出るため",
       not any("resolve_battle_effect" in target for target in targets), targets)
 check("ダメージの式（get_instant_damage）は読まない",

@@ -130,6 +130,11 @@ check("  → 参照する欄の型の名前と、その値の行が両方残る"
       'Kind = "shop"|"inn"' in text and '"kind": Kind' in text, text)
 check("何の型でもない辞書は今までどおり落とす", mod.type_line("Empty", {"title": "Empty"}) is None)
 
+# 見本での確かめ（127 が注入のたびに走らせていたもの。TECH.md §6.1 によりここへ移した）
+failure, sizes = mod.verify()
+check("verify passes on the sample", failure is None, failure)
+check("verify reports the sizes", isinstance(sizes, tuple) and len(sizes) == 2 and sizes[1] < sizes[0], sizes)
+
 if failures:
     raise SystemExit("FAILED: {}".format(failures))
 print("all ok")

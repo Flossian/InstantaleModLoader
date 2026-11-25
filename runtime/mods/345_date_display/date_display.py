@@ -8,12 +8,12 @@
 入らないときはラベルの行間を詰め、下限でも入らなければ字を小さくする。
 
 `status_texts` は中身が変わったときしか見張りを呼ばないので、日数の後とロードの後は見張りを直に呼ぶ。
+
+見張りに渡る文字列の書き換えはローダの窓口 `status_text`（TECH.md §3.3.21）に預け、
+ワールドごとの設定の読みはローダの `state.WorldSettings`（TECH.md §3.12.1）に任せる。
 """
 
-import os
-import sys
-
-from instantale_modloader import durations, frames, loads, state as state_api, ui
+from instantale_modloader import durations, frames, loads, state as state_api, status_text, ui
 
 from . import date_rules as rules
 
@@ -26,9 +26,12 @@ FORMAT = "Date:{year}年{month}{day}日"
 
 # ワールドごとの設定を置く場所。設定画面（tool.py）だけが書き、ゲーム中は読む。
 STATE_DIRNAME = "date_display"
-STATE_STORE_ATTR = "_instantale_date_display_world_store"
+#: 世界ごとに変えられる設定。
+WORLD_SETTINGS = ("START_YEAR", "MONTHS", "FORMAT")
 
-HUD_TARGET = "scripts.hud.new_hud:InstanTaleHUD.update_status_texts"
+#: 窓口 `status_text` で書き換える順（小さいほど先）。前は `333_` / `130_` より外側で、最初に書き換えていた。
+STATUS_ORDER = 10
+
 HUD_STATUS_LABEL = "status_label"
 HUD_ICONS = "icon_buttons"
 
@@ -44,7 +47,7 @@ def icons_top(hud, label):
     tops = []
     for button in frames.attr(hud, HUD_ICONS, None) or ():
         top = frames.attr(button, "top", None)
-        if isinstance(top, (int, float)):
+        if frames.is_number(top):
             tops.append(top)
     return max(tops) if tops else label.y
 
@@ -53,31 +56,22 @@ def measure_on(label, text):
     """ゲームのラベルと同じ条件で組み、`(行数, 1行の高さ)` を返す関数を作る。
 
     ラベル自身は箱の高さを超えた行を捨てるので、行数を読めない（GAME.md §2.29）。
-    高さの制限を外した別の組版で数える。
+    高さの制限を外した別の組版で数える（ローダの `ui.text_lines`。ラベルの幅で折り返す）。
+    測れなければ投げる（`fit` は予約の中で走るので、`ui.scheduler` が記録する）。
     """
-    from kivy.core.text import Label as CoreLabel
-
     def measure(font_size, line_height):
-        core = CoreLabel(text=text, font_name=label.font_name, font_size=font_size,
-                         line_height=line_height, halign=label.halign, valign=label.valign,
-                         strip=label.strip, text_size=(label.width, None))
-        core.render(real=False)
-        lines = core._cached_lines
-        return len(lines), max((line.h for line in lines), default=0)
+        found = ui.text_lines(label, text, label.width, font_size=font_size, line_height=line_height)
+        if found is None:
+            raise RuntimeError("date display: cannot measure the status label")
+        return found
 
     return measure
 
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME, tag="date display:")
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "345_date_display"
+    owner = ctx.mod_name or "345_date_display"
     schedule = ui.scheduler(ctx, "date display")
-
-    store = getattr(sys, STATE_STORE_ATTR, None)
-    if not isinstance(store, state_api.WorldStore):
-        store = state_api.WorldStore(ctx, STATE_DIRNAME, default=dict, write=write)
-        setattr(sys, STATE_STORE_ATTR, store)
-    store.rebind(ctx, write)
 
     def months_from(text):
         months = rules.parse_months(text)
@@ -86,28 +80,30 @@ def apply(ctx):
             return rules.parse_months(rules.DEFAULT_MONTHS)
         return months
 
-    calendar = {"world": object(), "start_year": START_YEAR, "months": months_from(MONTHS),
-                "format": FORMAT}
-    seen = {"misses": 0, "hit": False, "line": None, "unpainted": False}
+    def acceptable(name, value, _base):
+        """項目ごとの型。開始年は真偽値でない int、月と書式は文字列（前の読み方と同じ）。"""
+        if name == "START_YEAR":
+            return isinstance(value, int) and not isinstance(value, bool)
+        return isinstance(value, str)
+
+    # 世界が変わったときだけ読む（`follow_file=False`）。同じ世界を開き直したときは `after_load` が忘れさせる。
+    settings = state_api.WorldSettings(ctx, STATE_DIRNAME, WORLD_SETTINGS, globals(), write=write,
+                                       check=acceptable, follow_file=False)
+    calendar = {"start_year": START_YEAR, "months": months_from(MONTHS), "format": FORMAT}
+    seen = {"misses": 0, "hit": False, "line": None, "fit_due": False}
 
     def refresh_world(app):
         """世界が変わっていれば個別設定を読み直す。無い項目は一括設定のまま。"""
-        world = state_api.world_key(app)
-        if world == calendar["world"]:
-            return
-        record = (store.load(world, fresh=True)
-                  if isinstance(world, str) and world != state_api.UNKNOWN_WORLD else {})
-        year = record.get("START_YEAR")
-        months = record.get("MONTHS")
-        template = record.get("FORMAT")
-        calendar.update(
-            world=world,
-            start_year=year if isinstance(year, int) and not isinstance(year, bool) else START_YEAR,
-            months=months_from(months if isinstance(months, str) else MONTHS),
-            format=template if isinstance(template, str) else FORMAT)
-        write("world {!r}: start year {}, {} month(s), {} day(s) a year, format {!r}".format(
-            world, calendar["start_year"], len(calendar["months"]),
-            sum(days for _name, days in calendar["months"]), calendar["format"]))
+        world = settings.world(app)
+
+        def take(values):
+            calendar.update(start_year=values["START_YEAR"], months=months_from(values["MONTHS"]),
+                            format=values["FORMAT"])
+            write("world {!r}: start year {}, {} month(s), {} day(s) a year, format {!r}".format(
+                world, calendar["start_year"], len(calendar["months"]),
+                sum(days for _name, days in calendar["months"]), calendar["format"]))
+
+        settings.refresh(app, take)
 
     def date_line(app):
         """いまの日付の1行。日数が読めなければ None。"""
@@ -151,41 +147,37 @@ def apply(ctx):
         label.font_size = font
         label.line_height = line
 
-    @ctx.wrap(HUD_TARGET, safe=True)
-    def update_status_texts(orig, self, *args, **kwargs):
-        # (instance, value)。受け取った形のまま渡し、`value` だけを来た側に合わせて差し替える。
-        app = ui.find_app()
+    def with_date(text, app):
+        """窓口 `status_text` から、見張りに渡る文字列を受け取る。Location の行の下に日付を足した文字列を返す。"""
+        # 印は呼ばれるたびに下ろす。orig が投げて `painted` が来なかった回の印を、次の日付の無い回に持ち越さない。
+        seen["fit_due"] = False
         line = date_line(app) if app is not None else None
-        fixed = rules.with_date(frames.arg(args, kwargs, "value", 1), line)
+        fixed = rules.with_date(text, line)
         if fixed is None:
             seen["misses"] += 1
             if not seen["hit"] and seen["misses"] == MISS_LIMIT:
                 write("WARN no Location line in {} status update(s); no date is shown".format(MISS_LIMIT))
-            return orig(self, *args, **kwargs)
+            return None
         seen["hit"] = True
+        seen["fit_due"] = True
         if line != seen["line"]:
             seen["line"] = line
             write("date: {!r} (day {})".format(line, ui.game_day(app)))
-        args, kwargs, _written = frames.replace_arg(args, kwargs, "value", 1, fixed)
-        result = orig(self, *args, **kwargs)
-        # 見張りが `value` を塗らないビルドへの保険（GAME.md §2.29）
-        label = frames.attr(self, HUD_STATUS_LABEL, None)
-        shown = frames.text_of(label) if label is not None else None
-        if shown is not None and line not in shown:
-            if not seen["unpainted"]:
-                seen["unpainted"] = True
-                write("WARN the status label did not take the value; writing the label directly")
-            label.text = fixed
-        schedule(lambda: fit(self))
-        return result
+        return fixed
+
+    def painted(call):
+        # 日付を足した回だけ、塗った後に収まりを見る。
+        # 見張りが `value` を塗らないビルドへの保険（GAME.md §2.29）は窓口が受け持つ。
+        if seen["fit_due"]:
+            seen["fit_due"] = False
+            hud = call.obj
+            schedule(lambda: fit(hud))
+
+    status_text.on(owner, ctx, with_date, order=STATUS_ORDER, after=painted, write=write)
 
     def repaint(app):
-        """見張りを直に呼ぶ（包みを全部通る）。"""
-        hud = ui.find_hud(app)
-        text = frames.attr(hud, "status_texts", None) if hud is not None else None
-        update = frames.attr(hud, "update_status_texts", None) if hud is not None else None
-        if isinstance(text, str) and callable(update):
-            update(hud, text)
+        """見張りを直に呼ぶ（書き換えを全部通る）。例外は窓口が記録する。"""
+        status_text.repaint(app)
 
     def after_days(call):
         if call.moved:
@@ -193,7 +185,7 @@ def apply(ctx):
 
     def after_load(call):
         # 同じ世界を開き直したときも、設定画面で書いた個別設定を読み直す。
-        calendar["world"] = object()
+        settings.forget()
         schedule(lambda: repaint(call.app))
 
     durations.on_days(owner, ctx, after=after_days, write=write)

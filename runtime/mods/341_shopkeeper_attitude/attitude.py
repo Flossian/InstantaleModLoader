@@ -11,6 +11,7 @@
 
 根拠が無いときの答えは、手配中は 0（怯える。手配を数える MOD の素の動きと同じ）、平時は 1（普段どおり）。
 """
+from instantale_modloader import frames, llm
 
 WANTED, USUAL = "wanted", "usual"
 FAVOR, NEUTRAL, AGAINST = 0, 1, 2
@@ -94,19 +95,13 @@ FIELDS = {"reason": (str, ...), "stance": (int, ...), "line": (str, ...)}
 
 
 def clamp_stance(value):
-    """答えの stance を応じ方へ。読めなければ None。"""
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, str) and value.strip().lstrip("-").isdigit():
-        value = int(value.strip())
-    if isinstance(value, float) and float(value).is_integer():
-        value = int(value)
-    return value if value in (FAVOR, NEUTRAL, AGAINST) else None
+    """答えの stance を応じ方へ。読めなければ None（3つのどれでもない・整数でない小数・真偽値。ローダの `llm.whole`）。"""
+    return llm.whole(value, choices=(FAVOR, NEUTRAL, AGAINST))
 
 
 def clean(text, limit):
-    text = " ".join(str(text or "").split())
-    return text if limit is None or len(text) <= limit else text[:limit] + "…"
+    """空白を1つに畳んで `limit` 字で切る（`None` は切らない）。偽の値は空にする（`0` を "0" にしない）。"""
+    return frames.short(text or "", limit, collapse=True)
 
 
 def parse(data):

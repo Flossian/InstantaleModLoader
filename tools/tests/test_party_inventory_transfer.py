@@ -177,7 +177,15 @@ def press_label(ctx, app, label):
 class Ctx(object):
     """ローダの `ctx` の代わり。`wrap` は対象ごとに関数を控えるだけ。"""
 
+    seq = 0
+
     def __init__(self, out_dir):
+        # 窓口（`twin_windows` / `talks` / `loads`）の包みは世代ごとに1枚。注入し直しと同じく ctx ごとに世代を変える。
+        Ctx.seq += 1
+        self.generation = Ctx.seq
+        # 窓口の持ち主名は本物の ctx と同じくフォルダ名（mod_dir の basename）。
+        self.mod_dir = os.path.dirname(MOD_PATH)
+        self.mod_name = os.path.basename(self.mod_dir)
         self.out_dir = out_dir
         self.state_dir = os.path.join(out_dir, "state")
         self.hooks = {}

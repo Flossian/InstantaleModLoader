@@ -15,7 +15,7 @@
 - 暦はゲームの `elapse_days` で進める。怪我はゲームの `body_parts` に足して `check_body_damage` を呼ぶ
 - 能力値と戦闘の効果はローダの窓口（`abilities` / `battle_effects`）に答える。人物にもセーブにも書かない
 - 侵食・傷が開く・自己修復のサイクルは、日数（窓口 `durations.on_days`）と依頼の終わり（窓口 `quest_ends`。
-  放棄は窓口が無いので `QuestRetireManager.execute` を包む）で進める
+  放棄は同じ部品の `quest_ends.on_retire`）で進める
 - 入っている改造は `state\\body_augmentation_play\\<世界>×<主人公>.json`、
   見立てと世界観の判定は `state\\body_augmentation_world\\<世界>.json`、
   世界ごとの設定は `state\\body_augmentation\\<世界>.json`（同梱の `tool.py` が書く）
@@ -25,12 +25,11 @@
 
 import os
 import random
-import sys
 import threading
 import typing
 
-from instantale_modloader import (abilities, battle_effects, choices, durations, equipment, hudicons, ids, items,
-                                  llm, loads, quest_ends, shop_lineup, state as loader_state, ui)
+from instantale_modloader import (abilities, battle_effects, choices, durations, equipment, frames, hudicons, ids,
+                                  items, llm, loads, panels, quest_ends, shop_lineup, state as loader_state, ui)
 
 from . import prompts, rules, window
 
@@ -100,7 +99,6 @@ MEDICAL_TYPE = "medical_facility"
 UNDERWORLD_TYPE = "underworld_office"
 EXIT_CLS = "MovePhaseManager"
 TREATMENT_TARGET = "__main__:MedicalTreatmentManager.medical_treatment"
-QUEST_RETIRE_TARGET = "__main__:QuestRetireManager.execute"
 LLM_TIMEOUT = 60
 HISTORY_LIMIT = 50
 
@@ -109,13 +107,9 @@ coins = ui.rewrite_coins
 
 
 def _store():
-    """世代をまたぐ入れ物。プロセスに1つ（TECH.md §3.5）。"""
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"play": None, "world": None, "settings": None, "rng": random.Random(),
-                 "pending": set(), "theme_pending": set(), "window": None}
-        setattr(sys, STORE_ATTR, store)
-    return store
+    """世代をまたぐ入れ物。プロセスに1つ（TECH.md §3.5。ローダの `state.process_store`）。"""
+    return loader_state.process_store(STORE_ATTR, {"play": None, "world": None, "rng": random.Random(),
+                                                   "pending": set(), "theme_pending": set(), "window": None})
 
 
 def _world_bucket():
@@ -130,29 +124,25 @@ def apply(ctx):
             ctx, PLAY_DIRNAME, default=rules.new_bucket, normalize=rules.normalize_bucket,
             order=rules.order_bucket, write=write)
         store["world"] = loader_state.WorldStore(ctx, WORLD_DIRNAME, default=_world_bucket, write=write)
-        store["settings"] = loader_state.WorldStore(ctx, SETTINGS_DIRNAME, default=dict, write=write)
     play = store["play"].rebind(ctx, write)
     worlds = store["world"].rebind(ctx, write)
-    settings_store = store["settings"].rebind(ctx, write)
+    # 世界ごとの設定の控えはローダの `state.WorldSettings` で読む（読むだけ。フォルダは作らない）
+    world_settings = loader_state.WorldSettings(ctx, SETTINGS_DIRNAME, WORLD_SETTINGS, globals(), write=write)
     screen = ui.Screen(ctx, write, tag="augment", mark=MARK)
     save_soon = ui.saver(ctx, write, "augment")
     state = {"owner": None}
 
     # ------------------------------------------------------------ 設定
     def setting(app, name):
-        """世界ごとの設定（`tool.py` が書いた差分）があればそれ、無ければ一括設定。"""
-        try:
-            key = loader_state.world_key(app)
-            record = settings_store.load(key, fresh=True) if key != loader_state.UNKNOWN_WORLD else {}
-        except Exception:
-            record = {}
-        value = record.get(name) if isinstance(record, dict) else None
-        base = globals()[name]          # その場のモジュールの値（試しの道具 `m` で替えた値も効く）
-        if value is None or type(value) is not type(base) and not (
-                isinstance(base, (int, float)) and not isinstance(base, bool)
-                and isinstance(value, (int, float)) and not isinstance(value, bool)):
-            return base
-        return value
+        """世界ごとの設定（`tool.py` が書いた差分）があればそれ、無ければ一括設定。
+
+        一括設定はその場のモジュールの値を読む（試しの道具 `m` で替えた値も効く）ので、
+        `WorldSettings` が作ったときに写した値は使わず、控えの読みと型の照合（`accept`）だけを借りる。
+        """
+        base = globals()[name]
+        record = world_settings.record(world_settings.world(app))
+        ok, value = world_settings.accept(record.get(name), base)
+        return value if ok else base
 
     def config(app):
         return rules.Config(
@@ -169,8 +159,8 @@ def apply(ctx):
         return getattr(app, "player", None) if app is not None else None
 
     def area_name(app):
-        name = getattr(ui.current_area(app), "name", None)
-        return name if isinstance(name, str) and name else AREA_FALLBACK
+        # 名前は切らない（記録の文に入る）。読み方はローダの `ui.area_name`
+        return ui.area_name(app, ui.current_area(app), AREA_FALLBACK, limit=None)
 
     def place_name(app):
         return ui.facility_name(app, ui.current_facility(app)) or PLACE_FALLBACK
@@ -211,7 +201,7 @@ def apply(ctx):
                 row = parts.get(part)
                 if isinstance(row, dict):
                     injury = row.get("injury")
-                    found[part] = (injury if isinstance(injury, (int, float)) else 0, row.get("stage") or "")
+                    found[part] = (injury if frames.is_number(injury) else 0, row.get("stage") or "")
         return found
 
     def losses(app):
@@ -227,7 +217,7 @@ def apply(ctx):
         found = {}
         for key in rules.ABILITIES:
             a, b = original.get(key), current.get(key)
-            if isinstance(a, (int, float)) and isinstance(b, (int, float)) and a > b:
+            if frames.is_number(a) and frames.is_number(b) and a > b:
                 found[key] = a - b
         return found
 
@@ -438,29 +428,31 @@ def apply(ctx):
         except Exception:
             fn()
 
+    # 画面は `store["window"]` に1枚だけ持つ（ローダの `panels.Toggle`。開き直すときは前の画面を閉じる）
+    shown_window = panels.Toggle(store, key="window", log_exc=lambda text: ctx.log_exc("augment: " + text))
+
+    def opener_for(mode):
+        """`mode` は `"legal"` / `"illegal"`（施設の中）か None（見るだけ）。"""
+        def opener(app, on_dismiss):
+            view.update({"mode": mode, "select": None, "failed": set()})
+            if needs_theme(app):
+                detect_theme(app)
+            if mode is not None:
+                # 見立ては付け外しのできる施設で開いたときだけ頼む（見るだけのときは問い合わせない）
+                appraise_all(app)
+            model = build_model(app)
+            shown = window.AugmentWindow(app, model, on_select=select, on_action=act,
+                                         on_dismiss=on_dismiss, write=write)
+            write("open: mode={} augments={}".format(mode, len(model["records"])))
+            return shown
+        return opener
+
     def open_view(app, mode):
-        """画面を開く。`mode` は `"legal"` / `"illegal"`（施設の中）か None（見るだけ）。"""
-        close_view()
-        view.update({"mode": mode, "select": None, "failed": set()})
-        if needs_theme(app):
-            detect_theme(app)
-        if mode is not None:
-            # 見立ては付け外しのできる施設で開いたときだけ頼む（見るだけのときは問い合わせない）
-            appraise_all(app)
-        model = build_model(app)
-        store["window"] = window.AugmentWindow(app, model, on_select=select, on_action=act,
-                                               on_dismiss=lambda: store.update(window=None),
-                                               write=write)
-        write("open: mode={} augments={}".format(mode, len(model["records"])))
+        """画面を開く（残っている画面は先に閉じる）。"""
+        shown_window.open(app, opener_for(mode))
 
     def close_view():
-        current = store.get("window")
-        store["window"] = None
-        if current is not None:
-            try:
-                current.dismiss()
-            except Exception:
-                pass
+        shown_window.close()
 
     def refresh_window():
         current = store.get("window")
@@ -568,7 +560,7 @@ def apply(ctx):
             note = "付け外しは治療院（{}の施術は裏の事務所）で行える".format(words["illegal"])
         stats, battle = rules.total_pieces([r for _p, _s, r in records], losses(app))
         hints = rules.total_hints([r for _p, _s, r in records])
-        return {"theme": theme, "words": words, "player": getattr(player_of(app), "name", "") or "",
+        return {"theme": theme, "words": words, "player": ui.player_name(app),
                 "counts": counts, "gold": gold_text, "note": note, "mode": mode, "parts": parts, "candidates": cands,
                 "candidate_note": rules.candidate_note(tally, mode is not None, hint=bool(cands)),
                 "candidate_empty": rules.candidate_empty(tally, mode is not None),
@@ -709,8 +701,10 @@ def apply(ctx):
         close_view()
         label = "施術を受ける" if action == "install" else "取り外す"
         write("pressed {} {!r} ({})".format(action, payload, mode))
-        screen.start_phase(app, AugmentPhase(app, action, payload, mode), label,
-                           fallback=lambda: ACTIONS[action](app, payload, mode))
+        # 使い捨てのフェーズはローダの `Screen.run_phase` が作る（`PhaseSpec` に載せない。セーブに残さない）。
+        # 投げたら記録して施設のボタンを組み直す
+        screen.run_phase(app, label, run_action, action, payload, mode, label=action,
+                         on_error=choices.repaint)
 
     def pay(app, fee):
         if fee <= 0:
@@ -745,7 +739,7 @@ def apply(ctx):
         if not isinstance(row, dict):
             write("WARN hurt: no body part {!r}".format(part))
             return
-        before = row.get("injury") if isinstance(row.get("injury"), (int, float)) else 0
+        before = row.get("injury") if frames.is_number(row.get("injury")) else 0
         row["injury"] = before + amount
         check = getattr(app, "check_body_damage", None)
         if callable(check):
@@ -762,7 +756,7 @@ def apply(ctx):
             day = ui.game_day(app)
             if not isinstance(logs, list) or day is None:
                 return
-            text = template.format(player=getattr(player, "name", None) or PLAYER_FALLBACK,
+            text = template.format(player=ui.player_name(app, PLAYER_FALLBACK),
                                    area=area_name(app), part=rules.PART_NAMES.get(part, part), name=name)
             logs.append({"day_start": day, "day_end": day, "summarized_count": 0,
                          "content": RECORD_MARK + text + "\n"})
@@ -944,24 +938,11 @@ def apply(ctx):
 
     ACTIONS = {"install": install, "remove": remove}
 
-    class AugmentPhase(object):
-        """自前のフェーズ。`PhaseSpec` には載せない（セーブに残さない）。"""
-
-        def __init__(self, app, action, payload, mode):
-            self.app = app
-            self.action = action
-            self.payload = payload
-            self.mode = mode
-
-        def execute(self, choice_text):
-            done = False
-            try:
-                done = ACTIONS[self.action](self.app, self.payload, self.mode)
-            except Exception:
-                ctx.log_exc("augment: phase failed ({})".format(self.action))
-            if not done:
-                # 途中で断った（品が無い・代金や空きが足りない）。finish を通らないので、施設のボタンをここで組み直す
-                choices.repaint(self.app)
+    def run_action(app, action, payload, mode):
+        """押したボタンの処理（フェーズの中）。戻り値は返さない（前のフェーズの `execute` と同じ）。"""
+        if not ACTIONS[action](app, payload, mode):
+            # 途中で断った（品が無い・代金や空きが足りない）。finish を通らないので、施設のボタンをここで組み直す
+            choices.repaint(app)
 
     # ------------------------------------------------------------ 施設のボタン
     def offer(app, view_):
@@ -984,11 +965,8 @@ def apply(ctx):
     state["owner"] = choices.provide(ctx, screen, offer=offer)
 
     # ------------------------------------------------------------ MOD の一覧から開く（見るだけ）
-    def toggle_view(app):
-        if store.get("window") is not None:
-            close_view()
-            return
-        open_view(app, None)
+    # 開いていれば閉じ、閉じていれば見るだけで開く（`app` が無ければ開かない）
+    toggle_view = shown_window.on_press(opener_for(None))
 
     def listed(app):
         return player_of(app) is not None
@@ -1110,21 +1088,11 @@ def apply(ctx):
 
     quest_ends.on(OWNER, ctx, before=quest_end_before, after=quest_end_after, write=write)
 
-    @ctx.wrap(QUEST_RETIRE_TARGET, required=False, safe=True)
-    def quest_retire(orig, self, *args, **kwargs):
-        """依頼の放棄（窓口が無いので自分で包む。307・325・336・344 と同じ）。放棄は移動しない。"""
-        app = getattr(self, "app", None) or ui.find_app()
-        quest_id = None
-        try:
-            quest_id = ui.current_quest_id(app)
-        except Exception:
-            ctx.log_exc("augment: cannot read the abandoned quest")
-        result = orig(self, *args, **kwargs)
-        try:
-            advance_cycles(app, "quest {!r} abandoned".format(quest_id), cycles=rules.QUEST_CYCLES, save=True)
-        except Exception:
-            ctx.log_exc("augment: cycles after an abandoned quest failed")
-        return result
+    def quest_retire_after(call):
+        """依頼を放棄した（ローダの窓口 `quest_ends.on_retire`。依頼の id は窓口が元の処理の前に読む）。放棄は移動しない。"""
+        advance_cycles(call.app, "quest {!r} abandoned".format(call.quest_id), cycles=rules.QUEST_CYCLES, save=True)
+
+    quest_ends.on_retire(OWNER, ctx, after=quest_retire_after, write=write)
 
     # ------------------------------------------------------------ 治療院の棚
     def shop_note(facility):

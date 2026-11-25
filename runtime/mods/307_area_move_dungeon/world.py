@@ -13,22 +13,15 @@
 
 import sys
 
-from instantale_modloader import state, ui
+from instantale_modloader import frames, state, ui
 
 # 世界と周回の見分け方はローダの語彙。
 # ここで再輸出して `world.world_key(app)` / `world.playthrough_key(app)` を保つ。
 playthrough_key = state.playthrough_key
 world_key = state.world_key
 
-
-def short(value, limit=60):
-    """ログや画面に出す用に切り詰めた文字列。"""
-    if value is None:
-        return ""
-    if not isinstance(value, str):
-        value = str(value)
-    value = value.strip()
-    return value if len(value) <= limit else value[:limit] + "…"
+# ログや画面に出す用に切り詰めた文字列（ローダの語彙）。呼び手はどれも上限を渡す。
+short = frames.short
 
 
 # id を数として並べる鍵はローダの語彙（`301_` / `305_` と共有）。
@@ -44,9 +37,7 @@ def area_of(app, area_id):
     return ui.world_areas(app).get(str(area_id))
 
 
-def area_name(area, fallback="", limit=40):
-    name = getattr(area, "name", None)
-    return short(name, limit) if isinstance(name, str) and name else fallback
+# 土地の名前はローダの `ui.area_name(app, area, fallback)`（40字で切る。呼び手が直に使う）。
 
 
 def area_level(app, area, write, label, minimum=1):
@@ -121,15 +112,10 @@ def append_quest_value(app, quest_id, name, suffix, mark=None, on_error=None):
             continue
         if mark and mark in current:
             continue
-        try:
-            if isinstance(target, dict):
-                target[name] = current + suffix
-            else:
-                setattr(target, name, current + suffix)
+        if frames.set_field(target, name, current + suffix):
             written += 1
-        except Exception:
-            if on_error is not None:
-                on_error("cannot append to {} on {!r}".format(name, quest_id))
+        elif on_error is not None:
+            on_error("cannot append to {} on {!r}".format(name, quest_id))
     return written
 
 
@@ -148,15 +134,10 @@ def strip_quest_value(app, quest_id, name, mark, on_error=None):
         if not isinstance(current, str) or mark not in current:
             continue
         trimmed = current[:current.rfind(mark)].rstrip()
-        try:
-            if isinstance(target, dict):
-                target[name] = trimmed
-            else:
-                setattr(target, name, trimmed)
+        if frames.set_field(target, name, trimmed):
             written += 1
-        except Exception:
-            if on_error is not None:
-                on_error("cannot strip {} on {!r}".format(name, quest_id))
+        elif on_error is not None:
+            on_error("cannot strip {} on {!r}".format(name, quest_id))
     return written
 
 
@@ -167,15 +148,10 @@ def set_quest_value(app, quest_id, name, value, on_error=None):
         target = store.get(quest_id)
         if target is None:
             continue
-        try:
-            if isinstance(target, dict):
-                target[name] = value
-            else:
-                setattr(target, name, value)
+        if frames.set_field(target, name, value):
             written += 1
-        except Exception:
-            if on_error is not None:
-                on_error("cannot set {} on {!r}".format(name, quest_id))
+        elif on_error is not None:
+            on_error("cannot set {} on {!r}".format(name, quest_id))
     return written
 
 
@@ -235,12 +211,8 @@ def stamina_of(app):
         return None, None
     value = getattr(player, "physical_integrity", None)
     limit = getattr(player, "max_physical_integrity", None)
-    if not _number(limit) or limit <= 0:
+    if not frames.is_number(limit) or limit <= 0:
         limit = getattr(player, "original_max_physical_integrity", None)
-    if not _number(value) or not _number(limit) or limit <= 0:
+    if not frames.is_number(value) or not frames.is_number(limit) or limit <= 0:
         return None, None
     return value, limit
-
-
-def _number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool)

@@ -289,6 +289,10 @@ class FakeHUD(FakeWidget):
         layout.opacity = 0.0 if layout.opacity else 1.0
         return "opened" if layout.opacity else "closed"
 
+    def place_crafted_item(self, generated_item=None):
+        self.placed = generated_item
+        return "placed"
+
     # -- テストから使う道具 -------------------------------------------------
     def settle(self, rounds=12):
         """押下のあとの「次のフレーム」を1回ずつ回す。間にレイアウトを挟む。"""
@@ -315,7 +319,7 @@ class InstantaleApp(object):
 
 
 PRISTINE_HUD = {name: getattr(FakeHUD, name)
-                for name in ("toggle_craft_inventory_visibility",)}
+                for name in ("toggle_craft_inventory_visibility", "place_crafted_item")}
 PRISTINE_APP = {name: getattr(InstantaleApp, name)
                 for name in ("toggle_craft_inventory_window",)}
 
@@ -333,7 +337,12 @@ class FakeCtx(object):
     def wrap(self, target, **kw):
         def decorate(func):
             module_name, qualname = target.split(":")
-            module = sys.modules[module_name]
+            module = sys.modules.get(module_name)
+            if module is None or "." not in qualname:
+                # ローダの窓口 `items` は8つを全部包む。偽のゲームに無い対象（required=False）は包まない
+                if kw.get("required") is False:
+                    return func
+                raise AssertionError("no such target: " + target)
             cls_name, method = qualname.split(".")
             cls = getattr(module, cls_name, None)
             if cls is None or not hasattr(cls, method):
@@ -361,6 +370,8 @@ class FakeCtx(object):
     # ログは本物の `ctx.logger` をそのまま借りる。
     # ここを自前で書くと、検査だけが別のログ処理を通ることになる。
     _mod = None
+    # 窓口に名乗る持ち主（本物は apply() の間だけ MOD のフォルダ名）
+    mod_name = os.path.basename(os.path.dirname(MOD))
 
     def logger(self, name, **kw):
         import instantale_modloader as _ml
@@ -396,6 +407,9 @@ def install(mod, ctx, **settings):
     for name, func in PRISTINE_APP.items():
         setattr(InstantaleApp, name, func)
     CLOCK.pending = []
+    # 窓口の関所は1つの世代に1枚なので、包み直すたびに忘れさせる
+    from instantale_modloader import gates
+    gates.reset_all()
     mod.MARGIN, mod.MIN_WIDTH_RATIO, mod.FIX_ARROW = 6.0, 0.6, True
     for name, value in settings.items():
         setattr(mod, name, value)
@@ -648,6 +662,21 @@ def run():
     check("こちらからでも重なりが消える", clear_of_grids(hud),
           hud.craft_inventory_generate_button.window_rect())
 
+    # -- 生成の後（ローダの窓口 items.PLACE_CRAFTED 経由） ----------------------
+    print("\n[生成] 作った品をグリッドに置いた後も当て直す（窓口 items の後の処理）")
+    install(mod, ctx)
+    hud = FakeHUD()
+    hud.craft_inventory_layout.opacity = 1.0     # 画面は開いている（toggle を通さない）
+    hud.layout()
+    CLOCK.pending = []
+    placed = hud.place_crafted_item(generated_item="made")
+    check("ゲームの処理の戻り値をそのまま返す", placed == "placed", placed)
+    check("引数は受けた形のまま渡る", hud.placed == "made", getattr(hud, "placed", None))
+    check("当て直しを Clock に積む", len(CLOCK.pending) == len(mod.PASS_DELAYS), len(CLOCK.pending))
+    hud.settle()
+    check("置いた後に重なりが消える", clear_of_grids(hud),
+          hud.craft_inventory_generate_button.window_rect())
+
     # -- ボタンを持たないビルド ----------------------------------------------
     print("\n[別物] ボタンを持たないビルドでは何もしない")
     install(mod, ctx)
@@ -683,7 +712,8 @@ def run():
     finally:
         mod.frames = real_frames
     check("Clock の外へ例外が出ない", leaked is None, repr(leaked))
-    check("失敗は記録に残す", any("delayed fit failed" in text for text in ctx.errors),
+    check("失敗は記録に残す",
+          any("craft window: scheduled call failed" in text for text in ctx.errors),
           "\n".join(ctx.errors[:1]))
     del ctx.errors[:]
 

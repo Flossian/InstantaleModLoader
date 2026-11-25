@@ -29,14 +29,13 @@
   宿に泊まっても、旅から戻っても、着いた街が動いている。
   街の間の移動は素のゲームで最短 14 日（馬車。徒歩は90日。GAME.md §2.18）で、
   他の街の 7 日の移動より長いので、着く前に必ず終わっていて一度も見えない
-  （実プレイの 30 件中 16 件がこれだった。
-  移動を 7 日より短くする設定を入れているときはこの限りではない）。
+  （移動を 7 日より短くする設定を入れているときはこの限りではない。VERIFICATION.md §3.53）。
   別の街への旅は全部の街で、日が進んだときに引く ― 次にその街へ着いたときの
   「1人欠けている」「知らない冒険者が来ている」を作っているのがそれなので。
   月あたりの出発確率は「同じ街へ向かう割合」で2つに割り当て、
   それぞれの契機で引く
 - 帰ってきた人は `REST_DAYS`（既定 90）の間は次の旅に出ない
-  （実機で同じ人が続けて引かれたので足した。旅先で雇われて解散した人も同じ）
+  （同じ人が続けて旅に出ないため。VERIFICATION.md §3.53。旅先で雇われて解散した人も同じ）
 - 出発も帰還も、プレイヤーがその施設に居る間は次の機会まで延ばす
   （目の前で消えたり湧いたりしない）
 - 旅先で雇われた者は旅を終える。帰さない。解散のときにゲームが
@@ -62,13 +61,13 @@
 - `RETURN_ALL_ON_LOAD` が入 → 全員をその場で帰す（MODを外す前の片付け）
 
 ロードの直後は `world.characters` がほぼ空（GAME.md §2.7 の表）なので、
-ロードのフックの中では動かさず、旗だけ立てる。
+ロードのフックの中では動かさず、人物が揃った最初の組み直しで1回だけ突き合わせる
+（ローダの窓口 `loads.on_settled`）。
 
-版4: 一覧の `execute` のフック2本は、引数を受け取った形のまま元の関数へ渡す
-（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
+冒険者の一覧と「会話する」の一覧は同じ形なので、どちらが出ているかはローダの窓口 `choices` が見分ける
+（`choices.listing()`）。
 """
 
-import os
 import random
 import re
 import sys
@@ -108,11 +107,6 @@ CONVERSATION_SPEC = "ConversationStartManager"
 #: 一覧の名前の末尾に付けた Lv。付け直す前に剥がす（何度描き直しても増えない）。
 LEVEL_RE = re.compile(r"\s*Lv\d+$")
 
-#: 冒険者の一覧ではありえない spec。1つでも見えたら別の画面（`320_` と同じ）。
-OTHER_SCREEN_SPECS = ("ConversationEndManager", "MovePhaseManager",
-                      "DisplayTalkChoice", "DisplayQuestChoice",
-                      "QuestChoiceManager")
-
 #: ロードの入口。新規と続きの両方（名前では決められない。GAME.md §1.3）。
 #: 包むのはローダの窓口 `loads`（TECH.md §3.3.21）。
 LOAD_KINDS = (loads.LOAD, loads.NEW_GAME)
@@ -126,7 +120,7 @@ def _store():
     """世代をまたぐ入れ物。プロセスに1つ（TECH.md §3.5）。"""
     store = getattr(sys, STORE_ATTR, None)
     if not isinstance(store, dict):
-        store = {"worlds": None, "reconcile": False, "rng": random.Random()}
+        store = {"worlds": None, "rng": random.Random()}
         setattr(sys, STORE_ATTR, store)
     return store
 
@@ -142,25 +136,6 @@ def id_of(obj):
         return str(obj)
     value = getattr(obj, "id", None)
     return str(value) if isinstance(value, (str, int)) and not isinstance(value, bool) else ""
-
-
-def area_size(app, area_id):
-    """土地の種類。実行時の `Area.size` は読めないのでセーブ側から（GAME.md §2.7）。"""
-    for attr in ("save_data_dict", "world_dict"):
-        container = getattr(app, attr, None)
-        if not isinstance(container, dict):
-            continue
-        holders = [container]
-        inner = container.get("world_data")
-        if isinstance(inner, dict):
-            holders.append(inner)
-        for holder in holders:
-            areas = holder.get("areas")
-            entry = areas.get(str(area_id)) if isinstance(areas, dict) else None
-            size = entry.get("size") if isinstance(entry, dict) else None
-            if isinstance(size, str) and size:
-                return size
-    return ""
 
 
 def roster_lists(app, area, area_id):
@@ -249,11 +224,6 @@ def level_of(app, npc_id):
     return None
 
 
-def is_dead(character):
-    config = getattr(character, "config", None)
-    return bool(config.get("is_dead")) if isinstance(config, dict) else False
-
-
 def facility_of_character(character):
     """Character の今の施設 id。`location` は Facility か id の文字列（GAME.md §2.7）。"""
     return id_of(getattr(character, "location", None))
@@ -287,15 +257,15 @@ def area_of_facility(app, facility_id, preferred=""):
     return ""
 
 
-def area_name(area, area_id):
-    name = getattr(area, "name", None)
-    return name if isinstance(name, str) and name.strip() else "土地{}".format(area_id)
+def area_name(app, area, area_id):
+    """土地の名前。読めなければ「土地{id}」（ローダの `ui.area_name`。切らない）。"""
+    return ui.area_name(app, area, fallback="土地{}".format(area_id), limit=None)
 
 
 # ============================================================ 本体
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "326_npc_travel"
+    owner = ctx.mod_name or "326_npc_travel"
     store = _store()
     if store["worlds"] is None:
         store["worlds"] = loader_state.WorldStore(
@@ -348,7 +318,8 @@ def apply(ctx):
         towns = {}
         for area_id, area in (ui.world_areas(app) or {}).items():
             area_id = str(area_id)
-            size = area_size(app, area_id)
+            # 実行時の `Area.size` は読めないのでセーブ側から（ローダの `ui.area_size`。GAME.md §2.7）
+            size = ui.area_size(app, area_id)
             if size and not travel.is_town(size):
                 continue
             if not any(ui.facilities_of(node) for node in ui.nodes_of(area)):
@@ -396,7 +367,7 @@ def apply(ctx):
     def where_text(app, area_id, facility_id):
         """「〈土地〉の〈施設〉」。施設名が読めなければ土地だけ。"""
         area = (ui.world_areas(app) or {}).get(str(area_id))
-        town = area_name(area, area_id)
+        town = area_name(app, area, area_id)
         facility, _node = ui.find_facility(area, facility_id)
         name = ui.facility_name(app, facility) if facility is not None else ""
         return "{}の{}".format(town, name) if name else town
@@ -425,7 +396,7 @@ def apply(ctx):
             if isinstance(trip, dict) and trip.get("kind") != travel.LOCAL:
                 continue
             character = ui.character_of(app, npc_id)
-            if character is None or is_dead(character):
+            if character is None or npcs.is_dead(character):
                 continue
             if npc_id in present:
                 continue
@@ -643,7 +614,7 @@ def apply(ctx):
                 close_hired(app, trips, npc_id, trip, day)
                 changed = True
                 continue
-            if character is not None and is_dead(character):
+            if character is not None and npcs.is_dead(character):
                 close_without_moving(app, trips, npc_id, trip, "died on the road")
                 changed = True
                 continue
@@ -860,7 +831,7 @@ def apply(ctx):
         day = ui.game_day(app)
         origin_area = (ui.world_areas(app) or {}).get(trip["origin_area"])
         fields = {"name": trip.get("name") or ui.character_name(app, npc_id),
-                  "origin": area_name(origin_area, trip["origin_area"]),
+                  "origin": area_name(app, origin_area, trip["origin_area"]),
                   "where": where_text(app, trip["dest_area"], trip["dest_facility"]),
                   "days": travel.days_left(trip, day) if day is not None else ""}
         template = AWAY_CONTEXT if trip.get("kind") == travel.AWAY else LOCAL_CONTEXT
@@ -894,7 +865,6 @@ def apply(ctx):
     # 名簿には残してあるので、ゲームが名簿だけで組むならここは何もしない
     # （足す前に spec の引数で突き合わせるので二重にならない）。
     screen = ui.Screen(ctx, write, tag="npc travel", mark=MARK)
-    listing = {"armed": False}
 
     def local_trips_here(app, area_id):
         """この街の中に出ている人 `{npc_id: 行}`。"""
@@ -936,12 +906,11 @@ def apply(ctx):
                 entry["text"] = with_level(app, str(args[0]), entry.get("text"))
 
     def fix_adventurer_list(app, buttons):
-        """冒険者の一覧なら、同じ街に出ている人を並べ（居場所を添え）、レベルを出す。"""
-        if not listing["armed"]:
-            return
-        names = [ui.spec_cls_name(entry) for entry in buttons]
-        if any(name in OTHER_SCREEN_SPECS for name in names):
-            listing["armed"] = False
+        """冒険者の一覧なら、同じ街に出ている人を並べ（居場所を添え）、レベルを出す。
+
+        「会話する」の一覧と同じ形なので、どちらの一覧かはローダの窓口 `choices` が見分ける（`choices.listing()`）。
+        """
+        if choices.listing() != choices.LISTING_ADVENTURER:
             return
         at = screen.back_button_index(buttons)
         if at is None:
@@ -959,7 +928,7 @@ def apply(ctx):
         for npc_id in sorted(trips, key=ui.id_sort_key):
             trip = trips[npc_id]
             character = ui.character_of(app, npc_id)
-            if npc_id in party or (character is not None and is_dead(character)):
+            if npc_id in party or (character is not None and npcs.is_dead(character)):
                 continue
             label = list_label(app, npc_id, trip)
             if npc_id in listed:
@@ -986,64 +955,53 @@ def apply(ctx):
         if SHOW_LEVEL:
             show_levels(app, buttons)
 
-    # ================================================================ フック
-    @ctx.wrap("__main__:DisplayAdventurerTalkChoice.execute",
-              required=False, safe=True)
-    def adventurer_list_execute(orig, self, *args, **kwargs):
-        listing["armed"] = True
-        return orig(self, *args, **kwargs)
-
-    @ctx.wrap("__main__:DisplayTalkChoice.execute", required=False, safe=True)
-    def talk_list_execute(orig, self, *args, **kwargs):
-        # 「会話する」の一覧は冒険者の一覧と同じ形なので、明示的に旗を下ろす（`320_`）。
-        listing["armed"] = False
-        return orig(self, *args, **kwargs)
+    # ================================================================ 窓口
+    # 一覧の印を立てる包みは全 MOD の適用の後に boot が立てるが、ここで呼んでも同じ世代では1回だけ。
+    choices.install_listing(ctx)
 
     def after_days(call):
         """日が進んだ後に見回る（ローダの日数の関所 `durations.on_days`）。日数の進め方には触らない。
 
         数えるのは暦の前後の差（`call.moved`。暦が読めなければ関所が渡した日数）。
+        例外は窓口が記録する（TECH.md §3.3.21）。
         """
-        try:
-            patrol(call.app, call.moved, "days elapsed")
-        except Exception:
-            ctx.log_exc("npc travel: patrol after elapse_days failed")
+        patrol(call.app, call.moved, "days elapsed")
 
     durations.on_days(owner, ctx, after=after_days, write=write)
 
     def after_move(call):
         """プレイヤーが施設を移った後（ローダの窓口 `arrivals`）。待たせていた帰還があれば果たす。"""
-        try:
-            patrol(call.app, 0, "player moved")
-        except Exception:
-            ctx.log_exc("npc travel: patrol after move failed")
+        patrol(call.app, 0, "player moved")
 
     arrivals.on(owner, ctx, (arrivals.FACILITY,), after=after_move, write=write)
 
     def on_load(call):
         worlds.forget()
-        store["reconcile"] = True
         write("{}: reconcile armed".format(call.label))
 
     loads.on(owner, ctx, LOAD_KINDS, after=on_load, write=write)
 
+    def reconcile_after_load(call):
+        """ロードの後、人物が揃った最初の組み直しで1回（ローダの窓口 `loads.on_settled`）。
+
+        ロードの直後は `world.characters` がほぼ空なので、ロードのフックの中では突き合わせない。
+        例外は窓口が記録する（TECH.md §3.3.21）。
+        """
+        with worlds.lock:
+            reconcile(call.app)
+
+    # 冒険者の一覧の手当て（下の refresh）の後に突き合わせるので、choices.provide より前に登録する
+    # （後から預けた refresh が先に呼ばれる）。
+    loads.on_settled(owner, ctx, reconcile_after_load, kinds=LOAD_KINDS, write=write)
+
     def refresh_choice_buttons(self, _buttons):
-        """ロードの後の突き合わせと、冒険者の一覧の手当て。"""
+        """冒険者の一覧の手当て。"""
         try:
             buttons = getattr(self, "buttons", None)
             if isinstance(buttons, list):
                 fix_adventurer_list(self, buttons)
         except Exception:
             ctx.log_exc("npc travel: cannot fix the adventurer list")
-        if store["reconcile"]:
-            characters = getattr(getattr(self, "world", None), "characters", None)
-            if isinstance(characters, dict) and len(characters) > 1:
-                store["reconcile"] = False
-                try:
-                    with worlds.lock:
-                        reconcile(self)
-                except Exception:
-                    ctx.log_exc("npc travel: reconcile failed")
 
     # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
     choices.provide(ctx, screen, refresh=refresh_choice_buttons)

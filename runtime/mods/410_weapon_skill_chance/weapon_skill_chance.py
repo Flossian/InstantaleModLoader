@@ -70,7 +70,7 @@ import sys
 import threading
 import weakref
 
-from instantale_modloader import abilities, equipment, frames, items, llm, saving, ui
+from instantale_modloader import abilities, battles, equipment, frames, items, llm, saving, state, stays, ui
 
 # GUI から変えられる値（同じ名前と既定値が mod.json にもある。TECH.md §3.8）。
 CHANCE_CRAFT = 20.0         # クラフトで作った武器（%）
@@ -115,41 +115,22 @@ TYPE_WORDS = {"instant_damage": "ダメージ", "instant_heal": "回復", "buff"
 # 値段の鍵（`129_` / GAME.md §2.13.2）。スキル名はこの手前に入れる（実物の並び）。
 PRICE_KEYS = ("買価", "売価", "buy price", "sell price", "Buy price", "Sell price")
 
-# 仲間のスキルを足す・外す所。
-BATTLE_START_TARGET = "__main__:BattleStartManager.start_battle"
-BATTLE_END_TARGETS = ("__main__:BattleEndManager.end_phase",
-                      "__main__:BattleEndInColosseum.end_phase",
-                      "__main__:BattleEndInFreeAction.end_phase")
+# 仲間のスキルを足す・外す所（戦闘の始まりと終わりはローダの窓口 `battles`、休養は `stays`）。
 SAVE_TARGET = saving.TARGET   # ローダの窓口 `saving` が1枚だけ包む
-REST_TARGET = "__main__:VacationRestManager.execute"
 
-# 本体の装備の2枠（GAME.md §2.13.3）と、`333_` の自由枠の名前の頭（手に持っていない品）。
-EQUIPMENT_TYPES = ("weapon", "wearable")
-FREE_PREFIX = "free"
-
-# 再注入しても数え直さない・抽選済みを忘れない。
+# 再注入しても抽選済みを忘れない。
 STORE_ATTR = "_instantale_weapon_skill_chance_store"
 
 
 def process_store():
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {}
-        setattr(sys, STORE_ATTR, store)
-    store.setdefault("rolled", weakref.WeakSet())
-    store.setdefault("ids", set())       # weakref を取れない品の控え（id）
-    store.setdefault("logged", 0)
-    store.setdefault("counts", {})
-    store.setdefault("pending", {})      # master_ai_item_generate が名付けた武器
-    store.setdefault("local", threading.local())
-    store.setdefault("lent", [])         # 仲間の skills へ足したもの [(持ち主, 名前, スキル)]
-    return store
-
-
-def unwrap(item):
-    """画面の部品（`InventoryItem`）が来たら中の `item_instance` を取り出す。"""
-    inner = frames.attr(item, "item_instance", None)
-    return item if inner is None else inner
+    """sys に置いた入れ物（無い鍵と型の変わった鍵だけ埋める。ローダの state.process_store）。"""
+    return state.process_store(STORE_ATTR, {
+        "rolled": weakref.WeakSet(),
+        "ids": set(),                   # weakref を取れない品の控え（id）
+        "counts": {},
+        "local": threading.local(),
+        "lent": [],                     # 仲間の skills へ足したもの [(持ち主, 名前, スキル)]
+    })
 
 
 def is_bare_weapon(item):
@@ -172,7 +153,7 @@ def usefulness_of(item):
     if not callable(func):
         return None
     value = frames.attr(item, "value", None)
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if not frames.is_number(value):
         return None
     return func(value, frames.attr(item, "rarity", None) or "common")
 
@@ -238,26 +219,15 @@ def attach(item, skill):
 def score_of(character, attribute):
     """キャラクタの能力値。読めなければ None（`313_` の `score_of` と同じ順に当たる）。
 
-    最初はローダの能力値の窓口（装備などの補正を足した値）に聞く。
+    最初はローダの能力値の窓口（装備などの補正を足した値）に聞き、答えが無ければ素の値（`ui.ability_score`）。
     """
     if character is None:
         return None
-    raw = None
     boosted = abilities.scores(ui.find_app(), character)
-    if isinstance(boosted, dict) and boosted.get(attribute) is not None:
-        raw = boosted.get(attribute)
-    for name in ("ability_scores", "original_ability_scores"):
-        if raw is not None:
-            break
-        table = getattr(character, name, None)
-        if isinstance(table, dict) and table.get(attribute) is not None:
-            raw = table.get(attribute)
-            break
+    raw = boosted.get(attribute) if isinstance(boosted, dict) else None
     if raw is None:
-        raw = getattr(character, "attribute_" + attribute, None)
-    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-        return None
-    return raw
+        return ui.ability_score(character, attribute)
+    return raw if frames.is_number(raw) else None
 
 
 def ability_rate(intelligence, dexterity):
@@ -330,34 +300,18 @@ def effect_text(skill):
 
 
 def worn_items(app, holder):
-    """身に着けている品の並び（同じ品は1度だけ。`411_` の読み方と同じ）。"""
-    found = []
-    gear = equipment.gear(app, holder)
-    if gear is not None:
-        found = [item for region, item in gear if not str(region).startswith(FREE_PREFIX)]
-    else:
-        equipments = frames.attr(holder, "equipments", None)
-        if isinstance(equipments, dict):
-            inventory = items.inventory_of(holder) or {}
-            for key in EQUIPMENT_TYPES:
-                ref = equipments.get(key)
-                if isinstance(ref, (str, int)) and not isinstance(ref, bool):
-                    ref = inventory.get(str(ref))      # ロード直後は id の文字列
-                if ref is not None:
-                    found.append(ref)
-    unique, seen = [], set()
-    for item in found:
-        if id(item) not in seen:
-            seen.add(id(item))
-            unique.append(item)
-    return unique
+    """身に着けている品の並び（同じ品は1度だけ）。自由枠（手に持っていない品）は外す。
+
+    装備欄の窓口の答えが無ければ本体の装備の2枠を読む（ローダの `equipment.worn`）。
+    """
+    return [item for _region, item in equipment.worn(app, holder, free=False)]
 
 
 def worn_skills(app, holder):
     """身に着けている品のスキル `[(名前, スキルの辞書)]`。"""
     found = []
     for item in worn_items(app, holder):
-        skill = frames.attr(unwrap(item), "skill", None)
+        skill = frames.attr(items.unwrap(item), "skill", None)
         if isinstance(skill, dict) and isinstance(skill.get("name"), str) and skill["name"]:
             found.append((skill["name"], skill))
     return found
@@ -451,7 +405,7 @@ class ShownEffect(object):
 
     def __init__(self, item):
         self.attributes = None
-        item = unwrap(item)
+        item = items.unwrap(item)
         skill = frames.attr(item, "skill", None) if item is not None else None
         attributes = frames.attr(item, "attributes", None) if item is not None else None
         if not isinstance(skill, dict) or not isinstance(attributes, dict):
@@ -513,13 +467,10 @@ def apply(ctx):
     store = process_store()
     local = store["local"]
     write = ctx.logger(LOG_BASENAME)
-
-    def note(text):
-        store["logged"] += 1
-        if store["logged"] <= LOG_LIMIT:
-            write(text)
-        elif store["logged"] == LOG_LIMIT + 1:
-            write("... 以降は件数だけ数える（LOG_LIMIT={}）".format(LOG_LIMIT))
+    me = ctx.mod_name or "410_weapon_skill_chance"      # 窓口に名乗る持ち主の名前
+    # 抽選の記録は注入ごとに LOG_LIMIT 行まで。超えたら1回だけ知らせる（ローダの ctx.logger の span="injection"）
+    note = ctx.logger(LOG_BASENAME, cap=LOG_LIMIT, span="injection",
+                      cap_notice="... 以降は件数だけ数える（LOG_LIMIT={}）".format(LOG_LIMIT))
 
     def count(key):
         store["counts"][key] = store["counts"].get(key, 0) + 1
@@ -587,7 +538,7 @@ def apply(ctx):
 
     def roll(item, source, chance):
         """抽選して、当たればスキルを付ける。"""
-        item = unwrap(item)
+        item = items.unwrap(item)
         if not is_bare_weapon(item) or not first_roll(item):
             return
         count("rolled/" + source)
@@ -670,76 +621,45 @@ def apply(ctx):
             return "shop"
         return "other"
 
-    # ---- 品が組まれた瞬間（`128_` と同じ所）--------------------------------
-    # 生成の入口が品を返すとは限らない（店の入口は None を返して持ち主へ入れる）ので、
-    # 入口の最中に組まれた武器をここで控えておき、入口を抜けたところで抽選する。
-    # 入口の外で組まれた武器は、直前に `master_ai_item_generate` が名付けたものだけ拾う
-    # （セーブからの組み直しも `Item.__init__` を通るので、それ以外は見ない）。
-    @ctx.wrap("scripts.items:Item.__init__", safe=True, required=False)
-    def item_init(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
-        if not is_bare_weapon(self):
-            return result
-        collect = getattr(local, "collect", None)
-        if isinstance(collect, list):
-            collect.append(self)
-            return result
-        name = frames.attr(self, "name", None)
-        if isinstance(name, str) and store["pending"].pop(name, None) is not None:
-            roll(self, "other", CHANCE_OTHER)
-        return result
+    # ---- 品が生まれた（ローダの窓口 `items.on_made`。TECH.md §3.3.21）--------------
+    # 生成の入口が品を返すとは限らない（店の入口は None を返して持ち主へ入れる）ので、窓口は
+    # 入口の最中に組まれた品も控えて、入口を抜けたところで1品ずつ渡す（入れ子なら一番外の入口で1回）。
+    # 入口の外で組まれた品は、直前に `master_ai_item_generate` が名付けたものだけ来る（named）。
+    # セーブからの組み直し（generated/dict）は受けない。
+    def made(call):
+        item = call.item
+        if not is_bare_weapon(item):
+            return
+        if call.source == items.CRAFTED:
+            # クラフトの取りこぼし（入口を通らない版に備える）
+            roll(item, "craft", CHANCE_CRAFT)
+            return
+        if call.source == items.NAMED:
+            # テキストで頼んだ品。前は店とクラフトの最中に名付けた品を控えなかったので、その間は見ない
+            if context() is None:
+                roll(item, "other", CHANCE_OTHER)
+            return
+        if context() == "shop":
+            return                      # 店の入口の中は generate_item_in_shopping の後で見る
+        source = context() or source_of(call.app, call.obtainer)
+        note("entry: generate_item_from_item_data source={} {!r} for={!r}".format(
+            source, frames.short(frames.attr(item, "name", ""), 40),
+            frames.short(frames.attr(call.obtainer, "name", None), 30)))
+        roll(item, source, chance_of(source))
 
-    # ---- 生成の入口（LLM が書いた品を組む1本）-----------------------------
-    @ctx.wrap("__main__:InstantaleApp.generate_item_from_item_data", safe=True)
-    def generated(orig, self, *args, **kwargs):
-        outer, local.collect = getattr(local, "collect", None), []
-        try:
-            result = orig(self, *args, **kwargs)
-        finally:
-            created, local.collect = local.collect, outer
-        in_shopping = context() == "shop"
-        obtainer = frames.arg(args, kwargs, "obtainer", 7)
-        source = context() or source_of(self, obtainer)
-        weapons = [item for item in created + [unwrap(result)] if is_bare_weapon(item)]
-        for item in weapons:             # ここで見たので、後の組み直しで拾い直さない
-            store["pending"].pop(frames.attr(item, "name", None), None)
-        note("entry: generate_item_from_item_data source={} type={!r} weapons={} result={} for={!r}"
-             .format(source, frames.arg(args, kwargs, "item_type", 2), len(weapons),
-                     type(result).__name__, frames.short(frames.attr(obtainer, "name", None), 30)))
-        if isinstance(outer, list):
-            outer.extend(weapons)        # 外側の入口がまとめて見る
-        elif not in_shopping:            # 店の入口の中は generate_item_in_shopping の後で見る
-            for item in weapons:
-                roll(item, source, chance_of(source))
-        return result
+    items.on_made(ctx, made, owner=me, sources=(items.GENERATED, items.NAMED, items.CRAFTED), write=write)
 
-    # ---- テキストで頼んだ品（マスターAIの品の生成）---------------------------
-    @ctx.wrap("scripts.llm.llm_manager:master_ai_item_generate", safe=True,
-              required=False)
-    def master_item(orig, *args, **kwargs):
-        result = orig(*args, **kwargs)
-        data = llm.as_dict(result) or {}
-        category = data.get("item_category")
-        kind = category.get("type") if isinstance(category, dict) else None
-        name = data.get("item_name")
+    def named(call):
+        """テキストで頼んだ品（マスターAIの品の生成）の名前と種別を記録だけする。"""
         note("entry: master_ai_item_generate {!r} type={!r}".format(
-            frames.short(name, 40), kind))
-        if kind == WEAPON_TYPE and isinstance(name, str) and context() is None:
-            pending = store["pending"]
-            pending[name] = True
-            while len(pending) > 20:     # 組まれずに終わった名前を溜めない
-                pending.pop(next(iter(pending)))
-        return result
+            frames.short(call.name, 40), call.item_type))
 
-    # ---- クラフトの取りこぼし（入口を通らない版に備える）--------------------
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.place_crafted_item",
-              safe=True, required=False)
-    def crafted(orig, self, *args, **kwargs):
-        roll(frames.arg(args, kwargs, "generated_item", 0), "craft", CHANCE_CRAFT)
-        return orig(self, *args, **kwargs)
+    items.on(me, ctx, (items.MASTER_ITEM,), after=named, write=write)
 
     # ---- 説明欄: スキル名の下に効果と使用回数 -----------------------------
-    # 箱の大きさは `109_` が描いた後の文字で測り直すので、その内側で足す（mod.json の before）。
+    # 箱の大きさは `109_` が描いた後の文字で測り直すので、その内側で足して詰める（mod.json の before）。
+    # 窓口 `items` の DETAIL には載せず自分で包む。窓口の関所は一番外側に立つので、載せると `109_` の外側になり、
+    # 効果の行の詰め（tighten）が `109_` の計測の後に回る（TECH.md §3.3.21）。
     if SHOW_EFFECT:
         @ctx.wrap("scripts.hud.new_hud:ItemDetailBox.update_content", safe=True)
         def detail_box(orig, self, *args, **kwargs):
@@ -754,30 +674,26 @@ def apply(ctx):
         party.take_back()
 
     if PARTY_SKILLS:
-        @ctx.wrap(BATTLE_START_TARGET, safe=True, required=False)
-        def start_battle(orig, self, *args, **kwargs):
+        # 戦闘の始まりと終わりはローダの窓口 `battles` が1枚だけ包む（TECH.md §3.3.21）
+        def battle_before(call):
             party.take_back()            # 前の戦闘の残り（終わりを通らなかった戦闘）
-            result = orig(self, *args, **kwargs)
-            try:
-                added, clashed = party.lend(getattr(self, "app", None) or ui.find_app())
-                for member, name in added:
-                    note("battle: {} can use {!r}".format(member, frames.short(name, 40)))
-                for member, name in clashed:
-                    note("battle: {} already has a skill named {!r}, kept their own".format(
-                        member, frames.short(name, 40)))
-            except Exception:
-                ctx.log_exc("weapon skill chance: cannot lend weapon skills to the party")
-            return result
 
-        def end_phase(orig, self, *args, **kwargs):
-            try:
-                return orig(self, *args, **kwargs)
-            finally:
-                if party.lent:
-                    note("battle end: took back {} weapon skill(s)".format(party.take_back()))
+        def battle_after(call):
+            added, clashed = party.lend(call.app)
+            for member, name in added:
+                note("battle: {} can use {!r}".format(member, frames.short(name, 40)))
+            for member, name in clashed:
+                note("battle: {} already has a skill named {!r}, kept their own".format(
+                    member, frames.short(name, 40)))
 
-        for target in BATTLE_END_TARGETS:
-            ctx.wrap(target, safe=True, required=False)(end_phase)
+        battles.on(me, ctx, (battles.START,), before=battle_before, after=battle_after, write=write)
+
+        def battle_end(call):
+            """終わり方3つのどれでも、orig が投げた回も外す。"""
+            if party.lent:
+                note("battle end: took back {} weapon skill(s)".format(party.take_back()))
+
+        battles.on(me, ctx, (battles.END,), after=battle_end, always=True, write=write)
 
         def save_before(call):
             """セーブの skills に品のスキルを入れない（ローダの窓口 `saving`）。"""
@@ -787,19 +703,15 @@ def apply(ctx):
             """保存が済んだら（投げた回も）品のスキルを戻す。"""
             PartySkills.restore(call.memo or ())
 
-        saving.on("410_weapon_skill_chance", ctx, before=save_before, after=save_after, always=True)
+        saving.on(me, ctx, before=save_before, after=save_after, always=True)
 
-        @ctx.wrap(REST_TARGET, safe=True, required=False)
-        def rest(orig, self, *args, **kwargs):
-            # 戻すのは orig の前（この行動の保存に戻した回数を載せる。`137_` と同じ）
-            try:
-                for member, name, before, after in refill_worn(
-                        getattr(self, "app", None) or ui.find_app()):
-                    note("rest: {} {!r} {} -> {}".format(
-                        member, frames.short(name, 40), before, after))
-            except Exception:
-                ctx.log_exc("weapon skill chance: cannot refill the party's weapon skills")
-            return orig(self, *args, **kwargs)
+        def rest_before(call):
+            """宿で休養した（ローダの窓口 `stays`）。戻すのは orig の前（この行動の保存に戻した回数を載せる。`137_` と同じ）。"""
+            for member, name, before, after in refill_worn(call.app):
+                note("rest: {} {!r} {} -> {}".format(
+                    member, frames.short(name, 40), before, after))
+
+        stays.on(me, ctx, (stays.REST,), before=rest_before, write=write)
 
     write("installed (craft={}%, other={}%, shop={}%)".format(
         CHANCE_CRAFT, CHANCE_OTHER, CHANCE_SHOP))

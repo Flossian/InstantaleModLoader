@@ -30,12 +30,11 @@ VERIFICATION_LOG.md §2.82）。
 
   単体  「【生成するNPC】」の下に `- 名前:` と `- 概要:` がある
         （衛兵・闘技場の敵の頼み文にも「【生成するNPC】」と `- look_description:` はあるが、
-        名前と概要は無く「- 強さのランク」だけ。実機で衛兵に種が1回付いてから直した。
-        VERIFICATION_LOG.md §2.82）
+        名前と概要は無く「- 強さのランク」だけ。VERIFICATION_LOG.md §2.82）
   町    「【NPCの生成要素】」と `settlement_name:` の両方
   主人公 キャラを作る画面のさいころ（`create_character`）。
         「プレイヤーキャラクター」「ランダムに」「才能点」の3語が同じ本文にある。
-        版3で足した（ゲームが世界も種も渡さず、同じ型の傭兵ばかりが出ていた。GAME.md §2.35）。
+        主人公にも種を足すのは、ゲームが世界も種も渡さず、同じ型の傭兵ばかりが出るため（GAME.md §2.35）。
         世界観を渡すのは `143_` で、ここは表の種だけを足す
 
 単体でも、名前か概要が人でない存在（人形・魔物・竜・精霊・亡霊など）を指すなら種を付けない。
@@ -51,13 +50,12 @@ VERIFICATION_LOG.md §2.82）。
 
 from __future__ import annotations
 
-import io
-import json
 import os
 import random
 import threading
 import time
 
+from instantale_modloader import read_json
 from instantale_modloader.llm import wrap_outgoing
 
 LOG_BASENAME = "npc_variety.log"
@@ -95,13 +93,9 @@ MARK_TOWN_DATA = "settlement_name:"
 MARK_PLAYER = ("プレイヤーキャラクター", "ランダムに", "才能点")
 HEAD_SINGLE = "【この人物について決まっていること】"
 HEAD_TOWN = "【人物について決まっていること】"
-#: 版3の途中まで、表の句は中世の村を思わせるもの（羊飼い・写字生・寺院・薬草採り）を含んでいた。
-#: 世界に無いものは置き換えさせ、置き換えられなければ使わせない。「置き換えてよい」と許すだけだと、
-#: 魔法も剣も無い世界の主人公が羊を追って育ち、特質が「羊追いの勘」になった（VERIFICATION.md §3.93）。
-#: 「置き換えて書く」だけでも、羊の句を「海面上昇で沈んだ牧場」とこじつけて残したので、
-#: 同梱の表から舞台の物を外した（同 §3.93）。この添え書きは、手元の seeds.json の句の受け皿として残す。
-#: 外した後の句（「雇われの戦い手」「信仰の組織」）は、ファンタジーの世界でもそのまま本文に写ったので、
-#: 世界での呼び名に直させる一文を足した（同 §3.93）。
+#: 世界に無い物は置き換えさせ、置き換えられなければ使わせない。「置き換えてよい」と許すだけでは、
+#: 世界に合わない句がこじつけて残る。句の言い回しは本文にそのまま写るので、世界での呼び名に直させる。
+#: 同梱の表は舞台の物を持たないが、この添え書きは手元の seeds.json の句の受け皿として残す（VERIFICATION.md §3.93）。
 FOOT_FIT = ("句のうち、この世界の概要と雰囲気から自然に連想できない生き物・職業・場所・道具は、"
             "連想できるものに置き換えて書く。こじつけて残さない。置き換えられない句は使わない。"
             "句の言い回しはそのまま写さず、この世界で使われる具体的な呼び名・物・場所に直して書く。")
@@ -170,11 +164,8 @@ def read_seeds(path):
     empty = {section: [] for section in SECTIONS}
     if not path:
         return empty
-    try:
-        with io.open(path, encoding="utf-8") as handle:
-            data = json.load(handle)
-    except Exception:
-        return empty
+    # 手で直す表なので BOM 付きも読む。在るのに読めなければローダが modloader.log に残す（read_json）。
+    data = read_json(path)
     if not isinstance(data, dict):
         return empty
     tables = {"_drops": {section: {} for section in SECTIONS},
@@ -230,7 +221,7 @@ def mentions_role(tables, role):
 def inherit_role_limits(tables, bundled, role):
     """`role` を一度も書いていない手元の表に、同梱の表のその役の `not_for` を、同じ名前の軸にだけ当てる。
 
-    `player`（ランダムで作る主人公）の指定は v1.16.0 の同梱の表で足した。それより前の表を書き換えて
+    `player`（ランダムで作る主人公）の指定を持たない古い同梱の表を書き換えて
     `seeds.json` として使っていると、主人公に年齢の軸が付き、143 の年齢と食い違う。
     当てた軸の名前を返す（`"節/軸"`）。手元の表が `role` を書いていれば何もしない（手元の表どおり）。
     """
@@ -515,7 +506,6 @@ def apply(ctx):
     mod_dir = ctx.mod_dir
     write = ctx.logger(LOG_BASENAME)
     seeds = SeedFile(mod_dir, write)
-    count = {"single": 0, "town": 0}
 
     def run(texts, site):
         """ローダから、1回の推論で出ていく本文の並びとして呼ばれる。変えなければ None。"""
@@ -529,7 +519,6 @@ def apply(ctx):
             return None
         kind = {"この人物": "single", "主人公": "player"}.get(
             made[0][0], "town") if len(made) == 1 else "town"
-        count[kind] = count.get(kind, 0) + 1
         if LOG_SEEDS:
             write("[SEED] {} {} | {}人 ({:.1f}ms)".format(
                 site, kind, len(made), (time.monotonic() - started) * 1000))
@@ -540,10 +529,7 @@ def apply(ctx):
     # 掛け直しの時点はローダが `modloader.log` に `late-armed on` で残す（こちらの記録へは写さない）。
     hooks = wrap_outgoing(ctx, run, label="npc variety")
 
-    # 注入した時点で、作ったデータで正しさを確かめておく。
-    # 実経路はゲームが NPC を作るまで通らない（`111_` と同じ方針）。
-    _verify(ctx)
-
+    # 見分けと差し込みの確かめは固定の入力なので tools/tests/test_npc_variety.py にある（TECH.md §6.1）。
     armed = hooks.armed()
     tables = seeds.current()
     axes, phrases = table_size(tables)
@@ -552,65 +538,3 @@ def apply(ctx):
         "{}軸 {}句 from {}".format(axes, phrases, os.path.basename(seeds.path))
         if axes else "no table (nothing will be added)",
         log_path))
-
-
-# --------------------------------------------------------------------------
-# 自己検証
-# --------------------------------------------------------------------------
-_SAMPLE_TABLES = {
-    "look": [("髪", ["赤茶の髪を短く刈っている"], 100), ("瞳", ["鳶色の瞳"], 100),
-             ("特徴", ["片目に眼帯"], 0), ("年齢", ["まだ子ども"], 100)],
-    "personality": [("口数", ["無口"], 100)],
-    "description": [("出自", ["川向こうの漁村の生まれ"], 100)],
-    "_not_for": {"look": {"年齢": {"single": {"まだ子ども"}, "owner": {"まだ子ども"},
-                                  "player": "*"}},
-                 "personality": {}, "description": {}},
-}
-_SAMPLE_SINGLE = ["型: - look_description: 外見", "指示",
-                  "【生成するNPC】\n- 名前: 宿屋の主人\n- 概要: 宿を営む\n- 強さのランク: 8\n"]
-_SAMPLE_GUARD = ["型: - look_description: 外見", "衛兵NPCをデザインしろ",
-                 "【生成するNPC】\n- 強さのランク: 8\n"]
-_SAMPLE_DOLL = ["型: - look_description: 外見", "指示",
-                "【生成するNPC】\n- 名前: 石の番人\n- 概要: 遺跡を守る古いゴーレム\n- 強さのランク: 30\n"]
-_SAMPLE_PLAYER = ["あなたはキャラクター生成AIです。",
-                  "**1体のプレイヤーキャラクター**を**ランダムに**生成してください。\n"
-                  "- 今回利用可能な才能点：**30**\n"]
-_SAMPLE_TOWN = ["型", "指示", "【NPCの生成要素】\n- 名前\n【生成対象エリアのデータ】\n"
-                             "- settlement_name: 風の村\n"]
-
-
-def _verify(ctx):
-    rng = random.Random(1)
-    got, made = inject(_SAMPLE_SINGLE, _SAMPLE_TABLES, rng, chance=100)
-    if got is None or len(made) != 1 or HEAD_SINGLE not in got[2] \
-            or "赤茶の髪を短く刈っている" not in got[2] or "眼帯" in got[2] \
-            or "まだ子ども" in got[2] or got[0] != _SAMPLE_SINGLE[0]:
-        ctx.log("VERIFY FAILED: single injection {!r}".format(got), level="ERROR")
-        return
-    again, _made = inject(got, _SAMPLE_TABLES, rng, chance=100)
-    if again is not None:
-        ctx.log("VERIFY FAILED: seeded text was seeded again", level="ERROR")
-        return
-    if inject(_SAMPLE_GUARD, _SAMPLE_TABLES, rng, chance=100)[0] is not None:
-        ctx.log("VERIFY FAILED: guard prompt was touched", level="ERROR")
-        return
-    if inject(_SAMPLE_DOLL, _SAMPLE_TABLES, rng, chance=100)[0] is not None:
-        ctx.log("VERIFY FAILED: non-human prompt was seeded", level="ERROR")
-        return
-    got, made = inject(_SAMPLE_TOWN, _SAMPLE_TABLES, rng, chance=100,
-                       residents=2, adventurers=1)
-    if got is None or len(made) != len(TOWN_OWNERS) + 3 or HEAD_TOWN not in got[2] \
-            or "宿屋(inn)の owner:" not in got[2] \
-            or any("まだ子ども" in line for label, line in made if "owner" in label) \
-            or not all("まだ子ども" in line for label, line in made if "owner" not in label):
-        ctx.log("VERIFY FAILED: town injection {!r}".format(got), level="ERROR")
-        return
-    got, made = inject(_SAMPLE_PLAYER, _SAMPLE_TABLES, rng, chance=100)
-    if got is None or len(made) != 1 or made[0][0] != "主人公" or FOOT_PLAYER not in got[1] \
-            or "鳶色の瞳" not in got[1] or "まだ子ども" in got[1] or got[0] != _SAMPLE_PLAYER[0]:
-        ctx.log("VERIFY FAILED: player injection {!r}".format(got), level="ERROR")
-        return
-    if inject(_SAMPLE_TOWN, _SAMPLE_TABLES, rng, chance=0)[0] is not None:
-        ctx.log("VERIFY FAILED: chance 0 still injected", level="ERROR")
-        return
-    ctx.log("npc variety: self-check passed")

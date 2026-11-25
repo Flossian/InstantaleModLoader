@@ -7,20 +7,13 @@
 
 import math
 
-from instantale_modloader import wanted
+from instantale_modloader import frames, items, llm, wanted
 
 #: 盗みの規模の段。0 は金を奪っていない。
 SCALE_MAX = 4
 
 BUY = "買価"
 SELL = "売価"
-
-
-def _get(container, name):
-    """LLM の戻り値から項目を1つ読む。dict か属性を持つ型かは決めつけない。"""
-    if isinstance(container, dict):
-        return container.get(name)
-    return getattr(container, name, None)
 
 
 def _amount(value):
@@ -37,16 +30,8 @@ def _amount(value):
 
 
 def clamp_scale(value):
-    """LLM の答えを 0〜4 の整数に均す。読めなければ None。"""
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, str):
-        value = value.strip().lstrip("+")
-    try:
-        number = int(float(value))
-    except (TypeError, ValueError, OverflowError):
-        return None
-    return max(0, min(SCALE_MAX, number))
+    """LLM の答えを 0〜4 の整数に均す。読めなければ None（`llm.whole`）。"""
+    return llm.whole(value, 0, SCALE_MAX)
 
 
 def gold_claims(process):
@@ -59,15 +44,15 @@ def gold_claims(process):
         return 0
     total = 0
     for item in process:
-        kind = _get(item, "type")
-        amount = _amount(_get(item, "amount"))
+        kind = frames.field(item, "type")
+        amount = _amount(frames.field(item, "amount"))
         if not amount:
             continue
-        if kind == "get_gold" and _get(item, "target") == "player":
+        if kind == "get_gold" and frames.field(item, "target") == "player":
             total += amount
         elif kind == "move_gold":
-            source = _get(item, "from_character")
-            dest = _get(item, "to_character")
+            source = frames.field(item, "from_character")
+            dest = frames.field(item, "to_character")
             if dest == "player" and source != "player":
                 total += amount
             elif source == "player" and dest != "player":
@@ -162,19 +147,19 @@ def ability_chance(score, base_pct, per_point_pct, cap_pct=CHANCE_CEILING):
 
     読めない能力値は基準とみなす（読めないことを不利にも有利にもしない）。
     """
-    if isinstance(score, bool) or not isinstance(score, (int, float)):
+    if not frames.is_number(score):
         score = ABILITY_PIVOT
     pct = base_pct + (score - ABILITY_PIVOT) * per_point_pct
     return max(CHANCE_FLOOR, min(min(CHANCE_CEILING, cap_pct), pct))
 
 
-#: レア度の段（GAME.md §2.13.2 のスキーマの6段）。低い順。知らない語は最下段とみなす。
-RARITY_RANKS = ("common", "rare", "magical", "epic", "legendary", "mythic")
+#: レア度の段（GAME.md §2.13.2 のスキーマの6段。ローダの `items.RARITIES`）。低い順。知らない語は最下段とみなす。
+RARITY_RANKS = items.RARITIES
 
 
 def rarity_rank(record):
-    rarity = record.get("rarity") if isinstance(record, dict) else None
-    return RARITY_RANKS.index(rarity) if rarity in RARITY_RANKS else 0
+    """`items.to_dict` の形の品のレア度の段。辞書でなければ最下段（前と同じく文字列は受けない）。"""
+    return items.rarity_rank(record) if isinstance(record, dict) else 0
 
 
 def buy_price(record):

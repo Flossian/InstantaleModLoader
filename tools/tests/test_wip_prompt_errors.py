@@ -178,6 +178,9 @@ class FakeCtx:
     def logger(self, name, **kw):
         return ml.ModContext.logger(self, name, **kw)
 
+    def once(self, write, *args, **kw):
+        return ml.ModContext.once(self, write, *args, **kw)
+
     def log(self, message, level="INFO"):
         self.lines.append((level, message))
 
@@ -340,6 +343,18 @@ def scene_rules():
     check("messages は写しで書き換える", hit and rewritten[1]["content"] == after
           and MESSAGE[1]["content"] == PROMPT and rewritten[0] is MESSAGE[0])
     check("当たらなければ同じものを返す", module.rewrite_prompt([{"role": "user", "content": "x"}])[1] is False)
+    # 前は注入のたびに apply の中で回していた確かめ（固定の入力。TECH.md §6.1）
+    sample = ("【構造の生成要素】\n- 特殊facility \"free\": x\n【NPCの生成要素】\n- 名前\n"
+              "【生成ルール】\n- y\n\n【世界のデータ】\nz")
+    after = module.rewrite_rules(sample)
+    fixed, labels = module.fix_text("settlement_quest_generator",
+                                    "- 想定段階: ゲーム序盤\n難易度は30/70。液状の生物の一部はliquid_materialであり")
+    check("短い見本の書き直し（前の注入時の確かめ）",
+          after is not None and module.STRUCTURE_FREE in after and "【生成ルール】" not in after
+          and after.endswith("【世界のデータ】\nz") and "【NPCの生成要素】\n- 名前\n" in after, after)
+    check("短い見本の表（前の注入時の確かめ）",
+          fixed == "- 想定段階: ゲーム中盤\n難易度は30/76。液状の生物の一部もcreature_partであり"
+          and labels == ["liquid", "stage", "difficulty"], (fixed, labels))
 
 
 def scene_check():

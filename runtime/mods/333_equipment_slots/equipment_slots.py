@@ -20,16 +20,19 @@
 
 遊び方は DOC.md、検証の記録と決めた仕様は VERIFICATION.md §3.70、ゲーム側の事実は GAME.md §2.13.3。
 
-版28: フック10本（火力・防御・ステータス欄・格子の判定と配置・持ち物の移動・セーブの書き出し・タッチ・二つ並びの窓）は、
+フック（火力・防御・格子の判定と配置・セーブの書き出し・タッチ）は、
 引数を受け取った形のまま元の関数へ渡す（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
-差し替える値（武器攻撃力・防御・ステータス欄の文）は来た側に合わせて書く。
-`hasattr` を既定値付きの `getattr` に替えた（TECH.md §6）。
+差し替える値（武器攻撃力・防御）は来た側に合わせて書く。
+ステータス欄の文・戦闘の1手・持ち物の移動・二つ並びの窓・タイトルへ戻るは、ローダの窓口
+（`status_text` / `battles` / `twin_windows` / `loads`。TECH.md §3.3.21）に前後の処理だけを預ける。
 """
-import os
 import re
 import sys
 
-from instantale_modloader import choices, combat, equipment, frames, loads, state, ui
+from instantale_modloader import (battles, choices, combat, equipment, frames, loads, state,
+                                  status_text, twin_windows, ui)
+# 関数の中で品の辞書を `items` と呼んでいるので、ローダの部品は別名で読む。
+from instantale_modloader import items as item_api
 
 from . import slots as rules
 
@@ -59,6 +62,10 @@ COMBINE_DEFENSE_PERCENT = 10
 #: 画面上部の能力欄の行（`Atk:432(+500)`）。括弧の中が装備の値。
 STATUS_LINE = re.compile(r"^(Atk|Def):([0-9.]+)\(\+([0-9.]+)\)", re.M)
 
+#: 窓口 `status_text` で書き換える順（小さいほど先）。自分で包んでいたときは 345（日付の行）→ 333 → 130（通貨）の
+#: 順に書き換えていたので、345 の 10 と 130 の 30 の間に置く。
+STATUS_ORDER = 20
+
 #: 持ち主 → scope（ゲーム抜きの試験から引くため）。`apply()` が差す。
 SCOPE_FOR = None
 #: 装備欄の品 {持ち物の鍵: Item}。`apply()` が差す（ゲーム抜きの試験から中身を見るため）。
@@ -73,32 +80,27 @@ def _store(ctx, write):
     if store is None:
         store = state.WorldStore(ctx, "equipment_slots", write=write)
         setattr(sys, STORE_ATTR, store)
-    store.ctx, store.write = ctx, write
-    return store
+    # 繋ぎ替えは錠の中で（1回の読み書きが旧世代と新世代の ctx に跨がらないように。`WorldStore.rebind`）
+    return store.rebind(ctx, write)
 
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME, tag="equipment slots:")
     schedule = ui.scheduler(ctx, "equipment slots")
+    owner = ctx.mod_name or "333_equipment_slots"
     store = _store(ctx, write)
     #: 装備欄の品 {持ち物の鍵: Item}。装備欄のグリッドの item_dict そのもので、
     #: ここに居る間はプレイヤーの持ち物の辞書には居ない（合流するのはセーブの間だけ）。
     global CONTAINER
-    container = getattr(sys, CONTAINER_ATTR, None)
-    if not isinstance(container, dict):
-        container = {}
-        setattr(sys, CONTAINER_ATTR, container)
+    container = state.process_store(CONTAINER_ATTR, {})
     CONTAINER = container
-    npc_containers = getattr(sys, CONTAINERS_ATTR, None)
-    if not isinstance(npc_containers, dict):
-        npc_containers = {}
-        setattr(sys, CONTAINERS_ATTR, npc_containers)
+    npc_containers = state.process_store(CONTAINERS_ATTR, {})
     #: scope の控え {鍵: scope}。同じ持ち主には同じ辞書を返す（グリッドに付けて見分けるため）。
     scopes = {}
     #: 周回の鍵 -> その世界の別の主人公の周回（`bucket_of` が世界名だけのファイルを見るたびにディスクを叩かない）。
     checked_others = {}
-    #: 仲間の分を移さなかったことを書いた周回の鍵（1回だけ書く）。
-    noted_others = set()
+    #: 仲間の分を移さなかったことを、周回の鍵ごとに1回だけ書く。
+    note_once = ctx.once(write)
     #: ドロップ中の品（`try_place_item` → `is_valid_placement` の間だけ）と、MOD 自身が移している最中の旗。
     placing = {"item": None, "moving": False, "native": False, "cell": None}
 
@@ -126,12 +128,9 @@ def apply(ctx):
     def player_of(app):
         return getattr(app, "player", None) if app is not None else None
 
-    def inventory_of(owner):
-        inv = getattr(owner, "inventory", None)
-        if isinstance(inv, dict):
-            return inv
-        inner = getattr(inv, "inventory", None)
-        return inner if isinstance(inner, dict) else None
+    # 持ち物の辞書（入れ物の `.inventory` まで降りる）と、画面の部品の中の品はローダの語彙。
+    inventory_of = item_api.inventory_of
+    instance_of = item_api.unwrap
 
     def scope_for(app, owner, create=True):
         """持ち主（Character）の scope。主人公は名前が鍵、仲間は "npc:<id>"。
@@ -193,11 +192,9 @@ def apply(ctx):
         mine_only = any(k != name for k in players) or checked_others[key]
         moved = [k for k in list(old)
                  if k == name or (not mine_only and str(k).startswith("npc:"))]
-        if mine_only and any(str(k).startswith("npc:") for k in old) \
-                and key not in noted_others:
-            noted_others.add(key)
-            write("left the companions in the world file {!r}: another protagonist played this world ({})".format(
-                world, ", ".join([k for k in players if k != name] + checked_others[key])))
+        if mine_only and any(str(k).startswith("npc:") for k in old):
+            note_once(key, "left the companions in the world file {!r}: another protagonist played this world ({})"
+                      .format(world, ", ".join([k for k in players if k != name] + checked_others[key])))
         if moved:
             for k in moved:
                 bucket[k] = old.pop(k)
@@ -210,10 +207,6 @@ def apply(ctx):
         """(周回の鍵, この持ち主の控え {品の鍵: [x, y]})。y は上から。"""
         key, bucket = bucket_of(app)
         return key, bucket.setdefault(sc["key"], {})
-
-    def instance_of(widget_or_item):
-        inst = getattr(widget_or_item, "item_instance", None)
-        return inst if inst is not None else widget_or_item
 
     def key_of(widget):
         value = frames.attr(widget, "item_id", None)
@@ -290,8 +283,8 @@ def apply(ctx):
         """主人公の装備欄の辞書が今の周回で組まれているか。まだなら組む（窓を開くときと同じ `refresh_container`）。
 
         ロードは辞書を空にし（`world_loaded`）、組み直すのは窓を開くときだった。窓を開かずに戦闘へ入ると、
-        1手ごとの `sync_game` が空の辞書を「何も装備していない」と読み、本体の武器と防具を外した
-        （実機。ロードしてすぐ戦うと、2手目から素手になりダメージが 1 桁に落ちた。版22）。
+        1手ごとの `sync_game` が空の辞書を「何も装備していない」と読み、本体の武器と防具を外す
+        （VERIFICATION.md §3.77）。
         組めなかったとき（持ち物が読めない）は偽を返し、呼び手は本体の装備に触らない。
         """
         if getattr(sys, CONTAINER_ATTR + "_playthrough", None) is None:
@@ -302,8 +295,8 @@ def apply(ctx):
         """控えから本体の `weapon` / `wearable` を決め直す。
 
         装備が変わっていなければ本体の `equip_item` は通さない。本体は装備のたびに効果音を鳴らすので、
-        毎回通していた版は、所持品の窓を開くたびに、合算を入れていると戦闘の1手ごとにも装備の音が鳴り、
-        攻撃の効果音が聞こえなくなった（別の環境の実機）。合算の表示は最後の `repaint_status` で描き直す。
+        毎回通すと、所持品の窓を開くたびに、合算を入れていると戦闘の1手ごとにも装備の音が鳴り、攻撃の効果音が聞こえなくなる
+        （VERIFICATION.md §3.75・GAME.md §2.11）。合算の表示は最後の `repaint_status` で描き直す。
 
         `force`（窓を開いたとき・本体の Manager の後の組み直し）は、画面上部の括弧の中
         （本体が持っている装備の値）が装備欄の最高値と食い違っているときだけ通す。HUD の Atk/Def は
@@ -377,17 +370,9 @@ def apply(ctx):
 
         本体は `status_texts`（Kivy の StringProperty）が変わったときだけ見張りを呼ぶ。最高値の品が
         変わらないドラッグでは文字列が同じなので、合算の値は HP や所持金が動くまで描き変わらなかった
-        （VERIFICATION.md §3.70）。見張りを直に呼べば包み（合算の描き変え）を通る。
+        （VERIFICATION.md §3.70）。見張りを直に呼べば窓口 `status_text` の書き換え（合算の描き変え）を通る。
         """
-        hud = ui.find_hud(app)
-        text = frames.attr(hud, "status_texts", None)
-        update = frames.attr(hud, "update_status_texts", None)
-        if not isinstance(text, str) or not callable(update):
-            return
-        try:
-            update(hud, text)
-        except Exception:
-            ctx.log_exc("equipment slots: repainting the status texts failed")
+        status_text.repaint(app)
 
     def after_change(app, sc):
         key, _positions = positions_of(app, sc)
@@ -1077,19 +1062,22 @@ def apply(ctx):
         battle["npc_defense"] = result
         return result
 
-    @ctx.wrap("__main__:BattlePhaseManager.resolve_battle_effect", required=False, safe=True)
-    def resolve_battle_effect(orig, self, *args, **kwargs):
+    def turn_before(call):
+        """戦闘の1手の前（ローダの窓口 `battles.EFFECT`）。手の間だけ旗を立て、装備欄の品で本体の枠を組み直す。"""
         battle["active"], battle["npc_defense"] = True, None
-        app = ui.find_app()
+        app = call.app
         if app is not None:
             try:
                 sync_game(app, player_scope(app))   # 本体の popup で枠を落とされていても、装備欄の品で戦う
             except Exception:
                 ctx.log_exc("equipment slots: sync before a battle turn failed")
-        try:
-            return orig(self, *args, **kwargs)
-        finally:
-            battle["active"] = False
+
+    def turn_after(call):
+        """戦闘の1手の後。`orig` が投げても旗を下ろす（`always=True`）。"""
+        battle["active"] = False
+
+    # 1手の前後はローダの窓口が1枚だけ包む（`get_instant_damage` は手の中でだけ合算する）。
+    battles.on(owner, ctx, (battles.EFFECT,), before=turn_before, after=turn_after, always=True, write=write)
 
     @ctx.wrap("scripts.functions:get_instant_damage", required=False, safe=True)
     def get_instant_damage(orig, *args, **kwargs):
@@ -1112,8 +1100,8 @@ def apply(ctx):
         """ロードの後で窓をまだ開いていない仲間の、読むだけの scope。控えに位置が無ければ None。
 
         ロードは仲間の scope を捨て、組み直すのは窓を開くときだけなので、それまで `gear_value` は
-        本体の `equipments`（本体が仲間の分を保存しないので空）を読み、装備が無いと答えていた
-        （実機。ロードの前に装備させた仲間3人の手に `weapon=` が付かず、同じプロセスで装備させた仲間には付いた）。
+        本体の `equipments`（本体が仲間の分を保存しないので空）を読み、装備が無いと答えてしまう
+        （VERIFICATION.md §3.77）。
         組まずに読むだけにするのは、戦闘の計算の中から呼ばれ、持ち物の辞書を書き換えたくないため
         （`worn_of` と同じ読み方）。`scopes` には載せない。
         """
@@ -1159,7 +1147,6 @@ def apply(ctx):
         value = rules.stat_of(item, stat)
         return value if value > 0 else None
 
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "333_equipment_slots"
     global SCOPE_FOR
     SCOPE_FOR = scope_for
     combat.declare(combat.ATTACK, lambda app, holder: gear_value(app, holder, "weapon"),
@@ -1179,16 +1166,14 @@ def apply(ctx):
             return "{}:{}(+{})".format(m.group(1), m.group(2), int(round(found[1])))
         return STATUS_LINE.sub(sub, text)
 
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_status_texts", safe=True)
-    def update_status_texts(orig, self, *args, **kwargs):
-        # (instance, value)。受け取った形のまま渡し、`value` だけを来た側に合わせて差し替える。
-        app = ui.find_app()
-        if app is not None:
-            value = frames.arg(args, kwargs, "value", 1)
-            restated = restate_status(app, value)
-            if restated is not value:
-                args, kwargs, _ = frames.replace_arg(args, kwargs, "value", 1, restated)
-        return orig(self, *args, **kwargs)
+    def status_line(text, app):
+        """能力欄の文字列の書き換え（ローダの窓口 `status_text`。`value` の差し替えは窓口が1回だけ行う）。"""
+        if app is None:
+            return None
+        restated = restate_status(app, text)
+        return None if restated is text else restated
+
+    status_text.on(owner, ctx, status_line, order=STATUS_ORDER, write=write)
 
     def merge_into_save(data):
         """書き出す直前のセーブ辞書へ、装備欄の品を `to_dict()` で足す。足した数を返す。
@@ -1352,15 +1337,16 @@ def apply(ctx):
         placing["cell"] = (int(grid_x), to_top_y(int(grid_y), int(height))) if reason is None else None
         return reason is None
 
-    @ctx.wrap("scripts.hud.new_hud:InventoryItem.change_inventory", safe=True)
-    def change_inventory(orig, self, *args, **kwargs):
-        old = frames.attr(self, "inventory", None)
-        new_inventory = frames.arg(args, kwargs, "new_inventory", 0)
-        result = orig(self, *args, **kwargs)
+    def change_inventory(call):
+        """品が持ち物のグリッドの間を動いた後（ローダの窓口 `twin_windows.MOVE`）。
+
+        動かす前の持ち物（`call.old_inventory`）は `orig` が書き換えるので、窓口が `orig` の前に読んである。
+        """
+        self, old, new_inventory = call.obj, call.old_inventory, call.new_inventory
         app = ui.find_app()
         sc = scope_of_grid(new_inventory) or scope_of_grid(old)
         if app is None or sc is None:
-            return result
+            return
         container = sc["container"]
         item_key = key_of(self)
         item = instance_of(self)
@@ -1399,7 +1385,7 @@ def apply(ctx):
                     after_change(app, sc)
 
                 schedule(put_back)
-                return result
+                return
             container[item_key] = item
             positions[item_key] = [cell[0], cell[1]]
             if inv is not None:
@@ -1422,7 +1408,9 @@ def apply(ctx):
             unfit_widget(app, self, sc)
             write("{}: unequipped {!r}".format(sc["key"], held_key))
         after_change(app, sc)
-        return result
+
+    # 品の移動の前後はローダの窓口が1枚だけ包む（330_ / 402_ と同じ対象）。
+    twin_windows.on(owner, ctx, (twin_windows.MOVE,), after=change_inventory, write=write)
 
     # 右クリックの popup（`ItemPopupMenu`）は右クリックのたびに作られ、ボタンはそのときの
     # `on_equip_item` / `on_unequip_item` に束縛される。ここなら包みが効く（メインスレッド）。
@@ -1648,17 +1636,13 @@ def apply(ctx):
                     "toggle_reinforcement_inventory_visibility"):
         ctx.wrap("scripts.hud.new_hud:InstanTaleHUD." + _target, required=False, safe=True)(pull_before_window)
 
-    @ctx.wrap("__main__:InstantaleApp.toggle_twin_inventory_window", required=False, safe=True)
-    def toggle_twin_window(orig, self, *args, **kwargs):
-        """402_ の受け渡しの窓。右側が同行の仲間なら、組む前にその仲間の装備欄の品を辞書から抜き、
-        組んだ後に装備欄を窓の右に出す。店（場面が違う）には出さない。
+    def twin_window_before(call):
+        """402_ の受け渡しの窓を組む前（ローダの窓口 `twin_windows.OPEN`）。右側が同行の仲間なら、
+        その仲間の装備欄の品を辞書から抜き、scope を後の処理へ渡す。店（場面が違う）には出さない。
 
-        引数の名前は本体と同じにする。店を開く本体の lambda はキーワードで渡してくるので、
-        名前が違うと値が `kwargs` に残り、位置でも渡して二重になって落ちる（版21）。
-        版28 からは名前で受けず、受け取った形のまま渡す（読むのは `frames.arg`）。"""
-        # (left_inventory_obtainer, right_inventory_obtainer, left_label_text, situation)
-        right = frames.arg(args, kwargs, "right_inventory_obtainer", 1)
-        situation = frames.arg(args, kwargs, "situation", 3)
+        引数は窓口が名前でも位置でも読み、受け取った形のまま本体へ渡す
+        （店を開く本体の lambda はキーワードで渡してくる。VERIFICATION.md §3.76）。"""
+        right, situation = call.right, call.situation
         app = ui.find_app()
         sc = None
         if (app is not None and situation == SITUATION_TWIN and right is not None
@@ -1669,17 +1653,26 @@ def apply(ctx):
                     refresh_container(app, sc)
                 except Exception:
                     ctx.log_exc("equipment slots: refreshing the npc container failed")
-        result = orig(self, *args, **kwargs)
-        if sc is not None:
-            def settle():
-                try:
-                    build_panel(app, sc)
-                    if find_grid(app, sc) is not None:
-                        schedule(lambda: build_items(app, sc), delay=SETTLE_DELAY)
-                except Exception:
-                    ctx.log_exc("equipment slots: npc panel failed")
-            schedule(settle)
-        return result
+        return (app, sc) if sc is not None else None
+
+    def twin_window_after(call):
+        """組んだ後に、仲間の装備欄を窓の右に出す（前の処理が scope を渡した回だけ）。"""
+        if call.memo is None:
+            return
+        app, sc = call.memo
+
+        def settle():
+            try:
+                build_panel(app, sc)
+                if find_grid(app, sc) is not None:
+                    schedule(lambda: build_items(app, sc), delay=SETTLE_DELAY)
+            except Exception:
+                ctx.log_exc("equipment slots: npc panel failed")
+        schedule(settle)
+
+    # 2列の画面を開く前後はローダの窓口が1枚だけ包む（312_ / 134_ / 409_ と同じ対象）。
+    twin_windows.on(owner, ctx, (twin_windows.OPEN,), before=twin_window_before, after=twin_window_after,
+                    write=write)
 
     # 402_ の「装備／外す」はローダの窓口を通してここへ来る（書く役を 1 本にする。TECH.md §3.3.5）。
     def npc_toggle(app, holder, item):
@@ -1789,15 +1782,8 @@ def apply(ctx):
         if app is not None:
             schedule(lambda: ensure_buttons(app))
 
-    def restore_buttons_after(orig, self, *args, **kwargs):
-        """タイトルへ戻るの後で、隠したアイコンのボタンを戻す。"""
-        result = orig(self, *args, **kwargs)
-        buttons_back()
-        return result
-
-    ctx.wrap("__main__:InstantaleApp.return_to_title", required=False, safe=True)(restore_buttons_after)
-    # ロードの後はローダの窓口 `loads` から（TECH.md §3.3.21）
-    loads.on(owner + ":buttons", ctx, (loads.LOAD,), after=buttons_back, write=write)
+    # ロードの後とタイトルへ戻った後に、隠したアイコンのボタンを戻す（ローダの窓口 `loads`。TECH.md §3.3.21）
+    loads.on(owner + ":buttons", ctx, (loads.LOAD, loads.TITLE), after=buttons_back, write=write)
 
     def after_refresh(app):
         """選択肢の組み直しの後（ローダの窓口 `choices` の `after`。組み直しは自分で包まない。TECH.md §3.3.14）。"""

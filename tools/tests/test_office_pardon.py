@@ -305,6 +305,8 @@ class FakeCtx:
     # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
+    #: 本物の `ctx.mod_name`（apply() の外と同じ None。窓口の持ち主は MOD の予備の名前になる）。
+    mod_name = None
 
     def logger(self, name, **kw):
         import instantale_modloader as _ml
@@ -523,8 +525,8 @@ check("spec に自前のクラス名を書かない",
 app.press(label)
 CLOCK.settle()
 check("ゲーム側の押下処理へ流していない", app.harmless == 0, app.harmless)
-check("process_choice に自前のフェーズを渡す",
-      any(name == "PardonPhase" for name, _text in app.process_choice_calls),
+check("process_choice に自前のフェーズを渡す（ローダの Screen.run_phase が作る）",
+      any(name == "_RunPhase" for name, _text in app.process_choice_calls),
       app.process_choice_calls)
 check("確認の選択肢は2つ", len(app.buttons) == 2, app.labels())
 check("金額つきの支払いボタンが出る",

@@ -185,15 +185,23 @@ check("config.json の方式を読む", mod.config_backend(config) == "sdcpp_vul
 check("config.json が無ければ None",
       mod.config_backend(os.path.join(tmp, "missing.json")) is None)
 shutil.rmtree(tmp)
-check("sdcpp_* は下線を落とした1つだけ", mod.targets_for("sdcpp_cpu") == (
+
+
+def targets_for(backend):
+    """包む対象（ローダの `imagegen.creature_targets` を2関数ぶん）。"""
+    return tuple(target for func in mod.FUNCS
+                 for target in mod.imagegen.creature_targets(func, backend))
+
+
+check("sdcpp_* は下線を落とした1つだけ", targets_for("sdcpp_cpu") == (
     "image_generation.sdcppcpu.image_generation_creature:generate_character_image",
     "image_generation.sdcppcpu.image_generation_creature:generate_character_image_from_enemy"),
-    mod.targets_for("sdcpp_cpu"))
+    targets_for("sdcpp_cpu"))
 check("diffusers_openvino は下線が残る",
-      all(".diffusers_openvino." in t for t in mod.targets_for("diffusers_openvino"))
-      and len(mod.targets_for("diffusers_openvino")) == 2)
-check("方式が分からなければ4つとも", len(mod.targets_for(None)) == 8
-      and len(mod.targets_for("new_backend")) == 8)
+      all(".diffusers_openvino." in t for t in targets_for("diffusers_openvino"))
+      and len(targets_for("diffusers_openvino")) == 2)
+check("方式が分からなければ4つとも", len(targets_for(None)) == 8
+      and len(targets_for("new_backend")) == 8)
 
 ctx = Ctx()
 mod.ui.find_app = lambda: app

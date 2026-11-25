@@ -161,17 +161,18 @@ def parse_kind(data, where=""):
 
 def _read_json(path):
     import json
-    with open(path, encoding="utf-8") as fh:
+    with open(path, encoding="utf-8-sig") as fh:          # 手で直して BOM が付いても読む
         return json.load(fh)
 
 
-def load_kinds(default_path, extra_dir=None):
+def load_kinds(default_path, extra_dir=None, unreadable=None):
     """同梱の表と、足した出来事のフォルダを読む。`(出来事の並び, 読めなかった理由の並び)`。
 
     足した出来事は同じ key の同梱の出来事を差し替え、`enabled: false` だけのものは止める。
     止めた出来事も `enabled: False` で並びに残す（新しくは起こさないが、進行中の分は最後まで進む。
     設定画面で切ったときと同じ。`use_kinds` が起こす候補から外す）。
     読めなかった出来事だけを飛ばし、ほかはふだんどおり使う。
+    `unreadable` に list を渡すと、開けなかった・JSON として読めなかったファイルのパスを積む。
     """
     import os
     problems = []
@@ -181,6 +182,8 @@ def load_kinds(default_path, extra_dir=None):
     except (OSError, ValueError) as exc:
         rows = []
         problems.append("{}: 読めない（{}）".format(os.path.basename(default_path), exc))
+        if unreadable is not None:
+            unreadable.append(default_path)
     for index, row in enumerate(rows if isinstance(rows, list) else []):
         kind, found = parse_kind(row, "{} の{}件目".format(os.path.basename(default_path), index + 1))
         problems += found
@@ -194,6 +197,8 @@ def load_kinds(default_path, extra_dir=None):
             data = _read_json(os.path.join(extra_dir, name))
         except (OSError, ValueError) as exc:
             problems.append("kinds\\{}: 読めない（{}）".format(name, exc))
+            if unreadable is not None:
+                unreadable.append(os.path.join(extra_dir, name))
             continue
         kind, found = parse_kind(data, "kinds\\{}".format(name))
         problems += found
@@ -212,6 +217,9 @@ KINDS = []
 #: 英名 → 出来事。止めた出来事も入る（進行中の分の段・値段・文を引くため）。
 KIND_BY_KEY = {}
 PROBLEMS = []
+#: 最後に読み直したとき、開けなかった・読めなかった表のファイル。在れば「表に無い種類」を片付けない
+#: （読めないだけで進行中の出来事と依頼を終わらせると、控えに書かれて表を直しても戻らない）。
+UNREADABLE = []
 
 
 def use_kinds(kinds, problems=()):
@@ -235,8 +243,16 @@ def reload_kinds(mod_dir):
     table = os.path.join(mod_dir, USER_FILE)
     if not os.path.isfile(table):
         table = os.path.join(mod_dir, DEFAULT_FILE)
-    kinds, problems = load_kinds(table, os.path.join(mod_dir, EXTRA_DIRNAME))
+    unreadable = []
+    kinds, problems = load_kinds(table, os.path.join(mod_dir, EXTRA_DIRNAME), unreadable)
+    if table in unreadable and os.path.basename(table) != DEFAULT_FILE:
+        # 手元の表が読めなければ同梱の表で動かす（読めないファイルは UNREADABLE に残す）
+        fallback = os.path.join(mod_dir, DEFAULT_FILE)
+        kinds, more = load_kinds(fallback, os.path.join(mod_dir, EXTRA_DIRNAME), unreadable)
+        head = [p for p in problems if p.startswith(USER_FILE)]      # kinds\ の分は more に同じものがある
+        problems = head + ["{} の代わりに {} を使う".format(USER_FILE, DEFAULT_FILE)] + more
     use_kinds(kinds, problems)
+    UNREADABLE[:] = list(dict.fromkeys(unreadable))
     return problems
 
 

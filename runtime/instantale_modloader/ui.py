@@ -538,6 +538,38 @@ def close_enough(value, wanted):
 BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
               "in_conversation", "in_free_input", "in_action_in_conversation")
 
+#: 戦闘の旗。ゲームはこれを下ろし忘れる経路を持っている（`107_` の表）。
+#: 旗だけで戦闘中と決めず、敵が居るか（`app.current_enemy_dict`）まで見るかは呼ぶ側が決める。
+BATTLE_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle")
+
+#: `busy_flags(app, on_quest=True)` が依頼の最中に足す理由（`338_` / `911_` のログの語のまま）。
+ON_QUEST = "on a quest"
+
+
+def busy_flags(app, flags=None, on_quest=False):
+    """立っている忙しさの旗の名前を表の順に並べる。空なら手が空いている。
+
+    `flags` を省くと `BUSY_FLAGS`（`in_shopping` を入れない理由はその註）。
+    旗は真偽で読む（`modfacility.game_is_busy` と同じ `getattr(app, 旗, False)`）。
+    `on_quest=True` なら、依頼の最中（`current_quest_id` が在る）も `ON_QUEST` を後ろに足す
+    （`338_` / `911_` は依頼の最中にも知らせを出さない）。
+    最初の1つだけ要る側は `(busy_flags(app) or [None])[0]` で受ける。
+    `busy_signals` とは別物で、あちらは画面の手が塞がっている印（`is_adding_text` など）。
+    """
+    reasons = [flag for flag in (BUSY_FLAGS if flags is None else flags) if getattr(app, flag, False)]
+    if on_quest and current_quest_id(app) is not None:
+        reasons.append(ON_QUEST)
+    return reasons
+
+
+def battle_flags(app):
+    """立っている戦闘の旗（`BATTLE_FLAGS`）の名前。空なら旗の上では戦闘中ではない。
+
+    `106_` / `324_` / `336_` / `348_` / `404_` の写しと同じく旗だけを見る。
+    旗の残骸（敵の居ない戦闘の旗）を見分けるのは呼ぶ側（`modfacility.battle_leftovers` など）。
+    """
+    return [flag for flag in BATTLE_FLAGS if getattr(app, flag, False)]
+
 
 def money(value):
     """金額の表示。3桁ごとに区切る。読めない値はそのまま文字列にする。"""
@@ -642,13 +674,6 @@ def rewrite_coins(text):
     return _rewrite_coins(text, _coin_names["long"], _coin_names["short"])
 
 
-class _KeepMissing(dict):
-    """テンプレートに無い変数名が来ても落とさない（`{typo}` はそのまま残る）。"""
-
-    def __missing__(self, key):
-        return "{" + str(key) + "}"
-
-
 def fill_template(template, **values):
     """設定のテンプレートを埋め、通貨の表記を今の表記へ直す。
 
@@ -658,12 +683,9 @@ def fill_template(template, **values):
     （`130_` が差し替えていれば `馬車(1000G・14日)` → `馬車(1000円・14日)`）。
 
     `314_` / `315_` / `332_` の `fmt` に1字違わず写されていた。
+    埋め方は `frames.safe_format`（通貨の書き換えの無い版）と同じで、その後に通貨の表記を直す。
     """
-    try:
-        filled = str(template).format_map(_KeepMissing(values))
-    except Exception:
-        filled = str(template)
-    return rewrite_coins(filled)
+    return rewrite_coins(frames.safe_format(template, **values))
 
 
 def parse_coin(text):
@@ -968,6 +990,26 @@ def quest_value(quest, name, default=None):
     return frames.attr(quest, name, default)
 
 
+#: 依頼の `config['status']` で観測できている値は2つだけ（GAME.md §2.9）。
+QUEST_COMPLETED = "completed"
+QUEST_INCOMPLETE = "incomplete"
+
+
+def quest_status(quest):
+    """依頼の状態（`config['status']` の文字列）。依頼・config・状態が読めなければ None。
+
+    インスタンスでも dict でも読む（`quest_value` を通す）。
+    値はゲームの書いたまま返し、均さない（写しはどれも `== "completed"` で比べていた）。
+    読めないときの読み方は呼ぶ側が決める。`318_` は「片付いていない」、
+    `336_` の `job_open` は `== QUEST_INCOMPLETE` だけを開いているとみなす。
+    """
+    if quest is None:
+        return None
+    config = quest_value(quest, "config", None)
+    status = config.get("status") if isinstance(config, dict) else None
+    return status if isinstance(status, str) else None
+
+
 def set_quest_value(app, quest_id, name, value, on_error=None):
     """**両方の格納先に**書く。書けた数を返す（`len(quest_stores(app))` が満額）。
 
@@ -1045,6 +1087,104 @@ def clamp_into_window(widget):
             widget.x = 0
     except Exception:
         pass          # 座標を持たない相手。置けないだけで害は無い
+
+
+# --------------------------------------------------------------------------
+# 文字を組んだ寸法（画面に出ない CoreLabel で測る）
+# --------------------------------------------------------------------------
+#: ラベルから写す書式（`_label_options`）。数と書体のほかに、折り返しに効くものを全部。
+LABEL_STYLE_KEYS = ("font_size", "line_height", "font_name", "padding", "halign", "valign", "strip")
+
+
+def _is_size(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _style_value(style, name):
+    if isinstance(style, dict):
+        return style.get(name, frames.MISSING)
+    return frames.attr(style, name)
+
+
+def _label_options(style, text, width, font_size, line_height):
+    """`kivy.core.text.Label` に渡す書式。ラベル（または同じ鍵の dict）から写す。
+
+    `118_` / `109_` は padding を写して halign / valign / strip を写さず、`345_` はその逆で、
+    写し損ねた分だけ測った値が画面とずれる。ここでは在るものを全部写す。
+    """
+    size = font_size if font_size is not None else _style_value(style, "font_size")
+    spacing = line_height if line_height is not None else _style_value(style, "line_height")
+    if width is None:
+        text_size = _style_value(style, "text_size")
+        width = text_size[0] if isinstance(text_size, (list, tuple)) and text_size else None
+    options = {
+        "text": "" if text is None else str(text),
+        "font_size": size if _is_size(size) else 12,
+        "line_height": spacing if _is_size(spacing) else 1.0,
+        "text_size": (width if _is_size(width) else None, None),
+    }
+    font_name = _style_value(style, "font_name")
+    # `frames.attr` の番人（`<missing>` / `<... while reading>`）は書体の名前ではない。
+    if isinstance(font_name, str) and font_name and not font_name.startswith("<"):
+        options["font_name"] = font_name
+    padding = _style_value(style, "padding")
+    if isinstance(padding, (list, tuple)) and len(padding) == 4:
+        options["padding"] = tuple(padding)
+    for name in ("halign", "valign"):
+        value = _style_value(style, name)
+        if value in ("left", "center", "right", "justify", "top", "middle", "bottom", "auto"):
+            options[name] = value
+    strip = _style_value(style, "strip")
+    if isinstance(strip, bool):
+        options["strip"] = strip
+    return options
+
+
+def text_height(label_or_style, text, width=None, *, font_size=None, line_height=None):
+    """`text` をそのラベルの書式で組んだときの高さ（px の float）。測れなければ None。
+
+    画面に出ない `kivy.core.text.Label` を1枚焼いて寸法だけ取る（`109_` / `118_` の手）。
+    表示中のラベルには触らない（`text_size` を書いて `texture_update()` すると、
+    測るたびに表示中の箱が焼き直され、測定用の値が残る。`109_` の註）。
+
+    `label_or_style` はラベル、または `LABEL_STYLE_KEYS` と `text_size` を鍵に持つ dict。
+    書式は在るものを全部写す（`_label_options`）。
+    `width` は折り返す幅。省くとラベルの `text_size` の幅（`118_`）で、それも無ければ折り返さない。
+    ラベルの幅で折り返したい側（`345_`）は `label.width` を渡す。
+    `font_size` / `line_height` を渡すとラベルの値の代わりに使う（大きさを試す側）。
+    Kivy の無い環境（設定画面・テスト）や組版の失敗では None を返す。
+    """
+    try:
+        from kivy.core.text import Label as CoreLabel
+    except Exception:
+        return None
+    try:
+        probe = CoreLabel(**_label_options(label_or_style, text, width, font_size, line_height))
+        probe.refresh()
+        return float(probe.texture.size[1])
+    except Exception:
+        return None
+
+
+def text_lines(label_or_style, text, width=None, *, font_size=None, line_height=None):
+    """`text` を組んだときの `(行数, 1行の高さ)`。測れなければ None。
+
+    ラベル自身は箱の高さを超えた行を捨てるので、画面のラベルからは行数を読めない（GAME.md §2.29）。
+    高さの制限を外した別の組版で数える（`345_` の手。`render(real=False)` の後の
+    `_cached_lines` を読む。非公開の属性なので、読めなければ None）。
+    1行の高さは各行の高さの最大。引数は `text_height` と同じ。
+    """
+    try:
+        from kivy.core.text import Label as CoreLabel
+    except Exception:
+        return None
+    try:
+        core = CoreLabel(**_label_options(label_or_style, text, width, font_size, line_height))
+        core.render(real=False)
+        lines = core._cached_lines
+        return len(lines), max((line.h for line in lines), default=0)
+    except Exception:
+        return None
 
 
 # --------------------------------------------------------------------------
@@ -1561,6 +1701,121 @@ def area_id_of(area):
     return str(getattr(area, "id", "")) if area is not None else ""
 
 
+def _area_key(area_or_id):
+    """土地の id の文字列と、手元に在る土地（オブジェクトか dict。無ければ None）。
+
+    id の 0 が整数で来ても空と同じ扱いにしない（`405_` が踏んだ）。真偽値は id ではない。
+    """
+    if area_or_id is None or isinstance(area_or_id, bool):
+        return "", None
+    if isinstance(area_or_id, (str, int)):
+        return str(area_or_id).strip(), None
+    if isinstance(area_or_id, dict):
+        value = area_or_id.get("id")
+    else:
+        try:
+            value = getattr(area_or_id, "id", None)
+        except Exception:
+            value = None
+    key = "" if value is None or isinstance(value, bool) else str(value).strip()
+    return key, area_or_id
+
+
+def _saved_areas(app):
+    """セーブ側の土地の表 `{id: dict}` を見る順に並べる。
+
+    順は `save_data_dict` → その `world_data` → `world_dict` → その `world_data`
+    （`323_` / `326_` が降りていた範囲。いま遊んでいるセーブを骨格より先に見る）。
+    """
+    tables = []
+    for attr in ("save_data_dict", "world_dict"):
+        container = getattr(app, attr, None)
+        if not isinstance(container, dict):
+            continue
+        inner = container.get("world_data")
+        for holder in (container, inner):
+            areas = holder.get("areas") if isinstance(holder, dict) else None
+            if isinstance(areas, dict) and not any(areas is seen for seen in tables):
+                tables.append(areas)
+    return tables
+
+
+def _saved_area(areas, key):
+    """表から id で1件引く。鍵が文字列で一致しなければ鍵を文字列に均して引き直す。"""
+    entry = areas.get(key)
+    if entry is None:
+        entry = next((value for name, value in areas.items() if str(name) == key), None)
+    return entry if isinstance(entry, dict) else None
+
+
+def _area_text(holder, name):
+    """土地（オブジェクトか dict）の文字列の項目。空白だけ・文字列でなければ None。"""
+    if holder is None:
+        return None
+    if isinstance(holder, dict):
+        value = holder.get(name)
+    else:
+        try:
+            value = getattr(holder, name, None)
+        except Exception:
+            value = None
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def area_size(app, area_or_id):
+    """土地の規模（`village` / `town` / `city` など）を小文字で返す。読めなければ None。
+
+    実行時の `Area.size` は読めない（GAME.md §2.7）ので、セーブ側の土地の表から引く。
+    写し（`121_` / `323_` / `324_` / `325_` / `326_` / `331_` / `338_` / `339_` / `405_`）の
+    一番広い読み方にそろえてある。
+
+      1. 渡された土地そのものの `size`（オブジェクトでもセーブの dict でも。`324_` / `325_`）
+      2. `save_data_dict` とその `world_data`、`world_dict` とその `world_data` の `areas`
+         （`323_` / `326_`）。鍵が文字列で一致しなければ鍵を均して引き直す（`324_` / `325_` / `405_`）
+      3. 実行時の土地の表（`world_areas`）の `size`（`323_`）
+
+    `area_or_id` は土地のオブジェクト・セーブの dict・id（文字列か整数）のどれでもよい。
+    値は strip して小文字にするだけで、別名の読み替えや知らない規模を弾くことはしない
+    （規模の表は MOD ごとに違う。`324_` の `SIZE_ALIAS` など）。
+    `405_` の「いま遊んでいる世界の側を先に見る」は持たない（同じ世界ならセーブと骨格は同じ値）。
+    `323_` / `326_` は読めないと空文字を返していた（こちらは None）。
+    """
+    key, area = _area_key(area_or_id)
+    size = _area_text(area, "size")
+    if size:
+        return size.lower()
+    if not key:
+        return None
+    for areas in _saved_areas(app):
+        size = _area_text(_saved_area(areas, key), "size")
+        if size:
+            return size.lower()
+    size = _area_text(world_areas(app).get(key), "size")
+    return size.lower() if size else None
+
+
+def area_name(app, area_or_id, fallback="", limit=40):
+    """土地の名前。取れなければ `fallback`（`facility_name` と対）。
+
+    `area_or_id` は土地のオブジェクト・セーブの dict・id（文字列か整数）のどれでもよい。
+    id なら実行時の土地の表（`world_areas`）から引き、無ければセーブ側の土地の表
+    （`area_size` と同じ範囲）の `name` を見る（ロードの途中で実行時の世界がまだ無いとき）。
+    空白だけの名前も無いとみなす（`326_`）。名前は `frames.short(名前, limit)` で切る
+    （`307_` / `317_` の40字。`limit=None` なら切らない）。`fallback` は切らない。
+    代わりの語（この土地・この街・id など）は MOD ごとに違うので呼ぶ側が渡す。
+    """
+    key, area = _area_key(area_or_id)
+    name = _area_text(area, "name")
+    if not name and key:
+        if area is None:
+            name = _area_text(world_areas(app).get(key), "name")
+        for areas in ([] if name else _saved_areas(app)):
+            name = _area_text(_saved_area(areas, key), "name")
+            if name:
+                break
+    return frames.short(name, limit) if name else fallback
+
+
 # --------------------------------------------------------------------------
 # 手配度（GAME.md §2.20）
 # --------------------------------------------------------------------------
@@ -1895,6 +2150,50 @@ def facility_name(app, facility, limit=40):
             if found is not None:
                 return facility_name(app, found, limit)
     return ""
+
+
+def facility_owner(app, facility=None):
+    """施設の主を `(主の id（文字列）, 主の人物)` で返す。主が居なければ `(None, None)`。
+
+    `facility` を省くと、いま居る施設（`current_facility`）。施設の id（文字列か整数）なら
+    いま居る土地から引き当てる。施設はオブジェクトでも dict でもよい。
+
+    `Facility.owner` の持ち方に合わせて（写し: `312_` / `327_` / `336_` / `341_` / `405_` / `902_`）:
+
+      * id（文字列か整数）なら文字列にして `character_of` で人物を引く。人物が引けなければ `(id, None)`
+      * 人物そのもの（`405_` が受けていた形）なら、その id（`id` / `character_id` / `npc_id`）と人物。
+        id が読めなければ `(None, 人物)`
+      * None・空文字・空白だけ・真偽値・dict・list は主なし（`336_` の office と `902_` は空文字を、
+        `327_` は dict / list を主なしとみなしていた）
+
+    店か・主が MOD の人物（`mod:` で始まる id）かの判定は呼ぶ側に残す。
+    """
+    if facility is None:
+        facility = current_facility(app)
+    elif isinstance(facility, (str, int)) and not isinstance(facility, bool):
+        facility, _node = find_facility(current_area(app), str(facility))
+    if facility is None or isinstance(facility, bool):
+        return None, None
+    if isinstance(facility, dict):
+        owner = facility.get("owner")
+    else:
+        try:
+            owner = getattr(facility, "owner", None)
+        except Exception:
+            owner = None
+    if owner is None or isinstance(owner, (bool, dict, list, tuple, set)):
+        return None, None
+    if isinstance(owner, (str, int)):
+        owner_id = str(owner).strip()
+        return (owner_id, character_of(app, owner_id)) if owner_id else (None, None)
+    for name in ID_ATTRS:
+        try:
+            value = getattr(owner, name, None)
+        except Exception:
+            value = None
+        if isinstance(value, (str, int)) and not isinstance(value, bool) and str(value).strip():
+            return str(value).strip(), owner
+    return None, owner
 
 
 # --------------------------------------------------------------------------
@@ -2272,10 +2571,8 @@ def refresh_choices_after_load(ctx, write=None, tries=12, interval=0.25):
     呼ばれるたびに `modloader.log` へ WARN で移行を促す（呼んだ MOD の名前つき）。
     """
     _warn_after_load_deprecated(ctx)
-    shared = getattr(sys, _AFTER_LOAD_ATTR, None)
-    if not isinstance(shared, dict):
-        shared = {"token": None}
-        setattr(sys, _AFTER_LOAD_ATTR, shared)
+    from . import state
+    shared = state.process_store(_AFTER_LOAD_ATTR, {"token": None})
 
     @ctx.wrap("__main__:InstantaleApp.load_game_new", required=False, safe=True)
     def load_game_new(orig, self, *args, **kwargs):
@@ -2362,6 +2659,24 @@ def character_name(app, character_id, limit=40, fallback=None):
     if isinstance(name, str) and name.strip():
         return frames.short(name, limit)
     return str(character_id) if fallback is None else fallback
+
+
+def player_name(app, fallback="", limit=None):
+    """主人公の名前（`app.player.name`）。文字列でない・空白だけなら `fallback`。
+
+    名前は strip して返し、`limit` があれば `frames.short(名前, limit)` で切る（`317_` は40字）。
+    `fallback` は切らない。代わりの語は MOD ごとに違い、頼みの文に入るので呼ぶ側が渡す
+    （プレイヤー・プレイヤーキャラクター・冒険者・主人公・旅人など）。
+    `app` そのものの `name` は見ない（Kivy の `App.name` はアプリ名を返す）。
+    `talk_summary.player_name(app)` はこれを `fallback="プレイヤー"` で呼ぶ。
+    """
+    try:
+        name = getattr(getattr(app, "player", None), "name", None)
+    except Exception:
+        name = None
+    if not isinstance(name, str) or not name.strip():
+        return fallback
+    return frames.short(name, limit)
 
 
 #: 戦闘で逃げた者の預かり。逃げる手で `app.party` から外した者を、ゲームはここへ入れる（GAME.md §2.10）。
@@ -2588,6 +2903,19 @@ def window_watcher(ctx, handler, attr, tag="mod"):
             return False
 
     return watch_window
+
+
+class _RunPhase(object):
+    """`Screen.run_phase` が作る使い捨てのフェーズ。**`PhaseSpec` には決して載せない。**
+
+    `process_choice` はインスタンスを受け取るので、`__main__` に名前が無くてよい。
+    """
+
+    def __init__(self, run):
+        self._run = run
+
+    def execute(self, choice_text):
+        return self._run()
 
 
 class Screen(object):
@@ -3059,6 +3387,53 @@ class Screen(object):
             except Exception:
                 self._oops("direct dispatch failed")
         return False
+
+    def run_phase(self, app, choice_text, fn, *args, label=None, acting=None,
+                  busy_off_on_error=False, on_error=None):
+        """押されたボタンの処理 `fn(app, *args)` を、ゲームと同じ経路（`start_phase`）で走らせる。
+
+        MOD が各自で書いていた「`execute(choice_text)` だけを持つ自前のフェーズ」
+        （`301_` / `307_` / `320_` / `325_` / `330_` / `331_` / `336_` / `348_` / `925_` / `926_`）の代わり。
+        フェーズはこちらで作るので、`PhaseSpec` に載せない注意もここだけで済む。
+
+          * `fn` はゲームの別スレッド（`execute` の中）で呼ばれる。例外はゲームへ抜けさせず、
+            `ctx.log_exc("<tag>: phase <label> failed")` に残す（`label` を省くと `fn` の名前）
+          * `acting=(dict, 鍵)` を渡すと、`fn` の間だけ `dict[鍵] = True` にし、終わったら（投げても）
+            False に戻す（`325_` / `330_` / `331_` の連打よけ。2発目を捨てる判断は押下の側に残る）
+          * `busy_off_on_error=True` なら、投げたときに待機表示（`busy_on`）が出ていれば解く（`336_`）
+          * `on_error(app)` は投げたときに呼ぶ（その中の例外も残して握る）
+          * `process_choice` が使えなければ `fn(app, *args)` を直に呼ぶ（写しの `fallback` と同じく、
+            直に呼ぶ道では `acting` と失敗の手当てを通さない）
+
+        `choice_text` を `fn` に渡したい側は `args` に入れる
+        （`execute` が受ける文字列は `process_choice` に渡した `choice_text` そのもの）。
+        `fn` の戻り値は `execute` の戻り値になる（投げたときは None）。
+        処理が偽を返したときの手当て（`926_` の塗り直し）は `fn` の中に書く。
+        戻り値は `start_phase` と同じ（`process_choice` に渡せたら True）。
+        """
+        name = label if label is not None else getattr(fn, "__name__", "phase")
+
+        def run():
+            if acting is not None:
+                acting[0][acting[1]] = True
+            try:
+                return fn(app, *args)
+            except Exception:
+                self.ctx.log_exc("{}: phase {!r} failed".format(self.tag, name))
+                try:
+                    if busy_off_on_error and self.is_busy():
+                        self.busy_off(app)
+                    if on_error is not None:
+                        on_error(app)
+                except Exception:
+                    self._oops("cleanup after phase {!r} failed".format(name))
+                return None
+            finally:
+                if acting is not None:
+                    acting[0][acting[1]] = False
+
+        return self.start_phase(app, _RunPhase(run), choice_text,
+                                fallback=lambda: fn(app, *args))
 
     # -- 手が空くのを待つ ---------------------------------------------------
     def _others_busy(self, app):

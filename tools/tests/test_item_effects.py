@@ -155,6 +155,8 @@ class FakeCtx(object):
         return path
 
     _mod = "134_balance_item_effects"
+    # 本物の `ctx.mod_name` と同じく mod のフォルダ名（窓口に名乗る持ち主）
+    mod_name = _mod
 
     def logger(self, name, **kw):
         import instantale_modloader as _ml
@@ -189,6 +191,11 @@ def load_mod(name="item_effects_mod"):
 def fresh_mod(app, lang="ja"):
     if hasattr(sys, "_instantale_item_effects_store"):
         delattr(sys, "_instantale_item_effects_store")
+    # 窓口の登録と包みの印を素へ戻す（生成の入口・画面・説明欄はローダの窓口 `items` / `twin_windows` の包みを通して確かめる）
+    from instantale_modloader import gates, items, twin_windows
+    gates.reset_all()
+    items.reset()
+    twin_windows.reset()
     sys.modules["scripts.languages"] = types.SimpleNamespace(language=lang)
     module = load_mod()
     module.ui = FakeUI(app)

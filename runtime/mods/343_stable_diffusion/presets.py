@@ -36,9 +36,10 @@ import os
 import time
 
 try:                      # MOD 本体からはパッケージの隣、道具と検査からは素の名前で
-    from . import assets
+    from . import assets, rules
 except ImportError:
     import assets  # noqa: E402  自分の隣（モデルの置き場）
+    import rules  # noqa: E402  在るのに読めないファイルの判定
 
 #: 段のサンプラーの設定名。
 _STAGE = ("METHOD", "STEPS", "CFG", "SCHEDULER")
@@ -137,7 +138,7 @@ def custom_path(state_dir):
 def load_custom(state_dir):
     """カスタムプリセットの並び（保存した順）。無い・壊れているなら空。"""
     try:
-        with io.open(custom_path(state_dir), encoding="utf-8") as fh:
+        with io.open(custom_path(state_dir), encoding="utf-8-sig") as fh:
             data = json.load(fh)
     except Exception:
         return []
@@ -151,15 +152,10 @@ def load_custom(state_dir):
 
 def _write_custom(state_dir, rows):
     path = custom_path(state_dir)
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp = path + ".tmp"
-        with io.open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-            fh.write(json.dumps({"presets": rows}, ensure_ascii=False, indent=1))
-        os.replace(tmp, path)
-        return True
-    except Exception:
+    # `load_custom` は読めないファイルを空として返す。それを土台に書くと残っていたプリセットが消える。
+    if rules.json_unreadable(path):
         return False
+    return rules.write_json(path, {"presets": rows})
 
 
 def find_custom(state_dir, name):

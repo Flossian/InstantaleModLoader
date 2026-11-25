@@ -70,6 +70,8 @@ def check(name, cond, detail=""):
 # ---------------------------------------------------------------- 偽物
 class Ctx(object):
     _mod = None
+    # 本物の `ctx.mod_name` と同じく mod のフォルダ名（窓口に名乗る持ち主）
+    mod_name = "347_conversation_expressions"
 
     def __init__(self, out_dir):
         self.out_dir = out_dir
@@ -125,6 +127,10 @@ llm.watch_aliases = fake_watch
 class FakeField(object):
     def __init__(self, default, description=None):
         self.default, self.description = default, description
+
+    def __repr__(self):
+        # pydantic の FieldInfo と同じく中身で表す（`llm.extend_structure` は欄の repr で同じ組かを見る）
+        return "FakeField(default={!r}, description={!r})".format(self.default, self.description)
 
 
 made = []
@@ -185,6 +191,8 @@ try:
     main.APP = APP
 
     expressions.reset()
+    # 送り口はローダの窓口 `llm.on_request` の包みを通して確かめる（見張りは上の fake_watch がその場で立てる）
+    llm.reset_requests()
     if hasattr(sys, MOD.SHOWN_ATTR):
         delattr(sys, MOD.SHOWN_ATTR)
     ctx = Ctx(tempfile.mkdtemp(prefix="conversation_expressions_ctx_"))
@@ -197,6 +205,9 @@ try:
           registered.get("owner") == MOD.OWNER and registered.get("npc_id") == modnpc.ANY
           and callable(registered.get("prompt")))
     on_prompt = registered["prompt"]
+    check("送り口はローダの窓口 llm.on_request に載る（自分では包まない）",
+          llm.request_owners() == [Ctx.mod_name] and MOD.SEND_TARGETS[0] in installed,
+          (llm.request_owners(), list(installed)))
 
     print("プロンプト")
     args = {"response_prompt_instruction": "【返答の要素】\n- 指示: ...\n"}

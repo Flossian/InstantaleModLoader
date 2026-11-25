@@ -10,7 +10,7 @@
     "en": "When you clear or abandon a quest, the calendar advances by one inn stay, up to 30 days. Talks from before the quest are no longer treated as earlier today. Off by default",
     "ja": "依頼を片付けるか放棄して帰還すると、宿の宿泊1回ぶん（最大30日）日付が進む。出発前の会話が今日の続きとして扱われなくなる。既定は切"
   },
-  "version": "3",
+  "version": "4",
   "author": "R01/Flossian",
   "after": [
     "142_balance_quest_stamina",

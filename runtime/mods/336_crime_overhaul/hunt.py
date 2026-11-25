@@ -20,7 +20,7 @@
 「追手が来る手配」を同じ数で比べられる。
 """
 
-from instantale_modloader import wanted
+from instantale_modloader import frames, wanted
 
 #: 手配とみなす境界。これ未満の手配度が手配（役場の罰金の既定と同じ）。
 #: 設定にしていないのは、ここを動かすと平常（10）の土地まで手配に数え始めて、
@@ -45,8 +45,8 @@ def weights(by_area):
 
 
 def total_weight(by_area):
-    """全ての土地の重さの合計。"""
-    return sum(weights(by_area).values())
+    """全ての土地の重さの合計（`wanted.total_of`）。"""
+    return wanted.total_of(by_area or {})
 
 
 def area_weight(by_area, area_id):
@@ -113,7 +113,7 @@ def ready(day, last_day, cooldown_days):
 
 def purse(quest_reward, pct):
     """追手の懐の前金。依頼1件の報酬 × 割合（%）。報酬が引けない・割合が 0 以下なら 0。"""
-    if isinstance(quest_reward, bool) or not isinstance(quest_reward, (int, float)) or quest_reward <= 0:
+    if not frames.is_number(quest_reward) or quest_reward <= 0:
         return 0
     try:
         pct = float(pct)

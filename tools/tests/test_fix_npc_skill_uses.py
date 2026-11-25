@@ -54,6 +54,7 @@ def check(name, cond, detail=""):
 class Ctx(object):
     def __init__(self):
         self.hooks, self.lines, self.errors = {}, [], []
+        self.mod_name = "137_fix_npc_skill_uses"
 
     def logger(self, name, **kw):
         return self.lines.append
@@ -98,7 +99,10 @@ mod.ui = types.SimpleNamespace(find_app=lambda: None, party_member_ids=lambda ap
 mod.apply(ctx)
 referee = ctx.hooks["scripts.llm.llm_manager_battle:referee_npc"]
 save = ctx.hooks["__main__:InstantaleApp.save_game"]
-rest = ctx.hooks[mod.REST_TARGET]
+rest = ctx.hooks[mod.stays.TARGETS[mod.stays.REST]]   # 休養はローダの窓口 stays の関所
+check("戦闘の始まりと休養は窓口に載る",
+      mod.battles.owners(mod.battles.START) == ["137_fix_npc_skill_uses"]
+      and mod.stays.owners(mod.stays.REST) == ["137_fix_npc_skill_uses"])
 
 actor = types.SimpleNamespace(name="リュウ", skills=companion_skills())
 original = actor.skills

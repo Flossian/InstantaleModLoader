@@ -6,7 +6,7 @@
 乱数が無い argmax なので、外見文が定型化している品種では同じ画像に集中する（実測: potion は 52個中35個が同じ1枚。
 調査の全数値は VERIFICATION.md §3 の 128_ の項）。
 
-仕様は2行に尽きる（版6でここへ立ち返って作り直した）:
+仕様は2行に尽きる:
 
 - **同じアイテムの再入手は同じ絵**（同じ敵の同じドロップ・再ドロップ）
 - **別のアイテムには別の絵**（別名なのに同じ見た目、を避ける）
@@ -33,7 +33,7 @@ mushroom 28 / accessory 1）の追加辞書 `data/<item_detail>.json` を実行�
 
 もう1つ、素材に無い絵を足す。銃と爆発物・中世の武器と防具・魔法武器・防具と服と装身具。
 どれも画像生成 AI で作った一枚絵から起こした。
-分類は同じ種類の元画像をまとめた単位（`categories.json` の `sources`。版10 で119分類を45分類（品の種類：ジャンル）にまとめ、防具：ファンタジーを中世・ファンタジー・ハイファンタジー・ダークファンタジーに分け、防具：魔法とSF と食料：近世を足して50分類）。
+分類は同じ種類の元画像をまとめた単位（品の種類：ジャンル。`categories.json` の `sources`）。
 絵と辞書は分類ごとのフォルダに分ける（`images/<分類>/`・`data/<分類>/<品種>.json`）。
 分類ごとの設定で使い方を決める（使わない／素の絵と混ぜる／別扱い）。使わない分類は辞書を読まない。分類のフォルダを消しても動く。
 絵はゲームのフォルダには置かず、`images/<分類>/Assets/images/item_candidates_dark/<品種>/` に
@@ -66,8 +66,8 @@ import sys
 import threading
 import typing
 
-from instantale_modloader import llm, patch
-from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore,
+from instantale_modloader import frames, items, llm, patch, read_json
+from instantale_modloader.state import (UNKNOWN_WORLD, WorldSettings,
                                         world_filename, world_key)
 
 # 候補を類似度上位から最大何件まで広げるか。
@@ -403,7 +403,7 @@ IMAGE_SETS = (
     ("document_fantasy", "SET_DOCUMENT_FANTASY"),
     ("document_earlymodern", "SET_DOCUMENT_EARLYMODERN"),
 )
-# 版10 で分類を「品の種類：ジャンル」にまとめた（元画像1枚＝1分類の119分類 → 45分類）。旧い設定名で書かれたワールド個別設定を読むための表
+# 旧い設定名（元画像1枚＝1分類だったころの名前）で書かれたワールド個別設定を読むための表
 OLD_SETTINGS = {
     "SET_CREATURE_FANG": "SET_MATERIAL_CREATURE",
     "SET_CREATURE_MATERIAL": "SET_MATERIAL_CREATURE",
@@ -545,17 +545,20 @@ GENRE_WEIGHTS_FILE = "weights.json"
 # ワールド個別の設定の控え（`state/item_image_variety/<世界>.json`。一括設定と違う項目だけ）。
 # 名前は設定画面の道具（`modtool.state_dirname`）が作る名前と同じ。TECH.md §3.12.1
 SETTINGS_DIRNAME = "item_image_variety"
-SETTINGS_STORE_ATTR = "_iml_item_image_world_settings"
 # 世界ごとに上書きできる設定（mod.json の settings と同じ並び）
 SETTING_NAMES = (("TOP_K", "SIM_FLOOR", "SIM_GAP", "TAG_PENALTY", "USE_EXTRA_DICT", "USE_REDRAW", "CROSS_SLOT", "KIND_CHECK")
                  + tuple(setting for _genre, setting in GENRE_SETTINGS) + ("GENRE_BONUS",)
                  + tuple(setting for _name, setting in IMAGE_SETS))
 
 
-def read_genre_weights(mod_dir, user_path):
+def _quiet(_message):
+    """`read_genre_weights` の既定の記録先。設定画面からも呼ぶので、ローダのログへは書かない。"""
+
+
+def read_genre_weights(mod_dir, user_path, report=None):
     """`(素の絵の重み, {分類: {ジャンル: 重み}})`。既定（`genres.json`）に、変えた値（user_path）を重ねる。
-    読めない・形の違う値は既定のまま。ジャンルは `GENRE_SETTINGS` にあるものだけ。"""
-    import json
+    読めない・形の違う値は既定のまま。ジャンルは `GENRE_SETTINGS` にあるものだけ。
+    読み方はローダの `read_json`（BOM 付きも読む）。在るのに読めないファイルは `report` に1行渡す。"""
     known = {genre for genre, _setting in GENRE_SETTINGS}
 
     def clean(table):
@@ -565,18 +568,12 @@ def read_genre_weights(mod_dir, user_path):
                 if genre in known and isinstance(value, (int, float)) and not isinstance(value, bool):
                     out[genre] = max(0.0, min(1.0, float(value)))
         return out
-    try:
-        with open(os.path.join(mod_dir, "genres.json"), encoding="utf-8") as fh:
-            base = json.load(fh)
-    except (OSError, ValueError):
-        base = {}
+    report = report or _quiet
+    base = read_json(os.path.join(mod_dir, "genres.json"), {}, report=report)
+    base = base if isinstance(base, dict) else {}
     stock = clean(base.get("stock"))
     weights = {cat: clean(table) for cat, table in (base.get("weights") or {}).items()}
-    try:
-        with open(user_path, encoding="utf-8") as fh:
-            user = json.load(fh)
-    except (OSError, ValueError):
-        user = {}
+    user = read_json(user_path, {}, report=report)
     if isinstance(user, dict):
         if "stock" in user:
             stock.update(clean(user.get("stock")))
@@ -636,6 +633,7 @@ def apply(ctx):
     retired = ctx.read_json(os.path.join(ctx.mod_dir, "data", RETIRED_FILE), default=None)
     retired = retired if isinstance(retired, dict) else {}
     retire_log = ctx.logger("item_image.log")
+    owner = ctx.mod_name or "128_item_image_variety"
     seen = {}
 
     def visible(src):
@@ -652,18 +650,15 @@ def apply(ctx):
         return seen[src]
 
     def replacement(src):
-        """見つからない絵のパスの付け替え先（同じ書き方のパス）。表に無ければ None。"""
+        """見つからない絵のパスの付け替え先（同じ書き方のパス）。表に無ければ None。
+        部位をまたいだ絵の写し `xs.<元の部位>.<鍵>` は、元の部位の今の絵を直に指す（`stock_key` が元の部位と鍵を返す）。"""
+        sk = stock_key(src)
+        new = None if sk is None else retired.get("{}/{}".format(*sk))
+        if new is None:
+            return None
         norm = src.replace("\\", "/")
         marker = IMAGE_REL.replace(os.sep, "/") + "/"
-        at = norm.find(marker)
-        if at < 0 or not norm.endswith(".png"):
-            return None
-        slot, _, key = norm[at + len(marker):-4].partition("/")
-        if key.startswith(CROSS_PREFIX):
-            # 部位をまたいだ絵の写し `xs.<元の部位>.<鍵>`。元の部位の今の絵を直に指す
-            slot, _, key = key[len(CROSS_PREFIX):].partition(".")
-        new = retired.get("{}/{}".format(slot, key))
-        return None if new is None else "{}{}/{}.png".format(norm[:at + len(marker)], slot, new)
+        return "{}{}/{}.png".format(norm[:norm.find(marker) + len(marker)], sk[0], new)
 
     def remapped(src, where):
         """足した絵のパスが見つからなければ、付け替え先のパス。付け替えないなら None。"""
@@ -678,17 +673,18 @@ def apply(ctx):
             retire_log("retired: no image for {}".format(src))
         return None
 
-    @ctx.wrap("scripts.items:Item.__init__", required=False, safe=True)
-    def item_init(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
-        new = remapped(getattr(self, "image_src", None), "")
+    def item_built(call):
+        # 品を組み終えた後に絵を付け替える。`Item.__init__` はローダの窓口 `items` が1枚だけ包む（TECH.md §3.3.21）
+        item = call.obj
+        new = remapped(getattr(item, "image_src", None), "")
         if new is not None:
-            self.image_src = new
-        return result
+            item.image_src = new
+
+    items.on(owner, ctx, (items.BUILD,), after=item_built, write=retire_log)
 
     # 品の絵を描く所（所持品・装備欄・売買・クラフトの窓が同じ部品を組む）でも付け替える。
     # 読み込みが起動直後の当て直しの最中に重なると `Item.__init__` の包みが抜けていて、
-    # 品は外した鍵のまま作られる（10-23 に世界Fで白い枠が残った。VERIFICATION.md §3.26）。
+    # 品は外した鍵のまま作られる（VERIFICATION.md §3.26）。
     # 描く前に直せば、どの入れ物の品でも、読み込みの時刻によらず白い枠にならない。品の `image_src` も直すので次の保存で残る
     # 描き直しの置き場（ctx.mod_dir は包みが走るときには残っていない。ここで控える）
     redraw_root = os.path.join(ctx.mod_dir, "images", REDRAW_DIRNAME)
@@ -709,10 +705,12 @@ def apply(ctx):
     @ctx.wrap("scripts.hud.new_hud:InventoryItem.__init__", required=False, safe=True)
     def inventory_item_init(orig, self, *args, **kwargs):
         # InventoryItem.__init__(self, width_slots, height_slots, image_src, rarity, text, item_id, item_instance, inventory)
-        src = args[2] if len(args) > 2 else kwargs.get("image_src")
+        # 位置は self を除いて数える
+        original = frames.arg(args, kwargs, "image_src", 2)
+        src = original
         new = remapped(src, " (shown)")
         if new is not None:
-            item = args[6] if len(args) > 6 else kwargs.get("item_instance")
+            item = frames.arg(args, kwargs, "item_instance", 6)
             if item is not None and getattr(item, "image_src", None) == src:
                 item.image_src = new
             src = new
@@ -720,11 +718,8 @@ def apply(ctx):
         shown = redrawn(src)
         if shown is not None:
             src = shown
-        if src != (args[2] if len(args) > 2 else kwargs.get("image_src")):
-            if len(args) > 2:
-                args = args[:2] + (src,) + tuple(args[3:])
-            else:
-                kwargs = dict(kwargs, image_src=src)
+        if src != original:
+            args, kwargs, _ = frames.replace_arg(args, kwargs, "image_src", 2, src)
         return orig(self, *args, **kwargs)
 
     # 無ければローダの保留に積んで降りる（`patch.await_module`）。来たらローダが当て直す。
@@ -734,7 +729,8 @@ def apply(ctx):
         ctx.log("{} not loaded yet; waiting for it".format(EMBEDDING_MODULE))
         return
 
-    log = ctx.logger("item_image.log")
+    # 付け替えと同じファイルなので同じロガー（錠はロガーごと。別に作ると2本の追記が直列化されない）
+    log = retire_log
     # ctx.mod_dir / ctx.state_path は apply() の外を当てにしない。ここで控える。
     mod_dir = ctx.mod_dir
     state_dir = ctx.state_path("item_image")
@@ -761,39 +757,21 @@ def apply(ctx):
     }
 
     # ワールド個別の設定。控えのある世界ではその値を、無い世界では一括設定（ローダが注入した値）を使う。
-    # 置き場は `sys`（当て直しで作り直した空の器を握らないため。`314_` と同じ）。
-    settings_store = getattr(sys, SETTINGS_STORE_ATTR, None)
-    if not isinstance(settings_store, WorldStore):
-        settings_store = WorldStore(ctx, SETTINGS_DIRNAME, default=dict, write=log)
-        setattr(sys, SETTINGS_STORE_ATTR, settings_store)
-    else:
-        settings_store.rebind(ctx, log)
-    # 注入のたびにモジュールは作り直され、一括設定を注入してからここへ来る。
-    # だからここで控えた値がそのまま一括設定（`sys` には置かない。TECH.md §3.12.1）
-    base_settings = {name: globals()[name] for name in SETTING_NAMES}
-    active_settings = [None]
+    # 読み方・型の照合・変わったときだけ反映するのはローダの `state.WorldSettings`（TECH.md §3.12.1）。
+    # 注入のたびにモジュールは作り直され、一括設定を注入してからここへ来るので、ここで作れば写す値が一括設定になる。
+    # 旧い設定名（OLD_SETTINGS）で書かれた値は、まとめた分類の設定として読む（新しい名前が先）。
+    world_settings = WorldSettings(ctx, SETTINGS_DIRNAME, SETTING_NAMES, globals(), write=log,
+                                   aliases=OLD_SETTINGS)
 
-    def refresh_settings(world):
+    def refresh_settings(app):
         """その世界の個別設定を一括設定に重ねて、モジュールの値にする。型の違う値は使わない。"""
-        record = settings_store.load(world, fresh=True) if world != UNKNOWN_WORLD else {}
-        values = {}
-        if isinstance(record, dict):
-            # 版9 までの分類ごとの設定名（OLD_SETTINGS）で書かれた値は、まとめた分類の設定として読む（新しい名前が先）
-            record = dict(record)
-            for old, new in OLD_SETTINGS.items():
-                if old in record and new not in record:
-                    record[new] = record[old]
-        for name in SETTING_NAMES:
-            value = record.get(name) if isinstance(record, dict) else None
-            values[name] = value if value is not None and type(value) is type(base_settings[name]) \
-                else base_settings[name]
-        signature = (world, tuple(sorted(values.items())))
-        if signature != active_settings[0]:
-            globals().update(values)
-            active_settings[0] = signature
-            if any(values[n] != base_settings[n] for n in SETTING_NAMES):
-                log("settings {!r}: {}".format(world, ", ".join(
-                    "{}={}".format(n, values[n]) for n in SETTING_NAMES if values[n] != base_settings[n])))
+        if not world_settings.refresh(app, globals()):
+            return
+        base_settings = world_settings.base
+        changed = [n for n in SETTING_NAMES if globals()[n] != base_settings[n]]
+        if changed:
+            log("settings {!r}: {}".format(world_settings.world(app), ", ".join(
+                "{}={}".format(n, globals()[n]) for n in changed)))
 
     def ensure_world(settings=True):
         """世界が替わっていたら、その世界の対応表を読み直す。個別設定は毎回見る（変わっていれば読み直す）。
@@ -803,7 +781,7 @@ def apply(ctx):
         app = getattr(sys.modules.get("__main__"), "instantale_app", None)
         world = world_key(app) if app is not None else UNKNOWN_WORLD
         if settings or world != state["world"]:
-            refresh_settings(world)
+            refresh_settings(app)
         if world == state["world"]:
             return
         if world == UNKNOWN_WORLD:
@@ -862,7 +840,7 @@ def apply(ctx):
             stamp = None
         if genre_cache["stamp"] != (stamp,):
             genre_cache["stamp"] = (stamp,)
-            genre_cache["table"] = read_genre_weights(mod_dir, genre_path)
+            genre_cache["table"] = read_genre_weights(mod_dir, genre_path, report=lambda m: log("WARN " + m))
             genre_cache["bonus"] = {}
         return genre_cache["table"]
 
@@ -900,8 +878,6 @@ def apply(ctx):
         cache_key = (sub_type, USE_EXTRA_DICT, USE_REDRAW) + modes
         if cache_key in state["pools"]:
             return state["pools"][cache_key]
-        import json
-
         import torch
 
         # ゲーム自身と同じ相対パス（カレントはゲーム本体のフォルダ）。
@@ -909,8 +885,10 @@ def apply(ctx):
         if not os.path.isfile(base_path):
             state["pools"][cache_key] = None
             return None
-        with open(base_path, encoding="utf-8") as fh:
-            table = json.load(fh)
+        # 在るのに読めなければローダが記録し、素の選び方に任せる（控えないので次の品で読み直す）
+        table = ctx.read_json(base_path, default=None)
+        if table is None:
+            return None
         n_base = len(table)
         side = {}
         category = {}

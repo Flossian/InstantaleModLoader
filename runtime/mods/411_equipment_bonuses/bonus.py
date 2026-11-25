@@ -6,6 +6,8 @@
 
 import random
 
+from instantale_modloader import frames
+
 #: 能力値の鍵（`ability_scores` の綴り。GAME.md の NPC ひな型と `313_` の `ABILITIES`）。
 ABILITIES = ("strength", "dexterity", "constitution",
              "intelligence", "wisdom", "charisma")
@@ -30,9 +32,8 @@ RNG = random.Random()
 
 
 def _num(value):
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return value
+    """数ならそのまま、ほかは None（`bool` は数にしない。ローダの `frames.is_number`）。"""
+    return value if frames.is_number(value) else None
 
 
 def is_equipment(item):

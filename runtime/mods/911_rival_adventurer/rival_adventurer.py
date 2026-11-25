@@ -34,11 +34,9 @@
 import os
 import random
 import re
-import sys
-import time
 
 from instantale_modloader import (arrivals, choices, durations, frames, jobs, llm, loads, modfacility, modnpc, npcs,
-                                  quest_claims, state as loader_state, talk_affinity, ui)
+                                  quest_claims, quest_ends, state as loader_state, talk_affinity, ui)
 from instantale_modloader import board as quest_board   # 包みの関数 `board`（掲示板を開く）と名前が重なるので別名
 from instantale_modloader.npcs import npc_stores, save_npcs
 
@@ -99,7 +97,6 @@ STORE_ATTR = "_instantale_rival_adventurer"
 SETTLEMENT_QUEST = "settlement_quest"  # 掲示板の QuestChoiceManager の第1引数（GAME.md §2.9）
 CHOICE_SPEC = "QuestChoiceManager"
 STORY_QUEST_FIELD = "story_quest"
-COMPLETED = "completed"
 RUMOR_LIMIT = 2                        # 1回の会話に足す噂の件数
 HISTORY_LIMIT = 3                      # ライバル本人に渡す最近の取り合いの件数
 #: 取り合いの結末を本人に渡す言い方（`rivalry.RIVAL_WON` など）。
@@ -120,9 +117,6 @@ INTRO_CHARS = 300                      # 語りの上限（超えたら文型に
 REASON_CHARS = 80                      # 理由の上限
 DEED_CHARS = None                      # 頼み文に渡す功績1件の上限（None は切らない。VERIFICATION.md §3.95）
 PROFILE_CHARS = None                   # 頼み文に渡す人物の素性の上限（同上）
-#: 語りを出すのを見送る旗（GAME.md §2.6）。戦闘・会話の最中には割り込まない。
-BUSY_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
-              "in_conversation", "in_free_input", "in_action_in_conversation")
 
 #: ロードの入口（ローダの窓口 `loads`。TECH.md §3.3.21）。
 LOAD_KINDS = (loads.LOAD, loads.NEW_GAME)
@@ -131,11 +125,10 @@ LOAD_KINDS = (loads.LOAD, loads.NEW_GAME)
 GUILD_TYPE = "guild"
 APPROACH_PRIORITY = 10
 TOPIC_LIMIT = 3                        # 溜めておく話の種の数
-APPROACH_TTL = 60.0                    # 第一声の読み替えの印の寿命（秒）
+APPROACH_TTL = 60.0                    # 第一声の読み替えの予約の寿命（秒。ローダの窓口 `arrivals.opening`）
 #: 第一声の頼み文の最後の1件をこれに差し替える（`300_` と同じ手）。
 APPROACH_LINE = ("<状況: {facility}に入ってきた{player}を見つけ、あなたの方から声をかけた。"
                  "用件: {topic}。呼び止める第一声を述べよ>")
-STARTER_TARGET = "scripts.llm.llm_manager:conversation_starter"
 
 INTRO_PROMPT = """あなたはファンタジーRPGの語り手です。
 冒険者「{name}」が、同じ冒険者「{player}」を張り合う相手と見定めた場面を書いてください。
@@ -156,14 +149,12 @@ INTRO_PROMPT = """あなたはファンタジーRPGの語り手です。
 
 
 def _store():
-    """世代をまたぐ入れ物。プロセスに1つ（TECH.md §3.5）。"""
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"worlds": None, "reputation": None, "worker": None,
-                 "reconcile": False, "rng": random.Random(), "approach": None}
-        setattr(sys, STORE_ATTR, store)
-    for name in ("reputation", "worker", "approach"):
-        store.setdefault(name, None)
+    """世代をまたぐ入れ物。プロセスに1つ（TECH.md §3.5。旧い版の入れ物に足りない鍵の埋め方はローダの `state.process_store`）。"""
+    store = loader_state.process_store(STORE_ATTR, {"worlds": None, "reputation": None, "worker": None,
+                                                    "rng": None})
+    # 乱数は型で照合しない（既定値 None の鍵は無いときだけ埋まる）。差し替えた乱数（検査の固定値）を作り直さないため
+    if store["rng"] is None:
+        store["rng"] = random.Random()
     return store
 
 
@@ -216,8 +207,7 @@ def apply(ctx):
         return title.strip() if isinstance(title, str) and title.strip() else fallback
 
     def is_completed(quest):
-        config = ui.quest_value(quest, "config", None)
-        return isinstance(config, dict) and config.get("status") == COMPLETED
+        return ui.quest_status(quest) == ui.QUEST_COMPLETED
 
     def cleared_count(app):
         """プレイヤーが片付けた掲示板の依頼の数（`world.quests` の `completed`）。
@@ -285,8 +275,12 @@ def apply(ctx):
         return value
 
     def is_dead(app, npc_id):
-        config = raw_of(app, npc_id, "config")
-        return bool(config.get("is_dead")) if isinstance(config, dict) else False
+        """実行時の Character を先に、無ければ素データで見る（ロード直後は名簿が空）。
+
+        死の印の読み方はローダの `npcs.is_dead`（Character でも素データの辞書でも読み、modnpc の人物の属性も見る）。
+        """
+        character = ui.character_of(app, npc_id)
+        return npcs.is_dead(character if character is not None else save_npcs(app).get(str(npc_id)))
 
     def exists(app, npc_id):
         return ui.character_of(app, npc_id) is not None or str(npc_id) in save_npcs(app)
@@ -314,9 +308,8 @@ def apply(ctx):
     def player_level(app):
         return _int(getattr(getattr(app, "player", None), "experience_level", None))
 
-    def player_name(app):
-        name = getattr(getattr(app, "player", None), "name", None)
-        return name.strip() if isinstance(name, str) and name.strip() else "プレイヤー"
+    def player_name(app, fallback="プレイヤー"):
+        return ui.player_name(app, fallback=fallback)
 
     def rival_name(app, bucket):
         rival = bucket.get("rival") or {}
@@ -482,13 +475,11 @@ def apply(ctx):
         worker.enqueue({"app": app, "key": key, "rival": str(rival_id)})
 
     def busy_reason(app):
-        """語りを出すのを見送る理由。出してよければ None。"""
-        for flag in BUSY_FLAGS:
-            if getattr(app, flag, None):
-                return flag
-        if ui.current_quest_id(app) is not None:
-            return "on a quest"
-        return None
+        """語りを出すのを見送る理由。出してよければ None。
+
+        旗の表はローダの `ui.BUSY_FLAGS`（戦闘・会話の最中には割り込まない。GAME.md §2.6）。依頼の最中も見送る。
+        """
+        return (ui.busy_flags(app, on_quest=True) or [None])[0]
 
     def tell_intro(app):
         """まだ出していない登場の語りを出す。出したら True。"""
@@ -1024,16 +1015,23 @@ def apply(ctx):
         tell_intro(app)                 # 登場の語りがまだなら、声をかける前に出す
         text = rivalry.format_text(topic_texts.get(topic.get("kind"), ""),
                                    player=player_name(app), title=topic.get("title"))
-        # 種は印に持たせ、第一声を読み替えられたときに下げる（`conversation_starter`）。
-        # `process_choice` は詳細生成（GAME.md §2.23）を別スレッドへ回して先に戻るので、
-        # 戻った時点で下げると、印が期限切れで捨てられたときに種だけが消える。
-        store["approach"] = {"npc": str(rival_id), "topic": text, "at": time.monotonic(),
-                             "facility": facility_name(app, facility),
-                             "seed": topic, "key": key}
+        mark = {"seed": topic, "key": key}
+        place = facility_name(app, facility)
+
+        def line(call):
+            """第一声の頼み文の最後の1件に入れる文（差し替えの時に組む）。"""
+            return APPROACH_LINE.format(
+                facility=place, player=player_name(call.app) if call.app is not None else "旅人", topic=text)
+
+        # 第一声の読み替えはローダの窓口 `arrivals.opening` に予約する（相手の id を確かめるのも窓口）。
+        # 種は第一声を読み替えられたとき（`done`）に下げる。`process_choice` は詳細生成（GAME.md §2.23）を
+        # 別スレッドへ回して先に戻るので、戻った時点で下げると、予約が期限切れで捨てられたときに種だけが消える。
+        arrivals.opening(app, OWNER, rival_id, line, ttl=APPROACH_TTL,
+                         done=lambda call: spend_topic(mark), write=write)
         try:
             app.process_choice(manager_cls(app, rival_id), name)
         except Exception:
-            store["approach"] = None
+            arrivals.cancel_opening(OWNER)
             arrivals.withdraw(app, OWNER)
             ctx.log_exc("rival adventurer: cannot start the approach")
             return
@@ -1050,6 +1048,8 @@ def apply(ctx):
             ctx.log_exc("rival adventurer: cannot drop the spent topic")
 
     arrivals.install(ctx, write)
+    # 第一声の包み（`conversation_starter`）はローダが1枚だけ立てる（本番は全 MOD の後に一番外側）。
+    arrivals.install_opening(ctx, write)
 
     # ------------------------------------------------------------ ロードの突き合わせ
     def reconcile(app):
@@ -1121,19 +1121,16 @@ def apply(ctx):
         write("board: active quests {} -> {} (hidden {})".format(result, fixed, len(hidden)))
         return fixed
 
-    @ctx.wrap("__main__:QuestEndManager.execute", required=False, safe=True)
-    def quest_end(orig, self, *args, **kwargs):
-        """依頼を片付けた。ライバルの狙っていた依頼ならプレイヤーの勝ち。
+    def quest_end(call):
+        """依頼を片付けた（ローダの窓口 `quest_ends` の後の処理）。ライバルの狙っていた依頼ならプレイヤーの勝ち。
         ライバルがまだ居なければ抽選する。
 
-        どの依頼が終わるのかは `orig` の前に読む（終わった後は片付いている。`318_` と同じ）。
+        どの依頼が終わるのかは窓口が `orig` の前に読んである（終わった後は片付いている）。
         """
-        app = getattr(self, "app", None) or ui.find_app()
-        quest_id = ui.current_quest_id(app) if app is not None else None
-        result = orig(self, *args, **kwargs)
+        app, quest_id = call.app, call.quest_id
         try:
             if app is None:
-                return result
+                return
             lines = []
             with worlds.lock:
                 key, bucket = ledger(app)
@@ -1167,7 +1164,9 @@ def apply(ctx):
                                  proceed_on_timeout=True, tag="rival adventurer win")
         except Exception:
             ctx.log_exc("rival adventurer: cannot score the quest end")
-        return result
+
+    # 依頼の終わりはローダの窓口が1枚だけ包む（TECH.md §3.3.21）。
+    quest_ends.on(OWNER, ctx, after=quest_end, write=write)
 
     def after_move(call):
         """施設に着いた後（ローダの窓口 `arrivals`）。ギルドならライバルの声かけを段取りする。"""
@@ -1178,55 +1177,14 @@ def apply(ctx):
 
     arrivals.on(OWNER, ctx, (arrivals.FACILITY,), after=after_move, write=write)
 
-    @ctx.wrap(STARTER_TARGET, required=False, safe=True)
-    def conversation_starter(orig, *args, **kwargs):
-        """こちらが起こした会話の第一声だけ、「ライバルの方から声をかけた」に読み替える。
-
-        渡す messages の写しの最後の1件だけを差し替える。ゲームの会話履歴には触らない（`300_` と同じ）。
-        """
-        mark = store["approach"]
-        if mark is None:
-            return orig(*args, **kwargs)
-        character = kwargs.get("character_instance", args[3] if len(args) > 3 else None)
-        if str(getattr(character, "id", "")) != mark["npc"]:
-            return orig(*args, **kwargs)
-        store["approach"] = None
-        messages = kwargs.get("messages", args[0] if args else None)
-        if time.monotonic() - mark["at"] > APPROACH_TTL or not isinstance(messages, list) \
-                or not messages or not isinstance(messages[-1], dict):
-            return orig(*args, **kwargs)
-        app = ui.find_app()
-        replaced = dict(messages[-1])
-        replaced["content"] = APPROACH_LINE.format(
-            facility=mark["facility"], player=player_name(app) if app is not None else "旅人",
-            topic=mark["topic"])
-        new_messages = messages[:-1] + [replaced]
-        write("approach: opening line -> {!r}".format(replaced["content"][:80]))
-        if "messages" in kwargs:
-            kwargs = dict(kwargs, messages=new_messages)
-            result = orig(*args, **kwargs)
-        else:
-            result = orig(new_messages, *args[1:], **kwargs)
-        spend_topic(mark)
-        return result
-
     def on_load(call):
         worlds.forget()
-        store["reconcile"] = True
         write("{}: reconcile armed".format(call.label))
 
     loads.on(OWNER, ctx, LOAD_KINDS, after=on_load, write=write)
 
     def refresh_choice_buttons(self, _buttons):
-        """ロードの後の突き合わせと、掲示板の手当て。"""
-        if store["reconcile"]:
-            characters = getattr(getattr(self, "world", None), "characters", None)
-            if isinstance(characters, dict) and len(characters) > 1:
-                store["reconcile"] = False
-                try:
-                    reconcile(self)
-                except Exception:
-                    ctx.log_exc("rival adventurer: reconcile failed")
+        """掲示板の手当て（ロードの後の突き合わせは下の `settled`）。"""
         try:
             buttons = getattr(self, "buttons", None)
             if isinstance(buttons, list):
@@ -1236,6 +1194,13 @@ def apply(ctx):
 
     # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
     choices.provide(ctx, screen, refresh=refresh_choice_buttons)
+
+    def settled(call):
+        """ロードの後、人物が揃った最初の組み直しで1回だけ台帳を突き合わせる（ローダの窓口 `loads.on_settled`）。"""
+        reconcile(call.app)
+
+    # `choices.provide` の後で預けるので、掲示板の手当て（上の `refresh`）より先に突き合わせる（窓口の説明）。
+    loads.on_settled(OWNER, ctx, settled, kinds=LOAD_KINDS, write=write)
 
     ctx.log("rival adventurer: installed (rival after {} clears at {}%, intro {}, "
             "failure {}, success {}%+{}%/Lv, due {}..{} days, state {})".format(

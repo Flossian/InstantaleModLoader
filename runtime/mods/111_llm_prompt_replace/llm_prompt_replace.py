@@ -41,8 +41,7 @@
 * 別名の後生えの見張り
 * 入れ子で通る地点を素通しする印
 
-（v5 まではこのファイルが持っていた。`119_` にも同じものが要ると分かった時点でローダへ移した。TECH.md
-§3.2.3「写して回るものが出たら、それはローダの語彙」）。
+（`119_` にも同じものが要るのでローダに置く。TECH.md §3.2.3）。
 経路の実測と経緯は GAME.md §2.12 / VERIFICATION_LOG.md §2.24。
 
 こちらに残るのは**この MOD 固有の歯止め**1つだけ:
@@ -81,8 +80,7 @@ MOD は逆にこちらより外側へ置いて素の本文を見せる（その�
     <MOD>\\llm_replacements.txt                   旧い置き場。読むだけ（移行のため残す）
     <MOD>\\llm_replacements.default.txt           同梱の既定。MOD 更新で上書きされるのはこれだけ
 
-`state\\` へ移したのは、MOD のフォルダが**更新のたびに上書きされる置き場**だから。
-以前は「MOD 単体の部品は MOD のフォルダで完結させる」を理由に MOD の中だけを読んでいたが、
+`state\\` に置くのは、MOD のフォルダが**更新のたびに上書きされる置き場**だから。
 手で書いたルールは消耗品ではなく遊びの続き（§3.11 の `state\\` の定義そのもの）で、
 `state\\` なら MOD を入れ替えても、フォルダごと消しても巻き添えにならない。
 旧い置き場を読む候補に残してあるので、前の版で書いたルールは黙って無効にならない
@@ -100,14 +98,9 @@ MOD は逆にこちらより外側へ置いて素の本文を見せる（その�
 `102_` / `103_` / `105_` と同じファイルなので、
 置換と圧縮のどちらが先に効いたかを時系列で読める。
 
-## 同じ文面の行は1プロセスで1回（版8）
+## 同じ文面の行は1プロセスで1回
 
-版7までは LLM を呼ぶたびに、当たった規則ごとに `[REPLACE]` を1行書いていた。
-同じ規則が毎回同じ文面で当たるので、約40日で `[REPLACE]` が12,806行・約2.5MB になり、
-中身は91通りしか無かった（上位3通りで4,701行）。
-`[RULES] 読込` も apply のたびに出ていた（遅れて当て直す boot を含めて1,120回・約200KB）。
-
-版8から:
+同じ規則は毎回同じ文面で当たるので、そのまま書くとログが膨らむ（VERIFICATION_LOG.md §2.24）。
 
     [REPLACE] / [SKIP]  同じ文面はこのプロセスで最初の1回だけ書き、以後は規則ごとに数える
     [TALLY]             数えた回数を1行にまとめる。規則ごとに「この起動の累計(+前の [TALLY] から)」。
@@ -131,7 +124,6 @@ MOD のモジュールは boot のたびに読み直されるので、モジュ�
 import atexit
 import collections
 import hashlib
-import json
 import os
 import random
 import re
@@ -140,7 +132,7 @@ import threading
 import time
 import uuid
 
-from instantale_modloader import ui
+from instantale_modloader import read_json, state, ui, write_json
 from instantale_modloader.llm import wrap_outgoing
 
 # --------------------------------------------------------------------------
@@ -551,24 +543,16 @@ def log_store():
     """書いた行の文面と数えた回数の控え。1プロセスに1組。
 
     遅れて当て直す boot と注入し直しをまたいで持つ（`sys` に置く）。
-    鍵が欠けているか型が違えば、その鍵だけ作り直す（版の違う器を握らない）。
+    鍵が欠けているか型が違えば、その鍵だけ作り直す（版の違う器を握らない。ローダの `state.process_store`）。
+    `since` は `time.time()` の秒を入れるので既定も float にしてある（int の 0 だと毎回型違いで 0 に戻る）。
+    `rules` は最後に `[RULES] 読込` を書いたルールファイル、`file` はログのファイルの身元。
     """
-    store = getattr(sys, LOG_STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {}
-        setattr(sys, LOG_STORE_ATTR, store)
-    for name, kind in (("written", set), ("total", dict), ("pending", dict)):
-        if not isinstance(store.get(name), kind):
-            store[name] = kind()
-    for name in ("calls", "since"):
-        if not isinstance(store.get(name), (int, float)):
-            store[name] = 0
-    # `rules` は最後に `[RULES] 読込` を書いたルールファイル、`file` はログのファイルの身元。
-    store.setdefault("rules", None)
-    store.setdefault("file", None)
-    if not hasattr(store.get("lock"), "acquire"):
-        store["lock"] = threading.Lock()
-    return store
+    return state.process_store(LOG_STORE_ATTR, {
+        "written": set(), "total": {}, "pending": {},
+        "calls": 0, "since": 0.0,
+        "rules": None, "file": None,
+        "lock": threading.Lock(),
+    })
 
 
 def file_id(path):
@@ -668,14 +652,12 @@ def save_pending(store):
                 "proc": process_token(),
                 "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
                 "rows": rows}
-        tmp = path + ".tmp"
-        try:
-            with open(tmp, "w", encoding="utf-8") as fh:
-                json.dump(data, fh, ensure_ascii=False)
-            os.replace(tmp, path)
+        if write_json(path, data, report=_quiet):
             store["pending_saved"] = True
-        except OSError:
-            pass
+
+
+def _quiet(_message):
+    """控えの読み書きに失敗しても記録しない（書けなければ次の推論で書き直し、読めなければ諦める）。"""
 
 
 PROCESS_TOKEN_ATTR = "_instantale_prompt_replace_process"
@@ -700,11 +682,7 @@ def take_leftover(path):
     今のプロセスが残した控え（遅れて当て直す boot）は、手元の回数と同じなので読まない。
     見分けはプロセスの印（`process_token`）。印の無い前の版の控えは PID で見る。
     """
-    try:
-        with open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (OSError, ValueError):
-        return None
+    data = read_json(path, None, report=_quiet)
     if not isinstance(data, dict):
         return None
     mine = (data.get("proc") == process_token() if "proc" in data
@@ -972,7 +950,7 @@ def apply(ctx):
     # `ctx.mod_dir` も `ctx.state_dir` も apply() の外では引けないので、
     # ここで控えておく（ラッパは後からこの値を使う）。
     mod_dir = ctx.mod_dir
-    state_dir = getattr(ctx, "state_dir", "") or ""
+    state_dir = ctx.state_dir
     seen = Seen()
 
     write = ctx.logger("prompt_bloat.log")
@@ -1094,10 +1072,8 @@ def apply(ctx):
     # 掛け直しの時点はローダが `modloader.log` に `late-armed on` で残す（こちらの記録へは写さない）。
     hooks = wrap_outgoing(ctx, run, label="prompt replace")
 
-    # 注入した時点で、作ったデータで正しさを確かめておく。
-    # 実経路はゲームが LLM を呼ぶまで通らず、
-    # 起動直後に通る保証が無いため（102_ / 105_ と同じ方針）。
-    _verify(ctx)
+    # 書式の読み・抽選・復号の確かめは固定の入力なので tools/tests/test_llm_prompt_replace.py にある
+    # （test_sample_rules。前は注入のたびにここで回していた。TECH.md §6.1）。
 
     # どこに仕掛かったかと、どのルールファイルを読むのかを残す。
     armed = hooks.armed()
@@ -1107,79 +1083,3 @@ def apply(ctx):
         "{} rule group(s) from {}".format(len(groups), rules.path) if groups
         else "no rules in {} (nothing will be replaced)".format(rules.path),
         log_path))
-
-
-# --------------------------------------------------------------------------
-# 自己検証
-# --------------------------------------------------------------------------
-# プロキシの書式を1つずつ含めた見本。
-# タブ・無効タブ・コメント・確率・0%・エスケープ・正規表現の後方参照。
-_SAMPLE_LINES = [
-    "#tab:標準",
-    "#off:切った行=>効かない",
-    "古い言い方=>新しい言い方",
-    "念のため=>必ず替える=>100",
-    "絶対に替えない=>替わってしまった=>0",
-    "改行を入れる=>入れた\\n次の行",
-    "regex:(残り: -?\\d+)  - 効果:=>$1\\n  - 効果:",
-    "#offtab:切ったタブ",
-    "この行は切ったタブの中=>効かない",
-]
-
-_SAMPLE_TEXT = ("古い言い方。念のため。絶対に替えない。改行を入れる。"
-                "この行は切ったタブの中。残り: -1  - 効果: なし")
-
-_EXPECTED_TEXT = ("新しい言い方。必ず替える。絶対に替えない。入れた\n次の行。"
-                  "この行は切ったタブの中。残り: -1\n  - 効果: なし")
-
-
-def _verify(ctx):
-    rules, warnings = parse_rules(_SAMPLE_LINES)
-    if warnings:
-        ctx.log("VERIFY FAILED: sample rules produced warnings: {}".format(warnings),
-                level="ERROR")
-        return
-    if len(rules) != 5:
-        ctx.log("VERIFY FAILED: expected 5 rules from the sample, got {}".format(
-            len(rules)), level="ERROR")
-        return
-
-    groups = group_rules(rules)
-    chosen, skipped = decide(groups, _SAMPLE_TEXT, roll=lambda denom: 0)
-    got, _hits = apply_chosen(_SAMPLE_TEXT, chosen)
-    if got != _EXPECTED_TEXT:
-        ctx.log("VERIFY FAILED: unexpected replacement\n  got      {!r}\n"
-                "  expected {!r}".format(got, _EXPECTED_TEXT), level="ERROR")
-        return
-    if len(skipped) != 1 or "確率0" not in skipped[0][3]:
-        ctx.log("VERIFY FAILED: the 0% rule should have been skipped, got {!r}".format(
-            skipped), level="ERROR")
-        return
-
-    # 同じ「置換前」が2行あるときは1回の抽選でどちらかに決まる（合計 120 >
-    # 100 なので必ずどちらかになる）。
-    # 抽選値を固定して両方の枝を通す。
-    pair, _warnings = parse_rules(["同じ前=>Aへ=>60", "同じ前=>Bへ=>60"])
-    pair_groups = group_rules(pair)
-    if len(pair_groups) != 1:
-        ctx.log("VERIFY FAILED: same-from rules must share one group", level="ERROR")
-        return
-    outcomes = []
-    for value in (0, 70):
-        chosen, _skipped = decide(pair_groups, "同じ前", roll=lambda denom, v=value: v)
-        text, _hits = apply_chosen("同じ前", chosen)
-        outcomes.append(text)
-    if outcomes != ["Aへ", "Bへ"]:
-        ctx.log("VERIFY FAILED: probability groups picked {!r}".format(outcomes),
-                level="ERROR")
-        return
-
-    # 復号（ボディの形で書かれたルールが復号済みの本文に当たること）。
-    escaped, _warnings = parse_rules(["\\u3042い=>う\\u3048"])
-    if len(escaped) != 2 or escaped[1].from_text != "あい" or escaped[1].to_text != "うえ":
-        ctx.log("VERIFY FAILED: escaped rule was not decoded: {!r}".format(
-            [(r.from_text, r.to_text) for r in escaped]), level="ERROR")
-        return
-
-    ctx.log("verified: rule format (tabs / #off / probability / escapes / regex $1), "
-            "one draw per group, decoded forms registered")

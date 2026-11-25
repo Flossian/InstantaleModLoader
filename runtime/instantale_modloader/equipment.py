@@ -34,8 +34,8 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、両者はここ�
 """
 import sys
 
-from . import durations
-from . import log, log_exc
+from . import _kinds, durations, frames, state
+from . import _log_line, log_exc
 
 #: 仲間の品を、開いている受け渡しの窓の上で装備欄へ入れる／戻す。
 #: `fn(app, holder, item)` → "equipped" / "unequipped" / 断りの文字列。
@@ -63,34 +63,19 @@ SAVE_TARGET = "scripts.save_codec:write_obfuscated_json_file"
 WORLD_TARGET = "__main__:World.__init__"
 
 
-def _registry():
-    """`{種類: (持ち主, 関数)}`。`sys` に置いて注入し直しをまたぐ。"""
-    found = getattr(sys, _ATTR, None)
-    if not isinstance(found, dict):
-        found = {}
-        setattr(sys, _ATTR, found)
-    return found
+#: `{種類: (持ち主, 関数)}` の登録簿（`_kinds`。`combat` / `durations` と同じ形）。
+_by_kind = _kinds.KindRegistry(_ATTR, "equipment")
+_registry = _by_kind.table
 
 
 def declare(kind, fn, owner="", write=None):
     """その種類を答える関数を置く。置き換えたら前の持ち主を返す。"""
-    if not callable(fn):
-        raise TypeError("declare() needs a callable, got {!r}".format(type(fn)))
-    registry = _registry()
-    previous = registry.get(str(kind))
-    registry[str(kind)] = (str(owner or ""), fn)
-    before = previous[0] if previous else None
-    if write and before and before != str(owner or ""):
-        write("equipment: {!r} is now decided by {!r} (was {!r})".format(kind, owner, before))
-    return before
+    return _by_kind.declare(kind, fn, owner, write)
 
 
 def forget(owner, write=None):
     """その持ち主が置いたもの・貸したものを全部外す（MOD を外したとき）。外した種類を返す。"""
-    registry = _registry()
-    gone = [kind for kind, (who, _fn) in registry.items() if who == str(owner)]
-    for kind in gone:
-        registry.pop(kind, None)
+    gone = _by_kind.drop(owner)
     if write and gone:
         write("equipment: {!r} no longer decides {}".format(owner, gone))
     lent = [entry for entry in _loans() if entry["owner"] == str(owner)]
@@ -113,13 +98,11 @@ def owners():
     ローダの `boot()` が、今回適用されなかった MOD のぶんを外すのに使う
     （登録簿は注入をまたいで残るので、切った MOD の旧い関数に聞き続けないように）。
     """
-    return sorted({who for who, _fn in _registry().values()} | {entry["owner"] for entry in _loans()})
+    return sorted(_by_kind.owners() | {entry["owner"] for entry in _loans()})
 
 
-def source_of(kind):
-    """その種類を決めている MOD の名前。誰も置いていなければ `""`。"""
-    entry = _registry().get(str(kind))
-    return entry[0] if entry else ""
+#: その種類を決めている MOD の名前。誰も置いていなければ `""`。
+source_of = _by_kind.source_of
 
 
 def _call(kind, app, *args):
@@ -174,14 +157,55 @@ def gear(app, holder):
         return None
 
 
+#: 装備欄の MOD（`333_`）の自由枠の部位の名前の頭。部位の名前が `free` で始まる。
+FREE_PREFIX = "free"
+
+
+def worn(app, holder, *, free=True):
+    """身に着けている品 `[(部位, 品), ...]`。同じ品は1度だけ（最初に出た部位で）。何も無ければ `[]`。
+
+    `gear` の答えがあればそれを使う（部位は装備欄の MOD の名前、並びは優先順）。
+    答えが無ければ（装備欄の MOD が居ない・その人物が装備欄を使っていない）本体の `equipments` の
+    weapon / wearable を読み、部位は `""` にする。本体の2つの枠は装備品の種類の入れ物で、
+    装備欄の部位ではないので、部位の名前として LLM や画面へ渡さないため（`408_` と同じ）。
+    `equipments` の値がセーブから読んだ直後の id の文字列なら持ち物から引き当て、引けなければ数えない。
+
+    `free=False` は装備欄の自由枠（部位が `free` で始まる）を外す（`410_` は常に、`411_` は設定で外す）。
+
+    写し（`410_` / `411_` の `worn_items`、`408_` の `_equipment`）にそろえた形で、違いは2つ。
+    `410_` / `411_` は品だけを返す（`[item for _region, item in equipment.worn(...)]` で同じになる）。
+    `equipments` の値が真偽値なら品とみなさない（`410_` / `411_` は真偽値をそのまま品として返した）。
+    `926_` のように素の装備品を数えたくない用途は `gear` を直に使う。
+    """
+    if holder is None:
+        return []
+    answer = gear(app, holder)
+    if answer is not None:
+        found = [(region, item) for region, item in answer
+                 if free or not region.startswith(FREE_PREFIX)]
+    else:
+        found = []
+        equipments = frames.attr(holder, "equipments", None)
+        if isinstance(equipments, dict):
+            for key, _stat in GAME_KEYS:
+                ref = equipments.get(key)
+                if ref is None or isinstance(ref, bool):
+                    continue
+                item = _resolve(holder, ref)        # ロード直後は id の文字列
+                if item is not None:
+                    found.append(("", item))
+    unique, seen = [], set()
+    for region, item in found:
+        if id(item) not in seen:
+            seen.add(id(item))
+            unique.append((region, item))
+    return unique
+
+
 # ------------------------------------------------------------ 貸し
 def _loans():
     """`[{"holder", "owner", "items": {種類: 品}, "kept": {種類: 元の値}}]`。`sys` に置いて注入し直しをまたぐ。"""
-    found = getattr(sys, _LOANS_ATTR, None)
-    if not isinstance(found, list):
-        found = []
-        setattr(sys, _LOANS_ATTR, found)
-    return found
+    return state._process_value(_LOANS_ATTR, list)
 
 
 def _entry(holder):
@@ -191,12 +215,8 @@ def _entry(holder):
     return None
 
 
-def _write_default(text):
-    """窓口の記録は `modloader.log` へ。"""
-    try:
-        log(text, level="WARN" if text.startswith("WARN") else "INFO")
-    except Exception:
-        pass
+#: 窓口の記録は `modloader.log` へ（`_log_line`）。
+_write_default = _log_line
 
 
 def _native(app, name, item):

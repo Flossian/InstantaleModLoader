@@ -1,17 +1,15 @@
 # -*- coding: utf-8 -*-
 r"""保管庫。預けた品を控えに落とし、開くたびに作り直す。
 
-保管庫の中身は**持ち主を作らずに持つ**。
-世界に NPC を1人増やせばセーブの正規の形で残せるが、そのために人が1人生まれ、
-契約が切れたときに消す責任までこちらが持つことになる。
-代わりに採ったのは、
+保管庫の中身は**控えが正**で、持ち主の持ち物には住まわせない。
 
     預ける   プレイヤーの持ち物から抜き、セーブと同じ形の辞書にして控えへ
-    開く     控えから作り直し、**その窓の間だけ生きる持ち主**に持たせる
+    開く     控えから作り直し、窓の右に立つ持ち主に持たせる
     取り出す 持ち主から抜き、プレイヤーの持ち物へ
 
-という形。窓の持ち主（`holder`）は `Character` のインスタンスだが、
-`world.characters` にも `save_data_dict['npcs']` にも登録しない。
+窓の右に立つのは建物の管理人（`modnpc` の人物）で、窓を開くたびに作り直し、閉じるときに控えへ写す。
+管理人が引けないときだけ、その窓の間だけ生きる持ち主（`make_holder`）を立てる。
+こちらは `Character` のインスタンスだが、`world.characters` にも `save_data_dict['npcs']` にも登録しない。
 セーブには一切現れず、窓を閉じれば消える。
 
 ## 品の形はセーブと同じ
@@ -51,28 +49,6 @@ ABILITY_KEYS = ("strength", "dexterity", "constitution", "intelligence", "wisdom
                 "charisma")
 
 
-#: `scripts.characters.Character`。引けなければ None（ローダの `items` と同じもの）。
-character_class = items.character_class
-
-
-def inventory_dict(owner):
-    """持ち物の実体 `{item_id: Item}`。読めなければ None。
-
-    形の話はローダに寄せた（`instantale_modloader.items`。`modnpc` も同じものを使う）。
-    """
-    return items.inventory_of(owner)
-
-
-def item_to_dict(item):
-    """アイテムをセーブと同じ形の辞書にする。落とせなければ None。
-
-    落とせない品（属性が JSON にならないもの）は**預けさせない**。
-    控えに入らない品を持ち主から抜くと、その品は世界から消える。
-    中身はローダの `items.to_dict`（`modnpc` も同じものを使う）。
-    """
-    return items.to_dict(item)
-
-
 def describe(data):
     """控えの1件をログ用の1行に。"""
     if not isinstance(data, dict):
@@ -91,7 +67,7 @@ def make_holder(app, name, write=None):
 
     持ち物の入れ物が読めない個体なら None を返す（窓を開かない）。
     """
-    cls = character_class()
+    cls = items.character_class()
     if cls is None:
         if write:
             write("WARN storage: scripts.characters.Character is not available")
@@ -117,7 +93,7 @@ def make_holder(app, name, write=None):
             write("WARN storage: cannot build the holder ({})".format(
                 "; ".join(failures)))
         return None
-    if inventory_dict(holder) is None:
+    if items.inventory_of(holder) is None:
         if write:
             write("WARN storage: the holder has no inventory dict")
         return None
@@ -135,7 +111,7 @@ def fill(app, holder, records, write=None, skipped=None):
     戻り値で受け取れる実装と、持ち物へ直に入れる実装（`generate_item_in_shopping`
     と同じ形。GAME.md §2.13.1.2）の両方に備える。
     """
-    inv = inventory_dict(holder)
+    inv = items.inventory_of(holder)
     if inv is None or not isinstance(records, dict):
         return 0
     made = 0
@@ -165,12 +141,13 @@ def fill(app, holder, records, write=None, skipped=None):
 
 def dump(holder, write=None):
     """持ち主の持ち物を控えの形にする。`({鍵: 辞書}, 落とせなかった鍵)`。"""
-    inv = inventory_dict(holder)
+    inv = items.inventory_of(holder)
     if inv is None:
         return None, []
     records, lost = {}, []
     for key, item in inv.items():
-        data = item_to_dict(item)
+        # 落とせない品（属性が JSON にならないもの）は控えに入らない。持ち主から抜くと世界から消える。
+        data = items.to_dict(item)
         if data is None:
             lost.append(str(key))
             continue

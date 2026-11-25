@@ -93,25 +93,12 @@ id で引かれる場所に残さないことを守っているのは、**保存
 MOD を外せば何も戻らない。MOD 固有の続き（例えば出資の帳簿）は `state.WorldStore` で MOD が持つ。
 """
 
-import contextlib
 import copy
 import inspect
 import sys
 
-from . import frames, items, log, log_exc, log_unrepeated, npcs, patch, state, ui
+from . import _layered, frames, items, log, log_exc, log_unrepeated, npcs, patch, state, ui
 
-
-#: 前に書いた定型の行の中身（種類 -> 中身）。同じ中身なら繰り返さない（`_changed`）。
-#: 注入し直すとこのモジュールごと読み直されるので空に戻り、新しいログの頭には必ず出る。
-_LAST_WRITTEN = {}
-
-
-def _changed(kind, content) -> bool:
-    """`kind` の行の中身が前に書いたものと違えば控えて True。同じなら False。"""
-    if _LAST_WRITTEN.get(kind) == content:
-        return False
-    _LAST_WRITTEN[kind] = content
-    return True
 
 #: MOD の NPC の id の接頭辞。
 #: ゲームの採番は整数の連番なので、ここが被ることはない。
@@ -321,37 +308,48 @@ def npc_id_of(app, character, world=None):
 # --------------------------------------------------------------------------
 # 登録簿
 # --------------------------------------------------------------------------
-def registry():
-    """`{npc_id: 記録}`。書き換えてよいのはこのモジュールだけ。"""
-    reg = getattr(sys, REGISTRY_ATTR, None)
-    if not isinstance(reg, dict):
-        reg = {}
-        setattr(sys, REGISTRY_ATTR, reg)
-    return reg
+#: 控えの置き場所（`sys` の属性。注入をまたぐ）とフォルダ名。控えの読み書きは下の「控え」の節。
+STORE_ATTR = "_instantale_modnpc_store"
+STATE_DIRNAME = "modnpc"
+#: 建て直しの間だけ立つ「いまの世界の鍵」。`World.__init__` の中では `app.world_dict` が
+#: まだ前の世界を指していることがあるので、鍵を引数の `save_data_dict` から決めて持ち回る。
+_KEY_OVERRIDE_ATTR = "_instantale_modnpc_key_override"
+
+#: 繋ぎ方は `modnpc` / `modfacility` で同じなので `state` に1つ（違うのは上の3つの名前だけ）。
+_stores = state.SysWorldStore(STORE_ATTR, STATE_DIRNAME, _KEY_OVERRIDE_ATTR)
 
 
-def _record(npc_id):
-    """その id の記録。無ければ作る。"""
-    reg = registry()
-    record = reg.get(npc_id)
-    if not isinstance(record, dict):
-        record = reg[npc_id] = {
-            "id": npc_id,
-            "layers": [],        # 積んだ順。同じ持ち主は1つだけ
-            "character": None,   # MOD の NPC の実体（名簿に居ればそちらが真実）
-            "built_in": None,    # その実体を組んだ世代（`patch._generation`）
-            "stale_placed": False,  # 名簿の実体が差し替わった。置き直しが要る
-            "snapshot": None,    # 控えから読んだ実体の写し（次の spawn の材料）
-            "placed": None,      # (area_id, facility_id, 主の元の値, 主か, 一覧に出すか)
-            "logged": {},        # 持ち主 -> (世代, 層の数)。`registered` の行を書いた印
-        }
-    return record
+def _new_record(npc_id):
+    """その id の記録の初めの形。"""
+    return {
+        "id": npc_id,
+        "layers": [],        # 積んだ順。同じ持ち主は1つだけ
+        "character": None,   # MOD の NPC の実体（名簿に居ればそちらが真実）
+        "built_in": None,    # その実体を組んだ世代（`patch._generation`）
+        "stale_placed": False,  # 名簿の実体が差し替わった。置き直しが要る
+        "snapshot": None,    # 控えから読んだ実体の写し（次の spawn の材料）
+        "placed": None,      # (area_id, facility_id, 主の元の値, 主か, 一覧に出すか)
+        "logged": {},        # 持ち主 -> (世代, 層の数)。`registered` の行を書いた印
+    }
 
 
-def layers(npc_id):
-    """その id に積まれている層。積んだ順。"""
-    record = registry().get(npc_id)
-    return list(record["layers"]) if isinstance(record, dict) else []
+#: 登録簿・控えの1件の読み書き・場面の通知・関所の確かめの本体（`modfacility` と同じ形。`_layered`）。
+_reg = _layered.LayeredRegistry(
+    "modnpc", REGISTRY_ATTR, INSTALLED_ATTR, _stores,
+    id_key="npc_id", obj_key="character",
+    gate_mark="__instantale_modnpc_gate__", save_target=SAVE_TARGET,
+    off_text="off the world", new_record=_new_record)
+
+#: 前に書いた定型の行の中身（種類 -> 中身）。同じ中身なら繰り返さない（`_changed`）。
+#: 注入し直すとこのモジュールごと読み直されるので空に戻り、新しいログの頭には必ず出る。
+_LAST_WRITTEN = _reg.last_written
+_changed = _reg.changed
+
+#: `{npc_id: 記録}`。書き換えてよいのはこのモジュールだけ。
+registry = _reg.registry
+_record = _reg.record                # その id の記録。無ければ作る
+#: その id に積まれている層。積んだ順。
+layers = _reg.layers
 
 
 def layers_for(npc_id):
@@ -373,14 +371,8 @@ def has_layers(npc_id):
     return bool(layers(str(npc_id))) or bool(layers(ANY))
 
 
-def entries(owner=None):
-    """登録されている id。`owner` を渡すとその MOD の分だけ。"""
-    out = []
-    for npc_id, record in registry().items():
-        if owner is None or any(layer["owner"] == owner
-                                for layer in record["layers"]):
-            out.append(npc_id)
-    return sorted(out)
+#: 登録されている id。`owner` を渡すとその MOD の分だけ。
+entries = _reg.entries
 
 
 def names_in_use(app, skip=(), world=None, save_data_dict=None):
@@ -532,27 +524,7 @@ def unregister(owner, npc_id=None, app=None, write=None):
     層が1つも残らなくなった id は、`app` を渡してあれば素の状態へ戻してから
     記録ごと捨てる（MOD の NPC は世界から降り、被せは素の値に戻る）。
     """
-    dropped = []
-    for target in ([str(npc_id)] if npc_id is not None else entries(owner)):
-        record = registry().get(target)
-        if not isinstance(record, dict):
-            continue
-        record["layers"] = [layer for layer in record["layers"]
-                            if layer["owner"] != owner]
-        dropped.append(target)
-        if not record["layers"] and app is not None:
-            try:
-                despawn(app, target, write=write)
-            except Exception:
-                log_exc("modnpc: cannot take {} off the world".format(target))
-        if app is not None:
-            _drop_persisted(app, owner, target)   # `despawn` の後（先に消すと spawned=False が書き戻る）
-        if record["layers"]:
-            continue
-        registry().pop(target, None)
-    if write and dropped:
-        write("modnpc: {} unregistered {}".format(owner, ", ".join(dropped)))
-    return dropped
+    return _reg.unregister(owner, npc_id, app, write, despawn, _drop_persisted)
 
 
 def purge(app=None, write=None):
@@ -562,24 +534,14 @@ def purge(app=None, write=None):
     （TECH.md §3.10）。
     片付けたい MOD はこれを自分で呼ぶ。
     """
-    for npc_id in list(registry()):
-        if app is not None:
-            try:
-                despawn(app, npc_id, write=write)
-            except Exception:
-                log_exc("modnpc: cannot take {} off the world".format(npc_id))
-    registry().clear()
-    if write:
-        write("modnpc: the registry is empty")
+    _reg.purge(app, write, despawn)
 
 
 # --------------------------------------------------------------------------
 # 組む
 # --------------------------------------------------------------------------
-def _character_class():
-    """`scripts.characters.Character`。引けなければ None。"""
-    module = sys.modules.get("scripts.characters")
-    return getattr(module, "Character", None) if module is not None else None
+#: `scripts.characters.Character`。引けなければ None（`items.character_class` と同じもの）。
+_character_class = items.character_class
 
 
 def fields_of(npc_id):
@@ -1084,104 +1046,25 @@ def facility_of(app, area_id, facility_id, world=None):
 # --------------------------------------------------------------------------
 # 控え（state\modnpc\<世界>.json）
 # --------------------------------------------------------------------------
-#: 控えの置き場所（`sys` の属性。注入をまたぐ）とフォルダ名。
-STORE_ATTR = "_instantale_modnpc_store"
-STATE_DIRNAME = "modnpc"
-#: 建て直しの間だけ立つ「いまの世界の鍵」。`World.__init__` の中では `app.world_dict` が
-#: まだ前の世界を指していることがあるので、鍵を引数の `save_data_dict` から決めて持ち回る。
-_KEY_OVERRIDE_ATTR = "_instantale_modnpc_key_override"
-
-
-#: 繋ぎ方は `modnpc` / `modfacility` で同じなので `state` に1つ（違うのは上の3つの名前だけ）。
-_stores = state.SysWorldStore(STORE_ATTR, STATE_DIRNAME, _KEY_OVERRIDE_ATTR)
+# 置き場所の名前（`STORE_ATTR` / `STATE_DIRNAME` / `_KEY_OVERRIDE_ATTR`）と `_stores` は「登録簿」の節。
 bind_store = _stores.bind           # 控えを今の世代の `ctx` に繋ぐ（`install` が毎回呼ぶ）
 store = _stores.store               # 控え。`install` がまだなら None（控えずに動く）
 _current_key = _stores.current_key
 _bucket = _stores.bucket            # `(周回の鍵, 控え)` か `(None, None)`
 _jsonable = state.jsonable
 
+#: `with modnpc.keyed(key):` の間、控えをその周回の鍵で読み書きする（`modfacility.keyed` と対で使う）。
+keyed = _reg.keyed
 
-@contextlib.contextmanager
-def keyed(key):
-    """`with modnpc.keyed(key):` の間、控えをその周回の鍵で読み書きする。
-
-    `World.__init__` を MOD が直に包み、orig の後で `spawn` / `place` を呼ぶと、
-    ローダの関所（`world_init`）が立てた鍵はもう消えていて、控えは `app` から決めた鍵
-    （前の周回のことがある）へ書かれる。鍵を引数の `save_data_dict` から決めて
-    （`state.playthrough_key_of_dict`）ここで立てれば、読んでいる周回へ書ける。
-    抜けるときは入る前の値へ戻す（入れ子にしても外側の鍵を消さない）。
-    鍵が空なら何も立てない。
-    """
-    missing = object()
-    previous = getattr(sys, _KEY_OVERRIDE_ATTR, missing)
-    if isinstance(key, str) and key:
-        setattr(sys, _KEY_OVERRIDE_ATTR, key)
-    try:
-        yield key
-    finally:
-        if previous is missing:
-            try:
-                delattr(sys, _KEY_OVERRIDE_ATTR)
-            except AttributeError:
-                pass
-        else:
-            setattr(sys, _KEY_OVERRIDE_ATTR, previous)
-
-
-def _persist(app, owner, npc_id, **changes):
-    """1人ぶんの控えを書く。`snapshot=`（実体の写し）／`spawned=`／`place=`。書けたら True。
-
-    控えの形は `{持ち主: {id: {"snapshot": {...}, "spawned": bool, "place": [area, facility, 主か]}}}`。
-    `snapshot` は JSON に落ちる項目だけ（実行時のオブジェクトは落とさない）。
-    """
-    if not owner:
-        return False
-    key, bucket = _bucket(app)
-    if key is None:
-        return False
-    _put_entry(bucket, owner, npc_id, changes)
-    return store().save(key, bucket)
-
-
-def _put_entry(bucket, owner, npc_id, changes):
-    """控え `bucket` の1人ぶんを書き換える（書き出さない）。"""
-    entry = bucket.setdefault(owner, {}).setdefault(
-        str(npc_id), {"snapshot": None, "spawned": False, "place": None})
-    if "snapshot" in changes:
-        entry["snapshot"] = copy.deepcopy(changes["snapshot"])
-    if "spawned" in changes:
-        entry["spawned"] = bool(changes["spawned"])
-    if "place" in changes:
-        entry["place"] = list(changes["place"]) if changes["place"] else None
-
-
-def _drop_persisted(app, owner, npc_id):
-    key, bucket = _bucket(app)
-    if key is None:
-        return False
-    owned = bucket.get(owner)
-    if not isinstance(owned, dict) or str(npc_id) not in owned:
-        return False
-    owned.pop(str(npc_id), None)
-    if not owned:
-        bucket.pop(owner, None)
-    return store().save(key, bucket)
-
-
-def _persisted_entry(app, owner, npc_id):
-    key, bucket = _bucket(app)
-    if key is None:
-        return None
-    owned = bucket.get(owner)
-    entry = owned.get(str(npc_id)) if isinstance(owned, dict) else None
-    return entry if isinstance(entry, dict) else None
-
-
-def _layer_of(owner, npc_id):
-    for layer in layers(str(npc_id)):
-        if layer["owner"] == owner:
-            return layer
-    return None
+# 1人ぶんの控えの読み書き。控えの形は
+# `{持ち主: {id: {"snapshot": {...}, "spawned": bool, "place": [area, facility, 主か]}}}`。
+# `snapshot` は実体の写しで、JSON に落ちる項目だけ（実行時のオブジェクトは落とさない）。
+# 検査は `modnpc._persist` を差し替える。呼び元はこのモジュールの名前を通して引くので差し替えが届く。
+_persist = _reg.persist
+_put_entry = _reg.put_entry
+_drop_persisted = _reg.drop_persisted
+_persisted_entry = _reg.persisted_entry
+_layer_of = _reg.layer_of
 
 
 #: 写しに入れない項目。実行時のオブジェクトで、置き場所は `place` の控えが持つ。
@@ -1496,35 +1379,17 @@ def fire(site, app, npc_id, *, character=None, args=None, world=None,
     """その id に積まれた層のフックを順に呼ぶ。`[(持ち主, 戻り値), ...]`。
 
     フックの例外は飲む（1本の MOD の失敗で関所を止めない）。
-    飲んだことはローダのログに残す ― `safe=True` と同じ考えで、
-    見えなくするためではない。
+    飲んだことはローダのログに残す（`safe=True` と同じ考えで、見えなくするためではない）。
+    `info` は `{"site", "app", "npc_id", "character", "args", "world", "owner"}`。
+    層は `layers_for` の順（id 指定の層の後に `ANY` の層）。
     """
-    results = []
-    for layer in layers_for(npc_id):
-        fn = (layer.get("on") or {}).get(site)
-        if not callable(fn):
-            continue
-        info = {"site": site, "app": app, "npc_id": str(npc_id),
-                "character": character, "args": args, "world": world,
-                "owner": layer["owner"]}
-        try:
-            results.append((layer["owner"], fn(info)))
-        except Exception:
-            log_exc("modnpc: {} hook of {} on {} failed".format(
-                site, layer["owner"], npc_id))
-            if write:
-                write("WARN modnpc: {} hook of {} on {} failed".format(
-                    site, layer["owner"], npc_id))
-    return results
+    return _reg.fire(site, app, npc_id, layers_for(npc_id), character,
+                     args=args, world=world, write=write)
 
 
 def fire_all(site, app, *, args=None, world=None, write=None):
     """登録されている全員に同じ場面を通知する。`on["world"]` 用。"""
-    results = []
-    for npc_id in list(registry()):
-        results.extend(fire(site, app, npc_id, args=args, world=world,
-                            write=write))
-    return results
+    return _reg.fire_all(fire, site, app, args=args, world=world, write=write)
 
 
 # --------------------------------------------------------------------------
@@ -1772,10 +1637,8 @@ def restore(app, hidden, *, world=None, write=None):
             log_exc("modnpc: cannot place {} back after the save".format(npc_id))
 
 
-def installed():
-    """関所の状態。`{"generation", "owner", "targets"}` か、立っていなければ None。"""
-    done = getattr(sys, INSTALLED_ATTR, None)
-    return done if isinstance(done, dict) else None
+#: 関所の状態。`{"generation", "owner", "targets"}` か、立っていなければ None。
+installed = _reg.installed
 
 
 def gate_is_live():
@@ -1787,17 +1650,7 @@ def gate_is_live():
     `AttributeError: 'NoneType' object has no attribute 'id'`）。
     だから `spawn` はここが真でなければ載せない。
     """
-    try:
-        _owner, _name, current = patch.resolve(SAVE_TARGET)
-    except (LookupError, AttributeError):
-        return False
-    for _ in range(32):
-        if current is None:
-            return False
-        if getattr(current, "__wrapper_of__", None) == SAVE_TARGET and                 getattr(current, "__instantale_modnpc_gate__", False) and                 getattr(current, patch.GENERATION_MARK, None) == patch._generation:
-            return True
-        current = getattr(current, "__original__", None)
-    return False
+    return _reg.gate_is_live()
 
 
 def install(ctx, write=None):
@@ -1835,15 +1688,12 @@ def _read_lift_roster(ctx, write):
     前の注入で切ったまま `loader.json` から消した場合も、ここで戻る。
     """
     global LIFT_ROSTER
-    value = None
     runtime_dir = getattr(ctx, "runtime_dir", None)
     if runtime_dir:
-        try:
-            from . import config
-            value = config.load_flags(runtime_dir).get(LIFT_ROSTER_FLAG)
-        except Exception:
-            log_exc("modnpc: cannot read {}".format(LIFT_ROSTER_FLAG))
-    LIFT_ROSTER = value if isinstance(value, bool) else True
+        from . import config
+        LIFT_ROSTER = config._flag(runtime_dir, LIFT_ROSTER_FLAG, True, "modnpc")
+    else:
+        LIFT_ROSTER = True
     if not LIFT_ROSTER:
         log("modnpc: {} is off; the mod npcs stay in the roster during saves".format(
             LIFT_ROSTER_FLAG), level="WARN")
@@ -2167,10 +2017,7 @@ _WARNED_ATTR = "_instantale_modnpc_warned"
 
 
 def _warn_once(site, message, write=None):
-    warned = getattr(sys, _WARNED_ATTR, None)
-    if not isinstance(warned, set):
-        warned = set()
-        setattr(sys, _WARNED_ATTR, warned)
+    warned = state._process_value(_WARNED_ATTR, set)
     key = (site, message)
     if key in warned:
         return

@@ -383,6 +383,8 @@ class FakeCtx:
 
     # ログは本物の `ctx.logger` をそのまま借りる（`314_` のテストと同じ理由）。
     _mod = None
+    # 窓口に名乗る持ち主の名前（本物は apply() の間だけフォルダ名）。偽物は mod_dir を持たないので None。
+    mod_name = None
 
     def logger(self, name, **kw):
         import instantale_modloader as _ml
@@ -539,6 +541,38 @@ def specs_of(app):
     return [(entry["spec"].cls_name, list(entry["spec"].args))
             for entry in app.buttons if "spec" in entry]
 
+
+# ================================================================ 自己検証
+# 注入のたびに apply の中で回していた確かめ（固定の入力）をここへ移した（TECH.md §6.1）。
+print("[自己検証] ラベルの読み書き・日数の式・文言の書き換え")
+module, ctx, app, choice_cls = setup()
+check("注入のときには自己検証を回さない",
+      not any("verified:" in m or "VERIFY FAILED" in m for _l, m in ctx.logs), ctx.logs[-3:])
+# 通貨の表記は `130_` が差し替えていることがあるので、見本も同じ表記へ通してから突き合わせる
+check("代金のテンプレートを埋める",
+      module.fmt(module.START_BUTTON, name="訓練を受ける", price=500, years=3)
+      == module.ui.rewrite_coins("訓練を受ける(500G)"))
+check("知らない名前は残る", module.fmt("{name}と{typo}", name="訓練") == "訓練と{typo}")
+check("ラベルの名前を読む",
+      (module.plain_name("訓練を受ける(300G)"), module.plain_name("ただ鍛える(1年)"),
+       module.plain_name("やった")) == ("訓練を受ける", "ただ鍛える", "やった"))
+check("ラベルの年数を読む",
+      (module.phase_years("ただ鍛える(1年)"), module.phase_years("新たな技を学ぶ(3年)"),
+       module.phase_years("やった")) == (1, 3, None))
+check("ベース期間の表（期間名を明示で渡す）",
+      tuple(module.base_days(name) for name in
+            ("1ヵ月", "2ヵ月", "3ヵ月", "6ヵ月", "1年", "そんな期間は無い"))
+      == (30, 60, 90, 180, 365, 365))
+check("長さの言い方",
+      (module.length_text(365), module.length_text(1095), module.length_text(30),
+       module.length_text(540), module.length_text(7)) == ("1年", "3年", "1ヵ月", "18ヵ月", "7日"))
+check("知らない修行内容はゲームの年数が倍率の代わりに立つ",
+      (module.phase_days("no_such_activity", game_days=1095)[1],
+       module.phase_days("no_such_activity", years=2)[1],
+       module.factor_of("no_such_activity", 4)) == (3, 2, 4))
+check("AI の描写と段の外の行頭の漢数字には触らない",
+      (module.reword("これからの三年間、私が責任を持ってお手伝いいたしましょう。"),
+       module.reword("一年間、ひたすら鍛錬した。0の経験値を得た。", "simple")) == (None, None))
 
 # ================================================================ 既定
 print("[既定] 素の設定では表示も所持金も日数も1つも動かない")

@@ -35,6 +35,8 @@ spec.loader.exec_module(MOD)
 
 class FakeCtx:
     _mod = None
+    # mod_dir を持たない偽物なので、持ち主名は MOD の予備の名前になる（本物の ctx.mod_name は apply の外で None）
+    mod_name = None
 
     def __init__(self, out_dir):
         self.out_dir = out_dir

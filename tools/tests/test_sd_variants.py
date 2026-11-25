@@ -342,6 +342,11 @@ else:
             self.warnings = []
             self.generation = "test"
 
+        @property
+        def mod_name(self):
+            # 本物の ctx はフォルダ名を返す
+            return os.path.basename(self.mod_dir) if self.mod_dir else None
+
         def out_path(self, *parts):
             path = os.path.join(self.out_dir, *parts)
             os.makedirs(os.path.dirname(path), exist_ok=True)

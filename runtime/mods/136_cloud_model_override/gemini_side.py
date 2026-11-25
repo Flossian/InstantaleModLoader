@@ -16,7 +16,7 @@ SDK はモデル名を本文ではなく **URL のパス**（`models/<モデル>
 ## 名前だけでは通らないもの
 
 ゲームが `generationConfig.thinkingConfig` に入れる値は、ゲームで選んだモデルで決まる
-（送信モジュールの `_build_config` をゲームの中で呼んで確かめた。2026-11-13。VERIFICATION §3.71）。
+（VERIFICATION.md §3.71 の版8）。
 
     gemini-3.5-flash / 3-flash-preview / 3.1-flash-lite   thinking_budget=0（思考しない。`reasoning_models`）
     gemini-3.1-pro-preview                                 thinking_level=LOW
@@ -26,7 +26,7 @@ SDK はモデル名を本文ではなく **URL のパス**（`models/<モデル>
 受けないモデル（3.5 Flash-Lite は `400 Request contains an invalid argument.`）と、受けるか測れていないモデルには、
 外していちばん浅い段階で送る。
 思考の段階はモデルごとに受ける幅が違い、Gemini 4 と Gemini 3.8 Flash は `minimal` を持たない
-（Google の Thinking のページの表。2026-11-13。素のまま送ると `400 Thinking level MINIMAL is not supported`）。
+（Google の Thinking のページの表。VERIFICATION.md §3.71 の版8。素のまま送ると `400 Thinking level MINIMAL is not supported`）。
 受けない段階は、受ける幅のいちばん近い端へ寄せる（minimal なら low）。
 
 ## キャッシュ
@@ -35,11 +35,11 @@ Gemini 4 は暗黙のキャッシュだけで、印を付ける指定は無い�
 """
 
 import re
+from urllib.parse import urlsplit
 
-try:
-    from urllib.parse import urlsplit
-except Exception:  # pragma: no cover - 3.10 には必ず在る
-    urlsplit = None
+from instantale_modloader import frames
+
+from .claude_side import DEFAULT_MARK, DEFAULT_TEXT
 
 #: SDK で、生成の要求が最後に通る2点（ストリームと一括）。
 STREAMED = "google.genai._api_client:BaseApiClient.request_streamed"
@@ -58,7 +58,7 @@ LEVELS = ("minimal", "low", "medium", "high", "xhigh")
 STRICT = (("low", "medium", "high"), "medium", False)
 
 #: モデルごとの (受ける段階, 送らないときの既定, thinking_budget を受けるか)。前方一致なので、長い名前を先に並べる。
-#: 段階と既定は Google の Thinking のページの表（2026-11-13）。thinking_budget は実測（受けると測れたものだけ True）。
+#: 段階と既定は Google の Thinking のページの表（VERIFICATION.md §3.71 の版8）。thinking_budget は実測（受けると測れたものだけ True）。
 #: ゲームの一覧のモデルは、ゲームが送っている値から読んだ。
 TRAITS = (
     ("gemini-4-hydrogen", (("low", "medium", "high", "xhigh"), "high", True)),
@@ -74,11 +74,8 @@ TRAITS = (
 )
 
 #: thinking_budget を 0 のまま送るときのタイトル画面の書き方。
+#: 推論量を送らず API の既定に任せるときの書き方（DEFAULT_TEXT / DEFAULT_MARK）は `claude_side` から引く。
 BUDGET_ZERO = "budget 0"
-
-#: 推論量を送らず API の既定に任せるときの書き方（タイトル画面。`claude_side` と同じ）。
-DEFAULT_TEXT = "既定"
-DEFAULT_MARK = "（既定）"
 
 
 def traits(model):
@@ -213,8 +210,6 @@ def _host(client):
     except Exception:
         return ""
     url = str(url or "")
-    if urlsplit is None:
-        return url
     try:
         return (urlsplit(url).hostname or "").lower()
     except Exception:
@@ -245,16 +240,20 @@ def install(ctx, target, effort, log):
         log.swap("gemini", source, target, path, changed)
         return new_path, body
 
-    @ctx.wrap(STREAMED, required=False, safe=True, alias_scan=False)
-    def gemini_streamed(orig, self, http_method, path, request_dict, *args, **kwargs):
-        found = rewrite(self, path, request_dict)
+    def send(orig, self, args, kwargs):
+        """2点の共通部分。並びは (self, http_method, path, request_dict, http_options)。"""
+        found = rewrite(self, frames.arg(args, kwargs, "path", 1),
+                        frames.arg(args, kwargs, "request_dict", 2))
         if found is None:
-            return orig(self, http_method, path, request_dict, *args, **kwargs)
-        return orig(self, http_method, found[0], found[1], *args, **kwargs)
+            return orig(self, *args, **kwargs)
+        args, kwargs, _ = frames.replace_arg(args, kwargs, "path", 1, found[0])
+        args, kwargs, _ = frames.replace_arg(args, kwargs, "request_dict", 2, found[1])
+        return orig(self, *args, **kwargs)
+
+    @ctx.wrap(STREAMED, required=False, safe=True, alias_scan=False)
+    def gemini_streamed(orig, self, *args, **kwargs):
+        return send(orig, self, args, kwargs)
 
     @ctx.wrap(REQUEST, required=False, safe=True, alias_scan=False)
-    def gemini_request(orig, self, http_method, path, request_dict, *args, **kwargs):
-        found = rewrite(self, path, request_dict)
-        if found is None:
-            return orig(self, http_method, path, request_dict, *args, **kwargs)
-        return orig(self, http_method, found[0], found[1], *args, **kwargs)
+    def gemini_request(orig, self, *args, **kwargs):
+        return send(orig, self, args, kwargs)

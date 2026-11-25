@@ -10,6 +10,6 @@
     "en": "Opening your items while a battle is processing folds the enemy panel to zero height, and an enemy panel update at that moment crashes the game with a division by zero. The update now runs to the end while the panel is folded, and the panel is redrawn when it comes back.",
     "ja": "戦闘の処理中に持ち物を開くと敵の欄が高さ 0 に畳まれ、そのときに敵の欄の更新が走ると 0 除算でゲームが落ちる。畳まれている間も更新を最後まで走らせ、欄が戻ったら描き直す。"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian"
 }

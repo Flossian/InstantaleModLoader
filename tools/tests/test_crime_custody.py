@@ -209,6 +209,9 @@ try:
     Cfg.RESCUE_ENABLED, Cfg.RESCUE_AFFINITY, Cfg.RESCUE_DIFFICULTY_PLUS, Cfg.RESCUE_LOSS = True, 60, 10, 10
     screen.busy_on = screen.busy_off = noop
     screen.start_phase = lambda a, phase, *args, **kw: phases.append(phase)
+    # 押下の処理は本物の `Screen.run_phase` で使い捨てのフェーズに包む（中で上の `start_phase` を呼ぶ）
+    screen.ctx, screen.tag, screen.is_busy = ctx, "crime incentive", lambda: False
+    screen.run_phase = types.MethodType(ui.Screen.run_phase, screen)
     helper = Person("ミナ")
     helper.relationship = {"player": {"affinity": 90}}
     helper.config = {"is_dead": False}

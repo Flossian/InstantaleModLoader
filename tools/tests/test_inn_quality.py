@@ -353,6 +353,8 @@ class InstantaleApp:
 
 class FakeCtx:
     _mod = None
+    # 窓口に名乗る持ち主の名前（本物は apply() の間フォルダ名を返す）。
+    mod_name = os.path.basename(os.path.dirname(find_mod("_inn_quality")))
     manager = types.SimpleNamespace(
         send_request=lambda *a, **k: None,
         send_request_with_no_structure=lambda *a, **k: None)
@@ -540,6 +542,19 @@ app.press("宿泊を終える")
 rec = record_of(ctx)["8"]
 check("regular: owner without 'player' recorded only", rec["stays"] == 1 and rec["granted"] == 0
       and app.world.characters["8"].relationship == {}, rec)
+
+# ロード直後の形: 宿の主が実行時の名簿に居らず、セーブの素データにだけ居る。素データの好感度を上げる
+_saved_sdd, _saved_day = getattr(app, "save_data_dict", None), app.world.days_elapsed
+app.save_data_dict = {"npcs": {"13": {"name": "カイ", "ability_scores": {},
+                                      "relationship": {"player": {"affinity": 2}}}}}
+app.player.location = Facility("52", "13")
+stay(app, "bunk")
+app.press("宿泊を終える")
+rec = record_of(ctx)["13"]
+raw = app.save_data_dict["npcs"]["13"]["relationship"]["player"]["affinity"]
+check("regular: owner only in the save data gains affinity there", raw == 3 and rec["granted"] == 1,
+      (raw, rec))
+app.save_data_dict, app.world.days_elapsed = _saved_sdd, _saved_day
 
 # ---------------------------------------------------------------- 会話の1行
 app.world.days_elapsed += 12

@@ -172,6 +172,8 @@ try:
             return path
 
         _mod = None      # 本物の logger が MOD 名に使う
+        # 本物の `ctx.mod_name` と同じく mod のフォルダ名（窓口に名乗る持ち主）
+        mod_name = "322_battle_bgm"
 
         def logger(self, name, **kw):
             return ml.ModContext.logger(self, name, **kw)
@@ -224,7 +226,7 @@ try:
     try:
         ctx = FakeCtx()
         mod.AVOID_REPEAT = False
-        gates.reset_all()                # 窓口 arrivals の包みをこの偽の ctx に渡す
+        gates.reset_all()                # 窓口 arrivals / battles の包みをこの偽の ctx に渡す
         mod.apply(ctx)
     finally:
         os.chdir(old_cwd)
@@ -328,6 +330,9 @@ try:
     with io.open(os.path.join(ctx.out_dir, mod.LOG_BASENAME), encoding="utf-8") as fh:
         log_text = fh.read()
     check("hook: every battle leaves a [BGMPICK] line", log_text.count("[BGMPICK]") >= 7, log_text.count("[BGMPICK]"))
+    # 戦闘の組み立て（窓口 battles の BUILD）で控えた enemy_type が、次の戦闘曲の判定に載る
+    check("hook: enemy_type from BattleStartManager.__init__ reaches the pick",
+          "no candidate: normal by default" in log_text and "enemy_type='guard'" in log_text)
     check("hook: no unexpected errors",
           all("could not be played" in e for e in ctx.errors), ctx.errors)
 

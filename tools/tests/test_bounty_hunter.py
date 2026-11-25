@@ -44,7 +44,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml  # noqa: E402
-from instantale_modloader import arrivals, confinement, durations, gates, guards  # noqa: E402
+from instantale_modloader import arrivals, battles, confinement, durations, gates, guards  # noqa: E402
 
 TARGETS = (
     "scripts.llm.llm_manager:guard_npc_generator",
@@ -54,6 +54,7 @@ TARGETS = (
     "__main__:BattleEndManager.end_phase",
     # 着いた後・日数が進んだ後はローダの窓口（`arrivals` / `durations.on_days`）が包む。
     "__main__:AreaMoveManager.execute",
+    "__main__:AreaMoveManager.__init__",    # AREA の窓口が行き先と手段を控えるために一緒に包む
     "__main__:MovePhaseManager.move_phase",
     "__main__:InstantaleApp.elapse_days",
     "__main__:InstantaleApp.refresh_choice_buttons",
@@ -67,8 +68,13 @@ TARGETS = (
     "__main__:InstantaleApp.start_game",
 )
 #: TARGETS のうち、この MOD ではなくローダの窓口が包む対象
+#: 戦闘の組み立て・始まり・終わりは窓口 `battles`（始まりは窓口 `guards` も包む）。
 WINDOW_TARGETS = (
+    "__main__:BattleStartManager.__init__",
+    "__main__:BattleStartManager.start_battle",
+    "__main__:BattleEndManager.end_phase",
     "__main__:AreaMoveManager.execute",
+    "__main__:AreaMoveManager.__init__",
     "__main__:MovePhaseManager.move_phase",
     "__main__:InstantaleApp.elapse_days",
 )
@@ -219,6 +225,9 @@ class FakeUI(object):
         self.refresh_status = real.refresh_status
         self.money = real.money
         self.rewrite_coins = real.rewrite_coins
+        self.battle_flags = real.battle_flags
+        self.busy_flags = real.busy_flags
+        self.BATTLE_FLAGS = real.BATTLE_FLAGS
 
     def scheduler(self, ctx, tag="mod"):
         """本物と同じく「次のフレーム」。ゲームの外ではその場で実行する。"""
@@ -442,7 +451,38 @@ def main():
     wanted = {"0": -22, "1": 10, "2": -18}
     module, ctx = fresh_mod(App(wanted))
     hunt = module.hunt
-    check("注入時の自己検証が通っている",
+    # 以前は注入時に確かめていた固定の入力（TECH.md §6.1。ここへ移した）
+    cases = (
+        # (ここの重さ, 合計, 出すか, 難易度)
+        (0, 0, False, 20),
+        (20, 20, True, 40),
+        (19, 19, False, 39),        # どちらの条件にも届かない
+        (0, 40, True, 60),          # 手配されていない土地でも合計で来る
+        (0, 500, True, 75),         # 上限で頭打ち
+    )
+    check("条件と難易度の表",
+          all((hunt.should_send(here, total, 20, 40), hunt.difficulty_of(total, 20, 1.0, 75))
+              == (expected, level) for here, total, expected, level in cases),
+          [(here, total, hunt.should_send(here, total, 20, 40), hunt.difficulty_of(total, 20, 1.0, 75))
+           for here, total, _e, _l in cases])
+    scenes = (
+        # (画面に並ぶクラス名, 場面の最中か)
+        (["MovePhaseManager", "DisplayVacationChoice"], False),
+        (["VacationStartManager", "MovePhaseManager"], True),
+        (["VacationRestManager", "VacationTrainManager"], True),
+        (["DisplayTrainingChoice", "DisplayQuestChoice"], False),
+        ([None, ""], False),
+    )
+    check("場面の最中の見分けの表",
+          all(bool(module.sequence_in(names)) == expected for names, expected in scenes),
+          [(names, module.sequence_in(names)) for names, _e in scenes])
+    sample = {"衛兵1": type("E", (), {})(), "衛兵2": type("E", (), {})()}
+    held = sample
+    renamed = module.rename_enemies(sample, "賞金稼ぎ")
+    check("改名は入れ物を作り直さずに鍵を付け替える",
+          renamed == 2 and sorted(sample) == ["賞金稼ぎ1", "賞金稼ぎ2"] and sample is held,
+          (renamed, sorted(sample)))
+    check("注入で ERROR を出さない",
           not [level for level, _ in ctx.logs if level == "ERROR"], ctx.logs)
     check("手配された土地だけに重さが付く",
           hunt.weights(wanted) == {"0": 22, "2": 18}, hunt.weights(wanted))
@@ -492,6 +532,10 @@ def main():
           and own <= set(ctx.hooks),
           (arrivals.owners(arrivals.AREA), arrivals.owners(arrivals.FACILITY),
            durations.DAYS_HOOKS.owners()))
+    check("戦闘の組み立て・始まり・終わりは窓口 battles に登録する（自分では包まない）",
+          all(module.OWNER in battles.owners(kind)
+              for kind in (battles.BUILD, battles.START, battles.END_NORMAL)),
+          [battles.owners(kind) for kind in (battles.BUILD, battles.START, battles.END_NORMAL)])
     returned, times = arrive(ctx, app)
     check("土地に着くと追手が出る", BattleStartManager.built == [("guard", None)],
           BattleStartManager.built)

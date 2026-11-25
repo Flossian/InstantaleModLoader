@@ -11,16 +11,15 @@
 - 版1の途中までは施設の選択肢の「盗みを働く」だった（棚から無作為に1つ、同じ店は1日1回）。
   売買画面の右クリックへ移すので外した（セーブに焼かれた残骸を消すためラベルだけ残す。`office.OUR_LABELS`）
 """
-from instantale_modloader import frames, items, ui
+from instantale_modloader import frames, items, modnpc, ui
 
 from . import rules
 
 #: 外した施設の選択肢。セーブに焼かれた残骸を窓口 `choices` の `labels` で消すためだけに残す（`office`）。
 THEFT_LABEL = "盗みを働く"
 #: 店だと見なす選択肢（`Facility.choices` の鍵。GAME.md §2.20 の役場の項）。
+#: MOD が持つ施設の主（`331_` の店など。`modnpc.is_mod_npc`）の店は、自分の店から盗む話にしないので外す。
 SHOP_CHOICE = "売買する"
-#: MOD が持つ施設の主（`331_` の店など）。自分の店から盗む話にしない。
-MOD_NPC_PREFIX = "mod:"
 THEFT_SUCCESS_TEXT = "店主の目を盗み、{item}を懐に滑り込ませた。"
 THEFT_ABORT_TEXT = "店主の視線がこちらへ向いた。気取られる前に手を引っ込めた。"
 THEFT_CAUGHT_TEXT = "「泥棒だ！」店主の叫びを聞きつけ、衛兵が駆けつけてきた。"
@@ -73,11 +72,10 @@ def install(env):
         choices = getattr(facility, "choices", None)
         if facility is None or not isinstance(choices, dict) or SHOP_CHOICE not in choices:
             return None
-        owner_id = getattr(facility, "owner", None)
-        if owner_id is None or str(owner_id).startswith(MOD_NPC_PREFIX):
+        owner_id, keeper = ui.facility_owner(app, facility)
+        if owner_id is None or modnpc.is_mod_npc(owner_id):
             return None
-        keeper = ui.character_of(app, str(owner_id))
-        return (facility, str(owner_id), keeper) if keeper is not None else None
+        return (facility, owner_id, keeper) if keeper is not None else None
 
     def shop_key(app, facility):
         return "{}/{}".format(ui.area_id_of(ui.current_area(app)), getattr(facility, "id", ""))
@@ -177,7 +175,7 @@ def install(env):
     muted = {"buy": False}
 
     def number(value):
-        return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+        return value if frames.is_number(value) else None
 
     def take(app, widget, keeper):
         """盗んだ品を手持ちへ移す。`(品の名前, 理由)`。

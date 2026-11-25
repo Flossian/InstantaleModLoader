@@ -28,6 +28,7 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
 import sys
 
 from . import window_call, window_entries, window_put
+from . import state as _state_mod       # `claims(app, state=)` の引数と名前を分ける
 
 STORE_ATTR = "_instantale_quest_claims"
 
@@ -36,14 +37,7 @@ DONE = "done"
 
 
 def _store():
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"claims": {}, "urgent": {}, "errors": []}
-        setattr(sys, STORE_ATTR, store)
-    store.setdefault("claims", {})
-    store.setdefault("urgent", {})
-    store.setdefault("errors", [])
-    return store
+    return _state_mod.process_store(STORE_ATTR, {"claims": {}, "urgent": {}, "errors": []})
 
 
 def declare(owner, ctx, fn):

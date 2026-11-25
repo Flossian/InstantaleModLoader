@@ -305,6 +305,9 @@ def _fresh():
     if os.path.exists(path):
         os.remove(path)
     ctx = _Ctx()
+    # 1手・1手の効果・戦闘の始まりはローダの窓口 `battles` が包む。関所は1つの世代に1枚なので、
+    # 偽の ctx を作り直すたびに忘れさせて、新しい ctx に包みを渡す。
+    _ml.gates.reset_all()
     mod.apply(ctx)
     return ctx
 
@@ -319,6 +322,10 @@ def _log():
 
 # 継続回復が上限に当たった回。`max_hp_of` は float を返す。
 _ctx = _fresh()
+check("hooks: the action, its effect and the battle start go to the battles window",
+      all(_ml.battles.owners(kind) == [mod.OWNER]
+          for kind in (_ml.battles.ACTION, _ml.battles.EFFECT, _ml.battles.START)),
+      [(kind, _ml.battles.owners(kind)) for kind in (_ml.battles.ACTION, _ml.battles.EFFECT, _ml.battles.START)])
 _king = types.SimpleNamespace(name="灰の王", max_hp=1560, current_hp=1550,
                               experience_level=60, status={"再生": {}})
 _app = types.SimpleNamespace(current_enemy_dict={"灰の王": _king}, player=None)

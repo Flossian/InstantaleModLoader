@@ -128,8 +128,8 @@ class Journey(object):
         self.save()
         return self.record
 
-    def current(self, world=None, stages=()):
-        """いま有効な控え。段階・世界が合わなければ None。
+    def current(self, stages=()):
+        """いま有効な控え。段階が合わなければ None（周回の照合は呼び手の `road_of`）。
 
         `moving`（最後の移動を渡した後）だけは実時間の期限を見て、
         過ぎていたらその場で外す。
@@ -144,9 +144,6 @@ class Journey(object):
             return None
         if stages and record.get("stage") not in stages:
             return None
-        key = record.get("world")
-        if key and world and key != world:
-            return None
         return record
 
     # -- 日数 ---------------------------------------------------------------
@@ -155,9 +152,7 @@ class Journey(object):
 
         0 のまま着いた ＝ **`elapse_days` を一度も通らなかった**の合図で、
         `arrived_check` がそれを WARN に出す。
-        以前はここに予算の積み上げ（`spend`）があったが、
-        道中が日数を進めないことが分かったので数える相手が無くなった
-        （経緯は VERIFICATION.md §3.13）。
+        道中は日数を進めないので、積み上げて数える相手は無い（VERIFICATION.md §3.13）。
         """
         if self.record is None:
             return 0

@@ -27,12 +27,12 @@ r"""機能追加: 街に施設を建てる（出資する）。
 
 建物は `modfacility`（TECH.md §5.8）、主人は `modnpc`（§5.7）。
 どちらもセーブには残らず、控え（`state\`）から建て直す。
-この MOD が持つのは**出資の帳簿**だけ（`state\facility_investment\<世界名>.json`）。
+この MOD が持つのは**出資の帳簿**だけ（`state\facility_investment\<世界名×主人公名>.json`）。
 
     持ち株  = {area, facility, keeper, kind, tier, size, name, built, collected, received}
 
-`received` はこれまでに受け取った売上の合計（版45 から）。それより前に受け取った分は額が残っていないので、
-版45 より前の持ち株は最初に受け取ったときに `received_partial` を立てる（「家と施設」の窓は「以上」と書く）。
+`received` はこれまでに受け取った売上の合計。積み始める前に受け取った分は額が残っていないので、
+`received` を持たない持ち株は最初に受け取ったときに `received_partial` を立てる（「家と施設」の窓は「以上」と書く）。
 
 主人は施設を建てたときに一緒に生まれ、その施設の主として立つ。
 雇っているわけではない（表現の問題で、実際にどこかで雇うわけではない）。
@@ -63,17 +63,14 @@ r"""機能追加: 街に施設を建てる（出資する）。
 保存の前に外れ、書き出しの直前にも網があるので、セーブにも `world_data.json` にも残らない。
 進み（闘技場の `config` の `current_phase` / `enemy_data`）は実体と同じ辞書なので控えに載り、ロードで戻る。
 写しが無いまま押されたときのために、本体の入口は網で包んで握る（`run_guarded`）。
-
-版47: 宿泊・闘技場の相手の生成・建物の中の本体の入口のフックは、引数を受け取った形のまま元の関数へ渡す
-（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。闘技場の相手の生成は `location` だけを来た側に合わせて差し替える。
 """
 
 import datetime
 import sys
 
 from instantale_modloader import (choices, durations, frames, holdings, llm, loads, modfacility,
-                                  modnpc, npcs, prices, ui)
-from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, playthrough_key,
+                                  modnpc, npcs, prices, stays, ui)
+from instantale_modloader.state import (UNKNOWN_WORLD, WorldStore, ordered, playthrough_key,
                                         playthrough_key_of_dict)
 
 from . import catalog
@@ -84,7 +81,7 @@ LOG_BASENAME = "facility_investment.log"
 #: `modfacility` / `modnpc` に名乗る持ち主。控えの中でこの MOD の建物と主人を束ねる鍵。
 OWNER = "331_facility_investment"
 
-#: 世界ごとの控え `state\facility_investment\<世界名>.json`。
+#: 周回ごとの控え `state\facility_investment\<世界名×主人公名>.json`。
 STATE_DIRNAME = "facility_investment"
 
 #: 控えの置き場（`sys` の属性名）。注入し直しをまたいで残す。
@@ -117,8 +114,6 @@ ROOM_CLS = "DisplayVacationChoice"
 #: よその宿屋には触らない（層は建物ごとなので、持ち株の宿にしか掛からない）。
 HIDDEN_INN_CLASSES = (ROOM_CLS,)
 
-#: 闘技場の入口。署名は `(app)`（`out\recon\targets.txt`）。入口そのものは実行時の施設でも通る。
-ARENA_CLS = "EntryColosseumMatchManager"
 #: 素データを引く本体の入口。写し（`plain`）が置いてあれば通る。落ちたときの網だけここで持つ。
 #: `(包む先, 何の処理か, その網が効く種類)`。
 GUARDED_PHASES = (
@@ -131,10 +126,6 @@ GUARDED_PHASES = (
     ("__main__:TrainingStartManager.execute", "training", ("training_facility",)),
     ("__main__:TrainingPhaseManager.execute", "training", ("training_facility",)),
 )
-
-#: ゲーム自身が施設の画面に出す入口の spec。並んでいればこちらの同じ選択肢は出さない
-
-DAYS_PER_MONTH = 30
 
 # ---------------------------------------------------------------- 設定（mod.json）
 # ここの定数だけが GUI から変えられる（ローダは入口モジュールのグローバルへ書き込む）。
@@ -188,8 +179,7 @@ CANCEL_LABEL = "やめる"
 COLLECT_LABEL = "売上を受け取る({}G)"
 COLLECT_EMPTY_LABEL = "売上を受け取る(まだ無い)"
 #: 自分の宿屋の無料の宿泊。ゲームの `宿泊する` は自分の宿では伏せるので、泊まり方はこれだけ。
-#: 版33 までは同じ `宿泊する` を押させて宿代を後から返していたが、払って戻るのが見えず
-#: 分かりづらかった。
+#: 同じ `宿泊する` を押させて宿代を後から返す形は、払って戻るのが見えず分かりづらい。
 STAY_LABEL = "無料で泊まる"
 LEAVE_LABEL = "出る"
 
@@ -225,21 +215,13 @@ def main_module():
     return sys.modules.get("__main__")
 
 
-def _fmt(template, **values):
-    try:
-        return template.format(**values)
-    except (KeyError, IndexError, ValueError):
-        return template
+#: 設定の文型を埋める。書式に無い名前は `{名前}` のまま残し、壊れた書式は素の文字列で返す（ローダの `frames.safe_format`）。
+_fmt = frames.safe_format
 
 
 def ordered_bucket(bucket):
-    """控えの項目の並び。"""
-    if not isinstance(bucket, dict):
-        return bucket
-    order = ("holdings",)
-    ordered = {key: bucket[key] for key in order if key in bucket}
-    ordered.update({k: v for k, v in bucket.items() if k not in ordered})
-    return ordered
+    """控えの項目の並び（ローダの `state.ordered`）。辞書でなければそのまま返す。"""
+    return ordered(bucket, ("holdings",)) if isinstance(bucket, dict) else bucket
 
 
 def fighters_so_far(app, record):
@@ -340,12 +322,8 @@ def apply(ctx):
     modnpc.install(ctx, write=write)
 
     # ------------------------------------------------------------ 補助
-    def warn_once(token, text):
-        if token in state["warned"]:
-            return False
-        state["warned"].add(token)
-        write(text)
-        return True
+    # 鍵ごとに1回だけ書く（ローダの `ctx.once`）。覚えは注入をまたぐ sys の器に置き、直ったら `forget` で落とす。
+    warn_once = ctx.once(write, store=state["warned"])
 
     # ------------------------------------------------------------ 控え
     def current_key(app):
@@ -411,24 +389,11 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 街の規模と軒数
     def area_size(app, area_id):
-        """街の規模。実行時の `Area.size` は読めない（`324_` の実機 38/38）ので
-        素データから取る。街でなければ None。"""
-        for attr in ("save_data_dict", "world_dict"):
-            container = getattr(app, attr, None)
-            areas = container.get("areas") if isinstance(container, dict) else None
-            if not isinstance(areas, dict):
-                continue
-            entry = areas.get(str(area_id))
-            if entry is None:
-                for k, v in areas.items():
-                    if str(k) == str(area_id):
-                        entry = v
-                        break
-            if isinstance(entry, dict):
-                size = catalog.normalize_size(entry.get("size"))
-                if size:
-                    return size
-        return None
+        """街の規模。街でなければ None。
+
+        実行時の `Area.size` は読めないので素データから取る（ローダの `ui.area_size`。GAME.md §2.7）。
+        """
+        return catalog.normalize_size(ui.area_size(app, area_id))
 
     def built_here(app, area_id):
         """その街にこの MOD で建てた軒数。種類は問わない。
@@ -491,7 +456,7 @@ def apply(ctx):
     def keeper_name(app, record):
         """主人の名。帳簿に控えた名 → 実体の名 → 鍵から引いた名。
 
-        控えを先に見るのは、**建て直しても同じ人**にするため（版25 から帳簿に持つ）。
+        控えを先に見るのは、**建て直しても同じ人**にするため。
         """
         stored = record.get("keeper_name") if isinstance(record, dict) else None
         if stored:
@@ -560,7 +525,7 @@ def apply(ctx):
         return found
 
     def place_names(app, skip=None):
-        """その世界の施設の名前。新しい建物はこれと重ならないように選ぶ（版37）。"""
+        """その世界の施設の名前。新しい建物はこれと重ならないように選ぶ。"""
         return [str(record.get("name") or "") for record in holdings_of(app)
                 if record is not skip and record.get("name")]
 
@@ -574,8 +539,8 @@ def apply(ctx):
         # 2つだけの画面で止まった（実機）。画面の判断は1か所（TECH.md §5.8）。
         out = []
         kind = record.get("kind")
-        # 自分の宿屋の泊まり方はこれだけ（版40 でゲームの `宿泊する` を伏せた）。
-        # 同じ入口を押させて後から返す形は、払って戻るのが見えず分かりづらかった（版34）。
+        # 自分の宿屋の泊まり方はこれだけ（ゲームの `宿泊する` は `HIDDEN_INN_CLASSES` で伏せる）。
+        # 同じ入口を押させて後から返す形は、払って戻るのが見えず分かりづらい。
         if kind == "inn":
             out.append({"key": "stay", "label": STAY_LABEL,
                         # 伏せたゲームの `宿泊する` と同じ並びで出す。
@@ -595,14 +560,6 @@ def apply(ctx):
         if not facility_id or not keeper_id:
             return ""
 
-        def choices(info):
-            found = building_choices(info["app"], info["facility_id"])
-            return [] if found is None else found
-
-        def no_exit(info):
-            return [] if building_choices(info["app"], info["facility_id"]) is None \
-                else info["args"]["choices"]
-
         modfacility.register(
             OWNER, facility_id=facility_id,
             fields={"name": record.get("name") or "",
@@ -611,7 +568,8 @@ def apply(ctx):
                     "facility_type": record.get("kind"),
                     "tier": record.get("tier"),
                     "owner": keeper_id},
-            choices=choices, exit_label=LEAVE_LABEL,
+            choices=lambda info: building_choices(info["app"], info["facility_id"]),
+            exit_label=LEAVE_LABEL,
             # 持ち株の建物はロードで必ず建ち直る（手放す経路がまだ無い）。
             keep_inside=True,
             # 自分の宿ではゲームの `宿泊する`（宿代を取る）を出さない。
@@ -624,16 +582,15 @@ def apply(ctx):
             # （`VacationStartManager` は実体で足りた）ので、余計な写しは置かない。
             plain=catalog.needs_plain(record.get("kind")),
             # 絵は描かない。ゲームが名前で引いて生成する（`modfacility は絵に触らない`。TECH.md §5.8）。
-            on={"choices": no_exit,
-                "leave": lambda info: end_stay(info["app"], "left the building")},
+            on={"leave": lambda info: end_stay(info["app"], "left the building")},
             write=write)
         # 主人の層は**この世代のこのロードで1度だけ**積む（ロードのたびに積み直す）。塗り直しのたびに呼ぶとログが毎手流れる。
-        # 「登録簿に層が在れば積まない」にしていたら、注入し直しても前の版の層が残り、
-        # 版13 で足した `notes`（出資者の一文）が実機の頼み文に出なかった（VERIFICATION.md §3.63）。
+        # 「登録簿に層が在れば積まない」にすると、注入し直しても前の版の層が残り、
+        # 新しく足した `notes` が頼み文に出ない（VERIFICATION.md §3.63）。
         if keeper_id not in keepers_registered:
             keepers_registered.add(keeper_id)
             # 建てたときに作った主人（LLM か表）を帳簿から使う。
-            # 無ければ表から組む（版25 より前の持ち株）。
+            # 無ければ表から組む（主人を帳簿に控える前に建てた持ち株）。
             made = record.get("keeper_fields")
             fields = dict(made) if isinstance(made, dict) and made.get("name") else \
                 catalog.keeper_fields(record.get("kind"), record.get("area_name"),
@@ -644,14 +601,14 @@ def apply(ctx):
                 OWNER, npc_id=keeper_id,
                 fields=fields,
                 # 会話の頼み文に毎回足す。相手が出資者本人だと主人に分からせる
-                # （`profile` は控えの写しが勝つので、版12 までの主人にはここでしか届かない）。
+                # （`profile` は控えの写しが勝つので、出資者の一文を持たずに生まれた主人にはここでしか届かない）。
                 notes=lambda info: catalog.keeper_notes(
                     investor_name(info.get("app"), record), record.get("name")),
                 write=write)
         return facility_id
 
     def heal_keeper(app, keeper_id, world=None, record=None):
-        """版4以前に生まれた主人の `experience_level` を埋める。好感度の引き上げは建物ごとに1回だけ。
+        """`experience_level` を持たずに生まれた主人に埋める。好感度の引き上げは建物ごとに1回だけ。
 
         控えの写しは層の初期値より勝つので（`modnpc.spawn`）、None のまま写った主人は
         建て直しても None のまま。詳細生成がこれを掛け算に使って落ちる（VERIFICATION.md §3.63）。
@@ -683,15 +640,15 @@ def apply(ctx):
     def warm_keeper(handle):
         """主人のプレイヤーへの好感度が初期値より低ければ上げる。上げたら True。
 
-        版12 までに生まれた主人は「警戒心がある」（`affinity` 0）のまま。
+        好感度の初期値（`catalog.KEEPER_AFFINITY`）を置く前に生まれた主人は「警戒心がある」（`affinity` 0）のまま。
         会話で育った値は下げない（初期値より上ならそのまま）。
         """
         relationship = getattr(handle, "relationship", None)
         if not isinstance(relationship, dict):
             relationship = {}
             handle.relationship = relationship
-        player = relationship.get("player")
-        if not isinstance(player, dict):
+        player = npcs.player_row(handle)        # 欄の読み取りはローダの npcs（作るのはここ）
+        if player is None:
             relationship["player"] = dict(catalog.keeper_relationship()["player"])
             return True
         affinity = npcs.affinity_value(handle)  # float の扱いをほかの MOD と揃える（読めなければ None）
@@ -702,6 +659,9 @@ def apply(ctx):
         if isinstance(tags, list) and "出資者" not in tags:
             tags.append("出資者")
         return True
+
+    # ctx の値は apply() の間だけ（TECH.md §6.1）。フックから呼ぶ note_keeper のために控える。
+    generation = getattr(ctx, "generation", None)
 
     def note_keeper(app, record, facility, world=None):
         """主人のいまの姿を、建物に立っている間に1度だけ書く（一覧に出ないときの手掛かり）。
@@ -714,7 +674,7 @@ def apply(ctx):
         if not modfacility.inside(app, facility_id):
             state["noted"] = None
             return
-        token = (facility_id, getattr(ctx, "generation", None))
+        token = (facility_id, generation)
         if state.get("noted") == token:
             return
         state["noted"] = token
@@ -800,8 +760,7 @@ def apply(ctx):
                              world=world, write=write)
             heal_keeper(app, keeper_id, world=world, record=record)
             note_keeper(app, record, facility, world=world)
-            state["warned"].discard(("hub", key, area_id))
-            state["warned"].discard(("area", key, area_id))
+            warn_once.forget(("hub", key, area_id), ("area", key, area_id))
             if not standing:
                 built += 1
         settle_keeper_names(app, world=world, save_data_dict=save_data_dict)
@@ -812,9 +771,8 @@ def apply(ctx):
     def settle_keeper_names(app, world=None, save_data_dict=None):
         """帳簿に主人の名を控える。重なっていたら後の方を空いている名前へ寄せる。
 
-        版24 までは名前を控えず、建てるたびに鍵から選んでいた。候補が6人しかなかったので
-        4軒目で重なった（実機：闘技場と道場がどちらもトビアス）。
-        版25 は建てたときに控えるが、**それ以前の持ち株には控えが無い**ので、ここで埋める。
+        鍵から選ぶだけでは候補が少なく、4軒目で重なる（VERIFICATION.md §3.63）。
+        いまは建てたときに控えるが、**控える前に建てた持ち株には控えが無い**ので、ここで埋める。
         埋めるついでに、重なっている分だけ空いている名前へ寄せる（その1回だけ実体の名も変える）。
 
         **見るのは自分の主人だけではない。** その世界で使われている名前を全部
@@ -902,8 +860,8 @@ def apply(ctx):
         facility_id = facility_id_for(area_id, serial)
         keeper_id = keeper_id_for(area_id, serial)
         places = place_names(app)
-        # 表から選ぶときも、その世界で使っている建物の名前は飛ばす（版37。
-        # 鍵だけで選んでいた頃は別の世界でも同じ土地の同じ番号なら同じ名前になった）。
+        # 表から選ぶときも、その世界で使っている建物の名前は飛ばす
+        # （鍵だけで選ぶと、別の世界でも同じ土地の同じ番号なら同じ名前になる）。
         name = catalog.facility_name(kind, tier, area_name, facility_id, taken=places)
         day = ui.game_day(app)
         record = {
@@ -911,7 +869,7 @@ def apply(ctx):
             "area_name": area_name,
             "investor": investor_name(app),
             # 主人は下で作る（`KEEPER_SOURCE`）。表のときは使っていない名前を選ぶ
-            # （6人だと4軒目で重なった。実機：闘技場と道場がどちらもトビアス）。
+            # （候補が6人だと4軒目で重なる。VERIFICATION.md §3.63）。
             "keeper_name": "",
             "facility": facility_id,
             "keeper": keeper_id,
@@ -981,7 +939,7 @@ def apply(ctx):
         return True
 
     def add_received(record, gold, before):
-        """受け取った額を足す。版45 より前の持ち株は、一度も受け取っていなければ 0 から数える。"""
+        """受け取った額を足す。`received` を持たない持ち株は、一度も受け取っていなければ 0 から数える。"""
         got = record.get("received")
         if isinstance(got, int) and not isinstance(got, bool):
             record["received"] = got + int(gold)
@@ -1032,11 +990,8 @@ def apply(ctx):
         # 第1引数は**いまの宿屋と同じ月数**。ローダの窓口に聞く
         # （`durations.inn_stay`。TECH.md §3.3.2）ので、この MOD は式も、
         # 長さを変える MOD の名前も持たない。
-        # 版40 までは 1 を直に渡していた。「本体の経路は5回とも `['1', ...]`」という
-        # 実測から決めたが、その5回は `315_vacation_custom` が週単位の設定で走っていた回で、
-        # 週単位は月数を1に落として日数だけを縮める。素の `3ヵ月` では本体は 3 を渡すので、
-        # 同じ宿で払えば3ヵ月、無料なら1ヵ月という食い違いになっていた
-        # （実機。VERIFICATION.md §3.63 #7e）。
+        # 1 を直に渡すと、素の `3ヵ月` では本体は 3 を渡すので、同じ宿で払えば3ヵ月、
+        # 無料なら1ヵ月という食い違いになる（VERIFICATION.md §3.63 #7e）。
         months = max(1, int(durations.inn_stay(app, write=write)["months"]))
         try:
             phase = cls(app, months, quality)
@@ -1061,9 +1016,8 @@ def apply(ctx):
         """こちらの「無料で泊まる」から始めた宿泊か（`own_stay`）。
 
         ゲーム自身の `宿泊する` から始めた宿泊は**素のまま**（宿代を取る）。
-        版33 までは両方を無料にしていたが、払って戻るのが見えず分かりづらかったので、
-        無料は別のボタンにした。
-        版40 からは自分の宿にその `宿泊する` を出さない（`HIDDEN_INN_CLASSES`）ので、
+        両方を無料にすると払って戻るのが見えず分かりづらいので、無料は別のボタンにしてある。
+        自分の宿にはその `宿泊する` を出さない（`HIDDEN_INN_CLASSES`）ので、
         ここを通るのはよその宿屋の宿泊だけになる。判定は残す
         （ボタンを伏せてもゲームの経路そのものは塞いでいない）。
         """
@@ -1203,25 +1157,14 @@ def apply(ctx):
         if not choices.close_screen(app, state["owner"]):
             choices.repaint(app)
 
-    # ------------------------------------------------------------ 自前のフェーズ
-    class InvestPhase(object):
-        """自前のフェーズ。**`PhaseSpec` には決して載せない**（セーブに焼かれる）。"""
+    # ------------------------------------------------------------ 押下の処理
+    def run_phase(app, text, action, kind=None, tier=None, facility_id=None):
+        """押下をゲームと同じ経路（`process_choice`）で `run_action` に渡す（ローダの `ui.Screen.run_phase`）。
 
-        def __init__(self, app, action, kind=None, tier=None, facility_id=None):
-            self.app = app
-            self.action = action
-            self.kind = kind
-            self.tier = tier
-            self.facility_id = facility_id
-
-        def execute(self, choice_text):
-            state["acting"] = True
-            try:
-                run_action(self.app, self.action, self.kind, self.tier, self.facility_id)
-            except Exception:
-                ctx.log_exc("investment: phase {!r} failed".format(self.action))
-            finally:
-                state["acting"] = False
+        フェーズの間は `state["acting"]` を立て、連打の2発目は押下の側で捨てる。
+        """
+        screen.run_phase(app, text, run_action, action, kind, tier, facility_id,
+                         label=action, acting=(state, "acting"))
 
     def run_action(app, action, kind=None, tier=None, facility_id=None):
         if action == "desk":
@@ -1248,15 +1191,12 @@ def apply(ctx):
             write("ignored {!r}: the previous press is still running".format(action))
             return
         text = {"collect": "売上", "stay": STAY_LABEL}.get(action, action)
-        screen.start_phase(app, InvestPhase(app, action, facility_id=facility_id), text,
-                           fallback=lambda: run_action(app, action, facility_id=facility_id))
+        run_phase(app, text, action, facility_id=facility_id)
 
     # ------------------------------------------------------------ 役場のボタン
     def at_office(app):
-        location = getattr(getattr(app, "player", None), "location", None)
-        if location is None or isinstance(location, (str, int)):
-            return False
-        return ui.facility_type_of(location) == OFFICE_FACILITY_TYPE
+        location = ui.current_facility(app)     # ロード直後の施設 id の文字列も引き当てる
+        return location is not None and ui.facility_type_of(location) == OFFICE_FACILITY_TYPE
 
     def offer(app, view):
         """役場に「出資する」を出す（窓口 `choices` の `offer`）。建物の中はローダが出す。"""
@@ -1288,8 +1228,7 @@ def apply(ctx):
                 write("ignored {!r}: the previous press is still running".format(text))
                 return None
             write("pressed {!r} ({} kind={} tier={})".format(text, action, kind, tier))
-            screen.start_phase(app, InvestPhase(app, action, kind, tier), text,
-                               fallback=lambda: run_action(app, action, kind, tier))
+            run_phase(app, text, action, kind, tier)
             return None
         return on_press
 
@@ -1343,7 +1282,7 @@ def apply(ctx):
                     worlds.forget(key)
                     keepers_registered.clear()
                 state["own_stay"] = None
-                state["warned"] = set()
+                warn_once.forget()          # 覚えの器は sys の同じ集合のまま空にする
                 state["key_override"] = key
                 try:
                     # ローダの関所が立てる控えの鍵は内側の orig の中で消えている。
@@ -1514,19 +1453,16 @@ def apply(ctx):
     for _target, _what, _kinds in GUARDED_PHASES:
         guard(_target, _what, _kinds)
 
-    @ctx.wrap("__main__:VacationEndManager.execute", required=False)
-    def vacation_end(orig, self, *args, **kwargs):
-        """宿泊の覚え（`own_stay`）を落とすだけ。
+    def vacation_end(call):
+        """宿泊が終わった後（ローダの窓口 `stays` の END。orig が返ったときだけ）。宿泊の覚え（`own_stay`）を落とすだけ。
 
         中の選択肢と絵の戻しはローダが持つ（`modfacility` の `PHASE_END_TARGETS` と
         `BG_OTHER_TARGETS`。TECH.md §5.8）。ここで画面を触っていたら MOD ごとに同じ直しが要る。
+        例外は窓口が記録する（TECH.md §3.3.21）。
         """
-        result = orig(self, *args, **kwargs)
-        try:
-            end_stay(getattr(self, "app", None) or ui.find_app(), "vacation ended")
-        except Exception:
-            ctx.log_exc("investment: cannot close the stay")
-        return result
+        end_stay(call.app, "vacation ended")
+
+    stays.on(OWNER, ctx, (stays.END,), after=vacation_end, write=write)
 
     # ------------------------------------------------------------ 家と施設の窓
     def received_text(record):

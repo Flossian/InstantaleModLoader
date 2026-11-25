@@ -463,6 +463,8 @@ class FakeCtx(object):
     # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
+    # 窓口に名乗る持ち主の名前（本物は apply() の間だけフォルダ名）。
+    mod_name = os.path.basename(os.path.dirname(MOD))
 
     def logger(self, name, **kw):
         import instantale_modloader as _ml
@@ -492,8 +494,14 @@ def load_mod():
 
 
 def install(mod, ctx):
-    """注入をやり直す。**ラッパを重ねない**（本物は世代管理で置き換える）。"""
+    """注入をやり直す。**ラッパを重ねない**（本物は世代管理で置き換える）。
+
+    包むのはローダの窓口 `hud` なので、包みの印と登録も忘れさせてから当て直す
+    （偽の ctx は世代を持たず、印が残ると2回目の ctx に包みが渡らない）。
+    """
+    from instantale_modloader import hud as hud_window
     FakeHUD.update_display_text, FakeHUD.update_button_texts = PRISTINE
+    hud_window.reset()
     mod.apply(ctx)
 
 
@@ -509,6 +517,10 @@ def run():
     sys.modules["scripts.hud.new_hud"] = module
 
     ctx = FakeCtx(os.path.join(HERE, os.pardir, os.pardir, "out", "test", "text_expand"))
+    # 窓口 `hud` は後始末の例外を握り、MOD のログへ WARN の1行を書く（ctx.log_exc は通らない）。
+    # ログは追記なので、この回に足された分だけを後で見る。
+    log_path = os.path.join(ctx.out_dir, "text_expand.log")
+    log_start = os.path.getsize(log_path) if os.path.isfile(log_path) else 0
     mod = load_mod()
     install(mod, ctx)
     check("hooked update_display_text",
@@ -969,6 +981,13 @@ def run():
           hud.scroll.size)
 
     check("no exception was swallowed", not ctx.errors, ctx.errors[:1])
+    added = ""
+    if os.path.isfile(log_path):
+        with io.open(log_path, "rb") as fh:
+            fh.seek(log_start)
+            added = fh.read().decode("utf-8", "replace")
+    check("no hook raised inside the hud window", "WARN hud" not in added,
+          [line for line in added.splitlines() if "WARN hud" in line][:1])
 
     print()
     if failures:

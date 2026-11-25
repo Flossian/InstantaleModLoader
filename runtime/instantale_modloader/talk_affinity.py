@@ -26,17 +26,13 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
 """
 import sys
 
-from . import window_call, window_entries, window_put
+from . import frames, state, window_call, window_entries, window_put
 
 STORE_ATTR = "_instantale_talk_affinity"
 
 
 def _store():
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"limits": {}, "errors": []}
-        setattr(sys, STORE_ATTR, store)
-    return store
+    return state.process_store(STORE_ATTR, {"limits": {}, "errors": []})
 
 
 def limit(owner, ctx, fn):
@@ -57,7 +53,7 @@ def ceiling(app, npc_id, default):
         ok, got = window_call(store, owner, fn, app, str(npc_id))
         if not ok:
             continue
-        if isinstance(got, bool) or not isinstance(got, (int, float)):
+        if not frames.is_number(got):
             continue
         if got < value:
             value, by = got, owner

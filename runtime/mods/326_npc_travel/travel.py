@@ -7,6 +7,8 @@
 そのまま通せる。
 """
 
+from instantale_modloader import state as loader_state
+
 #: 旅の種類。`away` は別の街、`local` は同じ街の別の施設。
 AWAY = "away"
 LOCAL = "local"
@@ -16,7 +18,7 @@ AWAY_TYPES = ("guild", "inn")
 
 #: 主の居ない通路。同じ街の行き先にしない（GAME.md §2.7）。
 #: `free` はシーン記述エンジンが画面を持つ施設（GAME.md §2.21）で、
-#: 置いても会えるか分からないので同じく外す（実機で 4 件が引かれて気付いた）。
+#: 置いても会えるか分からないので同じく外す（VERIFICATION.md §3.53）。
 PASSAGE_TYPES = ("entrance", "exit", "ward", "location", "dungeon_location", "free")
 
 #: 街とみなす `size`（`325_` の TOWN_SIZES と同じ語彙）。
@@ -75,13 +77,8 @@ def _ordered(table, fields):
     ordered = {}
     for npc_id in sorted(table, key=lambda key: (len(str(key)), str(key))):
         row = table[npc_id]
-        if isinstance(row, dict):
-            ordered[npc_id] = {key: row[key] for key in fields if key in row}
-            for key in row:
-                if key not in fields:
-                    ordered[npc_id][key] = row[key]
-        else:
-            ordered[npc_id] = row
+        # 欄は決まった順に、知らない欄は後ろへ（ローダの `state.ordered`）
+        ordered[npc_id] = loader_state.ordered(row, fields) if isinstance(row, dict) else row
     return ordered
 
 

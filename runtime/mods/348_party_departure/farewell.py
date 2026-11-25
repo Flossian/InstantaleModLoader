@@ -11,7 +11,7 @@
 - 外すのはゲームの `remove_party_member`、置くのは `move_npc_to_facility`。
   外している間は入口の `shared.departing` に控え、ゲームが自分で置いたら二重に置かない
 - ボタンと確認の画面はローダの窓口 `choices` の宣言型の口（TECH.md §3.3.14）。
-  押下はゲームの `process_choice` に乗せる（`LeavePhase`。画面の塗り替えをゲームに任せるため）
+  押下はゲームの `process_choice` に乗せる（`ui.Screen.run_phase`。画面の塗り替えをゲームに任せるため）
 """
 
 from instantale_modloader import choices, ui
@@ -54,8 +54,6 @@ CONFIRM_SCREEN = "confirm"
 # （`404_` はパーティー会話の間このキーで落とす）。`302_` から変えていない。
 MARK = "mod_party_action"
 
-BATTLE_FLAGS = ("in_battle", "in_colosseum_battle", "in_boss_battle")
-
 
 def install(shared):
     ctx, cfg, write, screen = shared.ctx, shared.cfg, shared.write, shared.screen
@@ -72,9 +70,10 @@ def install(shared):
     # ------------------------------------------------------- 出してよい場面か
     def blocking_reason(app):
         """仲間と別れられない場面なら理由を返す。相手が仲間かどうかは `is_member` が見る。"""
-        for flag in BATTLE_FLAGS:
-            if getattr(app, flag, False):
-                return flag
+        # 戦闘の旗の並びはローダの語彙（`ui.BATTLE_FLAGS`）。最初に立っている旗を理由にする
+        battle = ui.battle_flags(app)
+        if battle:
+            return battle[0]
         # 依頼の最中は名簿を触らない（`current_quest_data` は依頼の外では None）。
         if getattr(app, "current_quest_data", None):
             return "in a quest"
@@ -86,31 +85,15 @@ def install(shared):
     def can_part(app, member_id):
         return is_member(app, member_id) and blocking_reason(app) is None
 
-    # ============================================================ 自前のフェーズ
-    class LeavePhase(object):
-        """`app.process_choice` に渡してゲームと同じ経路を通すためのフェーズ。
-
-        `PhaseSpec` には載せない（載せるとセーブに焼かれ、MOD 無しの次の起動で引けずに落ちる）。
-        """
-
-        def __init__(self, app, action, member_id):
-            self.app = app
-            self.action = action
-            self.member_id = member_id
-
-        def execute(self, choice_text):
-            # ゲームの別スレッドで走る。例外をゲームの側へ抜けさせない。
-            try:
-                return dispatch(self.app, self.action, self.member_id)
-            except Exception:
-                ctx.log_exc("farewell: phase {!r} failed".format(self.action))
-                return None
-
+    # ============================================================ 押下
     def press(app, action, member_id, text):
-        """自前のボタンが押された（窓口が押されたボタンの処理として呼ぶ）。"""
+        """自前のボタンが押された（窓口が押されたボタンの処理として呼ぶ）。
+
+        ゲームの `process_choice` に乗せる使い捨てのフェーズはローダが作る（`ui.Screen.run_phase`。
+        `PhaseSpec` に載せない注意も、別スレッドの例外を握るのもそちら）。
+        """
         write("farewell: pressed {!r} ({}) member={!r}".format(text, action, member_id))
-        screen.start_phase(app, LeavePhase(app, action, member_id), text,
-                           fallback=lambda: dispatch(app, action, member_id))
+        screen.run_phase(app, text, dispatch, action, member_id, label=action)
         return None
 
     def dispatch(app, action, member_id):

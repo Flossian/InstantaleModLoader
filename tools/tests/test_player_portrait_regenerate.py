@@ -214,7 +214,7 @@ _flags = []
 
 
 def _slow_look(*a):
-    _flags.append(getattr(mod._LOOK_CALL, "active", False))
+    _flags.append(True)
     _time.sleep(0.6)
     return ["late"]
 
@@ -229,7 +229,7 @@ finally:
 check("外見の頼みが LOOK_TIMEOUT 秒を過ぎても打ち切らず、返った外見を使う", _got == ["late"], _got)
 check("  過ぎたときと返ったときにログに出す",
       any(line.startswith("slow:") for line in logs) and any("returned after" in line for line in logs), logs)
-check("外見を作らせている印は、頼みを呼ぶスレッドに立つ", _flags == [True], _flags)
+check("外見の頼みは1回だけ呼ぶ", _flags == [True], _flags)
 
 del sys.modules[mod.CREATE_LOOK_MODULE]
 check("create_look が無ければ None",
@@ -268,11 +268,6 @@ check("数え戻す", rt["inflight"] == 1)
 rt["inflight"] = 0
 check("空いていれば True", mod._wait_idle(rt, timeout=0.2, poll=0.05) is True)
 
-print("=== 方式 ===")
-check("選ばれた方式のモジュール",
-      mod.module_names("sdcpp_cpu") == ["image_generation.sdcppcpu.image_generation_creature"])
-check("分からなければ4つとも", len(mod.module_names(None)) == 4)
-
 # ---------------------------------------------------------------- 描き直し
 print("=== 描き直し ===")
 mod = load_module("player_portrait_under_test_hooks")
@@ -283,6 +278,9 @@ del logs[:]
 class Ctx(object):
     def __init__(self):
         self.wraps = {}
+        # 窓口の持ち主名は本物の ctx と同じくフォルダ名（mod_dir の basename）。
+        self.mod_dir = os.path.dirname(MOD_PATH)
+        self.mod_name = os.path.basename(self.mod_dir)
 
     def logger(self, *args, **kwargs):
         return logs.append
@@ -327,27 +325,8 @@ mod.ui.find_app = lambda: app
 ctx = Ctx()
 mod.apply(ctx)
 
-# 外見を作らせている間だけ、ゲームの送り口に時間切れを付ける（ゲーム側の既定は無期限）。
-send = ctx.wraps.get(mod.SEND_TARGET)
-seen = []
-
-
-def fake_send(*args, **kwargs):
-    seen.append((args, kwargs))
-
-
-check("送り口を包む", send is not None, sorted(ctx.wraps))
-if send is not None:
-    send(fake_send, "character_create", "msg", None)
-    mod._LOOK_CALL.active = True
-    try:
-        send(fake_send, "character_create", "msg", None)
-        send(fake_send, "character_create", "msg", None, None, 30000, 15)
-    finally:
-        mod._LOOK_CALL.active = False
-    check("外見を作らせていない送りは触らない", "timeout" not in seen[0][1] and len(seen[0][0]) == 3, seen[0])
-    check("外見を作らせている間は時間切れを足す", seen[1][1].get("timeout") == mod.LOOK_TIMEOUT, seen[1])
-    check("呼ぶ側が渡した時間切れはそのまま", seen[2][0][5] == 15 and "timeout" not in seen[2][1], seen[2])
+# ゲームの送り口には時間切れを渡さない（打ち切らない方針。VERIFICATION.md §3.101）ので、送り口は包まない。
+check("ゲームの送り口を包まない", not [t for t in ctx.wraps if t.endswith(":send_request")], sorted(ctx.wraps))
 target = "image_generation.sdcppcuda.image_generation_creature:generate_character_image"
 check("選ばれた方式の関数を包む（生成中の数え）",
       target in ctx.wraps and len([t for t in ctx.wraps if "image_generation" in t]) == 1,

@@ -3,9 +3,7 @@
 
 OpenAI API・Claude API・Gemini API に対応する。
 差し替え先は設定画面の一覧から選び、一覧に無い名前は「一覧に無いモデル」の欄に書く。
-一覧に載せるのは、ゲームの一覧（main_026）に無いモデルだけ（ゲームが公式に選べるモデルは外した。版6）。
-OpenAI の一覧は版6で一度外し、版8でゲームの一覧に無い GPT-6.1 Terra が出たので戻した。
-Gemini は版8で足した。
+一覧に載せるのは、ゲームの一覧（main_026）に無いモデルだけ（ゲームが公式に選べるモデルは載せない。VERIFICATION.md §3.71）。
 
 ## ファイルの分け方
 
@@ -78,11 +76,9 @@ API の既定を「high（既定）」のように出す）。
   * 設定画面の表示もゲームが選んだモデルのまま
 """
 
-import io
-import json
 import os
 
-from instantale_modloader import llm, ui
+from instantale_modloader import llm, read_json, ui
 
 from . import claude_side, gemini_side, openai_side, user_role
 
@@ -94,7 +90,6 @@ OFF = "off"
 
 # ------------------------------------------------------------------ OpenAI API
 # 実際に送るモデル。既定は差し替えない。一覧はゲームの一覧（main_026）に無いモデルだけ。
-# 版6で一度外し、版8で GPT-6.1 Terra のために戻した。
 OPENAI_MODEL = "off"
 
 # 一覧に無いモデル名。空でなければ OPENAI_MODEL より優先する。
@@ -207,10 +202,10 @@ def model_names(mod_dir):
     `ctx.mod_dir` は apply() の間しか引けないので、apply() の中で読んでおく。
     """
     names = {}
-    try:
-        with io.open(os.path.join(mod_dir, "mod.json"), encoding="utf-8") as fh:
-            settings = json.load(fh).get("settings") or {}
-    except Exception:
+    # 読めない mod.json はローダの `read_json` が記録してから None を返す（BOM 付きも読む）
+    manifest = read_json(os.path.join(mod_dir, "mod.json")) if mod_dir else None
+    settings = manifest.get("settings") if isinstance(manifest, dict) else None
+    if not isinstance(settings, dict):
         return names
     for key in MODEL_LISTS:
         for model, label in ((settings.get(key) or {}).get("value_labels") or {}).items():

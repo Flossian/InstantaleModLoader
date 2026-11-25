@@ -49,7 +49,7 @@ import re
 import sys
 import threading
 
-from . import durations, frames, log, log_exc, state, ui
+from . import _kinds, durations, frames, log, log_exc, state, ui
 
 #: 能力値の鍵（`ability_scores` の綴り）。
 ABILITIES = ("strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma")
@@ -91,8 +91,7 @@ def situations(app, holder=None):
     if holder is not None:
         hp = frames.attr(holder, "current_hp", None)
         top = frames.attr(holder, "max_hp", None)
-        if isinstance(hp, (int, float)) and isinstance(top, (int, float)) and top > 0 \
-                and not isinstance(hp, bool) and not isinstance(top, bool) and hp <= top / 2.0:
+        if frames.is_number(hp) and frames.is_number(top) and top > 0 and hp <= top / 2.0:
             found.add("low_hp")
     return found
 
@@ -144,27 +143,27 @@ _stores = state.SysWorldStore(STORE_ATTR, STATE_DIRNAME, _KEY_OVERRIDE_ATTR)
 _local = threading.local()
 
 
+#: 読み口の印の既定。`missing` は世代をまたいで同じ物を使う（前の世代の読み口がこれと見比べる）ので、
+#: 入れ物を作るときに1度だけ作る（`process_store` は在る鍵を置き直さない）。
+_HOOKS_BLANK = {"missing": object(), "view": None}
+
+
 def _hooks():
-    found = getattr(sys, _HOOKS_ATTR, None)
-    if not isinstance(found, dict):
-        found = {"missing": object(), "view": None}
-        setattr(sys, _HOOKS_ATTR, found)
-    return found
+    return state.process_store(_HOOKS_ATTR, _HOOKS_BLANK)
 
 
-def _registry():
-    """`{持ち主: 関数}`（置いた順）。`sys` に置いて注入し直しをまたぐ。"""
-    found = getattr(sys, _REGISTRY_ATTR, None)
-    if not isinstance(found, dict):
-        found = {}
-        setattr(sys, _REGISTRY_ATTR, found)
-    return found
+#: `{持ち主: 関数}`（置いた順）の登録簿（`_kinds`。`battle_effects` と同じ形）。
+_owners = _kinds.OwnerRegistry(_REGISTRY_ATTR, "abilities")
+_registry = _owners.table
 
 
 def _number(value):
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return value
+    """数ならその値、そうでなければ None。
+
+    `frames.to_number` にしないのは、文字列の数（`"3"`）を数にしないため。
+    補正の量は MOD の関数が返した値そのもので、型の崩れた答えは足さない（写しのときの答えのまま）。
+    """
+    return value if frames.is_number(value) else None
 
 
 def _amounts(raw):
@@ -195,18 +194,17 @@ def declare(owner, fn, write=None):
     """
     if not callable(fn):
         raise TypeError("declare() needs a callable, got {!r}".format(type(fn)))
-    _registry()[str(owner or "")] = fn
+    _owners.put(owner, fn)
     if write:
         write("abilities: {!r} answers the ability bonuses".format(owner))
 
 
 def forget(owner, write=None):
     """その持ち主の `declare` を外す。外した種類を返す（`durations.forget` の片付け）。"""
-    if _registry().pop(str(owner), None) is None:
-        return []
-    if write:
+    gone = _owners.drop(owner)
+    if gone and write:
         write("abilities: {!r} no longer answers the ability bonuses".format(owner))
-    return ["abilities"]
+    return gone
 
 
 # 片付けの入口は `durations.forget` の1本に保つ（`combat` と同じ）。
@@ -215,7 +213,7 @@ durations.on_forget(forget)
 
 def owners():
     """`declare` を置いている持ち主（`boot()` が今回適用されなかった MOD のぶんを外すのに使う）。"""
-    return sorted(_registry())
+    return sorted(_owners.owners())
 
 
 def holder_key(app, holder):

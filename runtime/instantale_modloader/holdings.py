@@ -38,9 +38,8 @@
 その世代で適用されなかった MOD の側は、`ctx.superseded()` で見分けて出さない。
 """
 import os
-import sys
 
-from . import alive, hudicons, log_exc, panels, ui
+from . import alive, hudicons, log_exc, panels, state, ui
 
 STORE_ATTR = "_instantale_holdings"
 HOUSES = "houses"
@@ -65,11 +64,7 @@ UNREADABLE = "記録を読めなかった。"
 
 
 def _store():
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict) or not isinstance(store.get("sides"), dict):
-        store = {"sides": {}, "view": None}
-        setattr(sys, STORE_ATTR, store)
-    return store
+    return state.process_store(STORE_ATTR, {"sides": {}, "view": None})
 
 
 def tone(name, default=panels.TEXT):

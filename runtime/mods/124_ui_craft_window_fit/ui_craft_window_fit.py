@@ -118,7 +118,7 @@ HUD にぶら下がったまま（`opacity=0`）居る。
 重なっていなければ `clear` と出て何も動かない。
 """
 
-from instantale_modloader import frames, ui
+from instantale_modloader import frames, items, ui
 
 LOG_BASENAME = "craft_window.log"
 
@@ -146,8 +146,6 @@ FIX_ARROW = True
 # レイアウトが1フレームで終わらないビルドのために2回目以降を置く。
 # `fit` は何度呼んでも同じ結果になる。
 PASS_DELAYS = (0.0, 0.05, 0.25, 0.6)
-
-# 画面は開くたびに来るので、書くのは形が変わったときだけ。
 
 # ウィジェット木を何段まで降りてグリッドを探すか。
 MAX_DEPTH = 14
@@ -182,17 +180,15 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 読み取り
     def num(value, default=None):
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return default
+        # 座標は float にそろえて比べる（`frames.to_number` は整数の値を int で返す）
+        number = frames.to_number(value)
+        return default if number is None else float(number)
 
     def attr_num(widget, name, default=None):
         return num(frames.attr(widget, name), default)
 
     def parent_of(widget):
-        parent = frames.attr(widget, "parent")
-        return None if parent in (None, frames.MISSING) else parent
+        return frames.field(widget, "parent")
 
     def geom(widget):
         """局所座標（`x`/`y`）と窓座標（`wx`/`wy`）の両方。読めなければ None。
@@ -663,26 +659,14 @@ def apply(ctx):
             outcome, arrow_outcome,
             " ".join(show(block) for block in blocks)))
 
-    def fit_later(hud):
-        """Clock から呼ぶ `fit`。フックの safe=True は Clock の中まで届かず、ここで投げるとゲームごと落ちる。"""
-        try:
-            fit(hud)
-        except Exception:
-            ctx.log_exc("craft window: the delayed fit failed; leaving the window alone")
+    # フックの safe=True は Clock の中まで届かないので、Clock の中の例外はローダの
+    # `ui.scheduler` が握って記録する。ゲームの外（オフライン検証）ではその場で呼ぶ。
+    run_later = ui.scheduler(ctx, "craft window")
 
     def schedule(hud):
         """次のフレームから数回当て直す。`fit` は何度呼んでも同じ結果になる。"""
-        try:
-            from kivy.clock import Clock
-        except Exception:
-            fit(hud)                  # ゲームの外（オフライン検証）ではその場で
-            return
         for delay in PASS_DELAYS:
-            try:
-                Clock.schedule_once(lambda _dt, target=hud: fit_later(target), delay)
-            except Exception:
-                ctx.log_exc("craft window: could not schedule the fit")
-                return
+            run_later(lambda target=hud: fit(target), delay)
 
     # ------------------------------------------------------------ フック
     @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.toggle_craft_inventory_visibility",
@@ -699,15 +683,10 @@ def apply(ctx):
         schedule(ui.find_hud(self))
         return result
 
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.place_crafted_item",
-              safe=True, required=False)
-    def place_crafted_item(orig, self, *args, **kwargs):
-        # 生成でグリッドの中身が変わる ＝ レイアウトが走り直す。
-        # 当て直す。引数は受けた形のまま渡す（名前で来た引数を位置へ直したり、
-        # 渡されていない引数に None を詰めたりしない。docs/verification/3.104.md）
-        result = orig(self, *args, **kwargs)
-        schedule(self)
-        return result
+    # 生成でグリッドの中身が変わる ＝ レイアウトが走り直すので、当て直す。
+    # 包むのはローダの窓口 `items`（PLACE_CRAFTED。`call.obj` が HUD）で、後の処理だけを預ける（TECH.md §3.3.21）。
+    items.on(ctx.mod_name or "124_ui_craft_window_fit", ctx, (items.PLACE_CRAFTED,),
+             after=lambda call: schedule(call.obj))
 
     ctx.log("craft window: installed (MARGIN={} MIN_WIDTH_RATIO={} FIX_ARROW={})"
             .format(MARGIN, MIN_WIDTH_RATIO, FIX_ARROW))

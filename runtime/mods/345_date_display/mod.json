@@ -10,7 +10,7 @@
     "en": "Adds the date under Location in the status panel. The start year, days in a year, number of months, and each month's name and length can be set, shared or per world. A long location never pushes the date off the panel",
     "ja": "画面左下の欄の Location の下に日付を出す。開始の年・1年の日数・月数・各月の名前と日数を、全世界共通でも世界ごとにでも決められる。Location が長くても日付は欄に収まる"
   },
-  "version": "2",
+  "version": "3",
   "author": "R01/Flossian",
   "state": [
     "date_display"

@@ -52,16 +52,10 @@ NPC がどう感じるかは NPC の側（性格・手配度との関係）が�
 
 ## 注入の位置は NPC の複製の `profile`
 
-最初の案では `conversation_starter` の messages 差し替えと
-`retrieved_knowledge` への追加を挙げていたが、実装では `311_` と同じ
-**第4引数の NPC を浅く複製して `profile` に足す**形を採った。理由は2つ。
-
-* 会話5関数は先頭4引数の並びが共通なので、1箇所で5経路すべてに届く。
-  `retrieved_knowledge` の位置は関数ごとに違う（`conversation_facilitator` は12番目、
-  `..._after_retrieval` は11番目、`..._in_quest` には無い）ので、
-  そちらに乗せると経路ごとに位置を数えることになる
-* messages を差し替える形は「第一声だけ」に効く。
-  評判は会話の途中で尋ねられても効いていてほしい
+足す文はローダの `modnpc` の notes に預ける（TECH.md §5.7）。
+NPC の複製と `profile` への差し込みは関所が行い、会話5関数のすべてに届く。
+messages を差し替える形は「第一声だけ」に効くが、
+評判は会話の途中で尋ねられても効いていてほしい。
 
 ゲーム世界の NPC 本体も会話履歴も触らない。触ると別スレッドとセーブに漏れる。
 
@@ -77,7 +71,6 @@ NPC がどう感じるかは NPC の側（性格・手配度との関係）が�
 この MOD が足すのは**素材の言い換えではなく、編纂の結果**
 （手配・依頼・滞在まで込みの1つの評判と二つ名）で、
 重なりを増やさないために編纂の頼み文で「出来事を並べ直さない」と縛ってある。
-実機で `area_achievements` に何が入っているかは `LOG_MATERIAL` が1回だけ記録する。
 
 ## セーブには書かない
 
@@ -100,12 +93,14 @@ NPC がどう感じるかは NPC の側（性格・手配度との関係）が�
 import datetime
 import os
 import random
-import sys
 import time
 
 from instantale_modloader import (arrivals, durations, frames, hudicons, jobs, llm, loads, modnpc,
-                                  ui, wanted)
-from instantale_modloader.state import WorldStore, world_filename
+                                  panels, ui, wanted)
+# `hud` は人物欄の引数名と紛れるので別名で読む。
+from instantale_modloader import hud as hud_window
+from instantale_modloader.state import WorldStore, process_store, world_filename
+from instantale_modloader.state import ordered as ordered_keys
 
 from . import material, window
 
@@ -125,7 +120,6 @@ NOTES_PRIORITY = -5
 IN_NARRATION = False      # 情景描写（narrator）に注入するか
 MIN_DEEDS = 2             # 評判が立つ最低件数（achievements ＋ 完了した依頼）
 INJECT_DETAIL = "brief"   # 注入の長さ。brief=1文 / detailed=3文まで
-LOG_MATERIAL = True       # 素材の実行時の形を1回だけログに残すか
 
 # ---- 以下は設定にしない値 -------------------------------------------------
 
@@ -258,7 +252,7 @@ STATE_STORE_ATTR = "__instantale_reputation_store__"
 
 # --------------------------------------------------------------------- 素の関数
 # `apply()` の外に出してあるものは、ゲームも `ctx` も要らない部分。
-# `tools/tests/test_wip_reputation.py` がここを直接呼ぶ。
+# `tools/tests/test_reputation.py` がここを直接呼ぶ。
 
 def sentence_limit():
     return DETAIL_SENTENCES.get(INJECT_DETAIL, DETAIL_SENTENCES["brief"])
@@ -309,7 +303,7 @@ def qualifies(item):
 # --------------------------------------------------------------- 名声と悪名
 def deed_fame(difficulty):
     """依頼1件・闘技場の1勝の名声。難易度（相手の格）の2乗 ÷ `FAME_DIVISOR`。"""
-    if isinstance(difficulty, bool) or not isinstance(difficulty, (int, float)) or difficulty <= 0:
+    if not frames.is_number(difficulty) or difficulty <= 0:
         return 0.0
     return difficulty * difficulty / FAME_DIVISOR
 
@@ -343,7 +337,7 @@ def area_fame(entry):
     fame += STORY_WEIGHT * sum(deed_fame(value) for value in entry.get("story_difficulties") or ())
     fame += ARENA_WEIGHT * sum(deed_fame(min(value, ARENA_RANK_CAP))
                                for value in entry.get("arena_ranks") or ()
-                               if isinstance(value, (int, float)) and not isinstance(value, bool))
+                               if frames.is_number(value))
     return int(round(fame))
 
 
@@ -496,16 +490,15 @@ def clean_epithet(text):
 def echoes_material(epithet, player, item):
     """二つ名が素材の写しになっているか。写しは二つ名として受けない。
 
-    gemma-4 26B の実測（VERIFICATION_LOG.md §2.63）で出た2つの逃げ方への番人。
-    本人の名前（「旅人リン」「旅人」）と、依頼の題名そのまま
-    （「沖仲仕の代役」、「の」を抜いただけの「沖仲仕代役」も同じ）。
+    実測（VERIFICATION_LOG.md §2.63）で出た2つの逃げ方への番人。
+    本人の名前（名前そのものと、名前に含まれる語）と、依頼の題名そのまま
+    （「の」を抜いただけの形も同じ）。
     頼み文でも禁じたが、頼み文だけでは守らないモデルがあるので両側で持つ。
 
-    「橋の修復者」のような**派生形は写しとしない**
+    題名から作った**派生形は写しとしない**
     （題名と一致するのは正規化して同じになるものだけ）。
-    名前も同じで、「暴走のリン」のように**語が足された形は写しとしない**
-    （頼み文で禁じたのは「そのまま」。プレイヤー名を「リン」にした実測で
-    この形が実際に出た）。名前を除いた残りが2字に満たなければ写し。
+    名前も同じで、「暴走の＜名前＞」のように**語が足された形は写しとしない**
+    （頼み文で禁じたのは「そのまま」）。名前を除いた残りが2字に満たなければ写し。
     """
     if not isinstance(epithet, str) or not epithet:
         return False
@@ -612,14 +605,8 @@ def stored_bucket(bucket):
 
 
 def ordered_record(record):
-    """キャッシュ1件を `RECORD_KEYS` の並びに直す。知らない鍵は落とさず後ろへ回す。"""
-    if not isinstance(record, dict):
-        return {}
-    out = {key: record[key] for key in RECORD_KEYS if key in record}
-    for key, value in record.items():
-        if key not in out:
-            out[key] = value
-    return out
+    """キャッシュ1件を `RECORD_KEYS` の並びに直す。知らない鍵は落とさず後ろへ回す（ローダの `state.ordered`）。"""
+    return ordered_keys(record, RECORD_KEYS)
 
 
 def reputation_block(record, player, area, epithet="", nickname=""):
@@ -811,14 +798,8 @@ def epithet_due(record, mark):
 
 
 def ordered_epithet(record):
-    """二つ名の控えを `EPITHET_RECORD_KEYS` の並びに直す。知らない鍵は後ろへ。"""
-    if not isinstance(record, dict):
-        return {}
-    out = {key: record[key] for key in EPITHET_RECORD_KEYS if key in record}
-    for key, value in record.items():
-        if key not in out:
-            out[key] = value
-    return out
+    """二つ名の控えを `EPITHET_RECORD_KEYS` の並びに直す。知らない鍵は後ろへ（ローダの `state.ordered`）。"""
+    return ordered_keys(record, EPITHET_RECORD_KEYS)
 
 
 def build_epithet_messages(player, entries, current, exclude="", length=None):
@@ -960,38 +941,30 @@ def view_model(bucket, area_names, laws, here=""):
 
 # --------------------------------------------------------------------------
 def apply(ctx):
-    store = getattr(sys, STATE_STORE_ATTR, None)
-    if store is None:
-        store = {
-            "state": {
-                "last_check": 0.0,     # 素材を照合した時刻（間引き用）
-                "noted": set(),        # 1回だけ出す知らせの鍵
-            },
-            # 周回の鍵 -> キャッシュ（書くのはこの MOD だけ）。
-            # 出し入れと錠はローダの語彙（`state.WorldStore`）。
-            "worlds": WorldStore(ctx, STATE_DIRNAME,
-                                 normalize=as_bucket, order=stored_bucket),
-            # 編纂を回す背景スレッド。作るのは `compile_area` が出来てから。
-            "worker": None,
-        }
-        setattr(sys, STATE_STORE_ATTR, store)
+    # 入れ物はローダの state.process_store（前の版が置いた入れ物の足りない鍵も埋める）。
+    store = process_store(STATE_STORE_ATTR, {
+        "state": {
+            "last_check": 0.0,     # 素材を照合した時刻（間引き用）
+            "noted": set(),        # 1回だけ出す知らせの鍵
+        },
+        # 周回の鍵 -> キャッシュ（書くのはこの MOD だけ）。
+        # 出し入れと錠はローダの語彙（`state.WorldStore`）。器は作るだけで台帳に載るので下で1回だけ作る。
+        "worlds": None,
+        # 編纂を回す背景スレッド。作るのは `compile_area` が出来てから。
+        "worker": None,
+    })
+    if store["worlds"] is None:
+        store["worlds"] = WorldStore(ctx, STATE_DIRNAME, normalize=as_bucket, order=stored_bucket)
     state = store["state"]
 
     write = ctx.logger(LOG_BASENAME)
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "317_reputation"
+    owner = ctx.mod_name or "317_reputation"
     worlds = store["worlds"].rebind(ctx, write)
     data_lock = worlds.lock
 
-    def note_once(key, message):
-        """同じ鍵の知らせを1回だけ残す。
-
-        `ctx.warner` は行き先がローダの共用ログなので、
-        調べ物のための記録はこちらの1本にまとめる（TECH.md §3.11.2）。
-        """
-        if key in state["noted"]:
-            return
-        state["noted"].add(key)
-        write(message)
+    #: 同じ鍵の知らせを1回だけ残す（ローダの `ctx.once`。覚えは注入をまたぐ `sys` の器に置く）。
+    #: `ctx.warner` は行き先がローダの共用ログなので、調べ物のための記録はこちらの1本にまとめる（TECH.md §3.11.2）。
+    note_once = ctx.once(write, store=state.setdefault("noted", set()))
 
     #: 注入の結末。直前と同じ内容なら書かない（会話は1ターンに何度も回る）。
     note_inject = ctx.logger(LOG_BASENAME, dedup=True)
@@ -1125,7 +1098,7 @@ def apply(ctx):
             "area_id": str(area_id),
             "material": item,
             "player": material.player_name(app),
-            "day": material.game_day(app),
+            "day": ui.game_day(app),
         }
 
     def epithet_sources(app, mark):
@@ -1196,8 +1169,6 @@ def apply(ctx):
         控えのある土地も見る（線を下回った土地の控えを外すため）。
         """
         here = str(material.current_area_id(app) or "")
-        if LOG_MATERIAL and here:
-            note_once("shape", "素材の形: " + material.describe_shape(app, here))
         with data_lock:
             known = set(bucket_of(world)["areas"])
         standing = {area_id for area_id, item in (stats or {}).items()
@@ -1275,7 +1246,7 @@ def apply(ctx):
                 return
         queued = enqueue({"kind": "epithet", "world": world,
                           "player": material.player_name(app),
-                          "day": material.game_day(app),
+                          "day": ui.game_day(app),
                           "mark": mark, "exclude": exclude, "fresh": fresh,
                           "sources": epithet_sources(app, mark),
                           "why": "{}: {}".format(why, reason)})
@@ -1470,18 +1441,6 @@ def apply(ctx):
         return reputation_block(record, material.player_name(app),
                                 material.area_name(app, area_id), epithet, nickname)
 
-    def describe_area_args(arguments):
-        """ゲームが会話に渡している `area_*` の形（1回だけ記録する）。
-
-        「ゲームは既に `area_achievements` を渡している」を実機で確かめるための1行。
-        値は長いので形だけ出す。`arguments` は modnpc の関所が名前で束ねた引数（`info["args"]`）。
-        """
-        parts = []
-        for name in ("area_residency", "area_achievements"):
-            parts.append("{}={}".format(
-                name, frames.repr_value(arguments.get(name))[:80]))
-        return " / ".join(parts)
-
     def reputation_notes(info):
         """会話5関数の相手の `profile` に足す評判。
 
@@ -1496,9 +1455,6 @@ def apply(ctx):
         if app is None:
             note_inject("{}: app が見つからない".format(label))
             return None
-        if LOG_MATERIAL:
-            note_once("args:{}".format(label),
-                      "{} の素材引数: {}".format(label, describe_area_args(info.get("args") or {})))
         addition = block_for(app)
         if not addition:
             note_inject("{}: この土地の評判はまだ無い".format(label))
@@ -1528,16 +1484,11 @@ def apply(ctx):
             app = ui.find_app()
             addition = block_for(app) if app is not None else ""
             if addition:
-                if isinstance(kwargs.get("player_profile"), str):
-                    call_kwargs = dict(kwargs)
-                    call_kwargs["player_profile"] = (
-                        kwargs["player_profile"].rstrip() + "\n\n" + addition)
-                    note_inject("narrator: player_profile に{}字を足した".format(
-                        len(addition)))
-                elif len(args) >= 3 and isinstance(args[2], str):
-                    merged = list(args)
-                    merged[2] = args[2].rstrip() + "\n\n" + addition
-                    call_args = tuple(merged)
+                text = frames.arg(args, kwargs, "player_profile", 2)
+                if isinstance(text, str):
+                    call_args, call_kwargs, _ok = frames.replace_arg(
+                        args, kwargs, "player_profile", 2,
+                        text.rstrip() + "\n\n" + addition)
                     note_inject("narrator: player_profile に{}字を足した".format(
                         len(addition)))
                 else:
@@ -1565,18 +1516,16 @@ def apply(ctx):
     arrivals.on(owner, ctx, (arrivals.AREA,), after=area_arrival, write=write)
     arrivals.on(owner, ctx, (arrivals.FACILITY,), after=facility_arrival, write=write)
 
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.toggle_character_sheet_visibility",
-              required=False, safe=True)
-    def character_sheet_toggled(orig, self, *args, **kwargs):
-        """人物欄の開閉。引き直しのボタンは人物欄に在るので、
-        閉じた直後の照合で頼みを拾えるように間引きを1回ぶん解く。"""
-        result = orig(self, *args, **kwargs)
+    def character_sheet_toggled(call):
+        """人物欄の開閉の後（ローダの窓口 `hud` の SHEET。TECH.md §3.3.21）。
+        引き直しのボタンは人物欄に在るので、閉じた直後の照合で頼みを拾えるように間引きを1回ぶん解く。"""
         try:
             state["last_check"] = 0.0
-            check(ui.find_app(), "人物欄")
+            check(call.app or ui.find_app(), "人物欄")
         except Exception:
             ctx.log_exc("reputation: 人物欄の開閉で失敗した")
-        return result
+
+    hud_window.on(owner, ctx, (hud_window.SHEET,), after=character_sheet_toggled, write=write)
 
     def after_days(call):
         try:
@@ -1591,14 +1540,8 @@ def apply(ctx):
     icon_dir = os.path.dirname(os.path.abspath(__file__))
     icon_images = tuple(os.path.join(icon_dir, name) for name in ICON_FILES)
 
-    def close_view():
-        current = store.get("view")
-        store["view"] = None
-        if current is not None:
-            try:
-                current.dismiss()
-            except Exception:
-                ctx.log_exc("reputation: could not close the window")
+    # 画面は1枚だけ持ち、もう一度押したら閉じる（ローダの panels.Toggle。置き場は sys の器の "view"）。
+    view = panels.Toggle(store, log_exc=lambda text: ctx.log_exc("reputation: " + text))
 
     def current_model(app):
         """いまの名声・悪名を数え直してから、画面の中身を組む（開いた瞬間の値を出す）。"""
@@ -1613,53 +1556,35 @@ def apply(ctx):
         here = ui.area_id_of(ui.current_area(app))
         return view_model(bucket, names, laws, names.get(str(here), "") if here else "")
 
-    def open_view(app, sound=True):
+    def open_view(app, on_dismiss, sound=True):
+        """画面を開いて返す（`view` の opener）。"""
         model = current_model(app)
         model["rerolling"] = bool(state.get("rerolling"))
         busy = state.setdefault("rerolling_lands", set())
         for row in model["rows"]:
             row["rerolling"] = row["id"] in busy
-        store["view"] = window.open_window(
+        return window.open_window(
             app, model, write=write, sound=sound,
             on_reroll=lambda: request_reroll(app),
             on_land_reroll=lambda area_id: request_land_reroll(app, area_id),
-            on_dismiss=lambda: store.update({"view": None}))
-
-    def toggle_view(app):
-        if store.get("view") is not None:
-            close_view()
-            return
-        if app is None:
-            return
-        try:
-            open_view(app)
-        except Exception:
-            store["view"] = None
-            ctx.log_exc("reputation: could not open the window")
+            on_dismiss=on_dismiss)
 
     def refresh_view(_dt=None):
         """開いている画面を新しい中身で開き直す（表のスレッドで）。開いていなければ何もしない。"""
         state["refresh_pending"] = False
-        if store.get("view") is None:
+        if view.current() is None:
             return
         app = ui.find_app()
         if app is None:
             return
-        try:
-            current = store.get("view")
-            store["view"] = None
-            current.dismiss()
-            open_view(app, sound=False)
-        except Exception:
-            store["view"] = None
-            ctx.log_exc("reputation: could not refresh the window")
+        view.open(app, lambda app_, on_dismiss: open_view(app_, on_dismiss, sound=False))
 
     def view_changed():
         """編纂が終わった（ワーカーのスレッドから呼ばれる）。画面が開いていれば表のスレッドで開き直す。
 
         読み込みの直後は土地の編纂が続けて終わるので、0.5秒まとめてから1回だけ開き直す。
         """
-        if store.get("view") is None or state.get("refresh_pending"):
+        if view.current() is None or state.get("refresh_pending"):
             return
         state["refresh_pending"] = True
         try:
@@ -1716,38 +1641,23 @@ def apply(ctx):
             return False
         return True
 
-    hudicons.add(ctx, ICON_KEY, toggle_view, images=icon_images, order=ICON_ORDER,
+    hudicons.add(ctx, ICON_KEY, view.on_press(open_view), images=icon_images, order=ICON_ORDER,
                  label=window.TITLE, write=write)
 
     # ------------------------------------------------------------ 読み込みの後
     # 読み込んだ時点で評判の立つ土地をすべて照合し、変わった土地を編む（その土地に着くまで待たない）。
-    def after_load(call):
-        try:
-            state["last_check"] = 0.0
-            check(call.app, "読み込み")
-        except Exception:
-            ctx.log_exc("reputation: 読み込みの後の照合で失敗した")
-
-    loads.on(owner, ctx, (loads.LOAD, loads.NEW_GAME), after=after_load, write=write)
-
     # 起動直後は注入のやり直し（約6秒後）と読み込みが重なり、読み込みの包みが効く前に世界が読み込まれることがある
     # （実機。起動から14秒で世界を選んだ回に読み込みの後の照合が来なかった）。
-    # 注入が済んだ時点で世界が読み込まれていれば、その場で1回照合する。
-    def after_inject(_dt=None):
+    # その拾い直しはローダの窓口 loads の catch_up（注入が済んだ時点で世界が読み込まれていれば1回、call.label が "inject"）。
+    def after_load(call):
+        injected = getattr(call, "label", None) == "inject"
         try:
-            app = ui.find_app()
-            if app is None or material.player_of(app) is None or not ui.world_areas(app):
-                return
             state["last_check"] = 0.0
-            check(app, "注入")
+            check(call.app, "注入" if injected else "読み込み")
         except Exception:
-            ctx.log_exc("reputation: 注入の後の照合で失敗した")
+            ctx.log_exc("reputation: {}の後の照合で失敗した".format("注入" if injected else "読み込み"))
 
-    try:
-        from kivy.clock import Clock
-        Clock.schedule_once(after_inject, 1.0)
-    except Exception:
-        pass        # ゲームの外（検査）には Kivy が無い
+    loads.on(owner, ctx, (loads.LOAD, loads.NEW_GAME), after=after_load, write=write, catch_up=True)
 
     ctx.log("reputation: installed (会話={} 情景描写={} 二つ名={} 最低件数={} 長さ={}"
             " 二つ名の名声={} 土地={})"

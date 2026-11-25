@@ -45,14 +45,12 @@ import json
 import os
 import zipfile
 
+import instantale_modloader as _loader
 from instantale_modloader import npcs as _npcs
 from instantale_modloader import saves as _saves
 from instantale_modloader.saves import data_dir, worlds_dir
 
 # 再輸出（下の説明）。
-DATA_VENDOR = _saves.DATA_VENDOR
-SAVE_KEY = _saves.SAVE_KEY
-decode = _saves.decode
 list_worlds = _saves.list_worlds
 read_save = _saves.read_save
 save_path = _saves.save_path
@@ -104,6 +102,11 @@ def end_reservations(rows, world, when) -> list:
             row["reason"] = ENDED_REASON
             ended.append(str(row.get("name") or row.get("zip") or "?"))
     return ended
+
+#: 記憶の置き場（`311_` と `403_` の `state/` のフォルダ名）と zip の中の鍵。
+#: 書き出す `tool.py` と取り込む `npc_carryover.py` の両方が読む。
+MEMORY_STORES = (("npc_profiles", "profile"),
+                 ("npc_social_memory", "social"))
 
 #: 置ける施設（`npc_carryover.py` の「誰をどこへ」。実セーブに出る `facility_type`）。
 PLACEABLE_TYPES = ("guild", "inn")
@@ -220,8 +223,6 @@ def image_dir_of(npc, world: str = "", base: str = "") -> str:
     return ""
 
 
-# ---- セーブの読み --------------------------------------------------------
-
 # ---- セーブの中を読む ----------------------------------------------------
 
 def npcs_of(save) -> dict:
@@ -236,8 +237,8 @@ def affinity_of(npc) -> tuple:
     （実セーブで両方あった。103人の世界で str 57 / list 46）。
     配列のときの先頭が関係の側で、2つ目以降は魅力の話なので採らない。
     """
-    player = ((npc or {}).get("relationship") or {}).get("player")
-    if not isinstance(player, dict):
+    player = _npcs.player_row(npc or {})
+    if player is None:
         return None, ""
     # 数の読み方はローダの1か所（float は切り捨てた int。読めないものとして扱わない）
     affinity = _npcs.affinity_value(npc)
@@ -303,18 +304,6 @@ def location_of(save, npc) -> tuple:
     facility = find_facility(area, facility_id)
     return ((area or {}).get("name") or "",
             (facility or {}).get("name") or "")
-
-
-def name_exists(npcs, name: str, except_id: str = None) -> bool:
-    """同じ名前の NPC が居るか。エディタの `NameExists` と同じ完全一致。"""
-    if not name:
-        return False
-    for npc_id, npc in (npcs or {}).items():
-        if except_id is not None and str(npc_id) == str(except_id):
-            continue
-        if isinstance(npc, dict) and npc.get("name") == name:
-            return True
-    return False
 
 
 # ---- エクスポート（zip の書き）------------------------------------------
@@ -560,17 +549,12 @@ def load_pending(state_dir: str, strict: bool = False) -> list:
 
 
 def save_pending(state_dir: str, rows) -> bool:
-    """予約を書き出す。落ちても壊れないように隣に書いてから差し替える。"""
-    path = pending_path(state_dir)
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp = path + ".writing"
-        with io.open(tmp, "w", encoding="utf-8") as fh:
-            json.dump(list(rows), fh, ensure_ascii=False, indent=1)
-        os.replace(tmp, path)
-        return True
-    except OSError:
-        return False
+    """予約を書き出す。落ちても壊れないように隣に書いてから差し替える。
+
+    書き方はローダの `write_json`（TECH.md §3.11.1）。ゲームの中と道具画面の両方から呼ばれ、
+    どちらも `instantale_modloader` を引ける（道具画面は `modtool.add_loader_path` で引く）。
+    """
+    return _loader.write_json(pending_path(state_dir), list(rows), indent=1)
 
 
 def reservation(zip_rel: str, target_world: str, inherit=None) -> dict:

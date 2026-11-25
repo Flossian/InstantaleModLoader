@@ -75,6 +75,7 @@ class Ctx(object):
     def __init__(self):
         self._mod = matches[0]
         self.mod_dir = MOD_DIR
+        self.mod_name = matches[0]
         self.generation = "g1"
         self.hooks = {}
         self.errors = []

@@ -10,7 +10,7 @@
     "en": "Raises the generation resolution and overrides the sampler at the single exit every backend goes through, separately for portraits, enemies and backgrounds, keeping the aspect ratio. The checkpoint, TAESD, VAE and LoRA folder can be pointed elsewhere (for an SDXL model) because they are written before the pipeline is built. The advanced tab can also redraw only the portrait's face, which fixes eyes of mismatched color or shape. When a mod that shows conversation expressions (347 and so on) is installed, it also draws expression variants of portraits (smiling, angry, sad, surprised, plus expressions added in the advanced tab). Every default is the game's own value, and a setting left at its default is never written",
     "ja": "どのバックエンドでも通る1つの出口で、生成解像度を上げ、サンプラーを上書きする。立ち絵・敵・背景で別々に指定でき、縦横比は保つ。チェックポイント・TAESD・VAE・LoRA の置き場も差し替えられる（パイプラインが建つ前に書くため。SDXL のモデルへ移る用）。高度設定で、立ち絵の顔だけを描き直して、左右で色や形のずれた目を直すこともできる。会話の表情を見せる MOD（347 など）が入っていれば、立ち絵の表情差分（笑う・怒る・悲しむ・驚くと、高度設定で足した表情。見本の照れる顔が最初から入っている）も描く。既定値はすべてゲームの値で、既定のままの項目は書き換えない"
   },
-  "version": "30",
+  "version": "31",
   "author": "R01/Flossian",
   "state": ["stable_diffusion"],
   "after": ["131_sharp_portrait"],

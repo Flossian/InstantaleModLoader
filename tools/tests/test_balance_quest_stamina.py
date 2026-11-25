@@ -156,7 +156,6 @@ def setup(party=True, **settings):
     module, _meta = load_mod(**settings)
     module.ui = FakeUI(app, ml.ui)
     ctx = FakeCtx(OUT_DIR)
-    setattr(sys, module.INSTALLED_MARK, False)    # 1プロセス1回の印を外す（毎回の記録を見るため）
     module.apply(ctx)
     return app, module, ctx
 

@@ -18,8 +18,8 @@
 | 宿泊期間（月単位） | `DisplayVacationChoice.__init__` に渡る `period_months` を差し替える |
 | 宿泊期間（週単位） | `period_months` は 1 にして、宿泊の窓の間だけローダの日数送りの関所へ「残りは何日か」を出す |
 | LLM の描写の月数 | 窓の間だけ、出ていく本文の `数ヵ月の宿泊` を実際の期間へ（`llm.wrap_outgoing`） |
-| 宿の主への指示文 | `conversation_facilitator` と `_after_retrieval` の `response_prompt_instruction` の一文を、今の期間・部屋の名前・宿代へ |
-| 宿の主の記録 | `VacationStartManager.execute` の間に主の `life_log` へ増えた記録の期間・部屋の名前・日付の範囲を実際の値へ |
+| 宿の主への指示文 | `conversation_facilitator` と `_after_retrieval` の `response_prompt_instruction` の一文を、今の期間・部屋の名前・宿代へ（ローダの `modnpc` の `prompt` の口） |
+| 宿の主の記録 | `VacationStartManager.execute` の間（ローダの窓口 `stays`）に主の `life_log` へ増えた記録の期間・部屋の名前・日付の範囲を実際の値へ |
 | 主人公の活動の記録 | 宿泊の各段の間に主人公の `life_log` へ増えた `生活の記憶` の日付の範囲を、週単位の日数へ |
 
 ボタンに出す期間・料金は設定値そのもので、ゲームに渡す値も同じ設定値。
@@ -49,42 +49,34 @@
   ローカルもクラウドも同じ1か所で、
   `LlamaCppClient.chat` だけに仕掛けるとクラウド実行で丸ごと落ちる（`119_` が踏んだ）。
   当たらなかった本文はその一節だけログへ残す
-- 部屋の見分け・ラベルの素の料金の控え・前払い調整・精算は、v1.15.1 でローダの宿代の関所へ移した
-  （`prices.install_inn`。中身は移す前のこの MOD の形のまま）。
+- 部屋の見分け・ラベルの素の料金の控え・前払い調整・精算は、ローダの宿代の関所が持つ
+  （`prices.install_inn`）。
   街の出来事（`338_`）のような宿代へ倍率を掛ける MOD が、この MOD の答えの上に段を重ねられるようにするため。
   こちらは部屋ごとの答え（額・呼び名・ボタンの形）を置くだけで、素のままの部屋では答えない
-- **ボタンは `text` だけ触る**（spec と `args` はゲーム自身のものを残す）ので、
-  この MOD を外しても押下の挙動は壊れない。
-  `refresh_choice_buttons` が描く前に書くため、
-  `314_` のような次フレームの塗り直しは要らない。
+- 宿泊のボタンは、ゲームのボタンと同じ spec の写しを今の期間の文言で出す（窓口 `choices` の宣言型の口、`replace`）。
+  ゲームのボタンは書き換えないので、セーブにはゲームの文言が残り、この MOD を外しても押下の挙動は壊れない。
   `306_party_train_exp` も `VacationTrainManager.execute` を包むが、
   こちらは外側から重なるだけ
 
 遊び方の説明は MODS.md の `315_` の項、検証の経過は VERIFICATION.md §3.28。
 
-版9: 宿泊のフック（`DisplayVacationChoice.__init__`・`VacationStartManager.__init__`・`execute`・各段の `execute`・`add_text`）は、
-引数を受け取った形のまま元の関数へ渡す（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
-月数と文言の差し替えは来た側（位置かキーワード）に合わせる。
-同じ版で、宿の主に渡る2つの文を今の設定に揃えた（GAME.md §2.17、VERIFICATION.md §3.28）。
+宿の主に渡る2つの文も今の設定に揃える（GAME.md §2.17、VERIFICATION.md §3.28）。
 会話の指示文（`response_prompt_instruction`）の期間・部屋の名前・宿代と、宿泊のたびに主の `life_log` へ入る記録。
-それまでは1週間の設定でも主が「三ヵ月単位の宿だよ」と言い、記録には「1ヵ月間」と残っていた。
 主人公の活動の記録（文に期間は無い）も、週単位なら日付の範囲を実際の日数へ縮める。
 """
 
-import os
 import sys
 import re
 import time
 
-from instantale_modloader import choices, durations, frames, llm, prices, text_filters, ui
+from instantale_modloader import choices, durations, frames, llm, modnpc, prices, stays, text_filters, ui
 
 LOG_BASENAME = "vacation_custom.log"
 
 #: 控えの置き場（`sys` の属性名）。注入し直しをまたいで残す。
 STATE_STORE_ATTR = "__instantale_vacation_custom_store__"
 
-# ボタンには何も足さないが、`ui.Screen` の道具（say）を使うので印のキーは他の MOD と別にして持つ（TECH.md
-# §3.3）。
+# `choices.provide` に渡す `ui.Screen` の印。キーは他の MOD と別にして持つ（TECH.md §3.3）。
 MARK = "mod_vacation_custom"
 
 # ---------------------------------------------------------------- 設定（mod.json）
@@ -178,13 +170,6 @@ GAME_NAMES = {"kennel": "犬小屋", "simple": "簡易寝台", "private": "個�
               "luxury": "高級個室"}
 GAME_PRICES = {"kennel": 0, "simple": 10, "private": 100, "luxury": 1000}
 
-# ラベルから月数を読む形。
-# `宿泊する(3ヵ月)` → 3。
-# 料金を読むのはローダの語彙（`ui.parse_coin`。`314_` と共有）。
-# `個室(100G)` → 100。通貨の表記が差し替えられていれば
-# （`130_`）`個室(100円)` も読む。
-MONTHS_RE = re.compile(r"(\d+)\s*ヵ月")
-
 # 「Nヵ月泊まることにした。」を見分ける手掛かり（実測の文言）。
 STAY_TEXT_MARK = "泊まることにした"
 
@@ -202,9 +187,9 @@ PROMPT_MONTHS_RE = re.compile(
 # だから**当たらなかった側を実機から拾う**ための口を置く。
 PROMPT_MISS_MARKS = ("の宿泊", "の滞在")
 
-# 宿の主との会話の LLM と、その `response_prompt_instruction` の引数の位置（recon の signatures.json）。
-KEEPER_TALK_TARGETS = (("scripts.llm.llm_manager:conversation_facilitator", 10),
-                       ("scripts.llm.llm_manager:conversation_facilitator_after_retrieval", 9))
+# 宿の主との会話の LLM（`response_prompt_instruction` を受ける2本。recon の signatures.json）。
+# 引数はローダの `modnpc` の `prompt` の口が名前で渡す。
+KEEPER_TALK_SITES = ("conversation_facilitator", "conversation_facilitator_after_retrieval")
 
 # 宿の主への指示文の一文（exe の定数。GAME.md §2.17）。
 # 金額の後ろは見ない。`130_` が `scripts.languages:tr` の段で `10G` を `10円` へ直していることがあるため。
@@ -235,6 +220,8 @@ STAY_WINDOW_MANAGERS = (
     "VacationBeggingManager",
     "VacationEndManager",
 )
+#: そのうちローダの窓口 `stays` が包むもの（`REST` / `END`）。残りはこの MOD が自分で包む。
+STAY_GATED_MANAGERS = ("VacationRestManager", "VacationEndManager")
 
 #: 設定のテンプレートを埋める（知らない変数名は残し、通貨の表記を今の表記へ直す）。
 #: ローダの語彙（`314_` / `315_` / `332_` で共有）。
@@ -359,8 +346,8 @@ def apply(ctx):
     # 置くのは**関数**で、値ではない。年齢で変わるうえ、
     # 設定を変えたときに置き直す責任を読む側に持たせないため。
     # 「デフォルト」では None を返し、窓口がゲームの式へ落とす。
-    # `ctx.mod_dir` はフックの中では読めない（apply() の間だけ）ので、ここで控える。
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "vacation_custom"
+    # `ctx.mod_name` はフックの中では読めない（apply() の間だけ）ので、ここで控える。
+    owner = ctx.mod_name or "vacation_custom"
     durations.declare(durations.INN_STAY, stay_for, owner=owner, write=write)
 
     # 宿代も同じ約束でローダの窓口へ置く（`prices`）。
@@ -381,42 +368,35 @@ def apply(ctx):
     prices.install_inn(ctx, write)
 
     # ============================================================ ボタンの表示
-    def relabel_stay(entry, stay):
-        """`宿泊する(3ヵ月)` のボタン。期間を変えたときだけ書き直す。
+    noted = {"label": None}
 
-        出す期間は加算後の実値（`compute_stay` の `length`）で、
-        押したときに `period_months` へ渡す値と同じ計算から出ている。
-        月単位でゲームの月数と同じになったときは new == old で素通りする。
+    def offer(app, view):
+        """`宿泊する(3ヵ月)` のボタンを今の期間の文言で出す（窓口 `choices` の `offer`。組み直しのたびに呼ばれる）。
+
+        ゲームのボタンは書き換えず、同じ spec の写し（`replace`）を出す。押下はゲームへ流す（`on_press` 無し）。
+        保存の間は窓口が写しを外すので、セーブにはゲームの文言が残る（TECH.md §3.3.14 の宣言型の口）。
+        出す期間は加算後の実値（`compute_stay` の `length`）で、押したときに `period_months` へ渡す値と同じ計算から出ている。
+        月単位でゲームの月数と同じになったときは文言が変わらないので出さない。
         """
-        old = entry.get("text") or ""
-        new = fmt(STAY_BUTTON, length=stay["length"], months=stay["months"])
-        if new != old:
-            entry["text"] = new
-            write("label: {!r} -> {!r} (stay {})".format(old, new,
-                                                         stay["length"]))
+        out, stay = [], None
+        for entry in view.buttons:
+            if not isinstance(entry, dict) or ui.spec_cls_name(entry) != "DisplayVacationChoice":
+                continue
+            if stay is None:
+                stay = stay_for(app) or ()
+            if not stay:
+                break
+            old = entry.get("text") or ""
+            new = fmt(STAY_BUTTON, length=stay["length"], months=stay["months"])
+            if new != old:
+                out.append(choices.Choice(new, base=entry, replace=True))
+                if noted["label"] != (old, new):
+                    noted["label"] = (old, new)
+                    write("label: {!r} -> {!r} (stay {})".format(old, new, stay["length"]))
+        return out
 
-    def refresh_buttons(self, _buttons):
-        """ボタンが描かれる直前の1か所で、宿泊の期間のラベルだけ書き直す（部屋のボタンは関所）。
-
-        spec で名指しして触るので、宿と無関係な画面では辞書引きだけで素通りする。
-        """
-        try:
-            buttons = getattr(self, "buttons", None)
-            if isinstance(buttons, (list, tuple)):
-                stay = None
-                for entry in buttons:
-                    if not isinstance(entry, dict):
-                        continue
-                    if ui.spec_cls_name(entry) == "DisplayVacationChoice":
-                        if stay is None:
-                            stay = stay_for(self) or ()
-                        if stay:
-                            relabel_stay(entry, stay)
-        except Exception:
-            ctx.log_exc("vacation custom: cannot relabel the buttons")
-
-    # 選択肢はローダの窓口 `choices`（TECH.md §3.3.14）に預ける。
-    choices.provide(ctx, screen, refresh=refresh_buttons)
+    # 選択肢はローダの窓口 `choices`（TECH.md §3.3.14 の宣言型の口）に預ける。例外は窓口が捕まえて記録する。
+    choices.provide(ctx, screen, offer=offer)
 
     # ============================================================ 宿泊期間
     @ctx.wrap("__main__:DisplayVacationChoice.__init__", required=False, safe=True)
@@ -452,23 +432,8 @@ def apply(ctx):
         return orig(self, *args, **kwargs)
 
     # ============================================================ 宿代と予算
-    @ctx.wrap("__main__:VacationStartManager.__init__", required=False, safe=True)
-    def start_init(orig, self, *args, **kwargs):
-        """`execute` には引数が来ないので、月数と部屋をここで自分に控える。
-
-        自分専用の属性名で持つだけで、ゲームのデータには何も書かない（マネージャはセーブに入らない。セーブに入るのは
-        PhaseSpec のほう）。
-        """
-        result = orig(self, *args, **kwargs)
-        try:
-            # (app, months, quality)。受け取った形のまま渡し、ここでは読むだけ。
-            months = frames.arg(args, kwargs, "months", 1)
-            quality = frames.arg(args, kwargs, "quality", 2)
-            self._mod_vacation_custom = {"months": str(months),
-                                         "quality": str(quality)}
-        except Exception:
-            pass
-        return result
+    # `execute` には月数と部屋が来ない。ローダの窓口 `stays` が `VacationStartManager.__init__` から控えて
+    # `call.months` / `call.quality` で渡す（TECH.md §3.3.21）。
 
     # ------------------------------------------------ 宿の主の記録
     def keeper_memory_mark(app):
@@ -476,7 +441,7 @@ def apply(ctx):
         if not LLM_STAY_WORDING:
             return None
         try:
-            location = getattr(getattr(app, "player", None), "location", None)
+            location = ui.current_facility(app)     # ロード直後の施設 id の文字列も引き当てる
             keeper = ui.character_of(app, getattr(location, "owner", None))
             logs = getattr(keeper, "life_log", None)
             if not isinstance(logs, list):
@@ -557,26 +522,20 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("vacation custom: cannot correct the player's memory")
 
-    @ctx.wrap("__main__:VacationStartManager.execute", required=False)
-    def start_execute(orig, self, *args, **kwargs):
-        """宿泊の開始の間だけ窓を開け、週単位の予算を積み直す（宿代は関所が持つ）。
+    def start_before(call):
+        """宿泊の開始の間だけ窓を開け、週単位の予算を積み直す（宿代は関所が持つ。窓口 `stays` の `START` の前）。
 
         連泊（`まだ宿泊する`）も同じ窓を通るので、週単位の予算も積み直る。
-        抜けるときに、ゲームが宿の主へ書いた記録を実際の値へ直す。
+        戻り値（宿の主の記録の控え）は `start_after` に `call.memo` で渡る。
         """
-        app = getattr(self, "app", None) or ui.find_app()
-        info = getattr(self, "_mod_vacation_custom", None) or {}
+        app = call.app
         # ---- 週単位の予算。ゲームに渡した月数（=1）の宿泊にだけ積む。
         #      設定を途中で変えた・素の宿泊が進行中、という月数が合わない
         #      宿泊では積まない（文言も日数もゲームのまま）。
         try:
             stay = stay_for(app)
-            try:
-                months = int(str(info.get("months")))
-            except (TypeError, ValueError):
-                months = None
             if stay is not None and stay["days"] is not None \
-                    and months == stay["months"]:
+                    and call.months == stay["months"]:
                 state["block"] = {"left": int(stay["days"]), "spent": 0,
                                   "days": int(stay["days"]),
                                   "length": stay["length"],
@@ -584,7 +543,7 @@ def apply(ctx):
                                   # 「先に始まった事情が決める」で使う）。
                                   "since": time.time()}
                 write("stay: block of {} day(s) for {} (quality {!r})".format(
-                    stay["days"], stay["length"], info.get("quality")))
+                    stay["days"], stay["length"], call.quality))
             else:
                 state["block"] = None
         except Exception:
@@ -592,36 +551,53 @@ def apply(ctx):
             state["block"] = None
         memory = keeper_memory_mark(app)
         state["depth"] += 1
-        try:
-            return orig(self, *args, **kwargs)
-        finally:
-            state["depth"] -= 1
-            correct_keeper_memory(app, memory)
+        return memory
+
+    def start_after(call):
+        """抜けるときに、ゲームが宿の主へ書いた記録を実際の値へ直す（元の処理が投げても来る）。"""
+        state["depth"] -= 1
+        correct_keeper_memory(call.app, call.memo)
+
+    stays.on(owner, ctx, (stays.START,), before=start_before, after=start_after, always=True, write=write)
 
     # ------------------------------------------------ 週単位の予算が効く窓
+    def window_open(app):
+        """宿泊の各段の間だけ窓を開ける。日数の予算はこの窓の中だけ。主人公の記録の控えを返す。"""
+        memory = player_memory_mark(app)
+        state["depth"] += 1
+        return memory
+
+    def window_close(app, memory, ended):
+        state["depth"] -= 1
+        correct_player_memory(app, memory)
+        if ended:
+            block = state["block"]
+            state["block"] = None
+            if block is not None and block["spent"] == 0:
+                write("WARN stay: the {} block ended with no "
+                      "elapse_days call; this build may not elapse "
+                      "the stay through elapse_days -- run "
+                      "218_probe_vacation".format(block["length"]))
+
+    # 休養と終わりはローダの窓口 `stays`（`REST` / `END`）。元の処理が投げても窓を閉じる（always）。
+    stays.on(owner, ctx, (stays.REST, stays.END), before=lambda call: window_open(call.app),
+             after=lambda call: window_close(call.app, call.memo, call.kind == stays.END),
+             always=True, write=write)
+
+    # 窓口の無い段（鍛錬・労働・交流・物乞い）は自分で包む。
     def install_stay_window(cls_name):
         @ctx.wrap("__main__:{}.execute".format(cls_name), required=False)
         def stay_window(orig, self, *args, **kwargs):
-            """宿泊の各段の間だけ窓を開ける。日数の予算はこの窓の中だけ。"""
             app = getattr(self, "app", None) or ui.find_app()
-            memory = player_memory_mark(app)
-            state["depth"] += 1
+            memory = window_open(app)
             try:
                 return orig(self, *args, **kwargs)
             finally:
-                state["depth"] -= 1
-                correct_player_memory(app, memory)
-                if cls_name == "VacationEndManager":
-                    block = state["block"]
-                    state["block"] = None
-                    if block is not None and block["spent"] == 0:
-                        write("WARN stay: the {} block ended with no "
-                              "elapse_days call; this build may not elapse "
-                              "the stay through elapse_days -- run "
-                              "218_probe_vacation".format(block["length"]))
+                window_close(app, memory, False)
 
     for name in STAY_WINDOW_MANAGERS:
-        install_stay_window(name)
+        if name not in STAY_GATED_MANAGERS:
+            install_stay_window(name)
 
     # `elapse_days` はこちらでは包まない。包むのはローダの関所1枚だけで、
     # ここは「この宿泊であと何日進めてよいか」を答える側に回る（TECH.md §3.3.3）。
@@ -746,64 +722,33 @@ def apply(ctx):
                        else fmt(INN_KENNEL_FREE, name=kennel))
         return (text[:match.start()] + terms + text[match.end():]).replace(INN_KENNEL_TEXT, kennel_text)
 
-    def install_keeper_talk(target, text_at):
-        @ctx.wrap(target, required=False, safe=True)
-        def keeper_talk(orig, *args, **kwargs):
-            """指示文の差し替えは来た側（位置かキーワード）に合わせる。"""
-            try:
-                text = frames.arg(args, kwargs, "response_prompt_instruction", text_at)
-                new = reword_inn_terms(ui.find_app(), text)
-                if new != text:
-                    args, kwargs, _ = frames.replace_arg(
-                        args, kwargs, "response_prompt_instruction", text_at, new)
-                    write("keeper: the inn terms were reworded for {}".format(target.rsplit(":", 1)[1]))
-            except Exception:
-                ctx.log_exc("vacation custom: cannot reword the inn terms")
-            return orig(*args, **kwargs)
-        return keeper_talk
+    def keeper_talk(info):
+        """宿の主との会話の指示文を今の値にする（ローダの `modnpc` の `prompt`。誰と話していても呼ばれる）。
+
+        引数は窓口が名前で渡すので、位置かキーワードかを見分けなくてよい。
+        """
+        site, args = info.get("site"), info.get("args")
+        if site not in KEEPER_TALK_SITES or not isinstance(args, dict):
+            return
+        try:
+            text = args.get("response_prompt_instruction")
+            new = reword_inn_terms(info.get("app") or ui.find_app(), text)
+            if new != text:
+                args["response_prompt_instruction"] = new
+                write("keeper: the inn terms were reworded for {}".format(site))
+        except Exception:
+            ctx.log_exc("vacation custom: cannot reword the inn terms")
 
     if LLM_STAY_WORDING:
-        for target, text_at in KEEPER_TALK_TARGETS:
-            install_keeper_talk(target, text_at)
+        modnpc.install(ctx, write=write)
+        modnpc.register(owner, modnpc.ANY, prompt=keeper_talk, write=write)
+    elif modnpc.ANY in modnpc.entries(owner):
+        # 登録簿は注入をまたいで残るので、設定を切った回は前の注入の層を外す。
+        # 自分の層が無い回は呼ばない（`unregister` は自分の層が無くても、ほかの MOD の層があれば「外した」と記録に書くため）。
+        modnpc.unregister(owner, modnpc.ANY, write=write)
 
-    # ------------------------------------------------------------ 自己検証
-    # 実経路は宿に泊まるまで通らない。
-    # ラベルの読み書きと期間の計算だけは作ったデータで先に確かめておく（`314_` と同じ方針）。
-    # 通貨の表記は `130_` が差し替えていることがあるので、
-    # 見本のほうも同じ表記へ通してから突き合わせる。
-    parsed = ui.parse_coin(ui.rewrite_coins("個室(1,000G)"))
-    # テンプレートは既定の形を直に書く（`ROOM_BUTTON` は GUI で変えられるので、
-    # 設定を通すと変えた回に期待値とずれる）。
-    sample = fmt("{name}({price}G)", name="大部屋", price=30)
-    room_label = ui.rewrite_coins("大部屋(30G)")
-    survives = fmt("{name}と{typo}", name="個室")
-    def stay_field(choice, age, scaling, key):
-        stay = compute_stay(choice, age, scaling)
-        return None if stay is None else stay.get(key)
-
-    stays = (
-        compute_stay("デフォルト", 55, True) is None,
-        compute_stay("1週間", 25, True) == {"unit": "week", "count": 1,
-                                            "months": 1, "days": 7,
-                                            "length": "1週間"},
-        stay_field("1週間", 35, True, "length") == "2週間",
-        stay_field("2週間", 55, True, "days") == 28,      # 2+3 → 上限4週間
-        stay_field("1ヵ月", 42, True, "months") == 3,
-        stay_field("3ヵ月", 47, True, "months") == 5,
-        stay_field("4ヵ月", 61, True, "months") == 6,     # 4+3 → 上限6ヵ月
-        stay_field("6ヵ月", 20, True, "months") == 6,
-        stay_field("2週間", 55, False, "days") == 14,     # 加算OFF
-        stay_field("1週間", None, True, "days") == 7,     # 年齢が読めない
-        parse_age("28歳") == 28 and parse_age(None) is None,
-    )
-    if parsed == 1000 and sample == room_label \
-            and survives == "個室と{typo}" and all(stays):
-        ctx.log("verified: reads prices from labels, formats templates, and "
-                "computes the stay lengths with the age bonus")
-    else:
-        ctx.log("VERIFY FAILED: parsed={!r} sample={!r} survives={!r} "
-                "stays={!r}".format(parsed, sample, survives, stays),
-                level="ERROR")
+    # ラベルの読み書きと期間の計算の確かめは固定の入力なので tools/tests/test_vacation_custom.py にある（TECH.md §6.1）。
+    # ここに残すのは設定で変わる確かめだけ。
     if str(STAY_LENGTH).strip() not in STAY_CHOICES:
         ctx.log("STAY_LENGTH={!r} is not one of {}; staying with the game's "
                 "own period".format(STAY_LENGTH, "/".join(STAY_CHOICES)),

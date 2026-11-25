@@ -54,6 +54,7 @@ from instantale_modloader import frames
 from instantale_modloader import imagegen
 from instantale_modloader import patch as loader_patch
 from instantale_modloader import saves
+from instantale_modloader import state as loader_state
 from instantale_modloader import ui
 
 from . import assets
@@ -229,7 +230,7 @@ BULK_TARGET = "__main__:InstantaleApp.run_world_bulk_generation"
 #: `sys` に置いて当て直しをまたぐ（一括生成を始めた後にローダが MOD を当て直す。variants.shared）。
 BULK = variants.shared()
 
-#: ローダの窓口 `expressions` に表情の一覧を登録するときの名前。
+#: ローダの窓口 `expressions` に表情の一覧を登録するときの名前（`ctx.mod_name` が無いときの予備）。
 EXPRESSION_OWNER = "343_stable_diffusion"
 
 #: 表情差分を通すゲームの工程（`image_generation_creature` の写し。GAME.md §2.30）。
@@ -360,13 +361,9 @@ def unwrapped(func):
     署名は素の関数から読む。注入し直した回は `base.__dict__` に前の世代の
     包みが載っていて、そのまま読むと `(*args, **kwargs)` になり、
     引数を名前で引けず**黙って何も書き換えなくなる**。
+    剥がし方はローダの `patch.original_of`（連鎖が壊れていても 32 段で止まる）。
     """
-    for _ in range(32):
-        inner = frames.attr(func, "__original__", None)
-        if inner is None or inner is func:
-            break
-        func = inner
-    return func
+    return loader_patch.original_of(func)
 
 
 def below_ours(func):
@@ -474,6 +471,8 @@ def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
     warn = ctx.warner("stable_diffusion")
     seen = set()
+    #: 窓口（`expressions` と描き方の `imagegen`）に名乗る名前。
+    owner = ctx.mod_name or EXPRESSION_OWNER
 
     #: 寸法・サンプラー・安全弁・規則。生成のたびに変わっていれば読み直す（`live.py`）。
     live = hot.Live(ctx, write)
@@ -490,7 +489,7 @@ def apply(ctx):
         live.refresh()
         return variants.entry_rows(live.variants)
 
-    expressions.define(EXPRESSION_OWNER, ctx, expression_rows)
+    expressions.define(owner, ctx, expression_rows)
     if not live.hot():
         write("hot reload: off (場所が控えられない。設定は注入し直しで効く)")
 
@@ -1607,7 +1606,7 @@ def apply(ctx):
     # ------------------------------------------------- 会話の立ち絵の表情差分
 
     @ctx.wrap(BULK_TARGET, required=False, safe=True)
-    def bulk_generation(orig, *args, **kwargs):
+    def bulk_generation(orig, self, *args, **kwargs):
         """一括生成のあいだは、表情差分を立ち絵に続けて描く（`start_variants`）。
 
         ゲームの仕事が済んだ後に、立ち絵が既にある人物へ差分だけ描く（`backfill_variants`）。
@@ -1617,7 +1616,7 @@ def apply(ctx):
         BULK["depth"] += 1
         try:
             # ゲームが画面へ最後に渡した件数を控える（差分だけ描いた後に、画面をゲームの終わりの表示へ戻す）
-            progress = frames.arg(args, kwargs, "progress", 3)
+            progress = frames.arg(args, kwargs, "progress", 2)
             last = {}
             if callable(progress):
                 def recording(state, *more, **named):
@@ -1625,11 +1624,8 @@ def apply(ctx):
                         last.clear()
                         last.update(state)
                     return progress(state, *more, **named)
-                if len(args) > 3:
-                    args = args[:3] + (recording,) + tuple(args[4:])
-                elif "progress" in kwargs:
-                    kwargs = dict(kwargs, progress=recording)
-            result = orig(*args, **kwargs)
+                args, kwargs, _replaced = frames.replace_arg(args, kwargs, "progress", 2, recording)
+            result = orig(self, *args, **kwargs)
             # 一括生成の開始で読み込まれたモジュールに、ローダが当て直している最中のことがある（ゲームの仕事が
             # 無いと、その間に終わる）。最新の描き足しと表情を見せる MOD の宣言が揃うまで待つ（VERIFICATION.md §3.132）
             waiting = time.time()
@@ -1639,10 +1635,10 @@ def apply(ctx):
                 write("一括生成: ローダの当て直しが終わるのを {:.1f} 秒待ってから描き足す".format(time.time() - waiting))
             backfill = BULK.get("backfill")
             if callable(backfill):
-                stop_event = frames.arg(args, kwargs, "stop_event", 2)
+                stop_event = frames.arg(args, kwargs, "stop_event", 1)
                 reported = False
                 try:
-                    reported = backfill(frames.arg(args, kwargs, "world_path", 1), stop_event, progress)
+                    reported = backfill(frames.arg(args, kwargs, "world_path", 0), stop_event, progress)
                 except Exception:
                     ctx.log_exc("image quality: drawing the missing expression variants failed")
                 if reported and callable(progress):
@@ -1943,17 +1939,13 @@ def apply(ctx):
         world = os.path.basename(world_dir)
         if not world:
             return reported
-        try:
-            with open(os.path.join(world_dir, "world_data.json"), "rb") as fh:
-                world_data = saves.decode(fh.read())
-        except OSError:
-            world_data = None
+        # 骨格はセーブと立ち絵（`expressions.character_dir`）と同じ置き場（`saves.worlds_dir()`）から読む
+        world_data = saves.read_world(world)
         try:
             save_data = saves.read_save(world)
         except Exception:
             save_data = None
-        player_data = save_data.get("player_data") if isinstance(save_data, dict) else None
-        player = player_data.get("name") if isinstance(player_data, dict) else None
+        player = loader_state.player_name_of_dict(save_data)
         # 文（`prompts.json`）の無い人物は描けないので先に外す（数えると、一括生成のたびにゲームの用意へ進んで空振りする）
         people, no_text = [], 0
         for name in variants.world_npc_names(world_data, save_data):
@@ -2146,8 +2138,7 @@ def apply(ctx):
         """
         if creating:
             return True
-        player = frames.attr(ui.find_app(), "player", None)
-        return bool(name) and frames.attr(player, "name", None) == name
+        return bool(name) and ui.player_name(ui.find_app()) == name
 
     def start_variants(module_name, world, name, captured, creating=False):
         """立ち絵を保存し終えた後に、表情差分の仕事を始める。
@@ -2300,15 +2291,15 @@ def apply(ctx):
         return img2img.enabled(live.img2img)
 
     # 主人公の描き直し（`335_`）も、この中身から選ぶ口を出す（TECH.md §5.11）。
-    imagegen.declare_methods("343_stable_diffusion", ctx, offered)
+    imagegen.declare_methods(owner, ctx, offered)
 
     @ctx.wrap(REGEN_THREAD_TARGET, required=False, safe=True)
-    def regenerate_thread(orig, *args, **kwargs):
+    def regenerate_thread(orig, self, *args, **kwargs):
         """ボタンで選んだ描き方を、このスレッドの描き方にする（出口の `img2img.plan` が見る）。"""
         mode, REGEN["mode"] = REGEN["mode"], None
         with imagegen.drawing_method(mode or "txt2img") as method:
             write("regenerate: {}".format(method))
-            return orig(*args, **kwargs)
+            return orig(self, *args, **kwargs)
 
     #: 足したボタン、ゲームのボタンの元の文字と形、ゲームの再生成ボタンに結んだ手（閉じたら戻す）。
     regen_ui = {"buttons": [], "kept": [], "bound": None}

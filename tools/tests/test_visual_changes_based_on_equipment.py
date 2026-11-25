@@ -115,7 +115,12 @@ def fake_ask(ctx, rows, count, write):
 mod._ask_equipment_prompt = fake_ask
 store = FakeStore()
 holder = {"name": "テスト"}
-rows = [{"name": "革鎧", "description": "", "item_type": "wearable", "sub_type": ""}]
+rows = [{"name": "革鎧", "description": "", "item_type": "wearable", "item_detail": ""}]
+check("細分は attributes の item_detail から読む",
+      mod._item_row({"name": "革鎧", "item_type": "wearable",
+                     "attributes": {"item_detail": "body_armor"}})["item_detail"] == "body_armor")
+check("attributes が無ければ細分は空",
+      mod._item_row({"name": "革鎧"})["item_detail"] == "")
 mod.EQUIPMENT_PROMPT_COUNT = 1
 p1 = mod._prepare(None, store, write, None, holder, rows)
 p2 = mod._prepare(None, store, write, None, holder, rows)
@@ -157,10 +162,6 @@ with io.open(config, "w", encoding="utf-8") as fh:
 check("config.json の方式を読む", mod.config_backend(config) == "sdcpp_vulkan")
 os.remove(config)
 check("読めなければ None", mod.config_backend(config) is None)
-check("選ばれた方式だけ",
-      mod.image_targets("diffusers_openvino")
-      == ["image_generation.diffusers_openvino.image_generation_creature:generate_character_image"])
-check("分からなければ4つとも", len(mod.image_targets(None)) == 4)
 
 
 # ---------------------------------------------------------------- フック

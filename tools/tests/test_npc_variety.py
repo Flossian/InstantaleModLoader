@@ -18,7 +18,8 @@
   人でない   単体生成の名前か概要が人形・魔物・竜などを指すなら触らない（[SKIP] を残す）。
              見るのは名前と概要の行だけ
   経路       偽の LlamaCppClient の chat に流すと user 本文だけが伸び、system は変わらず、
-             送られた本文に種があり、[SEED] がログに残る。自己検証が通る
+             送られた本文に種があり、[SEED] がログに残る
+  小さな表   注入時の自己検証だった確かめ（単体・衛兵・人でない・町・主人公・割合0）を固定の入力で通す
 """
 
 import importlib.util
@@ -452,6 +453,54 @@ def main():
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
+    # -- 注入時の自己検証から移した確かめ（固定の入力。TECH.md §6.1） -------------
+    print("\n[小さな表で通す]")
+    sample_tables = {
+        "look": [("髪", ["赤茶の髪を短く刈っている"], 100), ("瞳", ["鳶色の瞳"], 100),
+                 ("特徴", ["片目に眼帯"], 0), ("年齢", ["まだ子ども"], 100)],
+        "personality": [("口数", ["無口"], 100)],
+        "description": [("出自", ["川向こうの漁村の生まれ"], 100)],
+        "_not_for": {"look": {"年齢": {"single": {"まだ子ども"}, "owner": {"まだ子ども"},
+                                      "player": "*"}},
+                     "personality": {}, "description": {}},
+    }
+    sample_single = ["型: - look_description: 外見", "指示",
+                     "【生成するNPC】\n- 名前: 宿屋の主人\n- 概要: 宿を営む\n- 強さのランク: 8\n"]
+    sample_guard = ["型: - look_description: 外見", "衛兵NPCをデザインしろ",
+                    "【生成するNPC】\n- 強さのランク: 8\n"]
+    sample_doll = ["型: - look_description: 外見", "指示",
+                   "【生成するNPC】\n- 名前: 石の番人\n- 概要: 遺跡を守る古いゴーレム\n- 強さのランク: 30\n"]
+    sample_player = ["あなたはキャラクター生成AIです。",
+                     "**1体のプレイヤーキャラクター**を**ランダムに**生成してください。\n"
+                     "- 今回利用可能な才能点：**30**\n"]
+    sample_town = ["型", "指示", "【NPCの生成要素】\n- 名前\n【生成対象エリアのデータ】\n"
+                                 "- settlement_name: 風の村\n"]
+    rng = random.Random(1)
+    got, made = mod.inject(sample_single, sample_tables, rng, chance=100)
+    check("単体: 種が1人ぶん付き、割合0の軸と単体に出さない句は付かない",
+          got is not None and len(made) == 1 and mod.HEAD_SINGLE in got[2]
+          and "赤茶の髪を短く刈っている" in got[2] and "眼帯" not in got[2]
+          and "まだ子ども" not in got[2] and got[0] == sample_single[0], got)
+    check("単体: 種の付いた本文は2度目は触らない",
+          got is not None and mod.inject(got, sample_tables, rng, chance=100)[0] is None)
+    check("単体: 衛兵の頼み文は触らない",
+          mod.inject(sample_guard, sample_tables, rng, chance=100)[0] is None)
+    check("単体: 人でない存在には付けない",
+          mod.inject(sample_doll, sample_tables, rng, chance=100)[0] is None)
+    got, made = mod.inject(sample_town, sample_tables, rng, chance=100, residents=2, adventurers=1)
+    check("町: 主5人＋住民2人＋冒険者1人。主に子どもは出さず、ほかには出る",
+          got is not None and len(made) == len(mod.TOWN_OWNERS) + 3 and mod.HEAD_TOWN in got[2]
+          and "宿屋(inn)の owner:" in got[2]
+          and not any("まだ子ども" in line for label, line in made if "owner" in label)
+          and all("まだ子ども" in line for label, line in made if "owner" not in label), made)
+    got, made = mod.inject(sample_player, sample_tables, rng, chance=100)
+    check("主人公: 種が付き、年齢の軸は付かない",
+          got is not None and len(made) == 1 and made[0][0] == "主人公"
+          and mod.FOOT_PLAYER in got[1] and "鳶色の瞳" in got[1] and "まだ子ども" not in got[1]
+          and got[0] == sample_player[0], got)
+    check("割合0なら何も足さない",
+          mod.inject(sample_town, sample_tables, rng, chance=0)[0] is None)
+
     # -- 経路 --------------------------------------------------------------------
     print("\n[経路]")
     out_dir = tempfile.mkdtemp(prefix="npc_variety_out_")
@@ -462,8 +511,7 @@ def main():
         ctx = FakeCtx(client, out_dir, MOD_DIR)
         mod.RNG = random.Random(7)
         mod.apply(ctx)
-        check("自己検証が通る", any("self-check passed" in l for l in ctx.lines)
-              and not any("VERIFY FAILED" in l for l in ctx.lines), ctx.lines)
+        check("注入でエラーを出さない", not any(l.startswith("ERROR") for l in ctx.lines), ctx.lines)
         check("仕掛かった記録", any("armed on" in l and "句 from seeds.default.json" in l for l in ctx.lines), ctx.lines)
         messages = [{"role": "system", "content": SINGLE[0]}, {"role": "system", "content": SINGLE[1]},
                     {"role": "user", "content": SINGLE[2]}]

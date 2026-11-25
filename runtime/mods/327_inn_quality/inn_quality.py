@@ -6,8 +6,7 @@
 この MOD は等級に3つの意味を足す。
 
 1. **1回の宿泊でできる活動の数**が部屋で変わる。
-   素のゲームは宿泊1回につき活動1回（実測。`out/vacation.jsonl` の宿泊54回すべてが
-   `VacationStartManager` → 活動1回 → `VacationEndManager`。GAME.md §2.17）。
+   素のゲームは宿泊1回につき活動1回（GAME.md §2.17）。
    宿代は活動1回の料金で、同時に暦を30日払っている。
    個室なら2回、高級個室なら3回を同じ宿代・同じ30日で過ごせる。
    買っているのは暦で、金が余る終盤でも日数は他で買えない。
@@ -19,16 +18,15 @@
    TECH.md §5.4）。
 3. **社交で会う相手を同行者から選ぶ**。
    素のゲームの社交は、エリアの施設を1つ選んでそこの主と会う
-   （実測: 【イベントの場所】が宿なら宿の主、ギルドならギルドの主。宿の名簿 `Facility.characters` を
-   差し替えても選ばれる相手は変わらなかった。実機2回目）。
+   （【イベントの場所】が宿なら宿の主、ギルドならギルドの主。宿の名簿 `Facility.characters` を
+   差し替えても選ばれる相手は変わらない。VERIFICATION.md §3.54）。
    だから相手は LLM へ渡る直前で差し替える。
    `vacation_scene_generator` / `vacation_scene_resolver` の `npc_list`（要素は
    `{'instance': Character, 'life_log_dict': {...}}`。実測）と、
    `VacationSocializeResolveManager.__init__` の `npc_id_list` の3か所を同じ1人にそろえる
    （schema の `const` も名前→id の対応も、この3つから組まれる）。
    `life_log_dict` はゲーム自身の `context_manager.get_life_log_text` で作る（読めなければ空）。
-   相手の優先は部屋を問わず 同行者 → エリア内の好感度の高い NPC → エリア内の生成済み NPC からランダム
-   （実機1回目で「部屋で段を変える」から改めた）。
+   相手の優先は部屋を問わず 同行者 → エリア内の好感度の高い NPC → エリア内の生成済み NPC からランダム。
 
 活動の数の作り:
 
@@ -45,8 +43,8 @@
 
 常連の作り:
 
-- 宿の主は `app.player.location`（宿泊中は `Facility`）の `owner`（GAME.md §2.7）
-- 好感度は本体の `relationship` に直接足す。文（`affinity_text`）は本体が会話のたびに
+- 宿の主は、いま居る施設（`ui.current_facility`。宿泊中は `Facility`）の `owner`（GAME.md §2.7）
+- 好感度は `npcs.affinity_of` / `npcs.set_affinity` で、実行時の人物と素データの `relationship` に足す。文（`affinity_text`）は本体が会話のたびに
   書き直すので触らない（GAME.md §2.25.1）。`"player"` の欄が無い初対面の主には足さず記録だけ残す
   （欄を新設しない。TECH.md §6.4）
 - 記録（`stays` / `granted` ほか）はメモリの中だけで動かし、ゲームの `save_game` が通った後に
@@ -60,18 +58,12 @@
 - `311_` / `403_` / `300_` の控えは読みも書きもしない
 
 遊び方の説明は DOC.md、検証の経過は VERIFICATION.md §3.54。
-
-版6: 宿泊のフック（`VacationStartManager.__init__`・`execute`・活動と社交の `execute`・
-`VacationSocializeResolveManager.__init__`・`VacationEndManager.execute`）は、引数を受け取った形のまま元の関数へ渡す
-（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。`npc_id_list` は引数の並びの8番目（`args[7]`）として読み書きする。
 """
 
-import os
 import random
-import sys
 
-from instantale_modloader import choices, durations, frames, loads, modnpc, npcs, saving, ui
-from instantale_modloader.state import WorldStore
+from instantale_modloader import choices, durations, frames, loads, modnpc, npcs, saving, stays, ui
+from instantale_modloader.state import WorldStore, process_store
 
 LOG_BASENAME = "inn_quality.log"
 STATE_DIRNAME = "inn_regular"
@@ -118,7 +110,6 @@ SOCIAL_PRIORITY = True
 FRIEND_AFFINITY = 10
 
 # ---------------------------------------------------------------- コード側の設定
-SOCIAL_TIERS = ("party", "friends", "random")
 SOCIALIZE_CLASS = "VacationSocializeManager"
 #: MOD 専用の乱数（ゲーム自身の乱数列をずらさない。TECH.md §6.1）。
 RNG = random.Random()
@@ -135,6 +126,7 @@ ACTIVITY_CLASSES = ("VacationTrainManager", "VacationRestManager",
                     "VacationBeggingManager")
 START_CLASS = "VacationStartManager"
 END_CLASS = "VacationEndManager"
+REST_CLASS = "VacationRestManager"
 
 RECORD_KEYS = ("name", "facility_id", "stays", "by_quality", "last_day", "granted")
 
@@ -165,11 +157,14 @@ def ordered(bucket):
 
 def inn_owner(app):
     """宿泊中の宿の主の `(id, 施設)`。読めなければ `(None, None)`。"""
-    facility = getattr(getattr(app, "player", None), "location", None)
-    owner = getattr(facility, "owner", None)
-    if owner is None or isinstance(owner, (dict, list)):
+    facility = ui.current_facility(app)     # ロード直後の施設 id の文字列も引き当てる
+    if facility is None:
         return None, None
-    return str(owner), facility
+    # 主の id の読み方はローダの `ui.facility_owner`（空・dict・list の主は「主なし」）。
+    owner, _character = ui.facility_owner(app, facility)
+    if owner is None:
+        return None, None
+    return owner, facility
 
 
 def rooms_text(by_quality):
@@ -211,88 +206,77 @@ def pick_partner(app, rng=RNG):
     """社交の相手を1人選ぶ。`(id, 段)`。触らないなら `(None, 理由)`。"""
     if not SOCIAL_PRIORITY:
         return None, "game default"
-    tiers = SOCIAL_TIERS
     party = [m for m in ui.party_member_ids(app) if ui.character_of(app, m) is not None]
     others = [n for n in area_npc_ids(app) if n not in party and n != ui.PLAYER_ID]
-    for tier in tiers:
-        if tier == "party" and party:
-            return rng.choice(party), tier
-        if tier == "friends":
-            scored = [(npcs.affinity_value(ui.character_of(app, n)), n) for n in others]
-            scored = [(a, n) for a, n in scored if a is not None and a >= int(FRIEND_AFFINITY)]
-            if scored:
-                best = max(a for a, _n in scored)
-                return rng.choice([n for a, n in scored if a == best]), tier
-        if tier == "random" and others:
-            return rng.choice(others), tier
+    if party:
+        return rng.choice(party), "party"
+    scored = [(npcs.affinity_of(app, n), n) for n in others]
+    scored = [(a, n) for a, n in scored if a is not None and a >= int(FRIEND_AFFINITY)]
+    if scored:
+        best = max(a for a, _n in scored)
+        return rng.choice([n for a, n in scored if a == best]), "friends"
+    if others:
+        return rng.choice(others), "random"
     return None, "no candidate"
 
 
 def life_log_dict(app, character):
-    """ゲーム自身の作り方で人生ログの辞書を組む。読めなければ空。"""
-    module = sys.modules.get("scripts.llm.context_manager")
-    build = getattr(module, "get_life_log_text", None)
-    try:
-        value = build(app, character) if callable(build) else None
-    except Exception:
-        value = None
-    return value if isinstance(value, dict) else {}
+    """ゲーム自身の作り方で人生ログの辞書を組む。読めなければ空（ローダの `npcs.life_log`）。"""
+    return npcs.life_log(app, character)
 
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
-    mod_owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "327_inn_quality"
+    mod_owner = ctx.mod_name or "327_inn_quality"
     screen = ui.Screen(ctx, write, tag="inn quality", mark=MARK)
 
     # 置き場は `sys`（`315_` と同じ理由。当て直しが宿泊の最中に挟まっても窓と残りが消えない）。
-    store = getattr(sys, STORE_ATTR, None)
-    if store is None:
-        store = {
-            "state": {
-                "window": None,   # `VacationStartManager.execute` の中: {"quality", "elapsed"}
-                "stay": None,     # 宿泊中: {"quality", "left"}
-                "menu": None,     # 写した活動の一覧 [(text, cls, args)]
-                "partner": None,  # 社交で差し替えた相手 (id, 名前)
-            },
-            "worlds": WorldStore(ctx, STATE_DIRNAME, order=ordered),
-        }
-        setattr(sys, STORE_ATTR, store)
+    # 入れ物はローダの state.process_store（前の版が置いた入れ物の足りない鍵も埋める）。
+    store = process_store(STORE_ATTR, {
+        "state": {
+            "window": None,   # `VacationStartManager.execute` の中: {"quality", "elapsed"}
+            "stay": None,     # 宿泊中: {"quality", "left"}
+            "menu": None,     # 写した活動の一覧 [(text, cls, args)]
+            "partner": None,  # 社交で差し替えた相手 (id, 名前)
+        },
+        # 器は作るだけで台帳に載るので、既定値の中では作らない（下で1回だけ作る）。
+        "worlds": None,
+        # 書き換えたがまだ `state\` へ書いていない世界の鍵。ゲームの保存が通ったら書く。
+        "pending": set(),
+    })
+    if store["worlds"] is None:
+        store["worlds"] = WorldStore(ctx, STATE_DIRNAME, order=ordered)
     state = store["state"]
     state.setdefault("partner", None)   # 前の版の控えが `sys` に残っていても落ちない
-    # 書き換えたがまだ `state\` へ書いていない世界の鍵。ゲームの保存が通ったら書く。
-    pending = store.setdefault("pending", set())
+    pending = store["pending"]
     worlds = store["worlds"].rebind(ctx, write)
 
     # ============================================================ 活動の数
-    @ctx.wrap("__main__:VacationStartManager.__init__", required=False, safe=True)
-    def start_init(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
-        # (app, months, quality)。受け取った形のまま渡し、ここでは読むだけ。
-        self._mod_inn_quality = str(frames.arg(args, kwargs, "quality", 2))
-        return result
-
-    @ctx.wrap("__main__:VacationStartManager.execute", required=False)
-    def start_execute(orig, self, *args, **kwargs):
-        quality = getattr(self, "_mod_inn_quality", None)
-        state["window"] = {"quality": quality, "elapsed": False}
+    # 宿泊の始まりの前後はローダの窓口 stays（TECH.md §3.3.21）。部屋（`call.quality`）は
+    # 窓口が `VacationStartManager.__init__` の引数から読んで控える。
+    def start_before(call):
+        state["window"] = {"quality": call.quality, "elapsed": False}
         state["stay"] = None
         state["partner"] = None
+
+    def start_after(call):
+        quality = call.quality
+        window, state["window"] = state["window"], None
         try:
-            return orig(self, *args, **kwargs)
-        finally:
-            window, state["window"] = state["window"], None
-            try:
-                if window and window["elapsed"]:
-                    state["stay"] = {"quality": quality, "left": actions_for(quality)}
-                    write("stay: quality={!r} actions={}".format(
-                        quality, state["stay"]["left"]))
-                    if REGULAR_MEMORY:
-                        remember(getattr(self, "app", None) or ui.find_app(), quality)
-                else:
-                    write("stay: no elapse_days in the window (quality={!r}); "
-                          "not counted".format(quality))
-            except Exception:
-                ctx.log_exc("inn quality: cannot open the stay")
+            if window and window["elapsed"]:
+                state["stay"] = {"quality": quality, "left": actions_for(quality)}
+                write("stay: quality={!r} actions={}".format(
+                    quality, state["stay"]["left"]))
+                if REGULAR_MEMORY:
+                    remember(call.app, quality)
+            else:
+                write("stay: no elapse_days in the window (quality={!r}); "
+                      "not counted".format(quality))
+        except Exception:
+            ctx.log_exc("inn quality: cannot open the stay")
+
+    stays.on(mod_owner, ctx, (stays.START,), before=start_before, after=start_after,
+             always=True, write=write)
 
     def days_begin(call):
         """日数が進む前（ローダの日数の関所 `durations.on_days`。TECH.md §3.3.21）。"""
@@ -302,19 +286,24 @@ def apply(ctx):
 
     durations.on_days(mod_owner, ctx, before=days_begin, write=write)
 
+    def count_activity(cls_name):
+        # 入口で数える。活動は自分の `execute` の中で次の画面を描くので、
+        # 出口で数えると最後の活動の後にもう1回並んでしまう。
+        stay = state["stay"]
+        if stay is not None:
+            stay["left"] -= 1
+            write("activity: {} left={}".format(cls_name, stay["left"]))
+
     def install_counter(cls_name):
         @ctx.wrap("__main__:{}.execute".format(cls_name), required=False)
         def activity_execute(orig, self, *args, **kwargs):
-            # 入口で数える。活動は自分の `execute` の中で次の画面を描くので、
-            # 出口で数えると最後の活動の後にもう1回並んでしまう。
-            stay = state["stay"]
-            if stay is not None:
-                stay["left"] -= 1
-                write("activity: {} left={}".format(cls_name, stay["left"]))
+            count_activity(cls_name)
             return orig(self, *args, **kwargs)
 
+    # 休養はローダの窓口 stays の REST の前で数える。ほかの活動（訓練・労働・物乞い）には窓口が無いので自分で包む。
+    stays.on(mod_owner, ctx, (stays.REST,), before=lambda call: count_activity(REST_CLASS), write=write)
     for name in ACTIVITY_CLASSES:
-        if name != SOCIALIZE_CLASS:
+        if name not in (SOCIALIZE_CLASS, REST_CLASS):
             install_counter(name)
 
     @ctx.wrap("__main__:VacationSocializeManager.execute", required=False)
@@ -394,11 +383,12 @@ def apply(ctx):
             ctx.log_exc("inn quality: cannot replace npc_id_list")
         return orig(self, *args, **kwargs)
 
-    @ctx.wrap("__main__:VacationEndManager.execute", required=False)
-    def end_execute(orig, self, *args, **kwargs):
+    def end_before(call):
+        """宿泊を終える前（ローダの窓口 stays の END）。"""
         state["stay"] = None
         state["partner"] = None
-        return orig(self, *args, **kwargs)
+
+    stays.on(mod_owner, ctx, (stays.END,), before=end_before, write=write)
 
     def refresh_buttons(self, _buttons):
         """描かれる直前に、活動の一覧を写す／残りがあれば並べ直す。"""
@@ -452,10 +442,10 @@ def apply(ctx):
             gain = min(setting("AFFINITY_", quality, 0),
                        int(AFFINITY_CAP) - int(record.get("granted", 0)))
             if gain > 0:
-                keeper = ui.character_of(app, owner)
-                affinity = npcs.affinity_value(keeper)
-                if affinity is not None:
-                    keeper.relationship["player"]["affinity"] = affinity + gain
+                # ロード直後の名簿はほとんど空なので、名簿に居ない主はセーブの素データから読み書きする
+                # （実行時の人物と素データの両方に書く。`npcs.set_affinity`）。
+                affinity = npcs.affinity_of(app, owner)
+                if affinity is not None and npcs.set_affinity(app, owner, affinity + gain):
                     record["granted"] = int(record.get("granted", 0)) + gain
                     write("regular: {} affinity {} -> {} (granted {}/{})".format(
                         record["name"], affinity, affinity + gain,
@@ -496,7 +486,7 @@ def apply(ctx):
         finally:
             worlds.lock.release()
 
-    saving.on("327_inn_quality", ctx, before=save_before, after=save_after, always=True, write=write)
+    saving.on(mod_owner, ctx, before=save_before, after=save_after, always=True, write=write)
 
     def world_init(call):
         """ロードと新規開始（世界を組み立てた後。ローダの窓口 `loads`）。

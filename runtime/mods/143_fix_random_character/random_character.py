@@ -31,12 +31,11 @@
 作成画面の時点の `app.world_dict` は前に遊んだ別の世界のことがあるので、1 を先に見る。
 タイトルの「続きから」（`InstantaleApp.load_game_new`）で控えを捨てる。
 世界の中身は `app.world_dict` の世界名が一致すればそれ、違えば
-`worlds\\<世界名>\\world_data.json` をローダの `saves.decode` で読む。
+`worlds\\<世界名>\\world_data.json` をローダの `saves.read_world` で読む。
 """
 
 from __future__ import annotations
 
-import io
 import os
 import random
 import re
@@ -198,13 +197,14 @@ def classify(texts):
 # ================================================================== 世界
 
 def clip(value, limit=None):
-    """1行に収めた文。文字列でなければ ""。`limit` が None なら切らず、改行も元のまま。"""
+    """1行に収めた文。文字列でなければ ""。`limit` が None なら切らず、改行も元のまま。
+
+    整え方はローダの `frames.short`（切るときは空白を畳み、「…」を足す）。
+    文字列でないものを ""にするのは、世界の項目に辞書などが入っていたときに `str()` の写しを頼み文へ入れないため。
+    """
     if not isinstance(value, str):
         return ""
-    if limit is None:
-        return value.strip()
-    got = " ".join(value.split())
-    return got if len(got) <= limit else got[:limit] + "…"
+    return frames.short(value, limit, collapse=limit is not None)
 
 
 def world_facts(world_dict, situation=None):
@@ -250,8 +250,9 @@ def read_world_file(name, base=""):
     r"""`worlds\<name>\world_data.json` を辞書にする。読めなければ None。
 
     中身は変わらない限り読み直さない（作成画面ではさいころのたびに来る）。
+    読むのはローダの `saves.read_world`。控え（パスと更新時刻の鍵）はこちらで持つ。
     """
-    path = os.path.join(saves.worlds_dir(base), name, "world_data.json")
+    path = saves.world_data_path(name, base)
     try:
         stamp = os.stat(path).st_mtime
     except OSError:
@@ -259,10 +260,8 @@ def read_world_file(name, base=""):
     cache = getattr(sys, CACHE_ATTR, None)
     if isinstance(cache, dict) and cache.get("key") == (path, stamp):
         return cache.get("data")
-    try:
-        with io.open(path, "rb") as fh:
-            data = saves.decode(fh.read())
-    except OSError:
+    data = saves.read_world(name, base)
+    if data is None:
         return None
     setattr(sys, CACHE_ATTR, {"key": (path, stamp), "data": data})
     return data
@@ -441,7 +440,7 @@ def apply(ctx):
             forget_world()
             note("[SCREEN] load: 作成画面の世界の控えを捨てた")
 
-    loads.on(os.path.basename(getattr(ctx, "mod_dir", "") or "") or "143_fix_random_character", ctx, (loads.LOAD,), before=before_load)
+    loads.on(ctx.mod_name or "143_fix_random_character", ctx, (loads.LOAD,), before=before_load)
 
     def run(texts, site):
         """ローダから、1回の推論で出ていく本文の並びとして呼ばれる。変えなければ None。"""
@@ -477,48 +476,7 @@ def apply(ctx):
     # 掛け直しの時点はローダが `modloader.log` に `late-armed on` で残す（こちらの記録へは写さない）。
     hooks = wrap_outgoing(ctx, run, label="random character")
 
-    _verify(ctx)
-
+    # 見分け・書き換え・作りの確かめは固定の入力なので tools/tests/test_random_character.py にある（TECH.md §6.1）。
     armed = hooks.armed()
     ctx.log("random character: armed on {} | log {}".format(
         ", ".join(armed) if armed else "nothing (targets missing)", log_path))
-
-
-# --------------------------------------------------------------------------
-# 自己検証
-# --------------------------------------------------------------------------
-_SAMPLE_WORLD = {"world_data": {"name": "見本の世界", "overview": "見本の概要。",
-                                "story": {"world_situation": "見本の情勢。"}}}
-_SAMPLE_CHARACTER = ["あなたは大人向けの無骨で無慈悲なダークファンタジーRPGのキャラクター生成AIです。",
-                     "**1体のプレイヤーキャラクター**を**ランダムに**生成してください。"
-                     "- 今回利用可能な才能点：**2497**"]
-_SAMPLE_LOOK = ["あなたはダークファンタジーRPGの管理者です。物語の主人公の外見のカテゴリと"
-                "立ち絵の英語の画像生成プロンプトを設定してください。",
-                "【設定】- 主人公の名前: 見本 - 外見: 見本の外見"]
-_SAMPLE_OTHER = ["あなたはダークファンタジーRPGのキャラクター生成AIだ。",
-                 "【生成するNPC】- 名前: 宿屋の主人"]
-
-
-def _verify(ctx):
-    facts = world_facts(_SAMPLE_WORLD, situation=True)
-    plan = plan_build(2497, random.Random(1), 10, 150)
-    got, kind, done = rewrite(_SAMPLE_CHARACTER, facts, plan)
-    if got is None or kind != "character" or done != ["world", "build"] \
-            or HEAD not in got[1] or HEAD_BUILD not in got[1] or got[0] != _SAMPLE_CHARACTER[0]:
-        ctx.log("VERIFY FAILED: character rewrite {!r}".format(got), level="ERROR")
-        return
-    if rewrite(got, facts, plan)[0] is not None:
-        ctx.log("VERIFY FAILED: the world was added twice", level="ERROR")
-        return
-    got, kind, done = rewrite(_SAMPLE_LOOK, facts)
-    if got is None or kind != "look" or HEAD not in got[1] or done != ["world"]:
-        ctx.log("VERIFY FAILED: look rewrite {!r}".format(got), level="ERROR")
-        return
-    if rewrite(_SAMPLE_OTHER, facts)[0] is not None:
-        ctx.log("VERIFY FAILED: an NPC prompt was touched", level="ERROR")
-        return
-    if not (10 <= plan["talent"] <= 150 and AGE_MIN <= plan["age"] <= AGE_MAX
-            and age_cost(plan["age"]) <= plan["talent"] * AGE_SHARE):
-        ctx.log("VERIFY FAILED: build {!r}".format(plan), level="ERROR")
-        return
-    ctx.log("random character: self-check passed")

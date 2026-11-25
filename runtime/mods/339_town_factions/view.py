@@ -15,6 +15,8 @@
      "rumors": [{"when", "text", "follow": [(文, 段 or None)]}],
      "history": [{"when", "pieces": [(文, 段 or None)], "reason"}]}
 """
+from instantale_modloader import frames
+
 from . import rules
 
 #: 窓に出す噂と来歴の期間（日）。
@@ -47,8 +49,7 @@ def _name(ledger, faction_id):
 
 def _worst_law(ledger, faction_id, laws):
     towns = [t for t, row in (ledger.get("towns") or {}).items() if row.get("faction") == faction_id]
-    found = [laws[t] for t in towns if isinstance(laws, dict) and isinstance(laws.get(t), (int, float))
-             and not isinstance(laws.get(t), bool)]
+    found = [laws[t] for t in towns if isinstance(laws, dict) and frames.is_number(laws.get(t))]
     return min(found) if found else None
 
 

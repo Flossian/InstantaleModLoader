@@ -584,8 +584,8 @@ def main():
         got = LLM.ask(ctx, "mod_q", [{"role": "user", "content": "x"}],
                       timeout=12.5, max_tokens=64)
         check(got == "答え", "戻り値がそのまま返る: {!r}".format(got))
-        check(seen and seen[0][3] == 12.5,
-              "timeout を必ず渡す（既定は無期限なので省略させない）: {}".format(seen))
+        check(seen and seen[0][3] is None and seen[0][2] == 64,
+              "timeout は送り口へ渡さない（守るプロバイダで打ち切られないように。VERIFICATION.md §3.101）: {}".format(seen))
         check(seen and isinstance(seen[0][1], list),
               "message はリストで渡す（素の文字列は TypeError になる）")
 

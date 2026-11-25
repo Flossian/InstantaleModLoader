@@ -38,7 +38,7 @@ MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
-from instantale_modloader import ui                     # noqa: E402
+from instantale_modloader import status_text, ui        # noqa: E402
 
 
 def find_mod(suffix):
@@ -305,11 +305,20 @@ class FakeCtx(object):
 
     _mod = None
 
+    # 本物の `ctx.mod_name` は mod のフォルダ名。偽物は mod_dir から作る。
+    @property
+    def mod_name(self):
+        return os.path.basename(self.mod_dir)
+
     # ログは本物の `ctx.logger` をそのまま借りる。
     # ここを自前で書くと、検査だけが別のログ処理を通ることになる。
     def logger(self, name, **kw):
         import instantale_modloader as _ml
         return _ml.ModContext.logger(self, name, **kw)
+
+    def once(self, write, *args, **kw):
+        import instantale_modloader as _ml
+        return _ml.ModContext.once(self, write, *args, **kw)
 
     # 警告も本物の `ctx.warner` を借りる（1度しか出さない側の作りを検査に通すため）。
     def warner(self, tag):
@@ -355,11 +364,18 @@ class FakeCtx(object):
 
 
 def arm(out_dir, long_name="円", short_name="円", prompts=True,
-        hud_format=None, uses_value=True):
-    """素の偽物に `apply()` を当てて `(languages, client, manager, ctx)` を返す。"""
+        hud_format=None, uses_value=True, watcher=None):
+    """素の偽物に `apply()` を当てて `(languages, client, manager, ctx)` を返す。
+
+    `watcher` を渡すと、見張り（`update_status_texts`）をそれに差し替えてから当てる。
+    """
     revert_client()
     revert_hud()
+    # 能力欄の窓口の登録と包んだ印も素へ戻す（偽の見張りを素に戻したので、包み直させる）
+    status_text.reset()
     FakeHUD.USES_VALUE = uses_value
+    if watcher is not None:
+        FakeHUD.update_status_texts = watcher
     languages = types.SimpleNamespace(tr=plain_tr)
     client = FakeClient()
     manager = FakeManager()
@@ -604,8 +620,23 @@ def test_hud_reread_build(tmp):
         check("読み直すビルドでも直る", "所持金:1,116,472円" in shown
               and "Gold:" not in shown, repr(shown))
         check("例外を出さない", not ctx.errors, ctx.errors)
+        # ラベルがゲームの元の文字列のままなら、窓口 `status_text` の保険が直に塗る
+        check("窓口の保険で効いた", "unpainted" in status_text._store()["said"],
+              status_text._store()["said"])
 
-        log = io.open(os.path.join(tmp, "hud_reread", M.LOG_BASENAME),
+        # ラベルが元の文字列と違うのに見出しが残ったときは、この MOD の保険（repaint）が直す
+        def decorating(self, instance, value):
+            self.status_label.text = self.status_texts + "\n"
+
+        _languages, _client, _manager, ctx = arm(
+            os.path.join(tmp, "hud_reread2"), hud_format="所持金:{money}{short}",
+            watcher=decorating)
+        hud = FakeHUD()
+        hud.set_status(STATUS_TEXT)
+        shown = hud.status_label.text
+        check("ラベルが元と違っても直る", "所持金:1,116,472円" in shown
+              and "Gold:" not in shown, repr(shown))
+        log = io.open(os.path.join(tmp, "hud_reread2", M.LOG_BASENAME),
                       encoding="utf-8").read()
         check("保険で効いたと残る", "hud repaint" in log, log[:300])
     finally:

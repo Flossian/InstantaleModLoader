@@ -162,6 +162,8 @@ class FakeCtx:
 
     # ログは本物の `ctx.logger` をそのまま借りる。
     _mod = None
+    # 本物の ctx は apply() の間、フォルダ名を返す（窓口に名乗る名前）。
+    mod_name = os.path.basename(MOD_DIR)
 
     def logger(self, name, **kw):
         import instantale_modloader as _ml

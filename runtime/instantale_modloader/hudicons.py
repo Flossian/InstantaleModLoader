@@ -101,6 +101,8 @@ DOT_ATTR = ui.MOD_WIDGET_PREFIX + "hud_icon_dot"
 
 
 def _store():
+    # `state.process_store` にしないのは、前の版の `attention`（集合）を移す処理を持つため
+    # （`process_store` は型の違う鍵を既定の空の辞書で置き換え、印を捨ててしまう）。
     store = getattr(sys, STORE_ATTR, None)
     if not isinstance(store, dict) or not isinstance(store.get("icons"), dict):
         store = {"icons": {}, "generation": None, "write": None, "said": set(), "attention": {},
@@ -258,6 +260,11 @@ def _any_marked(entries, app):
 
 
 def _number(value, default=None):
+    """配置の値を float に直す。直せなければ `default`。
+
+    `frames.is_number` / `to_number` に寄せないのは答えが違うため。ここは `float()` に通すので、
+    `True` は 1.0、`"1.5"` は 1.5 になる（配置の値の型変換で、数かどうかの判定ではない）。
+    """
     try:
         return float(value)
     except (TypeError, ValueError):

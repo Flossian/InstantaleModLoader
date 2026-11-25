@@ -17,11 +17,7 @@ r"""別の世界から書き出した NPC を、この世界のロード時に1�
 
 この MOD が触るのは**動いているゲームの中の辞書**で、
 ファイルとしてのセーブが書かれるのはプレイヤーが保存したとき。
-ロードしてそのままゲームを終えると、置いた NPC は消える。
-
-> 実機: 素データは
-> `save_data_dict['npcs']` に入ったが、保存せずに終えたので
-> `savedata.json` は 43人のままだった。
+ロードしてそのままゲームを終えると、置いた NPC は消える（VERIFICATION_LOG.md §2.81）。
 
 予約を「果たした」ことにするのは置いた瞬間だが、
 **保存されたかどうかは別に控える**（`saved`）。
@@ -81,7 +77,6 @@ import io
 import json
 import os
 import random
-import sys
 
 import instantale_modloader as loader
 from instantale_modloader import choices, frames, loads, npcs, saving, state as loader_state, ui
@@ -109,17 +104,14 @@ LOAD_KINDS = (loads.LOAD, loads.NEW_GAME)
 #: 置けないエリアの `size`。
 DUNGEON_SIZE = "dungeon"
 
-#: 初対面に戻すときの関係（実セーブの語彙。`320_` と同じ形）。
+#: 初対面に戻すときの関係（実セーブの語彙）。
+#: `affinity_text` は配列の形で持つ（文字列でも配列でもゲームは読む。GAME.md §2.25.1）。
 FRESH_RELATIONSHIP = {"player": {"affinity": 0,
                                  "affinity_text": ["警戒心がある"],
                                  "relationship": ["初対面"],
                                  "conversation_count": 0}}
 
-#: 記憶の置き場（`311_` と `403_` の `state/` のフォルダ名）と zip の中の鍵。
-MEMORY_STORES = (("npc_profiles", "profile"),
-                 ("npc_social_memory", "social"))
-
-#: `MEMORY_STORES` のうち、相手の id を鍵に持つほう（付け替えが要る）。
+#: `carryover.MEMORY_STORES` のうち、相手の id を鍵に持つほう（付け替えが要る）。
 SOCIAL_KEY = "social"
 
 #: ゲームの保存。ここを通ったら、置いた NPC はファイルにも残る。
@@ -141,41 +133,16 @@ KIND_WORDS = {"guild": "ギルド", "inn": "宿"}
 #: 世代をまたいで持つものの置き場（TECH.md §3.5）。
 #:
 #: `apply()` は1プロセスで何度も呼ばれる。
-#: 閉包に持たせると、注入し直した瞬間に前の世代の中身が消える。
-#: 実機の1回目がまさにその形だった ―
-#: ロード（14:03:37）で言付けを積んだ後、画面が出る前に再注入（14:03:39）が
-#: 走り、新しい世代の空のリストが読まれた（`out/modloader.log`）。
+#: 閉包に持たせると、注入し直した瞬間に前の世代の中身が消える
+#: （ロードの後、画面が出る前に注入し直しが走ることがある。VERIFICATION_LOG.md §2.81）。
 #: 到着の知らせは**ロードの後・最初の選択肢の組み直し**まで持ち越すものなので、
 #: その間に世代が変わっても残る場所に置く。
 STORE_ATTR = "_instantale_npc_carryover"
 
 
-def area_size(app, area_id):
-    """土地の種類。実行時の `Area.size` は読めないのでセーブ側から（GAME.md §2.7。`326_` と同じ）。"""
-    for attr in ("save_data_dict", "world_dict"):
-        container = getattr(app, attr, None)
-        if not isinstance(container, dict):
-            continue
-        holders = [container]
-        inner = container.get("world_data")
-        if isinstance(inner, dict):
-            holders.append(inner)
-        for holder in holders:
-            areas = holder.get("areas")
-            entry = areas.get(str(area_id)) if isinstance(areas, dict) else None
-            size = entry.get("size") if isinstance(entry, dict) else None
-            if isinstance(size, str) and size:
-                return size
-    return str(frames.attr(ui.world_areas(app).get(str(area_id)), "size", "") or "")
-
-
 def _store():
-    """世代をまたぐ入れ物。プロセスに1つ。"""
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"words": []}
-        setattr(sys, STORE_ATTR, store)
-    return store
+    """世代をまたぐ入れ物。プロセスに1つ（足りない鍵と型の変わった鍵だけ埋める。TECH.md §3.5）。"""
+    return loader_state.process_store(STORE_ATTR, {"words": []})
 
 
 def apply(ctx):
@@ -196,7 +163,8 @@ def apply(ctx):
         """
         found = []
         for area_id, area in (ui.world_areas(app) or {}).items():
-            if area_size(app, area_id) == DUNGEON_SIZE:
+            # 実行時の `Area.size` は読めないので、セーブ側から引くローダの1か所に任せる（GAME.md §2.7）。
+            if ui.area_size(app, area_id) == DUNGEON_SIZE:
                 continue
             for node in ui.nodes_of(area):
                 for key, facility in ui.facilities_of(node).items():
@@ -215,8 +183,7 @@ def apply(ctx):
         （実データ 33件中2件）。そこだけ宿が2倍出ることになる。
         土地 → 種別 → 施設 の順なら、**どの土地でもギルドと宿が半々**になる。
 
-        旅の者としてやって来る設定なので、宿に居ても不自然ではない
-        （ギルドを優先していた版は、素のデータでは宿が一度も選ばれなかった。§9.1）。
+        旅の者としてやって来る設定なので、宿に居ても不自然ではない（VERIFICATION.md §3.44）。
         """
         spots = placeable_spots(app)
         if not spots:
@@ -319,8 +286,8 @@ def apply(ctx):
         元の世界で仲間だった人は `['同行中']` のまま出ている。
         置き先では仲間の名簿に居ないのに、エリア移動の分岐はこの配列だけを読む（GAME.md §2.18）。
         """
-        player = (fields.get("relationship") or {}).get("player")
-        marks = player.get("relationship") if isinstance(player, dict) else None
+        player = npcs.player_row(fields)
+        marks = player.get("relationship") if player is not None else None
         if not isinstance(marks, list) or PARTY_MARK not in marks:
             return
         kept = [mark for mark in marks if mark != PARTY_MARK]
@@ -390,17 +357,16 @@ def apply(ctx):
         置き先に同じ名前の人物が居ればその id へ付け替え、
         居なければその項は落とす。
 
-        名前で引くのはこの MOD 全体の前提と同じ ―
-        取り込みの可否も名前の一致で決めている（§5・§6 手順1）。
+        名前で引くのはこの MOD 全体の前提と同じで、
+        取り込みの可否も名前の一致で決めている（`bring_in`）。
         置き先に同名の別人が居る場合は、その別人に関係が付く。
         名前より確かな手がかりがセーブに無いので、ここは割り切る。
         """
         relations = record.get("relations")
         if not isinstance(relations, dict) or not relations:
             return record, 0
-        from instantale_modloader.npcs import save_npcs
         by_name = {}
-        for other_id, other in save_npcs(app).items():
+        for other_id, other in npcs.save_npcs(app).items():
             name = other.get("name") if isinstance(other, dict) else None
             if isinstance(name, str) and name:
                 by_name.setdefault(name, str(other_id))
@@ -426,7 +392,7 @@ def apply(ctx):
         相手が入っていなければ何もしない（空のフォルダを作らない。TECH.md §3.11）。
         """
         done = []
-        for dirname, key in MEMORY_STORES:
+        for dirname, key in carryover.MEMORY_STORES:
             record = package.extra.get(key)
             if not isinstance(record, dict):
                 continue
@@ -469,8 +435,7 @@ def apply(ctx):
     # ================================================== 予約を果たす
     def placed_name(app, npc_id):
         """置いた後の名前。読めなければ空文字。"""
-        from instantale_modloader.npcs import save_npcs
-        record = save_npcs(app).get(str(npc_id))
+        record = npcs.save_npcs(app).get(str(npc_id))
         name = record.get("name") if isinstance(record, dict) else None
         return name if isinstance(name, str) else ""
 
@@ -489,8 +454,7 @@ def apply(ctx):
 
     def names_in_world(app):
         """いま世界に居る名前。素データから採る（実行時の名簿より確か）。"""
-        from instantale_modloader.npcs import save_npcs
-        return {npc.get("name") for npc in save_npcs(app).values()
+        return {npc.get("name") for npc in npcs.save_npcs(app).values()
                 if isinstance(npc, dict) and npc.get("name")}
 
     def bring_in(app, row, world):
@@ -503,7 +467,7 @@ def apply(ctx):
             write("  {}: cannot read {}".format(row.get("name"), path))
             return False, ""
         name = package.name
-        if (package.npc.get("config") or {}).get("is_dead"):
+        if npcs.is_dead(package.npc):
             # 元の世界で死んでいた（`config['is_dead']`。GAME.md §2.22）。生き返らせない。
             row["status"] = carryover.SKIPPED
             row["reason"] = "死亡"
@@ -628,21 +592,17 @@ def apply(ctx):
 
     # ================================================== フック
     def on_load(call):
-        self, label = call.obj, call.label
-        try:
-            app = (self if getattr(self, "world_dict", None) is not None
-                   else ui.find_app())
-            if app is not None:
-                world = loader_state.world_key(app)
-                if world and world != loader_state.UNKNOWN_WORLD:
-                    run(app, world, label)
-                else:
-                    write("{}: the world has no name yet; "
-                          "nothing brought in".format(label))
-        except Exception:
-            ctx.log_exc("npc carryover: the load hook failed")
+        # 例外は窓口 `loads` が記録する（TECH.md §3.3.21）。
+        app, label = call.app, call.label
+        if app is not None:
+            world = loader_state.world_key(app)
+            if world and world != loader_state.UNKNOWN_WORLD:
+                run(app, world, label)
+            else:
+                write("{}: the world has no name yet; "
+                      "nothing brought in".format(label))
 
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "323_npc_carryover"
+    owner = ctx.mod_name or "323_npc_carryover"
     loads.on(owner, ctx, LOAD_KINDS, after=on_load, write=write)
 
     def new_game_before(call):
@@ -673,9 +633,7 @@ def apply(ctx):
 
         ここを通るまでは、置いた NPC はメモリの中にしか居ない。
         """
-        self = call.app
-        app = (self if getattr(self, "save_data_dict", None) is not None
-               else ui.find_app())
+        app = call.app
         world = loader_state.world_key(app) if app is not None else ""
         try:
             rows = carryover.load_pending(state_dir, strict=True)
@@ -698,7 +656,7 @@ def apply(ctx):
                 write("WARN save: could not stamp {} as saved".format(
                     "、".join(str(name) for name in stamped)))
 
-    saving.on("323_npc_carryover", ctx, after=save_after, write=write)
+    saving.on(owner, ctx, after=save_after, write=write)
 
     def refresh_choice_buttons(self, _buttons):
         # 言付けはロードの直後ではなく、画面が出来てから出す。

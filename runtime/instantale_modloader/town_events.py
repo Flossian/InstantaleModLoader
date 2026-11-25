@@ -34,9 +34,7 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
 
 置き場は `sys` の属性（`_instantale_town_events`）。注入し直しをまたいで残る。
 """
-import sys
-
-from . import window_call, window_entries, window_put
+from . import state, window_call, window_entries, window_put
 
 STORE_ATTR = "_instantale_town_events"
 
@@ -44,14 +42,14 @@ TONES = ("good", "bad", "calm")
 
 
 def _store():
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"current": {}, "nudge": {}, "errors": []}
-        setattr(sys, STORE_ATTR, store)
-    return store
+    return state.process_store(STORE_ATTR, {"current": {}, "nudge": {}, "errors": []})
 
 
 def _int(value, default):
+    """整数ならその値、そうでなければ `default`。
+
+    `frames.is_number` に寄せないのは答えが違うため。段は整数だけを受け、`2.0` のような float も弾く。
+    """
     if isinstance(value, bool) or not isinstance(value, int):
         return default
     return value

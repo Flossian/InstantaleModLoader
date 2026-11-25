@@ -74,6 +74,7 @@ class FakeCtx(object):
         self.errors = []
         self.lines = []         # 関所が立ったことを知らせるローダの行も入る
         self.mod_dir = os.path.dirname(MOD_FILE)
+        self.mod_name = os.path.basename(self.mod_dir)
 
     def logger(self, _name, **_options):
         return self.lines.append

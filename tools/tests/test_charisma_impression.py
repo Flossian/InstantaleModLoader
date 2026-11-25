@@ -445,6 +445,9 @@ def setup(charm_table=CHARM_RUNGS, broken=None, spread=1, steps=4,
     def patched(*args, **kwargs):
         return hook(original, *args, **kwargs)
 
+    # 本物のローダと同じく、包みから1つ内側をたどれるようにする
+    # （mod は段の総当たりを `patch.unwrap` で剥がした素の関数で行う）。
+    patched.__original__ = original
     functions.document_emotion_scores_new = patched
 
     def call(npc, affinity, charisma):

@@ -36,21 +36,17 @@ OpenAI 互換の別サーバー（`any_server` / Alibaba）も `openai` の SDK 
 
 GPT-5.6 以降の既定（`prompt_cache_options.mode` が `implicit`）は、
 最新の発言の末尾に OpenAI が自動で印を置き、書き込みを入力の 1.25 倍で払う。
-ゲームの頼みは末尾が毎回変わるので当たらない（2026-10-08 の実機で、19回で読み出し 0、
-入力の 98% を書き込み。`prefix_cache.py`）。
+ゲームの頼みは末尾が毎回変わるので当たらない（`prefix_cache.py`。VERIFICATION.md §3.71 の #5）。
 設定で `explicit` に切り替え、印を置かない（`off`）か、
 前回の同じ種類の頼みと先頭から一致した所にだけ置く（`stable`）。
 GPT-5.5 以前は書き込みの割増しが無く、`prompt_cache_options` も受けないので触らない。
 """
 
-import json
+from urllib.parse import urlsplit
 
-from .prefix_cache import Prefixes
+from instantale_modloader import frames
 
-try:
-    from urllib.parse import urlsplit
-except Exception:  # pragma: no cover - 3.10 には必ず在る
-    urlsplit = None
+from .prefix_cache import Prefixes, dump as _dump
 
 #: SDK で、全リクエストが最後に通る1点。
 POST = "openai._base_client:SyncAPIClient.post"
@@ -92,13 +88,6 @@ def version(model):
 def takes_cache_options(model):
     found = version(model)
     return found is not None and found >= CACHE_OPTIONS_SINCE
-
-
-def _dump(value):
-    try:
-        return json.dumps(value, ensure_ascii=False, sort_keys=True)
-    except Exception:
-        return repr(value)
 
 
 def segments(body):
@@ -292,8 +281,6 @@ def _host(client):
         url = str(getattr(client, "base_url", "") or "")
     except Exception:
         return ""
-    if urlsplit is None:
-        return url
     try:
         return (urlsplit(url).hostname or "").lower()
     except Exception:
@@ -313,12 +300,14 @@ def install(ctx, target, effort, cache, log):
     prefixes = Prefixes()
 
     @ctx.wrap(POST, required=False, safe=True, alias_scan=False)
-    def openai_post(orig, self, path=None, *args, **kwargs):
+    def openai_post(orig, self, *args, **kwargs):
+        # 並びは (self, path, *, cast_to, body, ...)。body はキーワードだけで来る。
+        path = frames.arg(args, kwargs, "path", 0)
         body = kwargs.get("body")
         # 同じモデルを選んでいても通す（推論量の指定だけを効かせるため）。
         if not (isinstance(body, dict) and body.get("model")
                 and _host(self) == HOST):
-            return orig(self, path, *args, **kwargs)
+            return orig(self, *args, **kwargs)
         source = body.get("model")
         sent_to = target or source
         # 呼び出し側の dict は変えず、浅い写しを直す。
@@ -328,7 +317,7 @@ def install(ctx, target, effort, cache, log):
         if not (source == sent_to and not changed):
             kwargs = dict(kwargs, body=body)
             log.swap("openai", source, sent_to, path, changed)
-        result = orig(self, path, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         if log.wants("usage"):
             # キャッシュが当たっているかは応答の usage でしか分からない（GPT-5.6 以降は既定で
             # 最新の発言の末尾に印が付く。DOC.md「プロンプトキャッシュ」）。

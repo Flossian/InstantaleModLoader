@@ -89,10 +89,17 @@ llm.watch_aliases = lambda ctx, targets, install, label=None: [install(t) for t 
 
 
 class Ctx:
+    _seq = 0
+
     def __init__(self):
         self.hooks = {}
         self.errors = []
         self.mod_dir = os.path.join(MODS_DIR, matches[0])
+        self.mod_name = matches[0]
+        # 世代は apply() ごとに違う（本物の `ctx.generation`）。ローダの窓口（`battles`）の包みは世代ごとに1枚なので、
+        # 同じ値だと作り直した ctx に包みが渡らない。
+        Ctx._seq += 1
+        self.generation = "court-test-{}".format(Ctx._seq)
 
     def wrap(self, target, required=True, safe=False):
         def deco(fn):

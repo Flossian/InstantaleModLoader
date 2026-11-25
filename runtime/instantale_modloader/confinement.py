@@ -20,22 +20,18 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、ここで仲介�
 """
 import sys
 
-from . import alive
+from . import state, window_call, window_entries, window_put
 
 STORE_ATTR = "_instantale_confinement"
 
 
 def _store():
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"confiners": {}, "errors": []}
-        setattr(sys, STORE_ATTR, store)
-    return store
+    return state.process_store(STORE_ATTR, {"confiners": {}, "errors": []})
 
 
 def declare(owner, ctx, fn):
-    """`owner` が主人公を閉じ込めているかを返す関数を登録する。同じ持ち主の登録は差し替える。"""
-    _store()["confiners"][str(owner)] = (ctx, fn)
+    """`owner` が主人公を閉じ込めているかを返す関数を登録する。同じ持ち主の登録は差し替える（新しい登録として後ろへ）。"""
+    window_put(_store()["confiners"], owner, (ctx, fn))
 
 
 def withdraw(owner):
@@ -46,23 +42,16 @@ def withdraw(owner):
 def why(app):
     """`(理由, 閉じ込めている持ち主)`。誰も閉じ込めていなければ `(None, None)`。"""
     store = _store()
-    for owner, (ctx, fn) in list(store["confiners"].items()):
-        if not alive(ctx):
-            continue
-        try:
-            got = fn(app)
-        except Exception as exc:
-            store["errors"].append("{}: {}: {}".format(owner, type(exc).__name__, exc))
-            del store["errors"][:-20]
-            continue
-        if isinstance(got, str) and got:
+    for owner, (_ctx, fn) in window_entries(store["confiners"]):
+        ok, got = window_call(store, owner, fn, app)
+        if ok and isinstance(got, str) and got:
             return got, owner
     return None, None
 
 
 def owners():
     """いま数えている登録の持ち主。ログ用。"""
-    return [owner for owner, (ctx, _fn) in _store()["confiners"].items() if alive(ctx)]
+    return [owner for owner, _entry in window_entries(_store()["confiners"])]
 
 
 def reset():

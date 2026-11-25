@@ -46,6 +46,7 @@ import sys
 
 from . import alive
 from . import saves
+from . import state
 from . import ui
 
 #: 基本表情の一覧。最初の1つはふだんの顔で、差分を描かない（ゲームの立ち絵をそのまま見せる）。
@@ -76,12 +77,7 @@ STORE_ATTR = "_instantale_expressions"
 
 
 def _store():
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"wants": {}, "stamps": {}, "shown": {}}
-        setattr(sys, STORE_ATTR, store)
-    store.setdefault("defines", {})
-    return store
+    return state.process_store(STORE_ATTR, {"wants": {}, "stamps": {}, "shown": {}, "defines": {}})
 
 
 # ---- 宣言 ----------------------------------------------------------------

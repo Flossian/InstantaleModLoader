@@ -46,6 +46,9 @@ class FakeCtx:
     _mod = "146_fix_save_only_entities"
 
     def __init__(self, out_dir, alive=True):
+        # 本物の ctx と同じく、窓口の持ち主名は MOD のフォルダ名（mod_dir の basename）。
+        self.mod_dir = os.path.join(MODS_DIR, self._mod)
+        self.mod_name = os.path.basename(self.mod_dir)
         self.out_dir = out_dir
         self.hooks = {}
         self.errors = []

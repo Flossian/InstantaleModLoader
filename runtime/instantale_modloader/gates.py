@@ -31,14 +31,15 @@ VERIFICATION.md §3.113）。ゲームの更新で名前や引数が変わると
 """
 import sys
 
-from . import alive, log_exc
+from . import alive, log_exc, state
 
 #: 作った関所の全部と、窓口が自分で持つ包みの印（`durations` の日数の関所・`arrivals` の番号の包み）。
 #: `reset_all` が忘れる先。
 _GATES = []
 _INSTALL_ATTRS = []
 
-#: MOD を適用している間は、外側に立てる窓口（`quest_generation` / `quest_ends` / `text_filters` / `saving`）の包みを立てない。
+#: MOD を適用している間は、外側に立てる窓口（`quest_generation` / `quest_ends` / `text_filters` / `saving` / `shopping` / `items` ほか。
+#: 並びは `__init__._install_outer_windows`）の包みを立てない。
 #: 最初に登録した MOD の位置に立てると、後から適用した MOD の直の包みや、MOD が立てるローダの関所
 #: （`modnpc` の保存の関所は最初の注入では 336 の適用の時に立つ）より内側になり、前後の処理が見る値が変わる。
 #: `boot()` が全 MOD の適用の後にローダの ctx で立てる（MOD の層より外側。TECH.md §3.3.21）。
@@ -117,11 +118,7 @@ class Gate(object):
 
     # -- 登録 -----------------------------------------------------------------
     def _store(self):
-        store = getattr(sys, self.attr, None)
-        if not isinstance(store, dict):
-            store = {"hooks": {}, "seq": 0, "gate": None}
-            setattr(sys, self.attr, store)
-        return store
+        return state.process_store(self.attr, {"hooks": {}, "seq": 0, "gate": None})
 
     def on(self, owner, ctx, before=None, after=None, always=False, write=None, enter=None, leave=None):
         """前後の処理を登録する。同じ持ち主の登録は差し替える。差し替えたら True。

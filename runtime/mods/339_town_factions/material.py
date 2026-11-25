@@ -5,6 +5,8 @@
 街の案内文は `321_area_chronicle` が実行中だけ書き換えるので、実行時の `Area.descriptions` ではなく
 セーブの辞書の素の文を読む（VERIFICATION.md §3.98「元の案内文を読む」）。
 """
+from instantale_modloader import frames
+
 from . import rules
 
 TOWN_SIZES = ("village", "town", "city")
@@ -138,9 +140,8 @@ def world_data_of(save_data_dict):
     return data if isinstance(data, dict) else {}
 
 
-def _cut(text, limit):
-    text = str(text or "").strip()
-    return text if limit is None or len(text) <= limit else text[:limit] + "…"
+#: strip して limit 字で切り「…」を付ける（ローダの `frames.short`。limit が None なら切らない）。
+_cut = frames.short
 
 
 def _tail(text, limit):

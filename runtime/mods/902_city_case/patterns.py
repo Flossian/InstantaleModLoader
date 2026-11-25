@@ -35,9 +35,10 @@ JSON は人が書き換える前提なので、壊れている前提で読む。
 だから語彙を足しても謎は壊れない。
 """
 
-import io
-import json
 import os
+import sys
+
+from instantale_modloader import read_json
 
 #: 材料の置き場所（この MOD のフォルダの下）。
 FOLDER = "patterns"
@@ -79,16 +80,18 @@ def axes_wanted(suspects, cap=AXES_PER_CASE):
 
 
 def _read(path, write=None):
-    try:
-        with io.open(path, encoding="utf-8") as fh:
-            return json.load(fh)
-    except FileNotFoundError:
-        return None
-    except Exception as exc:
+    """材料の JSON を読む。無い・読めないときは None。
+
+    読み方はローダの `read_json`（BOM 付きも読む）。読めない理由はこの MOD のログへ書き、
+    `write` が無ければ黙る（ローダのログへは回さない）。
+    """
+    def report(_text):
         if write:
+            exc = sys.exc_info()[1]
             write("patterns: cannot read {}: {}: {}".format(
                 os.path.basename(path), type(exc).__name__, exc))
-        return None
+
+    return read_json(path, None, report=report)
 
 
 def _text(value, limit=200):

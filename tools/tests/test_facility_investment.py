@@ -481,6 +481,10 @@ class FakeCtx:
     def logger(self, name, **kw):
         return ml.ModContext.logger(self, name, **kw)
 
+    # 鍵ごとに1回だけ書く関数も本物を借りる
+    def once(self, write, *args, **kw):
+        return ml.ModContext.once(self, write, *args, **kw)
+
     def log(self, msg, level="INFO"):
         self.logs.append((level, msg))
 
@@ -1002,7 +1006,7 @@ try:
           all(word in FakeLLM.calls[0]["text"]
               for word in ("世界観", "泥の村", "宿屋", app.player.name)),
           FakeLLM.calls[0]["text"][:200])
-    check("待つ秒数を必ず渡す", FakeLLM.calls[0]["timeout"] == module.KEEPER_TIMEOUT)
+    check("待つ秒数は送り口へ渡さない（llm.ask の目安。VERIFICATION.md §3.101）", FakeLLM.calls[0]["timeout"] is None)
     check("答えの名前で建物が建つ（版37）", made.get("name") == "風待ちの宿"
           and getattr(building_of(world, made)[0], "name", None) == "風待ちの宿",
           made.get("name"))

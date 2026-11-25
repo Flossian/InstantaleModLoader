@@ -175,28 +175,13 @@ def apply(ctx):
     note = ctx.logger(LOG_BASENAME)
 
     # -- 寸法の読み書き ------------------------------------------------------
-    def number(value, default=None):
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return default
+    number = frames.to_number
 
     def size_of(widget, name, default=None):
         return number(frames.attr(widget, name), default)
 
-    def rect_of(widget):
-        x, y = size_of(widget, "x"), size_of(widget, "y")
-        width, height = size_of(widget, "width"), size_of(widget, "height")
-        if None in (x, y, width, height):
-            return None
-        return (x, y, width, height)
-
-    def window_size():
-        try:
-            from kivy.core.window import Window
-            return number(Window.width, 0.0), number(Window.height, 0.0)
-        except Exception:
-            return 0.0, 0.0
+    rect_of = ui.rect_of
+    window_size = ui.window_size
 
     schedule = ui.scheduler(ctx, "item list")
 

@@ -73,21 +73,14 @@
 `KeyError` を出しうる（`get_npc_employ_price` の前例。VERIFICATION_LOG.md §2.2）。
 売買の値段はこの mod、内部の段階計算はゲーム自身、と分ける。
 
-## 版の記録
+## ログに同じ中身を繰り返さない
 
-版3: `item_price.log` の同じ中身の繰り返しを止めた。
-設定の書き出し（`---- installed ...`）は apply のたびに出ていて、遅れて当て直す boot を含めて
-約40日で1,120回・約300KB だった。前に書いた中身と同じなら書かないようにした。
-値段が読めない品の `skip` は同じ品で何度も出ていた（1,085行のうち品は16通り）。
-品ごとに1プロセス1回にした。数（`skipped`）は今までどおり毎回数える。
-控えは `sys` に置き（1プロセス）、注入のときにログが世代送りされたら（ファイルが入れ替わったら）
-設定も `skip` も新しいログに書き直す。
+設定の書き出し（`---- installed ...`）は前に書いた中身と同じなら書かない（遅れて当て直す boot のたびに並ぶため）。
+値段が読めない品の `skip` は品ごとに1回だけ書き、数（`skipped`）は毎回数える。
+覚えは注入の間だけ持ち（`ctx.logger` の `span="injection"`）、注入し直したら設定も `skip` も新しいログに書き直す（VERIFICATION.md §3.19.2）。
 """
 
-import os
-import sys
-
-from instantale_modloader import prices, ui
+from instantale_modloader import frames, prices, state, ui
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
@@ -208,17 +201,9 @@ SKILL_KEY = "スキル"
 STORE_ATTR = "_instantale_item_price_store"
 
 def _num(value):
-    """数として読めれば float、読めなければ None（文字列で入ることがある）。"""
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value.strip())
-        except ValueError:
-            return None
-    return None
+    """数として読めれば float、読めなければ None（文字列で入ることがある。真偽値は数にしない）。"""
+    number = frames.to_number(value)
+    return None if number is None else float(number)
 
 
 def _round_nice(price):
@@ -231,26 +216,6 @@ def _round_nice(price):
     return price
 
 
-def file_id(path):
-    """ログのファイルの身元。無ければ None（世代送りで名前を変えられた直後など）。"""
-    try:
-        info = os.stat(path)
-    except OSError:
-        return None
-    return (info.st_dev, info.st_ino)
-
-
-def log_replaced(store, path):
-    """前の apply の後で `path` が入れ替わった（世代送り・削除）なら True。控えは今の身元へ進める。
-
-    世代送りは注入のとき（apply より前）にしか起きないので、apply の頭で見れば足りる。
-    """
-    now = file_id(path)
-    before = store.get("file")
-    store["file"] = now
-    return before is not None and before != now
-
-
 #: `Item` インスタンスからもセーブの辞書からも同じ形で読む（ローダの語彙）。
 #: 決済の突き合わせ（`price_on_show` / `name_of`）がこれを通る。
 read_item = prices.read_item
@@ -258,44 +223,26 @@ read_item = prices.read_item
 
 def apply(ctx):
 
-    # 再注入しても1組だけ持つ器。
-    # **鍵の型まで確かめる。**
-    # `isinstance(store, dict)` だけを見ると、版の違う器をそのまま握る。
+    # 再注入しても1組だけ持つ器（件数と、決済の検算を済ませた向き）。
+    # **鍵の型まで確かめる**（`state.process_store`）。
     # `settled` は旗（bool）から集合へ変えたので、旧版が走ったプロセスへ
     # 注入し直すと `label not in False` で TypeError になり、
     # 決済の検算だけが黙って死ぬ（`safe=True` なので画面には出ない）。
     # 手での注入し直しはこのプロジェクトの通常の操作なので、実際に踏む。
-    # `skip_seen` は `skip` の行を書いた品（版3）。
-    blanks = {"logged": 0, "reconciled": 0, "skipped": 0, "settled": set(),
-              "skip_seen": set()}
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = dict(blanks)
-        setattr(sys, STORE_ATTR, store)
-    else:
-        # 足りない鍵と、型の変わった鍵だけを入れ替える（件数は残したい）。
-        for name, blank in blanks.items():
-            if name not in store or not isinstance(store[name], type(blank)):
-                store[name] = blank
-    # `installed` は最後に書いた設定の行、`file` はログのファイルの身元（版3）。
-    store.setdefault("installed", None)
-    store.setdefault("file", None)
-
-    # 注入のときにログが世代送りされたら、新しいログに設定と `skip` を書き直す。
-    if log_replaced(store, ctx.out_path(LOG_BASENAME)):
-        store["skip_seen"].clear()
-        store["installed"] = None
+    store = state.process_store(STORE_ATTR, {"reconciled": 0, "skipped": 0, "settled": set()})
 
     write = ctx.logger(LOG_BASENAME, stamp=False)
-
-    def note(text):
-        """件数を数えつつ、最初の LOG_LIMIT 件だけ書き出す。"""
-        store["logged"] += 1
-        if store["logged"] <= LOG_LIMIT:
-            write(text)
-        elif store["logged"] == LOG_LIMIT + 1:
-            write("... 以降は件数だけ数える（LOG_LIMIT={}）".format(LOG_LIMIT))
-
+    # 設定の要約は、注入の間に同じ中身なら1回だけ書く（遅れて当て直す boot のたびに並ぶため）。
+    write_installed = ctx.logger(LOG_BASENAME, stamp=False, span="injection", unrepeated=True,
+                                 span_key="installed")
+    # 付け直しの記録は注入の間に LOG_LIMIT 行まで。売買画面を開くたびに全品を通る。
+    # 同じ span_key の2つの関数は枠（cap の数と打ち切りの1行）を分け合う。
+    # `skip` の行だけを `unrepeated` にして、値段が読めない品は品ごとに1回にする（数は `skipped` で毎回数える）。
+    notice = "... 以降は件数だけ数える（LOG_LIMIT={}）".format(LOG_LIMIT)
+    note = ctx.logger(LOG_BASENAME, stamp=False, span="injection", cap=LOG_LIMIT,
+                      cap_notice=notice, span_key="note")
+    note_skip = ctx.logger(LOG_BASENAME, stamp=False, span="injection", cap=LOG_LIMIT,
+                           cap_notice=notice, unrepeated=True, span_key="note")
 
     # 表は apply() の中で組む。
     # 設定はモジュールのグローバルへ書き込まれるので、
@@ -366,11 +313,8 @@ def apply(ctx):
         price, axis = base_price(item)
         if price is None:
             store["skipped"] += 1
-            # 同じ品は画面を開くたびにここを通る。行は品ごとに1プロセス1回（版3）。
-            line = "skip {} ({})".format(name_of(item), axis)
-            if line not in store["skip_seen"]:
-                store["skip_seen"].add(line)
-                note(line)
+            # 同じ品は画面を開くたびにここを通る。行は品ごとに注入の間に1回（`note_skip`）。
+            note_skip("skip {} ({})".format(name_of(item), axis))
             return None
         sell = _round_nice(min(max(price * float(SELL_RATE), float(MIN_PRICE)),
                                float(MAX_PRICE)))
@@ -383,8 +327,7 @@ def apply(ctx):
     # `REPRICE_ON_SIGHT` は画面に出た品を付け直すかどうか。
     # 包む対象は関所が持つので、**頼む側の性質**として渡す。
     prices.install(ctx, write)
-    prices.declare_base(os.path.basename(getattr(ctx, "mod_dir", "") or
-                                         "129_balance_item_price"),
+    prices.declare_base(ctx.mod_name or "129_balance_item_price",
                         base_for, on_sight=bool(REPRICE_ON_SIGHT), write=note)
     # ---- 決済とのずれ -----------------------------------------------------
 
@@ -448,18 +391,22 @@ def apply(ctx):
 
     if RECONCILE_GOLD:
         @ctx.wrap("__main__:InstantaleApp.buy_item", safe=True)
-        def buy_item(orig, self, item_instance=None, *args, **kwargs):
+        def buy_item(orig, self, *args, **kwargs):
+            # InstantaleApp.buy_item(self, item_instance)。位置は self を除いて数える
+            item_instance = frames.arg(args, kwargs, "item_instance", 0)
             before = gold_of(self)
             shown = price_on_show(item_instance, BUY_KEY)
-            result = orig(self, item_instance, *args, **kwargs)
+            result = orig(self, *args, **kwargs)
             settle(self, item_instance, BUY_KEY, -1, "buy", before, shown)
             return result
 
         @ctx.wrap("__main__:InstantaleApp.sell_item", safe=True)
-        def sell_item(orig, self, item_instance=None, *args, **kwargs):
+        def sell_item(orig, self, *args, **kwargs):
+            # InstantaleApp.sell_item(self, item_instance)。位置は self を除いて数える
+            item_instance = frames.arg(args, kwargs, "item_instance", 0)
             before = gold_of(self)
             shown = price_on_show(item_instance, SELL_KEY)
-            result = orig(self, item_instance, *args, **kwargs)
+            result = orig(self, *args, **kwargs)
             settle(self, item_instance, SELL_KEY, +1, "sell", before, shown)
             return result
 
@@ -470,10 +417,7 @@ def apply(ctx):
                      {key: round(value, 3) for key, value in sorted(type_mult.items())},
                      {key: round(value, 3) for key, value in sorted(rarity_mult.items())},
                      layers or "-"))
-    # 前に書いた中身と同じなら書かない（版3）。
-    if store.get("installed") != installed:
-        store["installed"] = installed
-        write(installed)
+    write_installed(installed)
     ctx.log("item price: installed (scale={:g}, sell_rate={:g}, on_sight={}, "
             "reconcile={})".format(float(PRICE_SCALE), float(SELL_RATE),
                                    bool(REPRICE_ON_SIGHT), bool(RECONCILE_GOLD)))

@@ -369,6 +369,105 @@ def open_window(app, title, build, *, subtitle="", on_dismiss=None, size_hint=SI
     return view
 
 
+# ------------------------------------------------------------ 押すたびに開け閉めする画面
+class Toggle(object):
+    """HUD のボタン（`hudicons.add`）から開く MOD の画面を1枚だけ持ち、もう一度押したら閉じる持ち手。
+
+        view = panels.Toggle(store, log_exc=lambda text: ctx.log_exc("town factions: " + text))
+
+        def opener(app, on_dismiss):
+            return window.open_window(app, view_model(app), write=write, on_dismiss=on_dismiss)
+
+        hudicons.add(ctx, ICON_KEY, view.on_press(opener), ...)
+        view.close()                    # ロードのときなど、開いていれば閉じる
+
+    `store` は画面を置く辞書で、`store[key]` に開いている画面（無ければ None）を持つ。
+    当て直しをまたいで同じ画面を指すように、MOD は `sys` に置いた入れ物を渡す（写しの5本と同じ）。
+    `opener(app, on_dismiss)` は画面を開いて返す。`on_dismiss` を画面が閉じたときに呼ばせると
+    （`open_window(on_dismiss=)` へそのまま渡す）、`store[key]` が空になる。
+
+    `122_` / `317_` / `338_` / `339_` / `926_` の `close_view` / `toggle_view` の写しにそろえた形:
+
+    - 押したとき、開いていれば閉じるだけ。開いていなくて `app` が None なら開かない（317・338・339）
+    - 開くときは、残っている画面を先に閉じる（926 の `open_view`。317 の開き直しもこれで書ける）
+    - 開くのに失敗したら `store[key]` を None に戻し、`log_exc` に1行渡す（317・338・339）
+    - 閉じるのに失敗しても `store[key]` は None にして、`log_exc` に1行渡す（926 は黙って握っていた）
+
+    `log_exc` に渡す文は `"could not open the window"` / `"could not close the window"` で、MOD の名前は
+    付けない（呼び側が頭に付ける）。None ならローダの `log_exc` へ `"panels: "` を付けて渡す。
+    `122_` のように画面を辞書に包んで置いていた写しは、画面そのものを置く形に直して使う。
+    メインスレッドから呼ぶ（画面の開け閉めなので）。
+    """
+
+    def __init__(self, store, key="view", log_exc=None):
+        self.store = store
+        self.key = key
+        self.log_exc = log_exc
+
+    def _log(self, text):
+        if self.log_exc is not None:
+            self.log_exc(text)
+            return
+        from . import log_exc
+        log_exc("panels: " + text)
+
+    def current(self):
+        """開いている画面。無ければ None。"""
+        return self.store.get(self.key)
+
+    def close(self):
+        """開いている画面を閉じる。閉じる画面があったら True。"""
+        view = self.store.get(self.key)
+        self.store[self.key] = None
+        if view is None:
+            return False
+        try:
+            view.dismiss()
+        except Exception:
+            self._log("could not close the window")
+        return True
+
+    def open(self, app, opener):
+        """残っている画面を閉じてから `opener(app, on_dismiss)` で開き、開いた画面を返す。開けなければ None。
+
+        `on_dismiss` は、閉じた画面が今持っている画面のときだけ `store[key]` を空にする
+        （開き直しの後で前の画面の通知が遅れて来ても、新しい画面を手放さないため）。
+        """
+        self.close()
+        box = {"view": None, "gone": False}
+
+        def dismissed(*_args):
+            box["gone"] = True
+            if box["view"] is None or self.store.get(self.key) is box["view"]:
+                self.store[self.key] = None
+
+        try:
+            view = opener(app, dismissed)
+        except Exception:
+            self.store[self.key] = None
+            self._log("could not open the window")
+            return None
+        box["view"] = view
+        if not box["gone"]:
+            self.store[self.key] = view
+        return view if not box["gone"] else None
+
+    def toggle(self, app, opener):
+        """開いていれば閉じて None、開いていなければ開いて、開いた画面を返す。`app` が None なら開かない。"""
+        if self.store.get(self.key) is not None:
+            self.close()
+            return None
+        if app is None:
+            return None
+        return self.open(app, opener)
+
+    def on_press(self, opener):
+        """`hudicons.add` の `on_press` に渡す関数 `fn(app)`。押すたびに `toggle(app, opener)` を呼ぶ。"""
+        def press(app):
+            self.toggle(app, opener)
+        return press
+
+
 # ------------------------------------------------------------ マウスを乗せたときの説明の窓
 #: 説明の窓の幅の上限（画面の幅の割合）と、マウスからの間（upx）。`121_` の人物欄の説明の窓と同じ値。
 TIP_WIDTH = 0.32

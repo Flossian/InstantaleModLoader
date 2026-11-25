@@ -14,18 +14,11 @@ from instantale_modloader import expressions, frames, imagegen, ui
 LOG_BASENAME = "character_image_refresh.log"
 
 # 人物の絵を描く関数。画像生成の方式ごとに別のモジュールに居るが、どの方式かはローダの
-# `imagegen` が吸収する（GAME.md §2.33）。
-FAMILIES = imagegen.FAMILIES
+# `imagegen` が吸収する（GAME.md §2.33）。方式が分からなければ4つとも包む（入っていない方式は待つだけ）。
 FUNCS = ("generate_character_image", "generate_character_image_from_enemy")
 
 #: ゲームが選んでいる画像生成の方式。読めなければ None（ローダの `imagegen.backend`）。
 config_backend = imagegen.backend
-
-
-def targets_for(backend):
-    """包む対象。方式が分からなければ4つとも（入っていない方式は待つだけ）。"""
-    return tuple(module + ":" + func
-                 for module in imagegen.creature_modules(backend) for func in FUNCS)
 
 # 立ち絵を出している HUD の画像。人物欄の右の立ち絵と、会話の立ち絵。
 # 木のどこに居るかに頼らず名前でも引く。
@@ -108,8 +101,12 @@ def apply(ctx):
     write = ctx.logger(LOG_BASENAME, tag="character image refresh:")
     schedule = ui.scheduler(ctx, "character image refresh")
 
-    def install(target):
-        @ctx.wrap(target, required=False, safe=True)
+    backend = config_backend()
+    if not imagegen.known(backend):
+        write("backend {!r} is unknown; wrapping all families".format(backend))
+
+    for func in FUNCS:
+        @imagegen.wrap_creature(ctx, func, name=backend, required=False, safe=True)
         def generated(orig, *args, **kwargs):
             # 描くのは背景スレッド。読み直しは描き終わった後にメインスレッドで。
             result = orig(*args, **kwargs)
@@ -118,11 +115,5 @@ def apply(ctx):
             if isinstance(name, str) and name and app is not None:
                 schedule(lambda: refresh(app, name, write))
             return result
-
-    backend = config_backend()
-    if backend not in FAMILIES:
-        write("backend {!r} is unknown; wrapping all families".format(backend))
-    for target in targets_for(backend):
-        install(target)
 
     ctx.log("character image refresh: installed ({})".format(backend))

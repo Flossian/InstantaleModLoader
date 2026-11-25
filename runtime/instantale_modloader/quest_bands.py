@@ -23,17 +23,13 @@ id 9 以降の街には範囲が無く、1〜76 の全域から引く。
 """
 import sys
 
-from . import window_call, window_entries, window_put
+from . import state, window_call, window_entries, window_put
 
 STORE_ATTR = "_instantale_quest_bands"
 
 
 def _store():
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"providers": {}, "errors": []}
-        setattr(sys, STORE_ATTR, store)
-    return store
+    return state.process_store(STORE_ATTR, {"providers": {}, "errors": []})
 
 
 def provide(owner, ctx, fn):

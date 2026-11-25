@@ -228,6 +228,8 @@ class FakeLLM(object):
 
 class FakeCtx(object):
     _mod = MOD_FOLDER
+    # 窓口に名乗る持ち主の名前（本物は apply() の間フォルダ名を返す）。
+    mod_name = MOD_FOLDER
 
     def __init__(self):
         self.out_dir = OUT_DIR
@@ -256,6 +258,10 @@ class FakeCtx(object):
 
     def logger(self, name, **kw):
         return ml.ModContext.logger(self, name, **kw)
+
+    # 1回だけ書く関数も本物を借りる（`logger` と同じ理由）。
+    def once(self, write, *args, **kw):
+        return ml.ModContext.once(self, write, *args, **kw)
 
     def log(self, msg, level="INFO"):
         self.logs.append((level, msg))

@@ -4,9 +4,9 @@
 ## なぜ「前回と同じ所まで」か
 
 ゲームの頼みは1回ずつ完結していて、前置きの末尾まで毎回変わる。
-2026-10-08 に実機で測ると、会話の system 4,552 字のうち前回と同じなのは先頭の 4,303 字で、
-MOD の抜き出しの頼み（system 無し）は先頭の 1,294 字 / 965 字だけが同じだった。
-OpenAI の既定（最新の発言の末尾に印）では、19回で読み出しが 0、入力の 98% を毎回書き込んでいた。
+会話の system も末尾が毎ターン変わり、MOD の抜き出しの頼み（system 無し）は先頭の一部だけが同じ。
+OpenAI の既定（最新の発言の末尾に印）では読み出しが付かず、入力のほとんどを毎回書き込む
+（VERIFICATION.md §3.71 の #5 と「分かったこと」）。
 末尾にも system の末尾にも印を置いても当たらない。
 
 そこで、頼みの種類ごとに直前の頼みを覚え、**先頭から一致した境目**に印を置く。
@@ -27,6 +27,7 @@ OpenAI の既定（最新の発言の末尾に印）では、19回で読み出�
 （最初の1回は比べる相手が無いので、控えも書かない）。
 """
 
+import json
 import threading
 
 #: これより短い一致には印を置かない。API の最小の長さ（OpenAI 1,024 トークン、
@@ -35,6 +36,17 @@ MIN_CHARS = 1000
 
 #: 覚えておく頼みの種類の数。古いものから忘れる。
 FAMILIES = 16
+
+
+def dump(value):
+    """文字でない部分（tools・出力の形・ブロック）を、比べるための1本の文字列にする。
+
+    `openai_side.segments` と `claude_side.segments` が使う。
+    """
+    try:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    except Exception:
+        return repr(value)
 
 
 def _common_len(a, b):

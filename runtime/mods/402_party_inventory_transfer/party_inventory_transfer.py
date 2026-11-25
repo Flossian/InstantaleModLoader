@@ -56,7 +56,7 @@ MOD 専用の「装備する／外す」ボタンを 1 つ出し、ローダの�
 popup と装備欄の中身まで写す観測は `223_probe_party_equipment` に分けてある。
 """
 
-from instantale_modloader import choices, equipment, frames, ui
+from instantale_modloader import choices, equipment, frames, items, loads, talks, twin_windows, ui
 from instantale_modloader.ids import claim
 
 
@@ -76,6 +76,8 @@ LOG_BASENAME = "party_inventory_transfer.log"
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME)
+    #: ローダの窓口（`twin_windows` / `talks` / `loads`）に名乗る持ち主の名前。
+    owner_name = ctx.mod_name or "402_party_inventory_transfer"
 
     # ローダ共通の画面部品。Clock への予約（`schedule`）を担う。選択肢は窓口 `choices` が組む。
     screen = ui.Screen(ctx, write, tag="party inventory transfer")
@@ -99,19 +101,9 @@ def apply(ctx):
         """ログ用の名前。無ければ `fallback`（id ではなく Character を持っている場面用）。"""
         return frames.short(frames.text_of(character, "name"), 80) or fallback
 
-    def inventory_dict(owner):
-        """持ち物の実体 `{item_id: Item}`。
-
-        Character の `inventory` は Inventory オブジェクトで、その `.inventory` が辞書。
-        辞書を直接持つ形にも備える。読めなければ None。
-        """
-        if owner is None:
-            return None
-        inv = getattr(owner, "inventory", None)
-        if isinstance(inv, dict):
-            return inv
-        inner = getattr(inv, "inventory", None)
-        return inner if isinstance(inner, dict) else None
+    #: 持ち物の実体 `{item_id: Item}`。Character の `inventory` は入れ物で、その `.inventory` が辞書
+    #: （辞書を直接持つ形にも備える。ローダの `items.inventory_of`）。読めなければ None。
+    inventory_dict = items.inventory_of
 
     def conversation_npc_id(app):
         """現在の会話相手id。
@@ -324,7 +316,7 @@ def apply(ctx):
     def sync_transfer(widget, old_grid, new_grid):
         """ドラッグで片側から片側へ移った直後に、持ち物の実体を持ち主に合わせる。
 
-        `InventoryItem.change_inventory` の包みから呼ばれる。`widget` が画面の
+        `InventoryItem.change_inventory` の後（窓口 `twin_windows` の `MOVE`）に呼ばれる。`widget` が画面の
         ボタン（`item_instance` と `item_id` を持つ）、`old_grid` / `new_grid` が
         移動前後の Inventory。手順:
           1. 受け渡しの窓の2人の間の移動でなければ何もしない（店の売買は素通し）
@@ -459,8 +451,6 @@ def apply(ctx):
 
     #: 装備できる item_type。本体の equipments のキー（slot 名）と同じ文字列。
     EQUIP_TYPES = ("weapon", "wearable")
-    #: MOD が足したボタンに付ける印（属性名）。同じ popup へ二重に足さないため。
-    EQUIP_BUTTON_MARK = "_mod_party_npc_equip_button"
     menu_skip = set()
 
     def skip_once(reason, widget):
@@ -476,25 +466,15 @@ def apply(ctx):
         inv = inventory_dict(owner)
         return key_for_instance(inv, item_instance, preferred)
 
-    def equipment_dict(owner, create=False):
-        """`owner.equipments`。無い／辞書でないときは `create=True` なら空の辞書を作って付ける。"""
-        if owner is None:
-            return None
-        eq = getattr(owner, "equipments", None)
-        if isinstance(eq, dict):
-            return eq
-        if not create:
-            return None
-        try:
-            owner.equipments = {}
-            return owner.equipments
-        except Exception:
-            return None
+    def equipment_dict(owner):
+        """`owner.equipments`。無い／辞書でないときは None。"""
+        eq = getattr(owner, "equipments", None) if owner is not None else None
+        return eq if isinstance(eq, dict) else None
 
     def is_equipped_by(owner, item_instance, preferred=None):
         """MOD の記録上、この持ち主がこの品を装備しているか（ボタンの文言を決める）。"""
         item_id = item_id_in(owner, item_instance, preferred)
-        eq = equipment_dict(owner, create=False)
+        eq = equipment_dict(owner)
         if item_id is None or not isinstance(eq, dict):
             return False
         return any(ref is not None and str(ref) == str(item_id) for ref in eq.values())
@@ -581,7 +561,6 @@ def apply(ctx):
         if equipped is None:
             equipped = is_equipped_by(npc, item_instance, getattr(widget, "item_id", None))
         button = Button(text="外す" if equipped else "装備", **kwargs)
-        setattr(button, EQUIP_BUTTON_MARK, True)
         try:
             from kivy.graphics import Color, Rectangle
             with button.canvas.before:
@@ -761,42 +740,28 @@ def apply(ctx):
 
     # ================================================================ フック
 
-    @ctx.wrap("__main__:InstantaleApp.close_shopping_window_process", required=False,
-              safe=True)
-    def close_shopping_window(orig, self, *args, **kwargs):
-        """受け渡しの窓を閉じた後の画面を1行残す（会話に戻れたかを後から読むため）。"""
-        result = orig(self, *args, **kwargs)
+    # 2列の画面の閉じる2経路・品の移動は窓口 `twin_windows` に預ける（TECH.md §3.3.21）。
+    def close_shopping_window(call):
+        """ボタンで閉じた後（`CLOSE` の after）。受け渡しの窓なら閉じた後の画面を1行残す（会話に戻れたかを後から読むため）。"""
         if state["open"]:
             state["open"] = False
             # 選択肢の塗り直しは閉じる処理の後に来ることがあるので、次のフレームで読む。
-            screen.schedule(lambda: report_closed(self), 0)
-        return result
+            app = call.app
+            screen.schedule(lambda: report_closed(app), 0)
 
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.turnoff_window_visibility", required=False,
-              safe=True)
-    def turnoff_window_visibility(orig, self, *args, **kwargs):
-        """外側を押して窓を消したときも、閉じた後の画面を1行残す。
+    def closed_if_hidden(call):
+        """外側を押して窓が消えた（`HIDDEN`。消した次のフレームで、2列の画面が見えていないときに来る）。
 
         外側を押して閉じる経路は `close_shopping_window_process` を通らない
         （`_on_backdrop_touch` → `turnoff_window_visibility` → `on_backdrop_callback`。GAME.md §2.13.1.3）。
-        消した直後はまだ表示の辞書が書き換わっていないことがあるので、次のフレームで見る。
         """
-        result = orig(self, *args, **kwargs)
-        if state["open"]:
-            app = ui.find_app()
-            if app is not None:
-                screen.schedule(lambda: closed_if_hidden(app), 0)
-        return result
-
-    def closed_if_hidden(app):
-        """受け渡しの窓が消えていれば閉じたものとして記録する。まだ見えているなら何もしない。"""
         if not state["open"]:
             return
-        data = getattr(ui.find_hud(app), "visible_twin_inventory_data", None)
-        if isinstance(data, dict) and data.get("TorF"):
-            return
         state["open"] = False
-        report_closed(app)
+        report_closed(call.app)
+
+    twin_windows.on(owner_name, ctx, (twin_windows.CLOSE,), after=close_shopping_window, write=write)
+    twin_windows.on(owner_name, ctx, (twin_windows.HIDDEN,), after=closed_if_hidden, write=write)
 
     def report_closed(app):
         buttons = getattr(app, "buttons", None)
@@ -806,16 +771,18 @@ def apply(ctx):
             if isinstance(buttons, list) else None))
 
     @ctx.wrap("__main__:ConversationStartManager.__init__", required=False)
-    def conversation_start(orig, self, app, character_id, *args, **kwargs):
+    def conversation_start(orig, self, *args, **kwargs):
         """会話の入口。相手の id を控える（誰との会話かはここでしか分からない）。"""
+        # (app, character_id)
+        character_id = frames.arg(args, kwargs, "character_id", 1)
         state["npc_id"] = str(character_id) if character_id is not None else None
-        return orig(self, app, character_id, *args, **kwargs)
-
-    @ctx.wrap("__main__:ConversationEndManager.finish_conversation", required=False)
-    def finish_conversation(orig, self, *args, **kwargs):
-        """会話の出口。相手の控えを消す。窓の2人（player / npc）は次に開くまで残してよい。"""
-        state["npc_id"] = None
         return orig(self, *args, **kwargs)
+
+    def finish_conversation(call):
+        """会話の出口（窓口 `talks` の `FINISH` の before）。相手の控えを消す。窓の2人（player / npc）は次に開くまで残してよい。"""
+        state["npc_id"] = None
+
+    talks.on(owner_name, ctx, (talks.FINISH,), before=finish_conversation, write=write)
 
     def on_press(app):
         """受け渡しボタンが押された（窓口がボタンに持たせた処理）。本体へ渡さず窓を開く。"""
@@ -825,35 +792,28 @@ def apply(ctx):
     # 選択肢と押下はローダの窓口 `choices`（TECH.md §3.3.14 の宣言型の口）に預ける。
     choices.provide(ctx, screen, refresh=drop_old_marks, offer=offer, labels=OUR_LABELS)
 
-    @ctx.wrap(
-        "scripts.hud.new_hud:InventoryItem.change_inventory",
-        required=False,
-        safe=True,
-    )
-    def change_inventory(orig, self, new_inventory, *args, **kwargs):
-        """ドラッグで品が別の側へ落ちたときに本体が呼ぶ。`self` は画面のボタン（InventoryItem）。
+    def change_inventory(call):
+        """ドラッグで品が別の側へ落ちた後（窓口 `twin_windows` の `MOVE` の after）。`call.widget` は画面のボタン（InventoryItem）。
 
-        本体に先に処理させてから、移動前後の Inventory を `sync_transfer` へ渡す。
-        同期の失敗はログに残すだけで、本体の戻り値はそのまま返す。
+        本体に先に処理させてから、移動前後の Inventory（`orig` の前に窓口が読んだ `call.old_inventory`）を
+        `sync_transfer` へ渡す。同期の失敗はログに残すだけ。
         """
-        old_inventory = getattr(self, "inventory", None)
-        result = orig(self, new_inventory, *args, **kwargs)
-
         try:
-            sync_transfer(self, old_inventory, new_inventory)
+            sync_transfer(call.widget, call.old_inventory, call.new_inventory)
         except Exception:
             ctx.log_exc("party inventory/equipment: persistent transfer sync failed")
 
-        return result
+    twin_windows.on(owner_name, ctx, (twin_windows.MOVE,), after=change_inventory, write=write)
 
     @ctx.wrap(
         "scripts.hud.new_hud:InventoryItem.show_popup_menu",
         required=False,
         safe=True,
     )
-    def show_popup_menu(orig, self, pos, *args, **kwargs):
+    def show_popup_menu(orig, self, *args, **kwargs):
         """品を右クリックしたときの本体の popup。仲間側の品には本体が出さないので、自前のボタンを出す。"""
-        result = orig(self, pos, *args, **kwargs)
+        pos = frames.arg(args, kwargs, "pos", 0)
+        result = orig(self, *args, **kwargs)
         try:
             screen.schedule(lambda: show_npc_menu(self, pos), 0)
         except Exception:
@@ -890,9 +850,8 @@ def apply(ctx):
         )
         return None
 
-    @ctx.wrap("__main__:InstantaleApp.return_to_title", required=False)
-    def return_to_title(orig, self, *args, **kwargs):
-        """タイトルへ戻るとき。控えを全部捨て、走っていない遅延保存も無効にする。"""
+    def return_to_title(call):
+        """タイトルへ戻るとき（窓口 `loads` の `TITLE` の before）。控えを全部捨て、走っていない遅延保存も無効にする。"""
         # 保存済みボタンはゲーム側に任せる。MODの一時参照だけ捨て、
         # ロード後はConversationEndManager specから復元する。
         # 世代番号を進めるのは、予約済みの保存が別のセーブへ走らないようにするため。
@@ -901,7 +860,8 @@ def apply(ctx):
         state["npc"] = None
         state["save_generation"] += 1
         write("return_to_title: transient transfer/equipment state cleared")
-        return orig(self, *args, **kwargs)
+
+    loads.on(owner_name, ctx, (loads.TITLE,), before=return_to_title, write=write)
 
     ctx.log("party inventory transfer: installed (after 301); log -> {}".format(
         ctx.out_path(LOG_BASENAME)))

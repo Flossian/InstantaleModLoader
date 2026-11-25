@@ -17,8 +17,6 @@
 体力の上限の組み直し（`update_max_physical_integrity`）も一緒に走り、
 セーブに残っている下がった後の上限へ、倍率がもう一度掛かった。
 """
-import os
-
 from instantale_modloader import abilities, frames, loads
 
 LOG_BASENAME = "injury_after_load.log"
@@ -78,6 +76,6 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("injury after load: could not rebuild the ability scores")
 
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "149_fix_injury_after_load"
+    owner = ctx.mod_name or "149_fix_injury_after_load"
     # 新しく始めるときも `load_game_new` を通る（TECH.md §3.3.21）。怪我は無いので何も起きない。
     loads.on(owner, ctx, (loads.LOAD,), after=after_load, write=write)

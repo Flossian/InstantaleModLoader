@@ -34,7 +34,7 @@ from instantale_modloader import frames, save_lookup, ui
 ENABLED = False
 
 LOG_BASENAME = "save_only_entities.log"
-#: 窓口に名乗る持ち主の名前。
+#: 窓口に名乗る持ち主の名前の予備（`apply()` の中は `ctx.mod_name` を先に使う）。
 OWNER = "146_fix_save_only_entities"
 
 SHOP_TARGET = "__main__:ShoppingStartManagerRemake.shopping_start_method_1"
@@ -54,11 +54,8 @@ SITE_TARGETS = {
 }
 
 
-def _get(obj, key, default=None):
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    value = frames.attr(obj, key, default)
-    return default if value is frames.MISSING else value
+#: 辞書でも属性でも1項目を読む（読めない番人は default に戻す）。
+_get = frames.field
 
 
 def place_keys(app):
@@ -106,22 +103,23 @@ def npc_missing(app, character):
 
 def apply(ctx):
     write = ctx.logger(LOG_BASENAME, cap=2000)
+    owner = ctx.mod_name or OWNER
     if not ENABLED:
         # 切っているときは包まず、窓口にも名乗らない（`340_` の宿屋の守りがそのまま働く）。
         for site in SITES:
-            if save_lookup.covered(site) == OWNER:
+            if save_lookup.covered(site) == owner:
                 save_lookup.withdraw(site)
         ctx.log("save only entities: off (setting ENABLED); the game looks up world_dict as is")
         return
     save_lookup.install(ctx, write)
     for site in SITES:
-        save_lookup.cover(OWNER, ctx, site, SITE_TARGETS[site])
+        save_lookup.cover(owner, ctx, site, SITE_TARGETS[site])
 
     def run(orig, args, kwargs, app, why, site):
         if not why:
             return orig(*args, **kwargs)
         # 場面の包みと保存の守りが揃っていなければ差し替えない（窓口と同じ判断。守りが無いと骨格に進みが焼かれる）。
-        if save_lookup.covered(site) != OWNER:
+        if save_lookup.covered(site) != owner:
             write("WARN {}: not redirected, the hooks for this scene are not all in place ({})".format(site, why))
             return orig(*args, **kwargs)
         with save_lookup.redirected(app, "{}: {}".format(site, why), write):

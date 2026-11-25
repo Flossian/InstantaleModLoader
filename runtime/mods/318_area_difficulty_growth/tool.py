@@ -18,7 +18,6 @@ TECH.md §3.12 の契約で動く。ローダの設定画面（`tools/gui.py`）
 どちらも読むだけで書かない（骨格はゲームが保存のたびに書く。GAME.md §2.9.1）。
 範囲の表と式は `bands.py`（ゲームの中の `town_bands.py` と同じもの）。場所・窓の記憶・配色は `tools/modtool.py`。
 """
-import io
 import os
 import sys
 
@@ -27,8 +26,11 @@ MOD_DIR = os.path.dirname(os.path.abspath(__file__))
 _IML_ROOT = os.environ.get("IML_ROOT") or ""
 for _tools in ([os.path.join(_IML_ROOT, "tools")] if _IML_ROOT else []) + [
         os.path.normpath(os.path.join(MOD_DIR, os.pardir, os.pardir, os.pardir, "tools"))]:
-    if os.path.isfile(os.path.join(_tools, "modtool.py")) and _tools not in sys.path:
-        sys.path.insert(0, _tools)
+    # 見つかった最初の候補で止める（両方を先頭へ足すと、後の3つ上が IML_ROOT より先になる）
+    if os.path.isfile(os.path.join(_tools, "modtool.py")):
+        if _tools not in sys.path:
+            sys.path.insert(0, _tools)
+        break
 if MOD_DIR not in sys.path:
     sys.path.insert(0, MOD_DIR)
 
@@ -65,34 +67,24 @@ def world_folders(base=""):
         return []
     found = []
     for name in names:
-        path = os.path.join(root, name, "world_data.json")
-        if not os.path.isfile(path):
+        if not os.path.isfile(saves.world_data_path(name, base)):
             continue
-        data = read_encoded(path)
+        data = saves.read_world(name, base)       # 難読化を解いた骨格。読めなければ None
         found.append((modtool.world_name(data or {}, name, mod_dir=MOD_DIR), name))
     return sorted(found, key=lambda pair: pair[0].casefold())
-
-
-def read_encoded(path):
-    """難読化されたゲームの JSON。読めなければ None。"""
-    try:
-        with io.open(path, "rb") as fh:
-            raw = fh.read()
-    except OSError:
-        return None
-    return _saves().decode(raw)
 
 
 def load_world(folder, base=""):
     """1世界ぶん。`{"name", "towns", "quests", "has_save"}`。骨格が読めなければ None。
 
     `quests` は街の id -> 今の依頼の難易度の並び（セーブの依頼。無ければ骨格の依頼）。
+    骨格とセーブの読みはローダの `saves.read_world` / `read_save`（どちらも読めなければ None）。
     """
     saves = _saves()
-    skeleton = read_encoded(os.path.join(saves.worlds_dir(base), folder, "world_data.json"))
+    skeleton = saves.read_world(folder, base)
     if not isinstance(skeleton, dict):
         return None
-    save = read_encoded(saves.save_path(folder, base))
+    save = saves.read_save(folder, base)
     towns = bands.towns_of(skeleton.get("areas") or {})
     source = save if isinstance(save, dict) else skeleton
     quests = {}

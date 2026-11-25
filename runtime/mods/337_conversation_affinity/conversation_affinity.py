@@ -43,9 +43,8 @@ LLM を別に呼ばない。
 - MOD の NPC（id が `mod:` で始まる。330 の管理人・331 の主人）は対象にしない
 """
 
-import sys
-
-from instantale_modloader import frames, npcs, state as loader_state, talk_affinity, talk_summary, ui
+from instantale_modloader import (frames, llm, modnpc, npcs, state as loader_state, talk_affinity,
+                                  talk_summary, ui)
 
 # ---- 設定（既定値は mod.json の "settings" と一致させること。
 #      `tools/check_mods.py` が AST で突き合わせる）------------------------
@@ -90,26 +89,14 @@ STATUS_REASONS = {
 
 
 def _store():
-    """世代をまたぐ入れ物。プロセスに1つ（TECH.md §3.5）。"""
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"worlds": None}
-        setattr(sys, STORE_ATTR, store)
-    return store
+    """世代をまたぐ入れ物。プロセスに1つ（TECH.md §3.5。ローダの `state.process_store`）。"""
+    return loader_state.process_store(STORE_ATTR, {"worlds": None})
 
 
 # ============================================================ 部品（ゲームに触らない）
 def clamp_step(value):
-    """LLM の答えを -3〜+3 の整数に均す。読めなければ None。"""
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, str):
-        value = value.strip().lstrip("+")
-    try:
-        number = int(float(value))
-    except (TypeError, ValueError, OverflowError):
-        return None
-    return max(-STEP_LIMIT, min(STEP_LIMIT, number))
+    """LLM の答えを -3〜+3 の整数に均す。読めなければ None（ローダの `llm.whole`）。"""
+    return llm.whole(value, -STEP_LIMIT, STEP_LIMIT)
 
 
 def plan_change(before, step, *, gain_per_step, loss_per_step, ceiling, gained_today):
@@ -155,7 +142,7 @@ def apply(ctx):
     def begin(talk):
         """この要約に判定を足すなら決まりの文、足さないなら None。"""
         npc_id, name, character = talk["npc_id"], talk["name"], talk["character"]
-        if not npc_id or npc_id.startswith(MOD_NPC_PREFIX) or npc_id == "player":
+        if not npc_id or modnpc.is_mod_npc(npc_id) or npc_id == "player":
             return None
         if npcs.affinity_value(character) is None:
             write("skip: {} ({}) has no affinity".format(name, npc_id))

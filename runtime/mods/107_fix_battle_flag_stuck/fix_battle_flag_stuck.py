@@ -11,7 +11,7 @@
 | 終了マネージャ | `end_phase` 完了時 | 入口 |
 |---|---|---|
 | `BattleEndManager` | `in_battle` は 0（ゲーム自身が下ろす）。**`in_colosseum_battle` は 1 のまま** | 通常の戦闘と、**闘技場からの撤退** |
-| `BattleEndInFreeAction` | `in_battle` が 1（下ろし忘れ） | 自由入力・会話から入った戦闘 |
+| `BattleEndInFreeAction` | `in_battle` は 0（main_024 から本体が下ろす。それより前は 1 のまま残った） | 自由入力・会話から入った戦闘 |
 | `BattleEndInColosseum` | 両方 0（ゲーム自身が下ろす） | 闘技場で勝ったとき |
 
 `106_`（戦闘BGM）の「復帰呼び出しが app ではなく
@@ -92,9 +92,7 @@ mod を入れる前に保存したもの）、読み込み直後に立ってい�
 注入した時点でも、窓が開いていなければ下ろす。
 """
 
-import os
-
-from instantale_modloader import frames, loads, ui
+from instantale_modloader import battles, frames, loads, twin_windows, ui
 
 LOG_BASENAME = "battle_bgm.log"   # 106_ / 207_ と同じ時系列で読めるようにする
 
@@ -112,22 +110,15 @@ REPORT_FLAGS = ("in_boss_battle",)
 # 売買の窓の旗。窓を閉じる処理の後とロードの後に下ろす（v6）。
 SHOP_FLAG = "in_shopping"  # 下ろすために名前を持つ。untrusted-flag-ok
 
-# 売買の窓を閉じる処理。窓の外側を押すとゲームが呼ぶ（閉じるボタンは無い）。
-SHOP_CLOSE_TARGET = "__main__:InstantaleApp.close_shopping_window_process"
-
-# ロード直後にも残骸を下ろすか。
-CLEAR_ON_LOAD = True
-
-# 注入した時点で既に立っている残骸も下ろすか。
-# **戦闘中に注入した場合を巻き込まないよう、
-# 敵が居ないことを確認してから下ろす**（`app.current_enemy_dict` が空。
-# 実測: 残骸のとき `len=0`）。
-CLEAR_ON_BOOT = True
+# 売買の窓を閉じる処理（窓の外側を押すとゲームが呼ぶ。閉じるボタンは無い）は、
+# ローダの窓口 `twin_windows` の CLOSE が包む（TECH.md §3.3.21）。ログに出す名前だけ持つ。
+SHOP_CLOSE_LABEL = "close_shopping_window_process"
 
 
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
     write = ctx.logger(LOG_BASENAME, tag="[FLAGFIX]")
+    owner = ctx.mod_name or "107_fix_battle_flag_stuck"
 
     find_app = ui.find_app     # 走っている app の探し方はローダの語彙
 
@@ -211,25 +202,22 @@ def apply(ctx):
     # 3種類とも同じ扱いにしてよい。
     # ゲームが下ろしている経路では stale が空になり、
     # この mod は何も書かずに素通りする（＝正しい経路には触れない）。
-    def on_end(target, label):
-        @ctx.wrap(target, required=False)
-        def _end(orig, self, *args, **kwargs):
-            result = orig(self, *args, **kwargs)
-            app = getattr(self, "app", None) or find_app()
-            try:
-                clear_stale(app, label)
-            except Exception:
-                ctx.log_exc("battle flag: clear failed")
-            try:
-                return_escaped(app, label)
-            except Exception:
-                ctx.log_exc("battle flag: could not bring the escaped members back")
-            return result
-        return _end
+    # 3つの終わり方はローダの窓口 `battles` の END が包み、orig が返った後だけ呼ばれる
+    # （自分で包まない。TECH.md §3.3.21）。call.label は包んだ関数の名前で、ログの見出しは前と同じ。
+    def after_end(call):
+        label = call.label
+        # call.app はマネージャの app か走っている app。検査で差し替えた find_app にも倒す
+        app = call.app or find_app()
+        try:
+            clear_stale(app, label)
+        except Exception:
+            ctx.log_exc("battle flag: clear failed")
+        try:
+            return_escaped(app, label)
+        except Exception:
+            ctx.log_exc("battle flag: could not bring the escaped members back")
 
-    on_end("__main__:BattleEndManager.end_phase", "BattleEndManager.end_phase")
-    on_end("__main__:BattleEndInFreeAction.end_phase", "BattleEndInFreeAction.end_phase")
-    on_end("__main__:BattleEndInColosseum.end_phase", "BattleEndInColosseum.end_phase")
+    battles.on(owner, ctx, (battles.END,), after=after_end, write=write)
 
     # ------------------------------------------------------------ ロード直後
     # この mod を入れる前に保存したセーブには、立ったままのフラグが焼かれている。
@@ -265,39 +253,36 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("battle flag: clear failed")
 
-    if CLEAR_ON_LOAD:
-        loads.on(os.path.basename(getattr(ctx, "mod_dir", "") or "") or "107_fix_battle_flag_stuck", ctx, (loads.LOAD, loads.NEW_GAME),
-                 after=after_load, write=write)
+    loads.on(owner, ctx, (loads.LOAD, loads.NEW_GAME), after=after_load, write=write)
 
     # ----------------------------------------------------- 売買の窓を閉じた後
-    @ctx.wrap(SHOP_CLOSE_TARGET, required=False)
-    def close_shopping_window_process(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
+    # ローダの窓口 `twin_windows` の CLOSE（close_shopping_window_process）の orig が返った後に呼ばれる。
+    def after_close(call):
         try:
-            clear_shop(self, "close_shopping_window_process")
+            clear_shop(call.obj, SHOP_CLOSE_LABEL)
         except Exception:
             ctx.log_exc("shop flag: clear failed")
-        return result
+
+    twin_windows.on(owner, ctx, (twin_windows.CLOSE,), after=after_close, write=write)
 
     # ------------------------------------------------------------- 注入した時点
     # 既にこの mod 無しで戦闘を終えているセッションには、
     # 残骸が立ったままになっている。
-    # 戦闘中に注入した場合を巻き込まないよう、敵が居ないことを確かめる。
-    if CLEAR_ON_BOOT:
-        try:
-            app = find_app()
-            enemies = getattr(app, "current_enemy_dict", None) if app else None
-            if app is not None and isinstance(enemies, dict) and not in_real_battle(app):
-                clear_stale(app, "injection")
-            elif app is not None and getattr(app, "in_battle", False):
-                write("injection: in_battle is set and enemies are present "
-                      "-- looks like a real battle; not touching")
-            # 売買の窓が開いている最中の注入は巻き込まない（閉じたときに下ろす）。
-            if app is not None and not getattr(app, "is_popup_window_opened", False):
-                clear_shop(app, "injection")
-        except Exception:
-            ctx.log_exc("battle flag: boot clear failed")
+    # 戦闘中に注入した場合を巻き込まないよう、敵が居ないことを確かめる
+    # （`app.current_enemy_dict` が空。実測: 残骸のとき `len=0`）。
+    try:
+        app = find_app()
+        enemies = getattr(app, "current_enemy_dict", None) if app else None
+        if app is not None and isinstance(enemies, dict) and not in_real_battle(app):
+            clear_stale(app, "injection")
+        elif app is not None and getattr(app, "in_battle", False):
+            write("injection: in_battle is set and enemies are present "
+                  "-- looks like a real battle; not touching")
+        # 売買の窓が開いている最中の注入は巻き込まない（閉じたときに下ろす）。
+        if app is not None and not getattr(app, "is_popup_window_opened", False):
+            clear_shop(app, "injection")
+    except Exception:
+        ctx.log_exc("battle flag: boot clear failed")
 
-    ctx.log("battle flag fix: clearing {} at battle end{}, {} after the trade window "
-            "closes log={}".format("/".join(CLEAR_FLAGS), " and on load" if CLEAR_ON_LOAD else "",
-                                   SHOP_FLAG, log_path))
+    ctx.log("battle flag fix: clearing {} at battle end and on load, {} after the trade window "
+            "closes log={}".format("/".join(CLEAR_FLAGS), SHOP_FLAG, log_path))

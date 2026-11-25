@@ -125,6 +125,8 @@ class FakeCtx:
     def __init__(self, out_dir, mod_dir=MOD_DIR):
         self.out_dir = out_dir
         self.mod_dir = mod_dir
+        # 本物の ctx.mod_name と同じく、MOD のフォルダ名（apply の間だけ引ける持ち主名）
+        self.mod_name = os.path.basename(mod_dir) if mod_dir else None
         self.hooks = {}
         self.errors = []
         self.notes = []

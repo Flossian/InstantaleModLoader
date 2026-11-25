@@ -84,10 +84,8 @@
 包むのは関所1枚（TECH.md §3.3.3）で、`orig` はそこが必ず呼ぶ。
 暦の進め方も日次処理もゲームのまま。
 
-道中のクエストは日数を進めない（GAME.md §2.18）ので、触る相手はこの1回だけ。
-以前は「道中と移動の合計」を予算として全段階を切り詰めていたが、
-使い切ると以後の日数送りに 0 が渡り続け、控えが外れないと
-**その世界の暦が止まっていた**（VERIFICATION.md §3.13）。
+道中のクエストは日数を進めない（GAME.md §2.18）ので、差し替えるのは最後の移動の1回だけ
+（全段階を予算で切り詰める形を捨てた経緯は VERIFICATION.md §3.13）。
 
 これが無いと最後の移動で徒歩ぶん（実測3ヵ月）が乗り、**徒歩より遅くて危険なだけの道**になる。
 差し替えるのは最後の移動の1回だけで、
@@ -100,19 +98,12 @@
 `STAMINA_MIN_PERCENT` を下回っていたら押された時点で断る。
 クエストの生成にも世界のデータにも一切触らない。
 読めなかったときは通す（値が読めないことを理由に遊びを止めない。WARN は残す）。
-
-## 版7
-
-`QuestStartManager.__init__`・`add_text`・`AreaMoveManager.__init__`・`random_quest_generator` のフックは、
-引数を受け取った形のまま元の関数へ渡す（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
-生成のプロンプトへの差し込みは、来た側（位置かキーワード）に合わせて `area_description` と `quest_difficulty` を差し替える。
 """
 
-import os
 import random
 import time
 
-from instantale_modloader import choices, durations, frames, loads, quest_ends, quest_generation, text_filters, ui
+from instantale_modloader import arrivals, choices, durations, frames, loads, quest_ends, quest_generation, text_filters, ui
 from instantale_modloader import state as state_api
 
 from . import world
@@ -325,7 +316,7 @@ def apply(ctx):
         前の周回の控えが別の依頼を道として扱う。
         世界名だけの鍵は v1.15.0 より前の版が書いた控えで、同じ世界なら受ける。
         """
-        record = journey.current(None, stages)
+        record = journey.current(stages)
         if record is None or app is None or not record.get("world"):
             return record
         if record.get("world") in (world.playthrough_key(app), world.world_key(app)):
@@ -419,8 +410,8 @@ def apply(ctx):
         target = world.area_of(app, target_id)
         origin = ui.current_area(app)
         origin_id = ui.area_id_of(origin)
-        target_name = world.area_name(target, "その土地")
-        origin_name = world.area_name(origin, "この土地")
+        target_name = ui.area_name(app, target, "その土地")
+        origin_name = ui.area_name(app, origin, "この土地")
 
         origin_level = world.area_level(app, origin, write,
                                         "origin {!r}".format(origin_name),
@@ -610,18 +601,6 @@ def apply(ctx):
         write("acceptance: falling back to the quest board")
         screen.start_phase(app, display_cls(app), "クエスト掲示板")
 
-    class RoadPhase(object):
-        """自前のフェーズ。**`PhaseSpec` には決して載せない**（セーブに焼かれる）。"""
-
-        def __init__(self, app):
-            self.app = app
-
-        def execute(self, choice_text):
-            try:
-                start_road(self.app, choice_text)
-            except Exception:
-                ctx.log_exc("road travel: phase failed")
-
     # ============================================================ 段階を進める
     def observe_quest(app):
         """ゲームが道中のクエストを進めているなら、控えを本決まりにする。
@@ -725,8 +704,8 @@ def apply(ctx):
     def on_press(app):
         """「危険な道を行く」が押された（窓口がボタンに持たせる処理）。"""
         write("pressed {!r}".format(ROAD_LABEL))
-        screen.start_phase(app, RoadPhase(app), ROAD_LABEL,
-                           fallback=lambda: start_road(app, ROAD_LABEL))
+        # 使い捨てのフェーズはローダが作る（`PhaseSpec` に載せない注意も `ui.Screen.run_phase` の側）。
+        screen.run_phase(app, ROAD_LABEL, start_road, ROAD_LABEL)
         return None
 
     def refresh_choice_buttons(self, _buttons):
@@ -828,33 +807,28 @@ def apply(ctx):
             write("quest {!r} ended but the road is for {!r}; not moving".format(
                 ended, record.get("quest_id")))
 
-    @ctx.wrap("__main__:QuestRetireManager.execute", required=False)
-    def quest_retire(orig, self, *args, **kwargs):
-        """放棄。移動しない。危険な道を引き返した、が正しい。"""
-        app = getattr(self, "app", None) or ui.find_app()
-        ended = None
-        try:
-            journey.sync()
-            ended = world.current_quest_id(app)
-        except Exception:
-            ctx.log_exc("road travel: cannot read the current quest")
-        result = orig(self, *args, **kwargs)
-        try:
-            record = road_of(app, "offered", "armed", "ready")
-            if record is not None and ended is not None \
-                    and ended != record.get("quest_id"):
-                write("quest {!r} was abandoned but the road is for {!r}; "
-                      "leaving it alone".format(ended, record.get("quest_id")))
-            elif record is not None and (ended is not None
-                                         or record.get("stage") != "offered"):
-                origin = record.get("origin_area_name") or "元の土地"
-                drop_road(app, "the quest was abandoned")
-                if app is not None:
-                    settle(app, lambda: screen.say(
-                        app, RETIRE_TEXT.format(origin=origin)))
-        except Exception:
-            ctx.log_exc("road travel: cannot cancel the road")
-        return result
+    def quest_retire_before(call):
+        """放棄の前。道中の控えを寄せる（放棄する依頼の id は窓口が `orig` の前に読む）。"""
+        journey.sync()
+
+    def quest_retire_after(call):
+        """放棄。移動しない。危険な道を引き返した、が正しい（ローダの窓口 `quest_ends.on_retire`）。
+
+        id が読めなかった回（`call.quest_id` が None）も、段階で判断する。
+        """
+        app, ended = call.app, call.quest_id
+        record = road_of(app, "offered", "armed", "ready")
+        if record is not None and ended is not None \
+                and ended != record.get("quest_id"):
+            write("quest {!r} was abandoned but the road is for {!r}; "
+                  "leaving it alone".format(ended, record.get("quest_id")))
+        elif record is not None and (ended is not None
+                                     or record.get("stage") != "offered"):
+            origin = record.get("origin_area_name") or "元の土地"
+            drop_road(app, "the quest was abandoned")
+            if app is not None:
+                settle(app, lambda: screen.say(
+                    app, RETIRE_TEXT.format(origin=origin)))
 
     def arrival_text(context, app):
         """到着の移動中だけ、ゲームの「徒歩で目指す。長旅だ...」を伏せる（ローダの窓口 `text_filters`。登録は `owner` の後）。
@@ -890,12 +864,6 @@ def apply(ctx):
         控えは `MOVE_TIMEOUT` まで残るので、その間の日数送りを見境なく
         差し替えると、宿泊も休暇も1回ごとに `TRAVEL_DAYS` を課すことになる。
 
-        以前は「道中と移動の合計」を予算として全段階を切り詰めていた。
-        予算を使い切ると以後の日数送りに **0** が渡り続け、
-        日数送りは宿泊も徒歩も休暇も通るので、控えが外れないと
-        **その世界の暦が止まっていた**（画面には何も出ない）。
-        道中が0日である以上、積み上げる意味は無かった。
-
         `since` は移動が始まった時刻。同じ移動に `314_`（街移動の設定）も
         望みを出すが、**この移動を起こしたのはこちら**なので日数はこちらが決め、
         あちらは頭打ちだけを掛ける（決めるのはローダの1か所）。
@@ -925,7 +893,7 @@ def apply(ctx):
         write("road: the road to {!r} takes {} day(s)".format(
             record.get("target_area_name"), granted))
 
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "area_move_dungeon"
+    owner = ctx.mod_name or "area_move_dungeon"
     durations.claim_days(owner, days_wish, note=days_note, write=write)
     durations.install(ctx, write)
 
@@ -958,26 +926,24 @@ def apply(ctx):
     loads.on(owner + ":new_game", ctx, (loads.NEW_GAME,), before=new_game_before, write=write)
     # 依頼の終わり（踏破）はローダの窓口が1枚だけ包む（前後の処理は上の `quest_end_before` / `quest_end_after`）。
     quest_ends.on(owner, ctx, before=quest_end_before, after=quest_end_after, write=write)
+    # 依頼の放棄も同じ窓口が1枚だけ包む（前後の処理は上の `quest_retire_before` / `quest_retire_after`）。
+    quest_ends.on_retire(owner, ctx, before=quest_retire_before, after=quest_retire_after, write=write)
     # 到着の移動中の文言はローダの窓口が1枚だけ包む（上の `arrival_text`）。
     text_filters.on(owner, ctx, arrival_text, write=write)
 
-    @ctx.wrap("__main__:AreaMoveManager.__init__", required=False)
-    def area_move(orig, self, *args, **kwargs):
-        """自分が起こしたのでない移動が始まったら、待っている道は捨てる。
+    def area_move(call):
+        """自分が起こしたのでない移動が始まったら、待っている道は捨てる（ローダの窓口 `arrivals.AREA_SETUP`）。
 
         普通に徒歩・馬車で移動してしまったなら、その道はもう関係が無い。
+        `depart` が組み立てる移動は `state["departing"]` が立っている間に来るので捨てない。
         """
-        try:
-            # (app, target_area_id, mode)。受け取った形のまま元の関数へ渡す。
-            app = frames.arg(args, kwargs, "app", 0)
-            mode = frames.arg(args, kwargs, "mode", 2)
-            journey.sync()
-            if not state["departing"] and road_of(app) is not None:
-                drop_road(app, "the player travelled by other means "
-                          "(mode={!r})".format(mode))
-        except Exception:
-            ctx.log_exc("road travel: cannot clear the road")
-        return orig(self, *args, **kwargs)
+        journey.sync()
+        if not state["departing"] and road_of(call.app) is not None:
+            drop_road(call.app, "the player travelled by other means "
+                      "(mode={!r})".format(call.mode))
+
+    # 街の移動の組み立て（`AreaMoveManager.__init__`）はローダの窓口が1枚だけ包み、行き先と手段を読んで渡す。
+    arrivals.on(owner, ctx, (arrivals.AREA_SETUP,), before=area_move, write=write)
 
     # ---------------------------------------- 生成プロンプトに道中の性質を差し込む
     # 生成への差し込みはローダの窓口が1枚だけ包む（`generate` が `offer` で置く。TECH.md §3.3.30）。

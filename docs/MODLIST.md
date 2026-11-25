@@ -118,11 +118,11 @@
 | [`314_area_move_custom`](MODS.md#314_area_move_custom-エリア移動の日数料金文言を変える) | 街移動のカスタマイズ | エリア移動の日数・料金・文言を変える | 16 |  |
 | [`315_vacation_custom`](MODS.md#315_vacation_custom-宿の宿泊期間部屋宿代を変える) | 宿泊のカスタマイズ | 宿の宿泊期間・部屋・宿代を変える | 14 |  |
 | [`316_bounty_hunter`](MODS.md#316_bounty_hunter-手配されていると追手が来る) | 賞金稼ぎが襲ってくる | 手配されていると追手が来る | 17 | 取込済 336_crime_overhaul |
-| [`317_reputation`](MODS.md#317_reputation-評判と二つ名) | 評判と二つ名 | 評判と二つ名 | 12 |  |
+| [`317_reputation`](MODS.md#317_reputation-評判と二つ名) | 評判と二つ名 | 評判と二つ名 | 11 |  |
 | [`318_area_difficulty_growth`](MODS.md#318_area_difficulty_growth-街ごとに依頼の難易度の範囲を決め片付けるたびに上げる) | 街ごとの依頼の難易度と上昇 | 街ごとに依頼の難易度の範囲を決め、片付けるたびに上げる | 8 |  |
 | [`319_battle_tactics`](MODS.md#319_battle_tactics-戦闘を複数手の駆け引きにする) | 戦闘の数値とバフ・デバフの作り直し | 戦闘を複数手の駆け引きにする | 18 |  |
 | [`320_guild_adventurer_recruit`](MODS.md#320_guild_adventurer_recruit-ギルドの冒険者の補充) | ギルドの冒険者の補充 | ギルドの冒険者の補充 | 2 |  |
-| [`321_area_chronicle`](MODS.md#321_area_chronicle-エリアの状況を更新依頼クリアで案内文が変わる) | 功績による土地の案内文の書き換え | エリアの状況を更新（依頼クリアで案内文が変わる） | 4 |  |
+| [`321_area_chronicle`](MODS.md#321_area_chronicle-エリアの状況を更新依頼クリアで案内文が変わる) | 功績による土地の案内文の書き換え | エリアの状況を更新（依頼クリアで案内文が変わる） | 3 |  |
 | [`322_battle_bgm`](MODS.md#322_battle_bgm-戦闘bgmを置いた曲から選んで鳴らす) | 戦闘BGMの選曲 | 戦闘BGMを置いた曲から選んで鳴らす | 2 |  |
 | [`323_npc_carryover`](MODS.md#323_npc_carryover-別の世界のnpcを連れてくる) | 別の世界のNPCを連れてくる | 別の世界のNPCを連れてくる | 4 |  |
 | [`324_place_bgm`](MODS.md#324_place_bgm-施設と土地のbgmを置いた曲から選んで鳴らす) | 街・施設BGMの選曲 | 施設と土地のBGMを置いた曲から選んで鳴らす | 4 |  |

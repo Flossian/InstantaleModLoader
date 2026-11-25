@@ -462,6 +462,9 @@ class InstantaleApp:
 
 class FakeCtx:
     def __init__(self):
+        # 窓口の持ち主名は本物の ctx と同じくフォルダ名（mod_dir の basename）。
+        self.mod_dir = MOD_DIR
+        self.mod_name = os.path.basename(MOD_DIR)
         self.out_dir = OUT_DIR
         self.state_dir = STATE_DIR
         self.hooks = {}
@@ -1429,6 +1432,15 @@ try:
           (ledger_of(app).get("hunter_day"), ledger_of(app)["hunters"]["95"], talks))
     check("現れたら次の刺客までの日数を引いて控える（ばらつき 0・最低 0 で基準 10）",
           ledger_of(app).get("hunter_gap") == 10, ledger_of(app).get("hunter_gap"))
+    from instantale_modloader import arrivals  # noqa: E402
+    check("呼び止めたら、その刺客との会話の第一声をローダの窓口に予約する",
+          (module.OWNER + ":hunter", "95") in arrivals.openings(), arrivals.openings())
+    sent_opening = []
+    ctx.hook(arrivals.OPENING_TARGET)(lambda *a, **k: sent_opening.append(k["messages"][-1]["content"]),
+                                      messages=[{"role": "user", "content": "<行動: 話しかける>"}],
+                                      character_instance=app.world.characters["95"])
+    check("その刺客との会話の第一声は、前にも挑んだ刺客の名乗りに差し替わる",
+          sent_opening and "白の教団の異端審問官" in sent_opening[0] and "以前にも" in sent_opening[0], sent_opening)
     with store.lock:
         book = store.load(key)
         book["hunters"]["95"]["status"] = "escaped"
@@ -1459,7 +1471,8 @@ def world_send(manager_name, message, structure=None, **kw):
     return {"ok": True}
 
 
-send_hook = ctx.hook(module.SEND_TARGET)
+# 世界の生成の頼みはローダの送り口の窓口（`llm.on_request`）に預けてある。llm_manager の送り口の包みを呼ぶ
+send_hook = ctx.hook(module.GENERATE_TARGETS[0])
 send_hook(world_send, "create_world_overview",
           [{"role": "system", "content": "スキーマ"}, {"role": "user", "content": WORLD_PROMPT}], None)
 check("世界の生成の頼みに足す", "【勢力】" in SENT_WORLD[-1][1][1]["content"]
@@ -1786,7 +1799,7 @@ check("その周回を読み込み直したら作る", ledger_of(app)["status"] 
 print("[流れ] 世界の生成が途中で止まった後に、別の世界を遊ぶ")
 module, ctx, app = fresh(enable=False)
 module.ORGANIZE_NEW_WORLDS = True
-send_hook = ctx.hook(module.SEND_TARGET)
+send_hook = ctx.hook(module.GENERATE_TARGETS[0])
 send_hook(world_send, "create_world_overview", [{"role": "user", "content": WORLD_PROMPT}], None)
 existing = os.path.join(OUT_DIR, "worlds", "既存の世界", "world_data.json")
 os.makedirs(os.path.dirname(existing), exist_ok=True)

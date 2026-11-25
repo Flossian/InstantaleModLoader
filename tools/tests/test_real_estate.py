@@ -749,6 +749,9 @@ class FakeCtx:
     def logger(self, name, **kw):
         return ml.ModContext.logger(self, name, **kw)
 
+    def once(self, write, *args, **kw):
+        return ml.ModContext.once(self, write, *args, **kw)
+
     def state_path(self, *parts):
         path = os.path.join(self.state_dir, *parts)
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -1091,7 +1094,7 @@ label = app.label_like("借りる")
 check("家賃が値札に出る", "{:,}".format(module.RENT_PRICE) in (label or ""), label)
 check("宿屋を見ていない世界では年齢から見積もる（31歳＝4ヵ月）",
       durations.game_inn_stay(app)["months"] == 4, durations.game_inn_stay(app)["months"])
-stay_len = durations.game_inn_stay(app)["months"] * module.DAYS_PER_MONTH
+stay_len = durations.game_inn_stay(app)["months"] * durations.DAYS_PER_MONTH
 check("値札の日数は宿泊4回ぶん",
       "{}日".format(stay_len * module.RENT_STAYS) in (label or ""), label)
 gold_before = app.player.gold
@@ -1233,7 +1236,7 @@ print("[滞在]")
 gold_before = app.player.gold
 day_before = app.world.days_elapsed
 months_now = durations.game_inn_stay(app)["months"]
-day_after = day_before + months_now * module.DAYS_PER_MONTH
+day_after = day_before + months_now * durations.DAYS_PER_MONTH
 app.press(module.STAY_LABEL)
 CLOCK.settle()
 check("ゲームの宿泊が宿屋と同じ月数で起きた",
@@ -1790,7 +1793,7 @@ print("[宿泊の長さはローダの窓口が決める]")
 # （`3ヵ月` に戻した後も1ヵ月で滞在していた。実機。VERIFICATION.md §3.62 #11）。
 module, ctx, app, places, classes = setup()
 window_months = durations.game_inn_stay(app)["months"]
-guess = window_months * module.DAYS_PER_MONTH * module.RENT_STAYS
+guess = window_months * durations.DAYS_PER_MONTH * module.RENT_STAYS
 app.press(module.OFFICE_LABEL)
 CLOCK.settle()
 check("値札は窓口の長さの4回ぶん",
@@ -1857,8 +1860,6 @@ app.go(places["inn"])
 room_menu(1)                                 # `1ヵ月` の頃の観測を控えに残す
 app.process_choice(classes["stay"](app, 1, "private_room"), "個室(100G)")
 CLOCK.settle()
-check("月単位のうちは30日で数える",
-      (read_state() or {}).get("stay_days") == 30, read_state())
 PLAN["length"] = "1週間"
 durations.declare(durations.INN_STAY, fake_length, owner="fake_315")
 try:
@@ -1878,6 +1879,13 @@ try:
 finally:
     durations.forget("fake_315")
     PLAN["length"] = "デフォルト"
+
+print("[誰も読まなくなった控えの項目は書くときに落とす]")
+retired = module.ordered_bucket({"contracts": [], "stay_days": 30, "stay_days_for": 1,
+                                 "stay_months": 3})
+check("stay_days / stay_days_for は落とし、ほかは残す",
+      "stay_days" not in retired and "stay_days_for" not in retired
+      and retired.get("stay_months") == 3 and retired.get("contracts") == [], retired)
 
 print("[自分の家の滞在で月数を学び直さない]")
 # ゲームは滞在の最中の画面に `まだ宿泊する`（`VacationStartManager`）を並べる。
@@ -1901,25 +1909,6 @@ check("家の中の「まだ宿泊する」からは覚えない",
       (read_state() or {}).get("stay_months") == 1, read_state())
 app.process_choice(classes["rest"](app, 1, module.STAY_QUALITY), "休養をとる")
 CLOCK.settle()
-
-print("[MOD が建てた宿では数えない]")
-# `331_facility_investment` の「無料で泊まる」のような、MOD の建物の中の宿泊。
-module, ctx, app, places, classes = setup()
-app.go(places["inn"])
-room_menu(2)
-app.process_choice(classes["stay"](app, 2, "private_room"), "個室(100G)")
-CLOCK.settle()
-before_days = (read_state() or {}).get("stay_days")
-app.go(places["office"])                     # 宿泊の活動の画面を畳む
-rent(app, module)
-mod_inn = home_of(app, module, places)
-app.go(mod_inn)                              # MOD が建てた建物の中
-app.short_stay_days = 90
-app.process_choice(classes["stay"](app, 3, "private_room"), "無料で泊まる")
-CLOCK.settle()
-check("MOD の建物の中の宿泊は数えない",
-      (read_state() or {}).get("stay_days") == before_days, read_state())
-app.short_stay_days = None
 
 print("[ゲームの採番で建てていた頃の控え]")
 # 版19 までの控え。建物の id がゲームの台帳から採った整数で、もう建て直せない。
@@ -2525,7 +2514,7 @@ print("[滞在の家賃は滞在の後で]")
 module, ctx, app, places, classes = setup()
 rent(app, module)
 term = contract_of(module, app)["term"]
-stay_len = durations.game_inn_stay(app)["months"] * module.DAYS_PER_MONTH
+stay_len = durations.game_inn_stay(app)["months"] * durations.DAYS_PER_MONTH
 app.elapse_days(term - stay_len)               # あと1回の滞在で期限が来る
 CLOCK.settle()
 due_before = contract_of(module, app)["due"]
@@ -2588,7 +2577,7 @@ def inn_stay_with_rent_due(short=False):
     rent(app, module)
     term = contract_of(module, app)["term"]
     months = durations.game_inn_stay(app)["months"]
-    app.elapse_days(term - months * module.DAYS_PER_MONTH)
+    app.elapse_days(term - months * durations.DAYS_PER_MONTH)
     CLOCK.settle()
     due_before = contract_of(module, app)["due"]
     app.go(places["inn"])

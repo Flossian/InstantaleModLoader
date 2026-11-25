@@ -112,6 +112,8 @@ class Area:
 
 class FakeCtx:
     _mod = "340_shop_lineup"
+    # 窓口に名乗る持ち主の名前（本物は apply() の間だけフォルダ名）。
+    mod_name = _mod
 
     def __init__(self, out_dir):
         self.out_dir = out_dir
@@ -161,6 +163,10 @@ def setup():
         delattr(sys, module.STORE_ATTR)
     saved, llm.wrap_outgoing = llm.wrap_outgoing, fake_wrap_outgoing
     REWRITES.clear()
+    # 売買の前後と雛形から並べる前後はローダの窓口 `shopping` が包む。偽の ctx は世代を持たないので、
+    # 包みの印と登録を忘れさせないと、新しい ctx に包みが渡らない。
+    from instantale_modloader import shopping
+    shopping.reset()
     try:
         ctx = FakeCtx(OUT_DIR)
         module.apply(ctx)

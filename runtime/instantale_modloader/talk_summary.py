@@ -45,7 +45,7 @@ import re
 import sys
 import threading
 
-from . import alive, llm, ui
+from . import WINDOW_ERRORS_KEEP, alive, llm, state, ui, window_put
 
 RESOLVER_TARGET = "scripts.llm.llm_manager:conversation_resolver"
 SEND_TARGET = "scripts.llm.llm_manager:send_request"
@@ -60,24 +60,21 @@ _GATE_ATTR = "_instantale_talk_summary_gate"
 
 
 def _store():
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"riders": {}, "errors": []}
-        setattr(sys, STORE_ATTR, store)
-    return store
+    return state.process_store(STORE_ATTR, {"riders": {}, "errors": []})
 
 
 def _error(text):
+    """`errors` の末尾に1行残す（欄の重なりの文。例外は `ctx.log_exc` へ書くので `window_call` は使わない）。"""
     errors = _store()["errors"]
     errors.append(text)
-    del errors[:-20]
+    del errors[:-WINDOW_ERRORS_KEEP]
 
 
 # ============================================================ 登録
 def ride(owner, ctx, begin, settle, fields):
-    """`owner` を要約に乗せる。同じ持ち主の登録は差し替える。"""
-    _store()["riders"][str(owner)] = {"ctx": ctx, "begin": begin, "settle": settle,
-                                      "fields": dict(fields or {})}
+    """`owner` を要約に乗せる。同じ持ち主の登録は差し替える（新しい登録として後ろへ）。"""
+    window_put(_store()["riders"], owner, {"ctx": ctx, "begin": begin, "settle": settle,
+                                           "fields": dict(fields or {})})
 
 
 def withdraw(owner):
@@ -168,8 +165,8 @@ def npc_id_of(app, character):
 
 
 def player_name(app):
-    name = getattr(getattr(app, "player", None), "name", None)
-    return name.strip() if isinstance(name, str) and name.strip() else "プレイヤー"
+    """主人公の名前。読めなければ「プレイヤー」（`ui.player_name` を呼ぶ。公開 I/F として残す）。"""
+    return ui.player_name(app, "プレイヤー")
 
 
 # ============================================================ 包み

@@ -239,6 +239,9 @@ class FakeCtx(object):
         self.out_dir = out_dir
         self.wrapped = {}
         self.errors = []
+        # 窓口の持ち主名は本物の ctx と同じくフォルダ名（mod_dir の basename）。
+        self.mod_dir = os.path.dirname(MOD)
+        self.mod_name = os.path.basename(self.mod_dir)
 
     def wrap(self, target, **kw):
         def decorate(func):

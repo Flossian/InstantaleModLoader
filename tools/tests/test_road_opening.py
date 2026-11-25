@@ -37,7 +37,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
-from instantale_modloader import choices              # noqa: E402
+from instantale_modloader import arrivals, choices, quest_ends   # noqa: E402
 
 
 def find_mod(suffix):
@@ -478,6 +478,8 @@ class FakeCtx:
         return path
 
     _mod = None
+    # 窓口に名乗る持ち主の名前（本物は apply() の間だけフォルダ名）。偽物は mod_dir を持たないので None。
+    mod_name = None
 
     def logger(self, name, **kw):
         return ml.ModContext.logger(self, name, **kw)
@@ -719,10 +721,41 @@ fake_app2 = types.SimpleNamespace(save_data_dict={"areas": {21: {"size": "City"}
 check("save_data_dict wins and int keys are matched", module.size_of(fake_app2, Area("21", "v", None, [])) == "city")
 check("fmt survives unknown names", module.fmt("{a}/{typo}", a="x") == "x/{typo}")
 
+# 注入のたびに apply の中で回していた自己検証（固定の入力）をここへ移した（TECH.md §6.1）。
+_sample = {"0": Area("0", "a", "town", ["1", "4"]), "1": Area("1", "b", "village", ["0", "2"]),
+           "2": Area("2", "c", "town", ["1"]), "4": Area("4", "d", "village", ["0"]),
+           "9": Area("9", "e", "dungeon", []), "21": Area("21", "f", "village", [])}
+_graph = module.build_graph(_sample)
+check("self check: BFS hops on the sample",
+      module.hops_between(_graph, "0", "2") == 1 and module.hops_between(_graph, "2", "4") == 2
+      and module.hops_between(_graph, "0", "1") == 0 and module.hops_between(_graph, "0", "21") is None)
+check("self check: price for 2 hops",
+      module.price_for(2) == int(module.PRICE_BASE) + 2 * int(module.PRICE_PER_HOP))
+check("self check: difficulty with both levels unknown",
+      module.difficulty_for(None, None, 0)
+      == module.MIN_DIFFICULTY + max(0, int(module.DIFFICULTY_OFFSET)))
+_world_only = types.SimpleNamespace(world_dict={"areas": {"5": {"size": "town"}}})
+check("self check: size from world_dict and from the attribute",
+      module.is_town(_world_only, Area("5", "g", None, []), {"town"})
+      and not module.is_town(_world_only, Area("6", "h", None, []), {"town"})
+      and module.is_town(_world_only, Area("9", "i", "city", []), {"city"}))
+check("self check: fmt keeps an unknown name", module.fmt("{a}と{typo}", a="砦") == "砦と{typo}")
+check("size_of retries with the table key when the area's own id misses",
+      module.size_of(_world_only, Area("x", "j", None, []), "5") == "town")
+check("ordered_bucket puts the three keys first and keeps unknown keys",
+      list(module.ordered_bucket({"extra": 1, "pending": None, "roads": [{"a": 1}]}))
+      == ["roads", "commissions", "pending", "extra"]
+      and module.ordered_bucket(None) == {"roads": [], "commissions": [], "pending": None})
+
 # ================================================================ 一覧
 print("[一覧]")
 module, ctx, app, classes = setup()
-check("self check passed", any("verified:" in m for _l, m in ctx.logs), ctx.logs[-3:])
+check("the fixed-input self check no longer runs at injection (moved to this test)",
+      not any("verified:" in m or "VERIFY FAILED" in m for _l, m in ctx.logs), ctx.logs[-3:])
+check("the retire and the move setup go through the loader's windows",
+      quest_ends.retire_owners() == ["road_opening"]
+      and "road_opening" in arrivals.owners(arrivals.AREA_SETUP),
+      (quest_ends.retire_owners(), arrivals.owners(arrivals.AREA_SETUP)))
 open_list(app, classes)
 check("search button before やめる",
       texts(app)[-2:] == ["新たな道を探す", "やめる"], texts(app))

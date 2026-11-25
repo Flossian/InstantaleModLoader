@@ -86,14 +86,8 @@ def reorder(buttons):
 
 
 def apply(ctx):
-    append = ctx.logger(LOG_BASENAME)
-    state = {"lines": 0, "last": None}
-
-    def write(text):
-        if state["lines"] >= MAX_LINES:
-            return
-        state["lines"] += 1
-        append(text)
+    write = ctx.logger(LOG_BASENAME, cap=MAX_LINES)
+    state = {"last": None}
 
     def texts(buttons):
         return [entry.get("text") if isinstance(entry, dict) else str(entry)

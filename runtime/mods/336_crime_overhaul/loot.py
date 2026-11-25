@@ -10,12 +10,13 @@
 """
 import threading
 
-from instantale_modloader import llm, loads, state, ui
+from instantale_modloader import frames, llm, loads, shopping, state, talk_summary, ui
 
 from . import rules
 
 MANAGER = "scripts.llm.llm_manager"
 SEND_TARGET = MANAGER + ":send_request"
+SHOP_TARGET = shopping.TARGETS[shopping.ENTER]   # ローダの窓口 `shopping` が1枚だけ包む
 #: 行動の始まり（所持金を控える）。`119_` と同じ並び。綴りはゲーム側のまま。
 FACILITATOR_TARGETS = (
     "master_ai_facilitator",
@@ -59,44 +60,19 @@ LOOT_CUT_TEXT = "奪った金のうち、手元に残ったのは{total}ゴー�
 
 def has_field(structure, name):
     """pydantic の型が `name` の項目を持つか。"""
-    for attr in ("model_fields", "__fields__"):
-        fields = getattr(structure, attr, None)
-        if isinstance(fields, dict):
-            return name in fields
-    return False
+    fields = llm.structure_fields(structure)
+    return isinstance(fields, dict) and name in fields
 
 
 def with_instruction(message, text):
-    """先頭の system の本文に `text` を書き足した写し。system が無ければ None（`337_` と同じ）。"""
-    if not isinstance(message, list):
-        return None
-    for index, turn in enumerate(message):
-        if isinstance(turn, dict) and turn.get("role") == "system" \
-                and isinstance(turn.get("content"), str):
-            copied = list(message)
-            copied[index] = dict(turn, content=turn["content"].rstrip() + "\n\n" + text)
-            return copied
-    return None
-
-
-def without_added(data):
-    return {key: value for key, value in data.items() if key not in ADDED_FIELDS}
+    """先頭の system の本文に `text` を書き足した写し。system が無ければ None（`337_` と同じ。`llm.edit_turn`）。"""
+    return llm.edit_turn(message, lambda content: content.rstrip() + "\n\n" + text)
 
 
 def restore(raw, structure):
     """足した型で返ってきた答えを元の型の形に戻す（`337_` と同じ。要約の記録とセーブに判定を混ぜない）。"""
-    if isinstance(raw, dict):
-        return without_added(raw)
-    if isinstance(raw, str):
-        import json
-        data = llm.as_dict(raw)
-        return json.dumps(without_added(data), ensure_ascii=False) if data is not None else raw
-    dump = getattr(raw, "model_dump", None)
-    if callable(dump):
-        data = without_added(dump())
-        validate = getattr(structure, "model_validate", None)
-        return validate(data) if callable(validate) else structure(**data)
-    return raw
+    return talk_summary.restore(raw, structure, ADDED_FIELDS)
+
 
 def loot_shares(cfg):
     """規模 → 目安の割合（%）。設定が書き込まれた後に読むので関数にしてある。"""
@@ -112,8 +88,6 @@ def install(env):
     action = {"open": False, "gold": None, "claimed": 0, "calls": 0, "key": None}
     #: 要約の関数から send_request へ「この要約に判定を足す」を渡す。同じスレッドで降りてくる。
     pending = threading.local()
-    #: 元の型 -> 足した型。鍵の型も持って id の使い回しを避ける。
-    extended_types = {}
 
     def open_action():
         app = ui.find_app()
@@ -124,7 +98,7 @@ def install(env):
                               key=state.playthrough_key(app) if app is not None else None)
 
     def note_claims(result):
-        claimed = rules.gold_claims(rules._get(result, "process"))
+        claimed = rules.gold_claims(frames.field(result, "process"))
         with lock:
             if action["open"]:
                 action["claimed"] += claimed
@@ -148,14 +122,16 @@ def install(env):
             write("loot: closed the action left open ({}; gold at its start {})".format(
                 why, taken["gold"]))
 
-    @ctx.wrap("__main__:ShoppingStartManagerRemake.execute", required=False, safe=True)
-    def shop_closes_action(orig, self, *args, **kwargs):
+    def shop_closes_action(call):
+        """店に入る前（ローダの窓口 `shopping`。TECH.md §3.3.21）。"""
         if cfg.LOOT_ENABLED:
             try:
                 drop_open_action("a shop opened")
             except Exception:
                 ctx.log_exc("crime incentive: cannot close the action")
-        return orig(self, *args, **kwargs)
+
+    # 持ち主は機能ごとに分ける（`law` も同じ場面に登録する。登録の順は前の包みの順のまま）。
+    shopping.on(env.owner + ":loot", ctx, (shopping.ENTER,), before=shop_closes_action, write=write)
 
     def load_closes_action(call):
         """ロードの前（ローダの窓口 `loads`。TECH.md §3.3.21）。"""
@@ -190,23 +166,12 @@ def install(env):
         return facilitator
 
     def extended(structure):
-        known = extended_types.get(id(structure))
-        if known is not None and known[0] is structure:
-            return known[1]
-        module = llm.manager()
-        factory = getattr(module, "create_model", None) if module is not None else None
-        if not callable(factory):
-            return None
         # 理由（金をどう受け取ったか）を規模より先に書かせる。売買を盗みと取り違えにくくなる（VERIFICATION.md §3.84）
-        child = factory(getattr(structure, "__name__", "Structure"), __base__=structure,
-                        **{REASON_FIELD: (str, ...), SCALE_FIELD: (int, ...)})
-        extended_types[id(structure)] = (structure, child)
-        return child
+        return llm.extend_structure(structure, {REASON_FIELD: (str, ...), SCALE_FIELD: (int, ...)})
 
     def prepare(args, kwargs, structure):
         """足した形の `(args, kwargs)`。足せなければ None（元のまま送る）。"""
-        message = args[1] if len(args) > 1 else kwargs.get("message")
-        new_message = with_instruction(message, INSTRUCTION)
+        new_message = with_instruction(frames.arg(args, kwargs, "message", 1), INSTRUCTION)
         if new_message is None:
             write("skip: the summary had no system message")
             return None
@@ -214,24 +179,20 @@ def install(env):
         if child is None:
             write("skip: cannot extend the summary structure")
             return None
-        args, kwargs = list(args), dict(kwargs)
-        if len(args) > 1:
-            args[1] = new_message
-        else:
-            kwargs["message"] = new_message
-        if len(args) > 2:
-            args[2] = child
-        else:
-            kwargs["structure"] = child
-        return tuple(args), kwargs
+        # どちらにも届いていない引数は名前で足す（前の手書きと同じ。`send_request(self, message, structure)`）
+        args, kwargs, _done = frames.replace_arg(args, kwargs, "message", 1, new_message, insert=True)
+        args, kwargs, _done = frames.replace_arg(args, kwargs, "structure", 2, child, insert=True)
+        return args, kwargs
 
     def install_send(target):
+        # 足した型で答えを受けて元の型に戻し、失敗したら素の型で送り直す（戻り値を変える）ので、
+        # 窓口 `llm.on_request`（戻り値を変えない）に乗らない。自分で包むまま。
         @ctx.wrap(target, required=False)
         def send_request(orig, *args, **kwargs):
             request = getattr(pending, "request", None)
             if request is None or request["sent"]:
                 return orig(*args, **kwargs)
-            structure = args[2] if len(args) > 2 else kwargs.get("structure")
+            structure = frames.arg(args, kwargs, "structure", 2)
             if structure is None or not has_field(structure, LAW_FIELD):
                 return orig(*args, **kwargs)
             request["sent"] = True              # 要約1回に1度だけ
@@ -263,7 +224,7 @@ def install(env):
             return
         scale = rules.clamp_scale(answer.get(SCALE_FIELD))
         reason = str(answer.get(REASON_FIELD) or "").strip()[:80]
-        loss = rules._get(result, LAW_FIELD)
+        loss = frames.field(result, LAW_FIELD)
         app = ui.find_app()
         if taken.get("key") and app is not None and state.playthrough_key(app) != taken["key"]:
             write("skip: {} the action began in another playthrough ({!r})".format(name, taken["key"]))

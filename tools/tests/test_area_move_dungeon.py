@@ -495,6 +495,8 @@ class FakeCtx:
     # ここを自前で書くと、
     # 検査だけが別のログ処理を通ることになる（`write_json` と同じ理由）。
     _mod = None
+    # mod_dir を持たない偽物なので、本物の apply() の外と同じく None（持ち主は MOD の予備の名前になる）。
+    mod_name = None
 
     def logger(self, name, **kw):
         import instantale_modloader as _ml
@@ -821,7 +823,8 @@ mod, ctx, app, classes = setup()
 show_confirmation(app, classes[0])
 press(app, "危険な道を行く")
 kinds = [name for name, _text in app.process_choice_calls]
-check("process_choice を通す", "RoadPhase" in kinds, app.process_choice_calls)
+check("process_choice を通す（フェーズはローダの `Screen.run_phase` が作る）", "_RunPhase" in kinds,
+      app.process_choice_calls)
 check("押しただけでは移動しない", app.moved == [], app.moved)
 check("道中のクエストが1件できる", len(app.world.quests) == 2, app.world.quests)
 check("受注画面へ渡す", app.accepted == [("settlement_quest", "40")], app.accepted)
@@ -846,7 +849,7 @@ try:
     press(app, "危険な道を行く")
 finally:
     mod.world.quest_ids = real_quest_ids
-check("例外は記録に残る", any("phase failed" in e for e in ctx.errors), ctx.errors)
+check("例外は記録に残る", any("phase 'start_road' failed" in e for e in ctx.errors), ctx.errors)
 check("待機表示が解ける", app.is_button_enabled is True, app.is_button_enabled)
 show_confirmation(app, classes[0])
 press(app, "危険な道を行く")

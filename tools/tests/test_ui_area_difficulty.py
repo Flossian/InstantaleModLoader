@@ -18,6 +18,7 @@
            BAND_UNKNOWN が空なら依頼の無い土地は名前のまま。
            CONFIRM_TEXT が空なら1行足さない。LEVEL_OFFSET=0 で難易度そのもの
   落とし所 … ゲームの関数が無ければ world.quests の走査で同じ帯が出る
+  組み立て … 難易度の一覧・枠・窓口の範囲から帯の文字列を作る（以前は apply() の中の自己検証）
 """
 import importlib.util
 import io
@@ -250,6 +251,8 @@ class FakeCtx:
         # （`text_filters.install`）、ここが同じ値だと作り直した ctx に包みが渡らない。
         FakeCtx._seq += 1
         self.generation = FakeCtx._seq
+        # 窓口に名乗る持ち主の名前（本物は apply() の間 MOD のフォルダ名）。
+        self.mod_name = os.path.basename(os.path.dirname(MOD))
         self.hooks = {}
         self.errors = []
         self.logs = []
@@ -551,8 +554,25 @@ check("同じ表示", texts_of(app)[:4] == ["陽光の砦（適正Lv 21〜30）"
 check("下がったことをログに残す", "scanning world.quests instead" in read_log())
 check("例外は出ていない", not ctx.errors, ctx.errors)
 
-print("[自己検証] apply() の時点で帯の組み立てを確かめている")
-check("verified の行", any("verified:" in msg for _lv, msg in ctx.logs), ctx.logs)
+# 以前は apply() の中の自己検証だった。固定の入力なのでここで確かめる（TECH.md §6.1）。
+print("[帯の組み立て] 難易度の一覧と枠から帯の文字列を作る")
+M = load_mod()
+check("最小〜最大", M.band_text(M.band_values([20, 29, 25], 1)) == "21〜30")
+check("1つの数", M.band_text(M.band_values([7], 1)) == "8")
+check("真偽値は数に数えない", M.band_values([True, 7], 1) == {"min": 7, "max": 7, "count": 1,
+                                                       "lv_min": 8, "lv_max": 8})
+check("空は BAND_UNKNOWN", M.band_text(M.band_values([], 1)) == "不明")
+check("枠 8 の見積もり（range(67, 77)）", M.band_text(M.estimate_values("8", 1)) == "推定 68〜77")
+check("枠の無い街は見積もらない", M.estimate_values("21", 1) is None)
+check("窓口の範囲からの見積もり（両端を含む）",
+      M.band_text(M.estimate_from_band((10, 20), 1)) == "推定 11〜21")
+M.BAND_UNKNOWN = ""
+check("BAND_UNKNOWN が空なら None", M.band_text(None) is None)
+check("書式に無い変数は残る", M.frames.safe_format("{name}と{typo}", name="砦") == "砦と{typo}")
+check("走査の落とし所は真偽値を拾わない",
+      M.difficulties_by_scan(World({}, {"1": quest("1", "5", 12), "2": quest("2", "5", True),
+                                        "3": quest("3", "6", 30)}), "5") == [12])
+check("apply() は ERROR を書かない", not any(level == "ERROR" for level, _msg in ctx.logs), ctx.logs)
 
 # ================================================================
 print()

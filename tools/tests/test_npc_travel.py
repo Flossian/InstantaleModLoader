@@ -45,7 +45,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
-from instantale_modloader import gates, modnpc         # noqa: E402
+from instantale_modloader import choices, gates, modnpc  # noqa: E402
 
 
 def find_mod(suffix):
@@ -186,6 +186,8 @@ class FakeCtx:
         self.logs = []
 
     _mod = None
+    # 本物の ctx.mod_name（窓口に名乗るフォルダ名）に当たる
+    mod_name = os.path.basename(MOD_DIR)
 
     def out_path(self, *parts):
         path = os.path.join(self.out_dir, *parts)
@@ -307,15 +309,16 @@ def fresh_mod(seed=1, keep_state=False, **settings):
     ctx = FakeCtx(OUT_DIR, STATE_DIR)
     # 日数・到着・ロードの前後と会話への注入は、ローダの窓口が1つの世代に1枚だけ包む。
     # 当て直すたびに前の登録と包みの印を忘れさせ、この ctx に包みを渡す
+    # （ロードの後の突き合わせの印 `loads.on_settled` も gates.reset_all で消える）。
+    # 一覧の種類の印（`choices.listing()`）は前の場面から持ち越さない
     gates.reset_all()
+    choices.reset()
     for attr in (modnpc.INSTALLED_ATTR, modnpc.STORE_ATTR):
         if hasattr(sys, attr):
             delattr(sys, attr)
     modnpc.registry().clear()
     module.apply(ctx)
     module._store()["rng"].seed(seed)
-    if hasattr(sys, module.STORE_ATTR):
-        getattr(sys, module.STORE_ATTR)["reconcile"] = False
     return module, ctx
 
 

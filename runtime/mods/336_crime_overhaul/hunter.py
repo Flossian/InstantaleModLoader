@@ -97,13 +97,14 @@
 記録は `out/bounty_hunter_send.log`。来た回も、来なかった回とその理由も1行ずつ。
 控えは `state/bounty_hunter/<世界名>.json`（316 の頃と同じ置き場と形。取り込んだ後もそのまま読む）。
 
-`BattleStartManager.__init__` のフックは、引数を受け取った形のまま元の関数へ渡す
-（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
+`BattleStartManager` の組み立て・始まりと `BattleEndManager.end_phase` はローダの窓口 `battles` に預ける
+（引数は窓口が受け取った形のまま元の関数へ渡す。TECH.md §3.3.21）。
 """
 
 import sys
 
-from instantale_modloader import arrivals, choices, confinement, durations, frames, guards, loads, ui, wanted
+from instantale_modloader import (arrivals, battles, choices, confinement, durations, frames, guards, loads, ui,
+                                  wanted)
 from instantale_modloader.state import WorldStore, world_key
 
 from . import hunt
@@ -141,9 +142,9 @@ FUNCTIONS_MODULE = "scripts.functions"
 BLOCKING_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle",
                   "in_conversation", "in_free_input")
 
-# そのうち戦闘の旗。**戦闘中は控えすら置かない**
+# そのうち戦闘の旗（ローダの `ui.BATTLE_FLAGS`）。**戦闘中は控えすら置かない**
 # （置くと、その戦闘が終わった瞬間に次の戦闘が始まる）。
-BATTLE_FLAGS = ("in_battle", "in_boss_battle", "in_colosseum_battle")
+BATTLE_FLAGS = ui.BATTLE_FLAGS
 
 # 服役の選択肢の目印（`ImprisonmentStartManager` / `ImprisonmentPhaseManager` / `ImprisonmentEndManager`。GAME.md §2.20）。
 IMPRISONMENT_MARK = "Imprisonment"
@@ -230,8 +231,8 @@ def sequence_on_screen(app):
 
 
 def fighting(app):
-    """いま戦闘中か。理由の一覧を返す（空なら戦闘中ではない）。"""
-    reasons = [name for name in BATTLE_FLAGS if getattr(app, name, False)]
+    """いま戦闘中か。理由の一覧を返す（空なら戦闘中ではない）。旗に加えて敵が居ることも数える。"""
+    reasons = ui.battle_flags(app)
     enemies = getattr(app, "current_enemy_dict", None)
     if isinstance(enemies, dict) and enemies:
         reasons.append("current_enemy_dict")
@@ -240,7 +241,7 @@ def fighting(app):
 
 def blocked_by(app):
     """追手を出せない理由。空なら出せる。"""
-    reasons = [name for name in BLOCKING_FLAGS if getattr(app, name, False)]
+    reasons = ui.busy_flags(app, flags=BLOCKING_FLAGS)
     enemies = getattr(app, "current_enemy_dict", None)
     if isinstance(enemies, dict) and enemies:
         reasons.append("current_enemy_dict")
@@ -581,9 +582,8 @@ def install(env):
                 "決まっていた追手を落とし、" if dropped else "", cfg.HUNTER_COOLDOWN_DAYS))
         return result
 
-    @ctx.wrap("__main__:BattleStartManager.__init__", required=False, safe=True)
-    def battle_start_init(orig, self, *args, **kwargs):
-        """**ゲーム自身が衛兵を出したこと**を知る唯一の入口。
+    def battle_start_init(call):
+        """**ゲーム自身が衛兵を出したこと**を知る唯一の入口（組み立ての後。ローダの窓口 `battles.BUILD`）。
 
         自分が組んだぶんは `memo["building"]` で見分ける
         （この時点では `memo["phase"]` にまだ入っていない）。
@@ -591,10 +591,9 @@ def install(env):
         同じマネージャを通るので、見ないとクエストの戦闘1回でクールダウンがやり直しになる
         （クエスト中は暦が進まないので、そのまま日数ぶん追手が来なくなる）。
         """
-        result = orig(self, *args, **kwargs)
-        # (app, enemy_type, enemy_content)。受け取った形のまま渡し、ここでは読むだけ。
-        app = frames.arg(args, kwargs, "app", 0)
-        enemy_type = frames.arg(args, kwargs, "enemy_type", 1)
+        # 引数 (app, enemy_type, enemy_content) は窓口が名前でも位置でも読んで渡す。
+        app = call.app
+        enemy_type = call.enemy_type
         if not memo["building"]:
             # 別の戦闘が始まった。前の追手の戦闘が終わりを通らずに消えていても（負けた・ロードした）、
             # 次の戦闘の終わりを追手の戦闘と取り違えない。
@@ -613,48 +612,46 @@ def install(env):
                 save_memo(target)
             write("ゲーム自身が衛兵を出した（{!r}）。1回の遭遇として数える"
                   "（次は{}日後から）".format(enemy_type, cfg.HUNTER_COOLDOWN_DAYS))
-        return result
 
-    @ctx.wrap("__main__:BattleStartManager.start_battle", required=False, safe=True)
-    def start_battle(orig, self, *args, **kwargs):
+    def start_battle_before(call):
+        """自分が組んだマネージャの戦闘なら、追手の戦闘の最中に入る。それ以外は何もしない。"""
+        if memo["phase"] is None or call.obj is not memo["phase"]:
+            return None
+        memo["hunting"] = memo["hunt_plan"]
+        return True
+
+    def start_battle_after(call):
         """敵が揃ったら名前を付け替える（難易度は、この中で `guards` が差し替える）。
 
         ここが最初の1手より前の唯一の足場で、
         `create_guard_enemies` はこの中から呼ばれる（実測）。
-        自分が組んだマネージャかどうかで見分けるので、
+        自分が組んだマネージャかどうか（前の処理が `call.memo` に残す）で見分けるので、
         ゲーム自身の衛兵を強くしたり改名したりすることはない。
         """
-        ours = memo["phase"] is not None and self is memo["phase"]
-        if not ours:
-            return orig(self, *args, **kwargs)
-        memo["hunting"] = memo["hunt_plan"]
-        result = orig(self, *args, **kwargs)
-        app = getattr(self, "app", None) or ui.find_app()
-        enemies = getattr(app, "current_enemy_dict", None)
+        if not call.memo:
+            return
+        enemies = getattr(call.app, "current_enemy_dict", None)
         name = cfg.HUNTER_NAME.strip()
         renamed = rename_enemies(enemies, name)
         write("追手が出そろった: {}{}".format(
             list(enemies) if isinstance(enemies, dict) else "?",
             "（{}体を{}に改名）".format(renamed, name) if renamed else ""))
         disarm()
-        return result
 
-    @ctx.wrap("__main__:BattleEndManager.end_phase", required=False, safe=True)
-    def battle_end(orig, self, *args, **kwargs):
+    def battle_end(call):
         """戦闘の終わり。ここと、その数秒後の2回だけ手配度を見る。
 
         ゲームがどの時点で下げるのかは測っていないので、
         **時機を1点に決め打ちしない**（`end_phase` の中で下がるなら1回目で、
         後の段で下がるなら2回目で戻る）。
         """
-        result = orig(self, *args, **kwargs)
-        app = getattr(self, "app", None) or ui.find_app()
+        app = call.app
         if memo["protect"] is not None:
             restore(app, "戦闘終了")
         plan, memo["hunting"] = memo["hunting"], None
         if plan is not None:
-            # 追手の戦闘の終わりを窓口へ知らせる（TECH.md §3.3.9）。勝ち負けはゲームの `end_type`。
-            outcome = getattr(self, "end_type", None)
+            # 追手の戦闘の終わりを窓口へ知らせる（TECH.md §3.3.9）。勝ち負けはゲームの `end_type`（窓口が orig の後に読む）。
+            outcome = call.end_type
             reached = wanted.hunt_ended(app, dict(plan, by=owner, outcome=outcome))
             write("追手の戦闘が終わった: {!r} 難易度{} 知らせた先={}".format(
                 outcome, plan["difficulty"], reached or "なし"))
@@ -662,15 +659,22 @@ def install(env):
                 pay_purse(app, plan, outcome)
             except Exception:
                 ctx.log_exc("bounty hunter: 前金を渡せなかった")
-        return result
+
+    # 戦闘の組み立て・始まり・終わり（`BattleEndManager` だけ）はローダの窓口 `battles`（TECH.md §3.3.21）。
+    # 脱獄（`prison`）も同じ節目に載せるので、持ち主は機能ごとに分ける。追手を先に登録する
+    # （前の包みでは追手が内側だった。前の処理は登録の新しい順、後の処理は古い順に呼ばれる）。
+    battles.on(owner, ctx, (battles.BUILD,), after=battle_start_init, write=write)
+    battles.on(owner, ctx, (battles.START,), before=start_battle_before, after=start_battle_after,
+               write=write)
+    battles.on(owner, ctx, (battles.END_NORMAL,), after=battle_end, write=write)
 
     def quest_reward(level):
         """その難易度の依頼1件の報酬（ゲームのヘルパ）。引けなければ None。"""
         reward = getattr(sys.modules.get(FUNCTIONS_MODULE), "get_quest_reward", None)
-        if not callable(reward) or isinstance(level, bool) or not isinstance(level, (int, float)):
+        if not callable(reward) or not frames.is_number(level):
             return None
         value = reward(max(1, int(round(level))))
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
+        if not frames.is_number(value):
             return None
         return int(value)
 
@@ -800,45 +804,7 @@ def install(env):
             ctx.log_exc("bounty hunter: 自由行動で失敗")
         return result
 
-    # ------------------------------------------------------------------ 自己検証
-    # 実経路は手配されるまで通らないので、条件と難易度だけ先に確かめる。
-    cases = (
-        # (ここの重さ, 合計, 出すか, 難易度)
-        (0, 0, False, 20),
-        (20, 20, True, 40),
-        (19, 19, False, 39),        # どちらの条件にも届かない
-        (0, 40, True, 60),          # 手配されていない土地でも合計で来る
-        (0, 500, True, 75),         # 上限で頭打ち
-    )
-    failures = []
-    for here, total, expected, level in cases:
-        got = (hunt.should_send(here, total, 20, 40),
-               hunt.difficulty_of(total, 20, 1.0, 75))
-        if got != (expected, level):
-            failures.append((here, total, got))
-    scenes = (
-        # (画面に並ぶクラス名, 場面の最中か)
-        (["MovePhaseManager", "DisplayVacationChoice"], False),
-        (["VacationStartManager", "MovePhaseManager"], True),
-        (["VacationRestManager", "VacationTrainManager"], True),
-        (["DisplayTrainingChoice", "DisplayQuestChoice"], False),
-        ([None, ""], False),
-    )
-    for names, expected in scenes:
-        if bool(sequence_in(names)) != expected:
-            failures.append(("sequence", names, sequence_in(names)))
-
-    sample = {"衛兵1": type("E", (), {})(), "衛兵2": type("E", (), {})()}
-    held = sample
-    renamed = rename_enemies(sample, "賞金稼ぎ")
-    if (renamed != 2 or sorted(sample) != ["賞金稼ぎ1", "賞金稼ぎ2"]
-            or sample is not held):
-        failures.append(("rename", sorted(sample), renamed))
-    if failures:
-        ctx.log("VERIFY FAILED: hunt {}".format(failures), level="ERROR")
-    else:
-        ctx.log("verified: should_send / difficulty_of on {} cases / rename / "
-                "sequence on {} cases".format(len(cases), len(scenes)))
+    # 条件と難易度・場面の見分け・改名の固定の入力での確かめは tools/tests/test_bounty_hunter.py（TECH.md §6.1）。
 
     def hunted_line(_app):
         """全域手配の線（ローダの窓口 `wanted`）。追手が来ない設定なら線は無い。

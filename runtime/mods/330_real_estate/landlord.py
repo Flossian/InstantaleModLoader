@@ -291,9 +291,10 @@ def office_owner(area, roster):
         for facility in ui.facilities_of(node).values():
             if ui.facility_type_of(facility) != OFFICE_FACILITY_TYPE:
                 continue
-            owner = getattr(facility, "owner", None)
-            if owner is not None and str(owner) in roster:
-                return str(owner)
+            # 主の id の読み方（空・人物そのもの）はローダの `ui.facility_owner`。人物は名簿で見るので app は渡さない
+            owner_id, _person = ui.facility_owner(None, facility)
+            if owner_id is not None and owner_id in roster:
+                return owner_id
     return None
 
 
@@ -331,7 +332,5 @@ def owner_candidate(app, area=None, facility=None, write=None):
 
 def at_facility_type(app, kind):
     """いま立っているのがその種類の施設か（役場の窓口を出すため）。"""
-    location = getattr(getattr(app, "player", None), "location", None)
-    if location is None or isinstance(location, (str, int)):
-        return False
-    return ui.facility_type_of(location) == kind
+    location = ui.current_facility(app)     # ロード直後の施設 id の文字列も引き当てる
+    return location is not None and ui.facility_type_of(location) == kind

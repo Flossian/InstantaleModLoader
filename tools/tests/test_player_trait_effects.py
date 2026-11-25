@@ -84,8 +84,16 @@ class FakeCtx:
     def write_json(self, path, data):
         return ml.write_json(path, data, report=self.log_exc)
 
+    # 本物の `ctx.mod_name` は mod のフォルダ名。偽物は mod_dir から作る。
+    @property
+    def mod_name(self):
+        return os.path.basename(self.mod_dir)
+
     def logger(self, name, **kw):
         return ml.ModContext.logger(self, name, **kw)
+
+    def once(self, write, *args, **kw):
+        return ml.ModContext.once(self, write, *args, **kw)
 
     def log(self, msg, level="INFO"):
         self.logs.append(msg)
@@ -160,6 +168,14 @@ check("名前の揺れは1つに決まるときだけ拾う", "煤の肺" in par
 check("値段の割合は上限で止める", parsed["煤の肺"]["effects"][0]["percent"] == -rules.PERCENT_MAX)
 check("性質の文は長さで切る", len(parsed["煤の肺"]["note"]) <= rules.NOTE_CHARS + 1)
 check("形の違う返答は読めない", rules.normalize({"x": 1}, fields) is None and rules.normalize("文", fields) is None)
+check("量は四捨五入した整数。NaN・無限大・真偽値は読めない",
+      rules._int("+2.6") == 3 and rules._int(" -1.4 ") == -1 and rules._int(2) == 2
+      and rules._int(float("inf")) is None and rules._int("nan") is None and rules._int(True) is None,
+      [rules._int(v) for v in ("+2.6", " -1.4 ", 2, float("inf"), "nan", True)])
+check("特質の severity が NaN・無限大なら読めない値（投げない）",
+      [rules.trait_fields({"name": "煤", "severity": v})[2] for v in (float("inf"), float("nan"), 2.7)]
+      == [None, None, 2],
+      [rules.trait_fields({"name": "煤", "severity": v}) for v in (float("inf"), float("nan"), 2.7)])
 check("効果は1つの特質に3つまで", len(rules.normalize({"traits": [{"name": "坑夫の勘", "effects": [
     {"kind": "ability", "stat": s, "amount": 1} for s in rules.STATS]}]}, fields)["坑夫の勘"]["effects"])
       == rules.EFFECTS_PER_TRAIT)

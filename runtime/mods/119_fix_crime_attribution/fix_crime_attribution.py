@@ -18,14 +18,9 @@
 
 ## 二段のうち、どちらがどの経路で効くか
 
-戻り値を直す2段目は `llm_manager` の `master_ai_*` を包む＝プロバイダに依存しないので、
-ローカルでもクラウドでも同じように効く。
-効かなかったのは1段目（プロンプトの置換）で、
-v1 は `LlamaCppClient.chat` しか包んでいなかった。
-クラウド（APIキー）ではそこを通らないので system 文が書き換わらず、
-LLM はマーカーを出さない。
-マーカーが無ければ2段目は既定の素通しに倒れる。
-**クラウドでは MOD 全体が何もしていなかった**（v2 で修正）。
+プロンプトの置換（1段目）は、ローダの `wrap_outgoing` がローカルとクラウドの両方に掛ける。
+戻り値の修正（2段目）は `llm_manager` の `master_ai_*` を包むので、プロバイダに依存しない。
+1段目が届かないとマーカーが出ず、2段目は既定の素通しに倒れる（VERIFICATION_LOG.md §2.41）。
 
 仕掛ける場所は `instantale_modloader.llm` が持っている（TECH.md
 §3.2.3 の「写して回るものが出たら、それはローダの語彙」）。
@@ -38,6 +33,7 @@ LLM はマーカーを出さない。
 """
 
 
+from instantale_modloader import frames
 from instantale_modloader.llm import wrap_outgoing
 
 
@@ -164,14 +160,8 @@ SUMMARIZER_REPLACEMENT = (
 )
 
 
-def _get(container, name):
-    """戻り値から項目を1つ読む。
-
-    LLM 処理の戻り値が dict なのか属性を持つオブジェクトなのかは決めつけない。
-    """
-    if isinstance(container, dict):
-        return container.get(name)
-    return getattr(container, name, None)
+# 戻り値から項目を1つ読むのは `frames.field`。
+# LLM 処理の戻り値が dict なのか属性を持つオブジェクトなのかは決めつけない。
 
 
 def _set(container, name, value):
@@ -227,8 +217,8 @@ def actor_and_clean(text):
 
 
 def process_type(item):
-    """処理1件の種類。並びの中身も dict とは限らないので `_get` 越しに引く。"""
-    return _get(item, "type")
+    """処理1件の種類。並びの中身も dict とは限らないので `frames.field` 越しに引く。"""
+    return frames.field(item, "type")
 
 
 def postprocess_facilitator(result):
@@ -238,7 +228,7 @@ def postprocess_facilitator(result):
     マーカーが無い・書き戻せない・`process` が知らない形、
     のどれに当たっても従来の結果をそのまま返す。
     """
-    actor, cleaned = actor_and_clean(_get(result, "think"))
+    actor, cleaned = actor_and_clean(frames.field(result, "think"))
     if actor is None:
         return result, "marker_missing", 0
     if not _set(result, "think", cleaned):
@@ -246,7 +236,7 @@ def postprocess_facilitator(result):
     if actor != "other_or_none":
         return result, "player_keep", 0
 
-    process = _get(result, "process")
+    process = frames.field(result, "process")
     if not isinstance(process, (list, tuple)):
         return result, "process_unknown", 0
     kept = [item for item in process if process_type(item) != "arrest_player"]
@@ -265,16 +255,16 @@ def postprocess_summarizer(result):
     戻り値は `(結果, 理由, 直す前の値)`。
     真偽値を先に弾いてから数として見る（True は 1 として通ってしまう）。
     """
-    actor, cleaned = actor_and_clean(_get(result, "summary"))
+    actor, cleaned = actor_and_clean(frames.field(result, "summary"))
     if actor is None:
         return result, "marker_missing", None
     if not _set(result, "summary", cleaned):
         return result, "summary_not_writable", None
 
-    loss = _get(result, "lawfulness_loss")
+    loss = frames.field(result, "lawfulness_loss")
     if actor != "other_or_none":
         return result, "player_keep", loss
-    if isinstance(loss, bool) or not isinstance(loss, (int, float)):
+    if not frames.is_number(loss):
         return result, "loss_unknown", loss
     if loss <= 0:
         return result, "other_zero", loss
@@ -358,11 +348,12 @@ def apply(ctx):
             break
     state = {
         "enabled": verified,    # 自己検査に通ったか。落ちていれば何もしない
-        "missing": set(),       # 素通しの理由を残した場所（同じものは二度書かない）
         "rewrites": 0,          # 書き換えた回数（ログの通し番号）
     }
 
     write = ctx.logger(LOG_BASENAME)
+    # 素通しの理由は場所と理由の組ごとに1度だけ残す（毎回の推論で溢れさせない）。
+    note_once = ctx.once(write)
 
     def rewrite(texts, site):
         """ローダから呼ばれる。書き換えないときは None。
@@ -379,17 +370,12 @@ def apply(ctx):
                 kind, site, state["rewrites"]))
             return new_texts
         if reason not in ("not_target", "already_injected"):
-            # 知らない形は1種類につき1度だけ残す（毎回の推論で溢れさせない）。
-            key = site + ":" + reason
-            if key not in state["missing"]:
-                state["missing"].add(key)
-                write("prompt unchanged at {}: {}".format(site, reason))
+            note_once(site + ":" + reason, "prompt unchanged at {}: {}".format(site, reason))
         return None
 
     # プロンプトを書き換える口はローダが持っている。
     # ローカルの3点もクラウドの別名も、別名が後から生えたときの掛け直しもそちらの担当。
-    # 掛け直しの時点はローダが `modloader.log` に `late-armed on` で残す。
-    # 版4まではこちらの記録にも写していたが、起動ごとに6行で記録の8割を占めたので版5で外した。
+    # 掛け直しの時点はローダが `modloader.log` に `late-armed on` で残すので、こちらの記録には写さない。
     hooks = wrap_outgoing(ctx, rewrite, label="crime attribution fix")
 
     def wrap_facilitator(name):

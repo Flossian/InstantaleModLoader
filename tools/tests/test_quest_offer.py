@@ -346,6 +346,8 @@ class FakeCtx:
         # 読んだファイル名。
         # 会話のたびに控えを読み直していないかを数えるのに使う。
         self.reads = []
+        # 本物の ctx.mod_name と同じく MOD のフォルダ名（窓口に名乗る持ち主名）
+        self.mod_name = os.path.basename(os.path.dirname(MOD))
 
     def out_path(self, *parts):
         path = os.path.join(self.out_dir, *parts)
@@ -558,8 +560,8 @@ mod, ctx, app = setup()
 app.refresh_choice_buttons()
 result = app.on_button_press(index_of(app, "offer"))
 check("ゲームの押下処理には渡さない", result is None, result)
-check("process_choice に自前フェーズを渡す",
-      any(name == "OfferPhase" for name, _t in app.process_choice_calls),
+check("process_choice に自前フェーズを渡す（ローダの Screen.run_phase が作る使い捨てのフェーズ）",
+      any(name == "_RunPhase" for name, _t in app.process_choice_calls),
       app.process_choice_calls)
 
 mod, ctx, app = setup()
@@ -744,9 +746,6 @@ entry = {"text": "【39】水底の警備",
 from instantale_modloader import ui as _ui
 check("quest_type の語彙を知らなくても id は args[1] から読める",
       (_ui.spec_args(entry) or [None, None])[1] == "39", _ui.spec_args(entry))
-check("自前で QuestChoiceManager を組む既定にはなっていない",
-      mod.LIST_MODE == "game" or mod.QUEST_TYPE_FOR_CHOICE is not None,
-      (mod.LIST_MODE, mod.QUEST_TYPE_FOR_CHOICE))
 
 # ================================================ セーブから戻った残骸との二重化
 print("=== タイトル戻り・再注入後の残骸 ===")
@@ -814,34 +813,6 @@ app.buttons = talk_buttons("62") + [{"text": "ここで別れる",
 app.on_button_press(len(app.buttons) - 1)
 check("302_ のボタンはこちらでは素通しになる",
       app.pressed_by_game == ["ここで別れる"], app.pressed_by_game)
-
-# ============================================================ 自前の一覧（LIST_MODE = "mod"）
-# 既定では使わない形。窓口 `choices` の MOD だけの画面で出し、下の画面は窓口が残す。
-print("=== 自前の一覧（MOD だけの画面） ===")
-clock = install_fake_kivy()
-mod, ctx, app = setup(history=history)
-list_mode, quest_type = mod.LIST_MODE, mod.QUEST_TYPE_FOR_CHOICE
-try:
-    mod.LIST_MODE, mod.QUEST_TYPE_FOR_CHOICE = "mod", "*verified*"
-    app.refresh_choice_buttons()
-    app.on_button_press(index_of(app, "offer"))
-    clock.settle()
-    texts = [b["text"] for b in app.buttons]
-    check("自前の一覧は依頼3件と「やめる」", len(texts) == 4 and texts[-1] == mod.CANCEL_LABEL
-          and all(choices.ours(b) for b in app.buttons), texts)
-    check("依頼のボタンはゲームの QuestChoiceManager の写し",
-          [mlui.spec_cls_name(b) for b in app.buttons[:2]] == ["QuestChoiceManager"] * 2,
-          [mlui.spec_cls_name(b) for b in app.buttons])
-    check("保存の間は下のゲームの一覧に戻る（一覧のボタンはセーブに残らない）",
-          [b["text"] for b in choices.strip(app.buttons)[0]] == ["会話を終了する"],
-          choices.strip(app.buttons)[0])
-    app.on_button_press(len(app.buttons) - 1)
-    clock.settle()
-    check("「やめる」で一覧を閉じて下の画面に戻る",
-          choices.opened(app) is None and mod.CANCEL_LABEL not in [b["text"] for b in app.buttons],
-          [b["text"] for b in app.buttons])
-finally:
-    mod.LIST_MODE, mod.QUEST_TYPE_FOR_CHOICE = list_mode, quest_type
 
 # ============================================================ 311_ の人物像
 # mod どうしは import せず**同じファイルを読む**ことで繋がる（TECH.md §3.2.3）。

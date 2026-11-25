@@ -58,15 +58,14 @@
 `__code__` は同一）。
 つまり「包まれた関数が1つでもスタックに載っていれば訓練の中」になり、
 戦闘の経験値まで写してしまう。
-`frames.MethodWatch` の docstring にも同じ注意を書いた。
 
 ## 出すのは「プレイヤーの獲得経験値」の後
 
 訓練1回の並びはこうなっている（GAME.md §2.17）:
 
-    add_text('テストプレイヤーはしばらくの期間を訓練に費やした...')
-    player.gain_exp(686852)              ← こちらが割り込む位置
-    add_text('156の経験値を得た。')        ← プレイヤーの獲得経験値（表示は156）
+    add_text('…はしばらくの期間を訓練に費やした...')
+    player.gain_exp(N)                   ← こちらが割り込む位置
+    add_text('Mの経験値を得た。')          ← プレイヤーの獲得経験値（表示は M）
 
 `gain_exp` の中で出すと、プレイヤーの獲得経験値より先に仲間の話が出る。
 そこで文言はいったん溜め、ゲームが次の行を出した後に流す（`add_text` を包む）。
@@ -75,7 +74,7 @@
 1行も出さずに訓練が終わるビルドのために、
 セッションの終わりで必ず流す受け皿を置いてある。
 
-**支給の点数と表示の数字は別物**（686852 を写して、画面には 156 と出る）。
+**支給の点数と表示の数字は別物**（N を写して、画面には M と出る。VERIFICATION.md §3.12）。
 だからこちらの文言に数値は入れない。
 `calculate_current_gained_exp_on_display()` の換算を再現することになるため。
 
@@ -99,9 +98,6 @@
 仲間の経験値は `world.characters` の上なので、ゲームが次に保存した時点で一緒に残る。
 訓練は月日が進む処理（＝ゲーム自身が保存する場面）なので、
 こちらから `save_game()` を呼んで割り込むことはしない。
-
-版2: `gain_exp` と `add_text` のフックは、引数を受け取った形のまま元の関数へ渡す
-（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 """
 
 import threading
@@ -165,11 +161,6 @@ NAME_SEPARATOR = "、"
 # 1回の支給で回すレベルアップの上限（`check_levelup` が下がらないビルドでの保険）。
 MAX_LEVELUPS = 20
 
-# 訓練の外での支給（＝戦闘など）を記録する本数の上限。
-# **触らないが、経験値の経路がどこを通っているかはこれで分かる。**
-# 0 にすると記録しない。
-TRACE_OTHER_GAINS = 20
-
 
 def apply(ctx):
     log_path = ctx.out_path(LOG_BASENAME)
@@ -182,7 +173,6 @@ def apply(ctx):
 
     state = {
         "mirrored": 0,       # 写した支給の本数（session の報告に使う）
-        "traced": 0,         # 訓練の外での支給を記録した本数
         "no_party_said": 0,  # 仲間が居ないときのログ（1セッション1回に絞る）
     }
 
@@ -207,11 +197,11 @@ def apply(ctx):
     # ------------------------------------------------------------ 読み取り
     def level_of(character):
         value = getattr(character, "experience_level", None)
-        return value if isinstance(value, (int, float)) else None
+        return value if frames.is_number(value) else None
 
     def point_of(character):
         value = getattr(character, "experience_point", None)
-        return value if isinstance(value, (int, float)) else None
+        return value if frames.is_number(value) else None
 
     def is_player(app, character):
         """その Character がプレイヤーか。同一性を先に見る。"""
@@ -327,7 +317,7 @@ def apply(ctx):
     #
     #     add_text('…はしばらくの期間を訓練に費やした...')
     #     player.gain_exp(N)                     ← こちらが割り込む位置
-    #     add_text('156の経験値を得た。')          ← プレイヤーの獲得経験値
+    #     add_text('Mの経験値を得た。')            ← プレイヤーの獲得経験値
     #
     # ここで出すと**プレイヤーの獲得経験値より先**に仲間の話が出てしまう。文言は
     # 溜めておき、ゲームが次の行を出した後に流す（`add_text` を包む）。
@@ -365,14 +355,6 @@ def apply(ctx):
         finally:
             local.flushing = False
 
-    def trace_other_gain(app, character, exp):
-        """訓練の外での支給を、上限つきで記録する（何もしない）。"""
-        if TRACE_OTHER_GAINS <= 0 or state["traced"] >= TRACE_OTHER_GAINS:
-            return
-        state["traced"] += 1
-        write("(not training) {} gained {} exp from {}".format(
-            frames.describe_instance(character), exp, frames.caller(3)))
-
     # ================================================================ フック
     @ctx.wrap("scripts.characters:Character.gain_exp", required=False)
     def gain_exp(orig, self, *args, **kwargs):
@@ -386,7 +368,7 @@ def apply(ctx):
             exp = frames.arg(args, kwargs, "exp", 0, 0)
             if getattr(local, "mirroring", False):
                 return result          # こちらが仲間に入れている最中
-            if not isinstance(exp, (int, float)) or isinstance(exp, bool) or exp <= 0:
+            if not frames.is_number(exp) or exp <= 0:
                 return result
             app = ui.find_app()
             if app is None:
@@ -394,15 +376,15 @@ def apply(ctx):
             source = in_training()
             if not is_player(app, self):
                 if source is not None:
-                    # ゲーム自身が仲間に配った。
-                    # 二重取りを避けるため控える。
+                    # ゲーム自身が仲間に配った。二重取りを避けるため控える。
+                    # 控えるのは仲間だけ（日数送りでは同行していない NPC にも配られ、`mirror` は仲間しか見ない）。
                     member_id = ui.element_id(self)
-                    given_ids().add(member_id)
-                    write("{}: the game gave {} exp to {!r} itself".format(
-                        source, exp, ui.character_name(app, member_id)))
+                    if member_id in ui.party_member_ids(app):
+                        given_ids().add(member_id)
+                        write("{}: the game gave {} exp to {!r} itself".format(
+                            source, exp, ui.character_name(app, member_id)))
                 return result
             if source is None:
-                trace_other_gain(app, self, exp)
                 return result
             mirror(app, exp, source)
         except Exception:

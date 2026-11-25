@@ -14,11 +14,11 @@
 """
 
 import math
-import sys
 import time
 import weakref
 
 from instantale_modloader import frames, ui
+from instantale_modloader.state import process_store
 
 # 出し方と、古さの数え方。
 # これと `FRESH_SECONDS` / `FRESH_SESSIONS` は mod.json の "settings" にも載っている。
@@ -61,11 +61,11 @@ STATE_STORE_ATTR = "__instantale_batch_message_render_states__"
 # 結び直す前にこれで外す（`113_` の `on_resize` と同じ作法）。
 WINDOW_ATTR = "_instantale_batch_render_touch"
 
-# 「この本文はもう画面に出ているか」を見るのに使う先頭の文字数（`settle_label`）。
+# 「この本文はもう画面に出ているか」を見るのに使う先頭の文字数（`watch_after_skip`）。
 PROBE_CHARS = 8
 
 # 打ち切った直後の画面を1回だけ記録する（`watch_after_skip`）。
-# 原因が決まったら落とす。
+# 同じ種類の「出した後に誰かが変える」を疑うときの目として残す。
 # 読み取りしかしないので、付けたままでも本文には触らない。
 WATCH_AFTER_SKIP = True
 WATCH_MOMENTS = (0.1, 0.5, 1.5)
@@ -88,38 +88,30 @@ FADE_FROM = 0.4
 
 
 def segment_parts(segment):
-    """控えた本文を (本文, 追加時刻, セッション番号) に開く。
-
-    注入し直しても控えは `sys` に残る（世代をまたぐ）。
-    古い版が置いた2つ組が混ざっていても読めるようにしておく。
-    """
-    session = segment[2] if len(segment) > 2 else 0
-    return segment[0], segment[1], session
+    """控えた本文を (本文, 追加時刻, セッション番号) に開く。"""
+    return segment[0], segment[1], segment[2]
 
 
 def apply(ctx):
-    store = getattr(sys, STATE_STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {
-            "states": weakref.WeakKeyDictionary(),
-            "fallback_states": {},
-        }
-        setattr(sys, STATE_STORE_ATTR, store)
-    # 打ち出しの最中かどうかは1本しか無い（同時に2つの本文は流れない）ので、
-    # app ごとの控えではなくここに置く。
-    # クリックの見張りから引ける場所が要る。
-    store.setdefault("stream", None)
-    # 打ち切りの最中は塗り直しを止める（`mute`）。
-    # 自分で回した鎖の残りを捨てるための印（`dropped`）。
-    # どちらも注入し直しをまたいで同じ辞書を使う。
-    store.setdefault("mute", False)
-    store.setdefault("dropped", [])
-    # 新しい本文が始まった回数。
-    # 打ち切りの最中に終端が次の本文を始めたことを、
-    # ゲームの旗（`is_adding_text`）ではなくこれで知る。
-    # 旗は次の本文ですぐ True に戻るので、
-    # 「終わった」と「次が始まった」を見分けられない。
-    store.setdefault("starts", 0)
+    # 注入し直しをまたいで同じ辞書を使う（`process_store` が足りない鍵だけを埋める）。
+    store = process_store(STATE_STORE_ATTR, {
+        "states": weakref.WeakKeyDictionary(),
+        "fallback_states": {},
+        # 打ち出しの最中かどうかは1本しか無い（同時に2つの本文は流れない）ので、
+        # app ごとの控えではなくここに置く。
+        # クリックの見張りから引ける場所が要る。
+        "stream": None,
+        # 打ち切りの最中は塗り直しを止める（`mute`）。
+        # 自分で回した鎖の残りを捨てるための印（`dropped`）。
+        "mute": False,
+        "dropped": [],
+        # 新しい本文が始まった回数。
+        # 打ち切りの最中に終端が次の本文を始めたことを、
+        # ゲームの旗（`is_adding_text`）ではなくこれで知る。
+        # 旗は次の本文ですぐ True に戻るので、
+        # 「終わった」と「次が始まった」を見分けられない。
+        "starts": 0,
+    })
     states = store["states"]
     fallback_states = store["fallback_states"]
     warned = {}     # 一度きりの警告の控え（種類ごと）
@@ -147,10 +139,6 @@ def apply(ctx):
                 states[app] = state
         except TypeError:
             state = fallback_states.setdefault(id(app), new_state())
-        # 古い版が置いた控えには新しい鍵が無い。
-        state.setdefault("session", 0)
-        state.setdefault("stream_cache", None)
-        state.setdefault("stream_now", None)
         return state
 
     def note_segment(state, context):
@@ -228,15 +216,12 @@ def apply(ctx):
             scroll = frames.attr(hud, "scroll_view")
             if label in (None, frames.MISSING) or scroll in (None, frames.MISSING):
                 return None
-            texture_size = frames.attr(label, "texture_size", (0, 0))
-            before_height = float(texture_size[1])
             if not set_cover(state, scroll, frames.attr(scroll, "height", 0)):
                 return None
             return {
                 "hud": hud,
                 "label": label,
                 "scroll": scroll,
-                "before_height": before_height,  # 控えるだけ（いまは読んでいない）
             }
         except Exception:
             hide_overlay(state)
@@ -253,33 +238,12 @@ def apply(ctx):
             return 1.0
 
     def measured_height(label, text):
-        """`text` をそのラベルの書式で組んだときの高さを実測する。
+        """`text` をそのラベルの書式で組んだときの高さを実測する。測れなければ None。
 
-        画面のラベルには触らない。
-        同じ書式の使い捨てを1枚焼いて寸法だけ取る。
-        書体と折り返し幅を写し損ねると値がずれるので、あるものはすべて渡す。
+        画面のラベルには触らず、同じ書式の使い捨てを1枚焼いて寸法だけ取る。
+        書式の写し方と折り返し幅（ラベルの `text_size`）は、`109_` / `345_` と同じくローダの `ui.text_height` に任せる。
         """
-        try:
-            from kivy.core.text import Label as CoreLabel
-            text_size = frames.attr(label, "text_size", (None, None))
-            width = text_size[0] if isinstance(text_size, (list, tuple)) else None
-            options = {
-                "text": text,
-                "font_size": frames.attr(label, "font_size", 12),
-                "text_size": (width, None),
-                "line_height": frames.attr(label, "line_height", 1.0),
-            }
-            font_name = frames.attr(label, "font_name")
-            if isinstance(font_name, str) and font_name:
-                options["font_name"] = font_name
-            padding = frames.attr(label, "padding")
-            if isinstance(padding, (list, tuple)) and len(padding) == 4:
-                options["padding"] = tuple(padding)
-            probe = CoreLabel(**options)
-            probe.refresh()
-            return float(probe.texture.size[1])
-        except Exception:
-            return None
+        return ui.text_height(label, text)
 
     def estimate_height(label, text, line_height):
         """実測できなかったときの見積り。
@@ -328,7 +292,7 @@ def apply(ctx):
         控えた本文をそのまま探してはいけない。
         ゲームは打ち出しの最中に本文には無い改行を混ぜるので、
         見つかる本文と見つからない本文が混ざり、
-        色が白・灰・白・灰と交互になる（実機で出た）。
+        色が白・灰・白・灰と交互になる（VERIFICATION_LOG.md §2.45）。
         空白を落として突き合わせ、位置だけ元に戻せば、
         どちらの形でも同じ1本の本文として扱える。
 
@@ -508,8 +472,7 @@ def apply(ctx):
         """こちらが付けた色を外す。素の本文に戻してから markup を落とす。
 
         タグの付いた文字列を残したまま markup だけ落とすと、
-        ゲームが本文を塗り直すまでの間、`[color=#808080]` がそのまま画面に出る（実機で見えた。
-        場面転換のときに一瞬タグが出る）。
+        ゲームが本文を塗り直すまでの間、`[color=#808080]` がそのまま画面に出る（場面転換のときに一瞬タグが出る）。
         塗り直しがいつ来るかはこちらの都合では決まらないので、その瞬間を作らない。
         """
         if state.get("markup_label") is not label:
@@ -526,16 +489,8 @@ def apply(ctx):
         state["plain"] = None
 
     # -- 一括表示 ------------------------------------------------------------
-    def schedule(callback, delay=0):
-        """次のフレーム（または `delay` 秒後）へ回す。
-
-        Kivy が居ない場所（オフライン検証）ではその場で呼ぶ。
-        """
-        try:
-            from kivy.clock import Clock
-            Clock.schedule_once(callback, delay)
-        except Exception:
-            callback()
+    # 次のフレーム（または `delay` 秒後）へ回す。Kivy が居ない場所（オフライン検証）ではその場で呼ぶ。
+    schedule = ui.scheduler(ctx, "batch message render")
 
     def fade(app, state):
         """行ごとに現す道が使えないときの引き返し先。
@@ -547,9 +502,7 @@ def apply(ctx):
 
         def run(_dt=None):
             # Clock のコールバックは `ctx.wrap(safe=True)` の守備範囲の外にある。
-            # ここで例外を出すとゲームごと落ちる。
-            # 実際に落とした（`out/live_crashes.log`: 存在しない
-            # `ui.hud_of` を呼んでいた）。
+            # ここで例外を出すとゲームごと落ちる（VERIFICATION_LOG.md §2.45）。
             try:
                 if state["generation"] != generation:
                     return
@@ -571,7 +524,7 @@ def apply(ctx):
 
         schedule(run)
 
-    def reveal(app, state, context, captured):
+    def reveal(app, state, captured):
         """一括で入れた本文のうち、新着の部分を上から順に見せる。
 
         新着の頭が見えるところまでスクロールし、そこから下を覆い、
@@ -607,7 +560,6 @@ def apply(ctx):
                 region_height = min(region_height, content_height)
                 line_height = min(line_height_of(label), viewport_height)
                 overflow = max(0.0, content_height - viewport_height)
-                progress = {"revealed": 0.0}
                 context_height = min(
                     CONTEXT_LINES * line_height,
                     max(0.0, content_height - region_height))
@@ -637,7 +589,6 @@ def apply(ctx):
                         reveal_now = min(
                             line_height, page_height - page["revealed"])
                         page["revealed"] += reveal_now
-                        progress["revealed"] += reveal_now
                         cover_height = max(
                             0.0, page_height - page["revealed"])
                         set_cover(state, scroll, cover_height)
@@ -678,11 +629,8 @@ def apply(ctx):
 
         # 後始末はゲームにやらせる。
         # 待ち行列 `to_add_text_list` から取り除くのも
-        # `is_adding_text` を下ろすのも、鎖の最後の呼び出しの仕事だ（`out/text_viewport.log`: 行列が 1 から 0 に減るのは
-        # `index == len(context)` の呼び出しと同時）。
-        # ここを自分で真似して行列を放置した結果、次の本文が永久に出ず、
-        # 消えない先頭が何度も再表示された。
-        # 実機で踏んだ。
+        # `is_adding_text` を下ろすのも、鎖の最後の呼び出し（`index == len(context)`）の仕事だ。
+        # ここを自分で真似すると行列が残り、次の本文が出なくなる（VERIFICATION_LOG.md §2.45）。
         _owner, before = canonical_text(app, None)
         started = store.get("starts", 0)
         try:
@@ -697,14 +645,14 @@ def apply(ctx):
         _owner, after = canonical_text(app, None)
         if before is not None and before != after and not warned.get("tail"):
             # 終端の
-            # index が「何も足さずに完了だけ」である保証は実測3件からの推定でしかない。
+            # index が「何も足さずに完了だけ」である保証は推定でしかない（VERIFICATION_LOG.md §2.45）。
             # 外れていれば末尾が重複するので、黙って壊れないよう一度だけ残す。
             warned["tail"] = True
             ctx.log("batch message render: the finishing call appended text"
                     " ({} -> {} chars); the tail may be duplicated".format(
                         len(before), len(after)), level="WARN")
 
-        reveal(app, state, context, captured)
+        reveal(app, state, captured)
         return result
 
     # -- 逐次表示とクリックでの打ち切り --------------------------------------
@@ -748,9 +696,7 @@ def apply(ctx):
         無ければ HUD → app の順に当たる。
 
         `frames.attr` の既定値は文字列の `MISSING` なので、
-        `isinstance(str)` だけでは「属性が無い」を弾けない。
-        ここを取り違えて、実機で打ち切りが毎回見送られていた（`out/modloader.log` の
-        `could not tell how much of the message is already shown`）。
+        `isinstance(str)` だけでは「属性が無い」を弾けない（VERIFICATION_LOG.md §2.45）。
         """
         owners = []
         if isinstance(stream, dict) and stream.get("owner") is not None:
@@ -771,9 +717,7 @@ def apply(ctx):
     def repaint(app, owner, text):
         """ゲーム本来の塗り直しを通す。
 
-        本文の正本へ書けば塗り直しが走る、とは限らない。
-        実機ではそれで画面が更新されず、打ちかけの数文字（NPC の名前）だけが残った（`out/modloader.log`:
-        `canonical 57552 -> 57569` と書けているのに画面は 7文字のまま）。
+        本文の正本へ書けば塗り直しが走る、とは限らない（VERIFICATION_LOG.md §2.45）。
         自分でラベルを塗らずにゲームの塗り直しを呼ぶのは、
         `117_` の切り詰めなど内側の層をそのまま通すため。
         """
@@ -790,7 +734,7 @@ def apply(ctx):
         Kivy はテクスチャの作り直しを次のフレームへ回すので、
         ゲームが `update_label_height()` を呼ぶ時点の `texture_size` は1手前のもの。
         1文字ずつなら見えない遅れが、
-        まとめて足すと「増えた行が枠から切り落とされる」形で出る（実機で踏んだ）。
+        まとめて足すと「増えた行が枠から切り落とされる」形で出る。
         GAME.md §2.3 の作法どおり、`texture_update()` の後に高さを出し直す。
         """
         hud = ui.find_hud(app)
@@ -808,9 +752,9 @@ def apply(ctx):
     def watch_after_skip(app, context):
         """打ち切った直後の数フレームを1回だけ記録する（読み取りのみ）。
 
-        実機で「一瞬全文が出た後に消える」が出たときに足した。
+        「一瞬全文が出た後に消える」を追うために足した。
         原因（正本だと思って書いていた先が写しで、
-        0.1 秒後に作り直されていた）は決着済みだが、
+        0.1 秒後に作り直されていた。VERIFICATION_LOG.md §2.45）は決着済みだが、
         同じ種類の「出した後に誰かが変える」を次に疑うときの目になるので残す。
         """
         if not WATCH_AFTER_SKIP or warned.get("watch"):
@@ -854,17 +798,12 @@ def apply(ctx):
     # `finish_stream` を回している最中に新しい本文の `index == -1` が入る。
     # 1枠だと、そこでいま捨てたい印が消える。
     # 残りがゲームへ渡って終端をもう一度踏み、
-    # `to_add_text_list.pop` が空の行列を叩いた（実機のクラッシュ。
-    # docs/VERIFICATION.md）。
+    # `to_add_text_list.pop` が空の行列を叩く（VERIFICATION.md §3.20）。
     # 本文ごとに1件持ち、落とすのはその本文が始め直されたときだけにする。
     def dropped_entries():
         # `is_dropped` は1文字ごとに通るので、
         # ここでは掃除をしない（死んだ参照を落とすのは `remember_dropped` の側）。
-        entries = store.get("dropped")
-        if not isinstance(entries, list):
-            entries = []            # 前の版は1枠だった（注入し直しで混ざる）
-            store["dropped"] = entries
-        return entries
+        return store["dropped"]
 
     def remember_dropped(app, context):
         entries = dropped_entries()
@@ -887,10 +826,8 @@ def apply(ctx):
         """クリックされた。残りをゲーム本来の経路で一気に流す。
 
         本文はこちらで書かない。
-        正本の名前を当てて書きにいく形は、実機で行き止まりだった。
-        `hud.display_text` へ書けても 0.1 秒後には元へ戻されていた（`out/modloader.log` の `after the skip +0.1s` で
-        `canonical` が書く前の長さに戻っている）。
-        あれは正本ではなく写しで、ゲームは自分の控えから作り直す。
+        `hud.display_text` へ書けても 0.1 秒後には元へ戻される。
+        あれは正本ではなく写しで、ゲームは自分の控えから作り直す（VERIFICATION_LOG.md §2.45）。
 
         そこで、1文字ずつの呼び出しをその場で最後まで回す。
         書くのはゲーム自身なので、どこに本文があるかを知る必要が無く、
@@ -995,8 +932,7 @@ def apply(ctx):
 
         ホイールは弾く。
         Kivy は回転も `on_touch_down` で配るので、
-        本文を読み返そうとしてスクロールしただけで打ち切りが走っていた（押した記録がどこにも残らないので、
-        原因を追うときに見えない）。
+        弾かないと本文を読み返そうとしてスクロールしただけで打ち切りが走る（VERIFICATION.md §3.20）。
         """
         try:
             button = getattr(touch, "button", None)
@@ -1064,7 +1000,7 @@ def apply(ctx):
 
     @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.update_display_text",
               required=False, safe=True)
-    def update_display_text(orig, self, instance=None, value=None, *args, **kwargs):
+    def update_display_text(orig, self, *args, **kwargs):
         # 先にゲームに塗らせる。
         # こちらは塗り終わった後の色だけを直す（`112_` と同じ作法）。
         # 打ち出し中でなければ何もしない ＝ 一括表示のときは素通り。
@@ -1072,9 +1008,11 @@ def apply(ctx):
             # 打ち切りで1文字ずつ回している最中。
             # 塗り直しは終わってから1回だけ。
             return None
-        result = orig(self, instance, value, *args, **kwargs)
+        result = orig(self, *args, **kwargs)
         stream = store.get("stream")
         if isinstance(stream, dict):
+            instance = frames.arg(args, kwargs, "instance", 0)
+            value = frames.arg(args, kwargs, "value", 1)
             try:
                 if instance is not None and isinstance(value, str):
                     # 本文の正本を持っているのはこの `instance`。

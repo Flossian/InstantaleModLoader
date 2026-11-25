@@ -72,9 +72,8 @@ TECH.md §6.2「語彙を推測するくらいなら、語彙を知らずに済�
 
 HP の持ち主が `Character` インスタンスか辞書かは決めつけない。
 どちらでも読める形にしてある（`read_number`）。
-最大 HP の属性名は `Character.update_max_hp()` から `max_hp` と読めるが、
-これも当たれば使うだけで、
-無ければ残量の括弧を省く（属性名の推測でゲームを落とさない）。
+最大 HP の属性名は `max_hp`（GAME.md §2.10）。
+読めなければ残量の括弧を省く。
 
 ## 戦闘が変わったら台帳を捨てる
 
@@ -114,15 +113,10 @@ HP の持ち主が `Character` インスタンスか辞書かは決めつけな�
 
 読むのは HP だけ、書くのは画面のテキストだけ。
 セーブにも `world` にも触らない。
-
-## 版5
-
-1手と継続効果のフックは、引数を受け取った形のまま元の関数へ渡す
-（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 """
 
 
-from instantale_modloader import frames, ui
+from instantale_modloader import battles, frames, ui
 
 LOG_BASENAME = "battle_damage.log"
 LOG_TAG = "battle dmg"
@@ -132,10 +126,8 @@ LOG_TAG = "battle dmg"
 # `Character.__init__` の `current_hp=None` から（実測の署名）。
 HP_KEY = "current_hp"
 
-# 最大 HP の属性名の候補。
-# `Character.update_max_hp()` があるので
-# `max_hp` が本命だが、**当たらなければ残量の括弧を省くだけ**にして推測でこけないようにする。
-MAX_HP_KEYS = ("max_hp", "current_max_hp", "max_hit_point")
+# 最大 HP の属性名（GAME.md §2.10）。読めなければ残量の括弧を省く。
+MAX_HP_KEY = "max_hp"
 
 # 身体の損耗（HP とは別の数字。`SHOW_INTEGRITY` が ON のときだけ見る）。
 INTEGRITY_KEY = "physical_integrity"
@@ -179,13 +171,7 @@ MIN_AMOUNT = 1
 #
 # 候補は環境依存文字を入れない。cp932 に在り、かつ先頭バイトが NEC 特殊
 # （0x87）・NEC 選定 IBM 拡張（0xED-0xEE）・IBM 拡張（0xFA-0xFC）でない字だけを
-# 選んである（＝ JIS X 0208 の範囲）。最初の版で使っていた `▶`（U+25B6）は
-# cp932 に無く、フォントや端末によっては出ない・化ける。実測:
-#
-#     '▶' U+25B6 → cp932 に無い（環境依存）      '●' U+25CF → JIS X 0208
-#     '»'  U+00BB → cp932 に無い（環境依存）      '※' U+203B → JIS X 0208
-#     '①' U+2460 → NEC 特殊（環境依存）          '・' U+30FB → JIS X 0208
-#
+# 選んである（＝ JIS X 0208 の範囲。VERIFICATION.md §3.14）。
 # 候補を増やすときは、その字で上の判定を通してから足すこと。
 LINE_PREFIX = "なし"
 
@@ -257,26 +243,13 @@ def apply(ctx):
 
     # ------------------------------------------------------------ 読み取り
     def read_value(holder, key):
-        """属性でも辞書でも同じように読む。持ち主の型を決めつけない。"""
-        if holder is None:
-            return None
-        if isinstance(holder, dict):
-            return holder.get(key)
-        return getattr(holder, key, None)
+        """属性でも辞書でも同じように読む。持ち主の型を決めつけない（`frames.field`）。"""
+        return frames.field(holder, key)
 
     def read_number(holder, key):
-        """数値として読めるときだけ返す。`bool` は数値として扱わない。"""
+        """数値として読めるときだけ返す。`bool` は数値として扱わない（`frames.is_number`）。"""
         value = read_value(holder, key)
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            return None
-        return value
-
-    def read_max(holder, keys):
-        for key in keys:
-            value = read_number(holder, key)
-            if value is not None:
-                return value
-        return None
+        return value if frames.is_number(value) else None
 
     def read_statuses(holder):
         """`{状態異常の名前: 効果の文}`。入れ物が辞書でなければ空。
@@ -338,7 +311,7 @@ def apply(ctx):
     def snapshot(holder):
         return {
             "hp": read_number(holder, HP_KEY),
-            "max": read_max(holder, MAX_HP_KEYS),
+            "max": read_number(holder, MAX_HP_KEY),
             "integrity": read_number(holder, INTEGRITY_KEY),
             "max_integrity": read_number(holder, MAX_INTEGRITY_KEY),
             "status": read_statuses(holder),
@@ -422,7 +395,7 @@ def apply(ctx):
             if not state["no_max_said"]:
                 state["no_max_said"] = True
                 write("note: no max HP attribute found (tried {}); showing the "
-                      "current value only".format(", ".join(MAX_HP_KEYS)))
+                      "current value only".format(MAX_HP_KEY))
             return REMAINING_TEXT_NO_MAX.format(hp=amount_text(record["hp"]))
         return REMAINING_TEXT.format(hp=amount_text(record["hp"]),
                                      max=amount_text(record["max"]))
@@ -561,22 +534,26 @@ def apply(ctx):
             ctx.log_exc("battle dmg: add_text failed")
 
     # ================================================================ フック
+    # 1手と戦闘の始まりはローダの窓口 `battles` が包み、ここは前後の処理だけを渡す
+    # （自分で包まない。TECH.md §3.3.21）。after は登録の古い順なので、先に適用される
+    # `319_` の後始末（構えの武装・敵の体力の伸ばし）の後に読む今の順のままになる。
+    owner = ctx.mod_name or "308_battle_damage_display"
+
     # 1手ぶん。
     # **元の処理をすべて通してから**出すので、
     # ゲームの地の文の後ろに付く（この中で HP が動き、地の文も出る）。
-    @ctx.wrap("__main__:BattlePhaseManager.handle_battle_situation",
-              required=False, safe=True)
-    def handle_battle_situation(orig, self, *args, **kwargs):
-        app = getattr(self, "app", None) or ui.find_app()
+    # orig が投げた回は報告しない（前の包みと同じ。always=False）。
+    def before_action(call):
         try:
-            seed(app)
+            seed(call.app)
         except Exception:
             ctx.log_exc("battle dmg: cannot read the combatants before the action")
-        result = orig(self, *args, **kwargs)
-        # (character_key, character_side, battle_action)。受け取った形のまま渡し、ここでは読むだけ。
-        report(app, "action by {!r} ({})".format(frames.arg(args, kwargs, "character_key", 0),
-                                                  frames.arg(args, kwargs, "character_side", 1)))
-        return result
+
+    def after_action(call):
+        # (character_key, character_side, battle_action)。窓口が orig の前に引数から読んでいる。
+        report(call.app, "action by {!r} ({})".format(call.character_key, call.character_side))
+
+    battles.on(owner, ctx, (battles.ACTION,), before=before_action, after=after_action, write=write)
 
     # 毒などの継続分。
     # 1人ずつ呼ばれるが、台帳が差を吸うので何度出しても重ならない。
@@ -603,18 +580,16 @@ def apply(ctx):
         return result
 
     # 戦闘が始まったら台帳を捨てて取り直す（前の戦闘の残骸で誤報を出さない）。
-    @ctx.wrap("__main__:BattleStartManager.start_battle", required=False, safe=True)
-    def start_battle(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
-        app = getattr(self, "app", None) or ui.find_app()
+    def after_start(call):
         forget("a new battle started")
         try:
-            seed(app)
+            seed(call.app)
             write("battle start: {} combatant(s) on the ledger".format(
                 len(state["ledger"])))
         except Exception:
             ctx.log_exc("battle dmg: cannot read the combatants at the battle start")
-        return result
+
+    battles.on(owner, ctx, (battles.START,), after=after_start, write=write)
 
     ctx.log("battle dmg: log -> {} (enemies={} allies={} heal={} remaining={} "
             "integrity={} status={} min={})".format(

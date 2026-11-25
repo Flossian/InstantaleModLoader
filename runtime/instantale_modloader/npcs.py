@@ -268,11 +268,21 @@ def save_npcs(app):
 # 置き場所は `relationship["player"]["affinity"]`。実行時の Character では属性、
 # セーブの素データでは辞書の項目だが、中の形は同じ。
 
-def _player_row(holder):
+def player_row(holder):
+    """人物の `relationship["player"]` の欄（好感度・感情の文・関係の印の辞書）。無ければ None。
+
+    実行時の Character（属性 `relationship`）でも、セーブの素データの辞書（項目 `relationship`）でも読む。
+    返すのは欄そのもので写しではないので、書き換えると人物の欄が変わる。
+    欄が無いときに作りはしない（作ると `affinity_text` などが欠けた欄になる。`set_affinity` の註）。
+    """
     relationship = (holder.get("relationship") if isinstance(holder, dict)
                     else getattr(holder, "relationship", None))
     row = relationship.get("player") if isinstance(relationship, dict) else None
     return row if isinstance(row, dict) else None
+
+
+#: 公開名 `player_row` の前の名前。中で使っている所と、名前で引いていた MOD のために残す。
+_player_row = player_row
 
 
 def affinity_value(holder):
@@ -335,6 +345,75 @@ def set_affinity(app, npc_id, value, character=None):
         row["affinity"] = value
         written += 1
     return written
+
+
+# --------------------------------------------------------------------------
+# 死の印と人生の記録（`326_` / `336_` / `339_` / `327_` / `341_` に写されていた読み方）
+# --------------------------------------------------------------------------
+def is_dead(character) -> bool:
+    """人物が死んでいるか。読めなければ False（死んでいないと読む）。
+
+    死の印の置き場は人物の種類で違う。ゲームの人物は `config['is_dead']`（GAME.md §2.22）、
+    modnpc の取っ手（`modnpc.Npc`）は属性 `is_dead`（中身は同じ `config['is_dead']`）。
+    写しのうち両方を見ていたのは `336_` の救出だけで、ほかは `config` だけを見て取っ手の死を見落とした。
+    ここは両方を見る。セーブの素データの辞書（`save_npcs` の値）は項目 `config` を読む。
+
+    `339_` の写しは人物が引けないときも「生きていない」としていたが、ここは人物を受ける関数なので
+    None は False にする（引けないことを死とみなすかは呼び側が決める）。
+    属性の読み取りが投げたとき（`frames.attr` の番人の文字列）も印とはみなさない。
+    """
+    if character is None:
+        return False
+    if isinstance(character, dict):
+        config = character.get("config")
+    else:
+        mark = frames.attr(character, "is_dead", None)
+        if mark and not isinstance(mark, str) and not callable(mark):
+            return True
+        config = frames.attr(character, "config", None)
+    return isinstance(config, dict) and bool(config.get("is_dead"))
+
+
+#: 人生の記録を組むゲームの関数の在り処（`get_life_log_text(app, character)`）。
+LIFE_LOG_MODULE = "scripts.llm.context_manager"
+
+
+def _life_log_raw(app, character):
+    """ゲームの `get_life_log_text` の戻り値そのもの。引けない・投げたら None。
+
+    投げても記録しない（写しの3本とも黙って空に倒していた。頼みの組み立ての途中で毎回呼ばれる）。
+    """
+    build = getattr(sys.modules.get(LIFE_LOG_MODULE), "get_life_log_text", None)
+    if not callable(build):
+        return None
+    try:
+        return build(app, character)
+    except Exception:
+        return None
+
+
+def life_log(app, character) -> dict:
+    """人物の人生の記録を、ゲーム自身の作り方（`context_manager.get_life_log_text`）で組んだ辞書。
+
+    ゲームの戻り値は名前に反して `{"460日前-416日前": 文, …}` の辞書（GAME.md §2.25、VERIFICATION.md §3.54）。
+    辞書でなければ・引けなければ・投げたら `{}`（`327_` の `life_log_dict` と同じ答え）。
+    """
+    value = _life_log_raw(app, character)
+    return value if isinstance(value, dict) else {}
+
+
+def life_log_text(app, character, limit=None) -> str:
+    """人物の人生の記録を、頼みに載せる文にする。読めなければ空文字。
+
+    `336_` / `341_` の `life_log_text` と同じ答え。ゲームの戻り値を `str()` にする
+    （辞書なら Python の辞書の表記のまま）。空の値は空文字。
+    `limit` 字を超えたら `limit` 字で切って「…」を付ける（None は切らない）。
+    """
+    value = _life_log_raw(app, character)
+    if not value:
+        return ""
+    text = str(value)
+    return text if limit is None or len(text) <= limit else text[:limit] + "…"
 
 
 def index_stores(app):

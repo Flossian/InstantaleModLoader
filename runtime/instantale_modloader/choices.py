@@ -59,6 +59,10 @@ MOD が選択肢にボタンを足すとき、守ることが多い（どれか1
                                   `open_screen` で開いた MOD だけの画面の `Choice` の並び。None を返すと閉じる
         labels                    前の版がセーブに焼いた自前のボタンの文言（無害な spec で印の無いものを外す）
 
+    `view`（`View`）は buttons（ゲームの一覧）・partner / end_entry（会話の相手と「会話を終える」）・from_save・
+    refreshing・listing（いまの一覧の種類。"talk" は「会話する」の相手一覧、"adventurer" はギルドの冒険者一覧、
+    どちらでもなければ None。窓口の外からは `choices.listing()`）を持つ。
+
     choices.Choice(text, on_press=fn, place=choices.before("ConversationEndManager"), base=None)
         on_press(app)             押された。True を返すと窓口がゲーム自身の保存を呼ぶ
         base                      ゲームのボタン。その spec のまま文言だけ変えて出す（MOD が無い起動では元のボタンとして働く）
@@ -77,6 +81,7 @@ import threading
 import weakref
 
 from . import alive, ui
+from . import state as loader_state
 
 STORE_ATTR = "_instantale_choices"
 REFRESH_TARGET = "__main__:InstantaleApp.refresh_choice_buttons"
@@ -102,18 +107,27 @@ SAVED_CHOICE_ATTRS = ("buttons", "buttons_backup", "buttons_backup_for_shopping"
 #: 組み直しと保存が一覧を取り合わないための鍵の待ち（秒）。待ち切ったら鍵なしで進む（ゲームを止めない）。
 LOCK_TIMEOUT = 2.0
 OPENED_KEY = "opened"
+#: いまの一覧の種類（`View.listing` / `listing()`）。「会話する」の相手一覧とギルドの冒険者一覧は同じ形
+#: （`ConversationStartManager` × 人数 ＋「やめる」）で、spec だけでは見分けられない。
+LISTING_TALK = "talk"
+LISTING_ADVENTURER = "adventurer"
+#: 一覧を出すゲームの関数と、その一覧の種類。ローダが1回だけ包み、`orig` の前に印を立てる
+#: （一覧の組み直しは `orig` の中で走る）。`320_` / `326_` / `404_` が各自で包んで旗を持っていた。
+LISTING_TARGETS = (("__main__:DisplayTalkChoice.execute", LISTING_TALK),
+                   ("__main__:DisplayAdventurerTalkChoice.execute", LISTING_ADVENTURER))
+#: どちらの一覧にも出ない spec。ゲームの一覧に1つでも見えたら別の画面へ移っている（印を下ろす）。
+#: `404_` の並び（`320_` / `326_` の並びに `DisplayAdventurerTalkChoice` を足したもの）。
+LISTING_OTHER_SPECS = ("ConversationEndManager", "MovePhaseManager", "DisplayTalkChoice",
+                       "DisplayAdventurerTalkChoice", "DisplayQuestChoice", "QuestChoiceManager")
 
 
 def _store():
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"providers": {}, "order": [], "installed": None, "world": None,
-                 "restore": None, "after": {"token": None}, "worlds": None, "log": []}
-        setattr(sys, STORE_ATTR, store)
-    store.setdefault("fold", {"token": None})     # 前の版のローダが作った入れ物にも足す
-    store.setdefault("lock", threading.RLock())
-    store.setdefault("opened", {})
-    return store
+    # 前の版のローダが作った入れ物にも、足りない鍵は足される（`state.process_store`）。
+    return loader_state.process_store(STORE_ATTR, {
+        "providers": {}, "order": [], "installed": None, "world": None,
+        "restore": None, "after": {"token": None}, "worlds": None, "log": [],
+        "fold": {"token": None}, "lock": threading.RLock(), "opened": {},
+        "listing": None, "listing_installed": None})
 
 
 def _world_mark(world):
@@ -292,7 +306,6 @@ def _worlds(ctx):
         if not getattr(ctx, "state_dir", None) or not all(
                 callable(getattr(ctx, name, None)) for name in ("read_json", "write_json")):
             return None
-        from . import state as loader_state
         store["worlds"] = loader_state.WorldStore(ctx, STATE_DIRNAME)
     return store["worlds"]
 
@@ -522,10 +535,60 @@ class View(object):
         self.partner, self.end_entry = ui.conversation_partner(self.buttons)
         self.from_save = from_save()
         self.refreshing = refreshing()
+        #: いまの一覧の種類。`LISTING_TALK`（"talk"）・`LISTING_ADVENTURER`（"adventurer"）・None（`listing()`）
+        self.listing = _settle_listing(self.buttons)
 
     def find(self, cls_name):
         """その spec のゲームのボタン（最初の1つ）。無ければ None。"""
         return ui.find_spec_button(self.buttons, cls_name)
+
+
+def listing():
+    """いまの一覧の種類。`"talk"`（「会話する」の相手一覧）・`"adventurer"`（ギルドの冒険者一覧）・None（どちらでもない）。
+
+    `offer` の中では `view.listing` と同じ。窓口の外（`refresh` の古い口・押下の処理）から読む口。
+    印はゲームが一覧を出す関数（`LISTING_TARGETS`）の `orig` の前に立ち、組み直しのゲームの一覧に
+    別の画面の spec（`LISTING_OTHER_SPECS`）が見えたら下りる。包みは `install_listing`（全 MOD の適用の後に `boot()` が立てる）。
+    MOD ごとの旗で見分けていた形（`320_` / `326_` / `404_`）を1か所にした。画面の判断はローダに置く。
+    """
+    return _store().get("listing")
+
+
+def _settle_listing(buttons):
+    """ゲームの一覧に別の画面の spec が見えたら一覧の印を下ろす。いまの種類を返す。"""
+    store = _store()
+    if store.get("listing") is not None and isinstance(buttons, list) and any(
+            ui.spec_cls_name(entry) in LISTING_OTHER_SPECS for entry in buttons):
+        store["listing"] = None
+    return store.get("listing")
+
+
+def install_listing(ctx, write=None):
+    """一覧を出すゲームの関数（`LISTING_TARGETS`）を包んで、一覧の種類の印を立てる。1つの世代につき1回。立てたら True。
+
+    `boot()` が全 MOD の適用の後に呼ぶ。`view.listing` を読む MOD が `apply()` の中で呼んでもよい（同じ世代では1回だけ）。
+    印を立てるだけで `orig` の前後の処理は無いので、どの層に立っても答えは同じ。
+    世代を持たない ctx（ゲーム抜きの検査の偽物）は、ctx ごとに1度。
+    """
+    store = _store()
+    generation = getattr(ctx, "generation", None)
+    mark = ("generation", generation) if generation is not None else ("ctx", id(ctx))
+    if store.get("listing_installed") == mark:
+        return False
+    store["listing_installed"] = mark
+
+    def hook(target, kind):
+        @ctx.wrap(target, required=False, safe=True)
+        def show_listing(orig, self, *args, **kwargs):
+            _store()["listing"] = kind
+            return orig(self, *args, **kwargs)
+
+    for target, kind in LISTING_TARGETS:
+        hook(target, kind)
+    if write:
+        write("choices: the listing marks were declared on {}".format(
+            ", ".join(target for target, _kind in LISTING_TARGETS)))
+    return True
 
 
 def ours(entry):
@@ -979,6 +1042,8 @@ def on_refresh(ctx, app):
         removed = prune_remnants(buttons, app=app)
         if removed:
             _log(ctx, "dropped {} button(s) the older versions left in the save: {}".format(len(removed), removed))
+        # 一覧の印は MOD の `refresh` より前に下ろす（`refresh` の古い口から `listing()` を読む MOD に同じ答えを見せる）
+        _settle_listing(buttons)
     world = getattr(app, "world", None)
     if world is not None and not _same_world(store["world"], world):
         store["world"] = _world_mark(world)

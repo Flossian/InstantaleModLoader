@@ -94,19 +94,29 @@ class FakeUI(object):
         return getattr(self._real, name)
 
 
-class FakeLLM(object):
+def watch_now(ctx, targets, install, **kw):
     """`llm.watch_aliases` の代わり。見張らずに、その場で全部の送り口へ当てる。"""
+    for target in targets:
+        install(target)
+    return []
+
+
+class FakeLLM(object):
+    """MOD から見た `llm`。見張りだけ `watch_now` に替え、ほかは本物（窓口 `on_request` ほか）。"""
 
     def watch_aliases(self, ctx, targets, install, **kw):
-        for target in targets:
-            install(target)
-        return []
+        return watch_now(ctx, targets, install, **kw)
+
+    def __getattr__(self, name):
+        return getattr(ml.llm, name)
 
 
 class FakeCtx(object):
     _seq = 0
 
     _mod = "334_colosseum_custom"
+    # 窓口に名乗る持ち主の名前（本物は apply() の間フォルダ名を返す）。
+    mod_name = _mod
 
     def __init__(self, out_dir):
         self.out_dir = out_dir
@@ -164,6 +174,16 @@ DEFEAT_LOG = []
 defeat._write = DEFEAT_LOG.append
 
 
+def apply_now(module, ctx):
+    """`apply()` を通す。送り口の窓口（`llm.on_request`）は登録のときに送り口を包むので、見張りはその場で当てる形に替える。"""
+    plain_watch = ml.llm.watch_aliases
+    ml.llm.watch_aliases = watch_now
+    try:
+        module.apply(ctx)
+    finally:
+        ml.llm.watch_aliases = plain_watch
+
+
 def fresh(app):
     shutil.rmtree(OUT_DIR, ignore_errors=True)
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -175,7 +195,7 @@ def fresh(app):
     defeat.ui = module.ui
     del DEFEAT_LOG[:]
     ctx = FakeCtx(OUT_DIR)
-    module.apply(ctx)
+    apply_now(module, ctx)
     hook = ctx.hooks["__main__:InstantaleApp.add_text"]
     app.add_text = lambda context: hook(App.add_text, app, context)
     return module, ctx, manifest
@@ -370,7 +390,7 @@ module_next.ui = FakeUI(app, ml.ui)
 module_next.llm = FakeLLM()
 module_next.RANK_CAP = 40
 ctx_next = FakeCtx(OUT_DIR)
-module_next.apply(ctx_next)
+apply_now(module_next, ctx_next)
 check("当て直しの後の包みからも窓が見える",
       ctx_next.hooks["scripts.functions:get_enemy_exp_lvl"](enemy_level, "normal", 58) == 41,
       seen)
@@ -381,6 +401,9 @@ ctx_next.hooks["__main__:BattleStartManager.start_battle"](lambda self: None, Ma
 check("閉じた窓は前の世代の包みからも閉じて見える",
       lvl(enemy_level, "normal", 58) == 59 and seen["difficulty"] == 58, seen)
 check("当て直しの後も例外を漏らさない", not ctx_next.errors, ctx_next.errors)
+# 窓口（battles・text_filters ほか）の登録は持ち主ごとに1つで、当て直した世代が持っている。
+# 以降の検査は前の世代の module の設定を変えて見るので、当て直してから続ける（本番は前の世代が用済みになる）。
+module, ctx, manifest = fresh(app)
 module.RANK_CAP = 0
 
 # ---------------------------------------------------------------- 相手の顔ぶれ
@@ -697,6 +720,39 @@ check("預かりに置き去りにしない", "87" not in app.escaped_member_in_
 check("勝った試合でも居場所と体力が戻る",
       jacob.location == "arena" and jacob.current_hp == 1,
       (jacob.location, jacob.current_hp))
+
+
+# 逃げた試合の前の処理で手配度の見張りが投げても、預けた仲間は後の処理で戻す
+# （窓口は前の処理の例外を握り、同じ持ち主の後の処理へ渡る memo が空になる）。
+class BrokenGuard(dict):
+    def __setitem__(self, key, value):
+        raise RuntimeError("broken guard")
+
+
+jacob = Member("ジェイコブ")
+ctx.hooks["__main__:ColosseumMatchStart.execute"](
+    lambda self, choice: None, Manager(app), "申し込む")
+app.in_colosseum_battle = 1
+app.escaped_member_in_battle = {}
+app.party = {"player": app.player, "87": jacob}
+jacob.current_hp = -20
+ctx.hooks["__main__:InstantaleApp.remove_party_member"](game_loses_track, app, "87")
+saved_no_wanted = module.NO_WANTED_ON_ESCAPE
+errors_before = len(ctx.errors)
+module.NO_WANTED_ON_ESCAPE = True
+getattr(sys, module.STATE_STORE_ATTR)["lawful_guard"] = BrokenGuard()
+try:
+    ctx.hooks["__main__:BattleEndManager.end_phase"](lambda self: None, Manager(app))
+finally:
+    module.NO_WANTED_ON_ESCAPE = saved_no_wanted
+    getattr(sys, module.STATE_STORE_ATTR)["lawful_guard"] = None
+check("手配度の見張りが投げても、逃げた試合で倒れた仲間を戻す",
+      app.party.get("87") is jacob and "87" not in app.escaped_member_in_battle,
+      (app.party, app.escaped_member_in_battle))
+check("  → 見張りの失敗は1行残す",
+      ctx.errors[errors_before:] == ["colosseum: cannot arm the lawfulness watch"],
+      ctx.errors[errors_before:])
+del ctx.errors[errors_before:]
 
 print("負けて切り上げても手配されない")
 

@@ -24,7 +24,7 @@ MODS_DIR = os.path.join(RUNTIME_DIR, "mods")
 if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
-from instantale_modloader import arrivals, llm, prices, ui, wanted  # noqa: E402
+from instantale_modloader import arrivals, llm, prices, shopping, ui, wanted  # noqa: E402
 from instantale_modloader import state as loader_state  # noqa: E402
 
 
@@ -92,6 +92,7 @@ class FakeCtx(object):
     def __init__(self):
         self.hooks = {}
         self.mod_dir = os.path.join(MODS_DIR, "341_shopkeeper_attitude")
+        self.mod_name = os.path.basename(self.mod_dir)
 
     def wrap(self, target, **options):
         def decorate(fn):
@@ -218,7 +219,8 @@ try:
     screen = screens[-1]
     worlds = sys.modules[mod.__name__]._store()["worlds"]
     layer = layers[0]
-    shop = ctx.hooks[mod.SHOP_TARGET]
+    # 売買を押した場面もローダの窓口 `shopping` に預ける（包むのはローダの1枚）
+    shop = ctx.hooks[shopping.TARGETS[shopping.ENTER]]
     # 着いた後はローダの窓口 `arrivals` に預ける（包むのはローダの1枚）
     arrive = ctx.hooks[arrivals.MOVE_TARGET]
     check("店の値の圧を引き受けたと名乗る", wanted.shop_pressure_taker() == "341_shopkeeper_attitude")

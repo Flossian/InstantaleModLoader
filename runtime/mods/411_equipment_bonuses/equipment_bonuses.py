@@ -9,7 +9,7 @@
 武器と防具にはさらに、それぞれの効果を「会心: 15%」の形で書く
 （種類と決まりは `effects.py`。戦闘に効かせるのはローダの戦闘の効果の窓口 `battle_effects`）。
 
-作られた瞬間を拾う経路は `410_` と同じ:
+作られた瞬間はローダの窓口 `items.on_made` が拾う（`410_` と同じ経路）:
 
   * `generate_item_from_item_data` の最中に `Item.__init__` で組まれた装備（店の品揃え・クラフト・入手品）
   * テキストで頼んで `master_ai_item_generate` が名付けた装備（入口の外で組まれる）
@@ -36,12 +36,10 @@
 威光は主人公が着ているときだけ、値段の窓口（`prices.adjust`）で店の買値を下げる。
 """
 
-import os
-import sys
-import threading
 import weakref
 
-from instantale_modloader import abilities, battle_effects, equipment, frames, items, llm, prices, ui
+from instantale_modloader import (abilities, battle_effects, equipment, frames, items, prices, shopping,
+                                  state, ui)
 
 from . import bonus, effects
 
@@ -98,24 +96,23 @@ EFFECT_PRESENCE = True
 LOG_BASENAME = "equipment_bonuses.log"
 LOG_LIMIT = 300
 
-#: 自由枠（`333_` の部位名）。
-FREE_PREFIX = "free"
+#: 自由枠（`333_` の部位名の頭）。外し方はローダの `equipment.worn(free=...)` が持つ。
+FREE_PREFIX = equipment.FREE_PREFIX
 
 STORE_ATTR = "_instantale_equipment_bonuses_store"
 
 
 def process_store():
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {}
-        setattr(sys, STORE_ATTR, store)
-    store.setdefault("rolled", weakref.WeakSet())
-    store.setdefault("ids", set())        # weakref を取れない品の控え（id）
-    store.setdefault("logged", 0)
-    store.setdefault("counts", {})
-    store.setdefault("pending", {})       # master_ai_item_generate が名付けた装備
-    store.setdefault("local", threading.local())
-    return store
+    """抽選した品の印と数えた件数。注入し直しをまたいで持つ（ローダの `state.process_store`）。
+
+    `ids` は weakref を取れない品の控え（id）。
+    マスターAIが名付けた装備の控えと入口の積みはローダの窓口 `items.on_made` が持つ。
+    """
+    return state.process_store(STORE_ATTR, {
+        "rolled": weakref.WeakSet(),
+        "ids": set(),
+        "counts": {},
+    })
 
 
 #: ゲームの表示言語（`ui.language`。名前はこのモジュールから引く側のために残す）。
@@ -162,37 +159,17 @@ def enabled_armor_effects():
     return [kind for kind in effects.ARMOR_KINDS if flags.get(kind)]
 
 
-def unwrap(item):
-    """画面の部品（`InventoryItem`）が来たら中の `item_instance` を取り出す。"""
-    inner = frames.attr(item, "item_instance", None)
-    return item if inner is None else inner
+#: 画面の部品（`InventoryItem`）から中の品を取り出す（ローダの `items.unwrap`。名前は引く側のために残す）。
+unwrap = items.unwrap
 
 
 def worn_items(app, holder):
-    """身に着けている品の並び（同じ品は1度だけ）。"""
-    found = []
-    gear = equipment.gear(app, holder)
-    if gear is not None:
-        for region, item in gear:
-            if not INCLUDE_FREE_SLOTS and str(region).startswith(FREE_PREFIX):
-                continue
-            found.append(item)
-    else:
-        equipments = frames.attr(holder, "equipments", None)
-        if isinstance(equipments, dict):
-            inventory = items.inventory_of(holder) or {}
-            for key in bonus.EQUIPMENT_TYPES:
-                ref = equipments.get(key)
-                if isinstance(ref, (str, int)) and not isinstance(ref, bool):
-                    ref = inventory.get(str(ref))      # ロード直後は id の文字列
-                if ref is not None:
-                    found.append(ref)
-    unique, seen = [], set()
-    for item in found:
-        if id(item) not in seen:
-            seen.add(id(item))
-            unique.append(item)
-    return unique
+    """身に着けている品の並び（同じ品は1度だけ）。
+
+    読み方はローダの `equipment.worn`（装備欄の窓口の答え、無ければ本体の `equipments` の weapon / wearable を、
+    ロード直後の id の文字列なら持ち物から引き当てる）。自由枠は `INCLUDE_FREE_SLOTS` で決める。
+    """
+    return [item for _region, item in equipment.worn(app, holder, free=INCLUDE_FREE_SLOTS)]
 
 
 def current_bonus(app, holder):
@@ -227,16 +204,12 @@ def answers_for(app, holder):
 
 def apply(ctx):
     store = process_store()
-    local = store["local"]
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "411_equipment_bonuses"
+    owner = ctx.mod_name or "411_equipment_bonuses"
     write = ctx.logger(LOG_BASENAME)
-
-    def note(text):
-        store["logged"] += 1
-        if store["logged"] <= LOG_LIMIT:
-            write(text)
-        elif store["logged"] == LOG_LIMIT + 1:
-            write("... 以降は件数だけ数える（LOG_LIMIT={}）".format(LOG_LIMIT))
+    # 抽選の記録は LOG_LIMIT 行で打ち切り、超えたら1回だけ知らせる。数は注入の間ずっと持つ
+    # （遅れて当て直す boot では数え直さず、手で注入し直した新しいログでは数え直す。ctx.logger の span）。
+    note = ctx.logger(LOG_BASENAME, cap=LOG_LIMIT, span="injection",
+                      cap_notice="... 以降は件数だけ数える（LOG_LIMIT={}）".format(LOG_LIMIT))
 
     def count(key):
         store["counts"][key] = store["counts"].get(key, 0) + 1
@@ -283,59 +256,16 @@ def apply(ctx):
         note("{}: {!r} [{}] +{} {}".format(source, name_of(item), rarity, rolled,
                                            ["{} {}".format(k, effects.text_of(k, a, t, lang)) for k, a, t in found]))
 
-    @ctx.wrap("scripts.items:Item.__init__", safe=True, required=False)
-    def item_init(orig, self, *args, **kwargs):
-        result = orig(self, *args, **kwargs)
-        if not bonus.is_equipment(self):
-            return result
-        collect = getattr(local, "collect", None)
-        if isinstance(collect, list):
-            collect.append(self)
-            return result
-        name = frames.attr(self, "name", None)
-        if isinstance(name, str) and store["pending"].pop(name, None) is not None:
-            roll(self, "text")
-        return result
+    # 品が作られた瞬間はローダの窓口 `items.on_made` が拾い、1品ずつ渡す（自分で包まない。TECH.md §3.3.21）。
+    # 受けるのは生成の入口（generate_item_from_item_data）で組まれた品・マスターAIが名付けて入口の外で組まれた品・
+    # クラフトの品。セーブからの組み直しにも使われる generate_item_from_dict は受けない。
+    # 記録の見出しは前と同じ語にそろえる。
+    labels = {items.GENERATED: "generated", items.NAMED: "text", items.CRAFTED: "craft"}
 
-    @ctx.wrap("__main__:InstantaleApp.generate_item_from_item_data", safe=True)
-    def generated(orig, self, *args, **kwargs):
-        outer, local.collect = getattr(local, "collect", None), []
-        try:
-            result = orig(self, *args, **kwargs)
-        finally:
-            created, local.collect = local.collect, outer
-        made = [item for item in created + [unwrap(result)]
-                if item is not None and not isinstance(item, dict) and bonus.is_equipment(item)]
-        for item in made:                 # ここで見たので、後の組み直しで拾い直さない
-            store["pending"].pop(frames.attr(item, "name", None), None)
-        if isinstance(outer, list):
-            outer.extend(made)            # 外側の入口がまとめて見る
-        else:
-            for item in made:
-                roll(item, "generated")
-        return result
+    def made(call):
+        roll(call.item, labels.get(call.source, call.source))
 
-    @ctx.wrap("scripts.llm.llm_manager:master_ai_item_generate", safe=True,
-              required=False)
-    def master_item(orig, *args, **kwargs):
-        result = orig(*args, **kwargs)
-        data = llm.as_dict(result) or {}
-        category = data.get("item_category")
-        kind = category.get("type") if isinstance(category, dict) else None
-        name = data.get("item_name")
-        if kind in bonus.EQUIPMENT_TYPES and isinstance(name, str) \
-                and getattr(local, "collect", None) is None:
-            pending = store["pending"]
-            pending[name] = True
-            while len(pending) > 20:      # 組まれずに終わった名前を溜めない
-                pending.pop(next(iter(pending)))
-        return result
-
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.place_crafted_item",
-              safe=True, required=False)
-    def crafted(orig, self, *args, **kwargs):
-        roll(frames.arg(args, kwargs, "generated_item", 0), "craft")
-        return orig(self, *args, **kwargs)
+    items.on_made(ctx, made, owner=owner, sources=tuple(labels), write=write)
 
     # ================================================================ 効かせる
     def answer(app, holder):
@@ -396,14 +326,18 @@ def apply(ctx):
     prices.adjust(owner, presence_layer, temporary=True, write=write)
     seen_presence = {"percent": 0}
 
-    @ctx.wrap("__main__:ShoppingStartManagerRemake.execute", required=False, safe=True)
-    def shop_start(orig, self, *args, **kwargs):
-        """着替えた後に店へ入ったら、古い額が残らないように組み直す。"""
+    def shop_start(call):
+        """着替えた後に店へ入ったら、古い額が残らないように組み直す。
+
+        店に入る処理（ShoppingStartManagerRemake.execute）はローダの窓口 `shopping` の ENTER が包み、
+        orig の前に呼ばれる（自分で包まない。TECH.md §3.3.21）。
+        """
         percent = presence_now()
         if percent != seen_presence["percent"]:
             seen_presence["percent"] = percent
             prices.refresh("presence armor")
-        return orig(self, *args, **kwargs)
+
+    shopping.on(owner, ctx, (shopping.ENTER,), before=shop_start, write=write)
 
     write("installed tiers={} weapon={} effects={} armor={} effects={} mode={} cap={} free={} party={}".format(
         tiers(), weapon_counts(), enabled_effects(), armor_counts(), enabled_armor_effects(),

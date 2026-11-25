@@ -16,7 +16,7 @@ thunder / thunder_aoe / earth だけで、記録では8割強が slash だった
 クラウドの構造化出力も、ゲームがこのクラスから作るので、どの接続先にも同じ選択肢が届く。
 子クラスは `vfx` だけを上書きするので、欄の並び（LLM が書く順）は親のまま
 （pydantic v2 は上書きした欄を親の位置に残す）。返ってきた値の検証も子クラスが通す。
-送り口は「開始する」のたびに置き直されるので、`llm.watch_aliases` で包む（TECH.md §3.4）。
+送り口は「開始する」のたびに置き直されるので、包むのはローダの窓口 `llm.on_request` に任せる（TECH.md §3.4・§3.3.21）。
 自由入力の審判（`referee_player_any_input_new_new`）は、送り口の答えを関数の中の元の型（8択）で作り直す。
 足した値（`arcane` など）はそこで落ちた（実機。`319_` の防御の手番）。局所の型は外から替えられないので、
 この審判の答えだけは、送り口から返る所で足した値を運び手に置き換えて控え（`NARROWED_MANAGERS`）、
@@ -51,14 +51,11 @@ import shutil
 import sys
 import time
 import typing
-import weakref
 
-from instantale_modloader import llm
+from instantale_modloader import frames, llm
 
 LOG_BASENAME = "attack_animations.log"
 
-#: 返却型を差し替える送り口。返却型を取らない `send_request_with_no_structure` は見ない。
-BATTLE_SEND_TARGETS = ("scripts.llm.llm_manager_battle:send_request",)
 #: 送り口の答えを、関数の中の元の型（8択の Literal）で作り直す審判（送り口の最初の引数の名前）。
 #: 足した値が来るとそこで落ちる（実機。自由入力の審判）。答えの足した値を運び手に置き換え、元の値を控える。
 NARROWED_MANAGERS = ("referee_player_any_input_new_new", "referee_player_any_input_new_new_with_skill")
@@ -72,6 +69,8 @@ EFFECT_TARGETS = (
     "__main__:InstantaleApp.window_effect",
 )
 SOUND_TARGET = "scripts.sounds:SoundManager.play_sound"
+#: `play_sound(self, app, sound_src)` の引数名の並び（self を除く。音の名前は2つ目。recon の targets.txt）。
+SOUND_ARGS = ("app", "sound_src")
 
 #: ゲームの値 → ゲームが出す絵のフォルダ（exe の定数で確かめた。運び手に使う分だけ）。
 CARRIER_SOURCES = {
@@ -193,12 +192,14 @@ def added_choices(existing):
     return tuple(value for value in GAME_HANDLED + tuple(VFX) if value not in have)
 
 
-def extend_structure(structure, pydantic_module):
-    """`vfx` の選択肢を足した子クラス。対象でなければ None。
+def vfx_field(structure, pydantic_module):
+    """`vfx` の欄を選択肢を足した Literal で上書きする欄の組 `(型, Field)`。対象でなければ None。
 
     対象は「`vfx` の欄が Literal で、slash を含む」型だけ。
     戦闘の審判以外の型や、版が変わって形が違う型には触らない。
+    元の説明の後ろに手引きを足し、必須か既定値かは元の欄に合わせる。
     """
+    # pydantic v2 の欄（`model_fields`）だけを見る。v1 の欄は `is_required()` を持たない
     fields = getattr(structure, "model_fields", None)
     if not isinstance(fields, dict) or "vfx" not in fields:
         return None
@@ -216,41 +217,42 @@ def extend_structure(structure, pydantic_module):
         field = pydantic_module.Field(..., description=description)
     else:
         field = pydantic_module.Field(default=info.default, description=description)
-    return pydantic_module.create_model(
-        structure.__name__, __base__=structure, vfx=(widened, field))
+    return widened, field
+
+
+def extend_structure(structure, pydantic_module):
+    """`vfx` の選択肢を足した子クラス。対象でなければ None。
+
+    子クラスを作って控えるのはローダの `llm.extend_structure`（上書きなので `replace=True`。
+    同じ型と同じ欄なら前に作った子を返し、控えは直近の組だけ持つ）。
+    """
+    spec = vfx_field(structure, pydantic_module)
+    if spec is None:
+        return None
+    return llm.extend_structure(structure, {"vfx": spec}, replace=True)
+
+
+def _after_vfx_line(text):
+    """`- vfx:` の行の次に手引きを差し込んだ本文。その行が無ければ None（次の system を見る）。"""
+    lines = text.split("\n")
+    heads = [n for n, line in enumerate(lines) if line.lstrip().startswith(VFX_LINE_HEAD)]
+    if not heads:
+        return None
+    lines.insert(heads[0] + 1, "  " + VFX_GUIDE)
+    return "\n".join(lines)
 
 
 def with_vfx_guide(message):
     """審判の messages の写しに手引き（`VFX_GUIDE`）を1行足したもの。足さないなら None。
 
-    足す場所は system の `- vfx:` の行の次。その行が無ければ最初の system の末尾。
-    既に手引きが載っている・system が無いときは足さない。元の並びと辞書は書き換えない。
+    足す場所は system の `- vfx:` の行の次。その行がどの system にも無ければ最初の system の末尾。
+    既に手引きが載っている・system が無いときは足さない。元の並びと辞書は書き換えない（`llm.edit_turn`）。
     """
-    if not isinstance(message, list):
-        return None
-    systems = []
-    for index, item in enumerate(message):
-        content = llm.content_of(item)
-        if content is None:
-            continue
-        if VFX_GUIDE in content:
-            return None
-        if item.get("role") == "system":
-            systems.append((index, content))
-    if not systems:
-        return None
-    for at, text in systems:
-        lines = text.split("\n")
-        heads = [n for n, line in enumerate(lines) if line.lstrip().startswith(VFX_LINE_HEAD)]
-        if heads:
-            lines.insert(heads[0] + 1, "  " + VFX_GUIDE)
-            break
-    else:
-        at, text = systems[0]
-        lines = text.split("\n") + [VFX_LINE_HEAD + " " + VFX_GUIDE]
-    rewritten = list(message)
-    rewritten[at] = dict(message[at], content="\n".join(lines))
-    return rewritten
+    guided = llm.edit_turn(message, _after_vfx_line, unless=VFX_GUIDE)
+    if guided is None:
+        guided = llm.edit_turn(message, lambda text: text + "\n" + VFX_LINE_HEAD + " " + VFX_GUIDE,
+                               unless=VFX_GUIDE)
+    return guided
 
 
 def carrier_of(vfx):
@@ -363,13 +365,13 @@ def resolve_sources(mod_dir, game_dir, style, tail_root=None):
     return sources, missing
 
 
+#: `resolve_battle_effect(self, character_key, character_side, battle_action, ...)` の引数名の並び（self を除く）。
+RESOLVE_ARGS = ("character_key", "character_side", "battle_action")
+
+
 def battle_action_of(args, kwargs):
     """`resolve_battle_effect(character_key, character_side, battle_action, ...)` の battle_action。"""
-    if "battle_action" in kwargs:
-        return kwargs["battle_action"]
-    if len(args) >= 3:
-        return args[2]
-    return None
+    return frames.arg(args, kwargs, "battle_action", RESOLVE_ARGS)
 
 
 def apply(ctx):
@@ -380,10 +382,6 @@ def apply(ctx):
     if missing:
         write("WARN art not found, falls back to the carrier: {}".format(", ".join(missing)))
 
-    # 型の差し替えの控え。送り口は1手ごとに新しい Structure を作るので、クラスを鍵に弱く持つ。
-    # 値も弱く持つ。差し替えた型は鍵の子クラスで `__bases__` から鍵を強く掴むので、
-    # 値をそのまま持つと鍵が回収されず、1手ごとに型が溜まる。
-    extended = weakref.WeakKeyDictionary()
     # 差し替えの控え（resolve_battle_effect の1回ぶん）。
     pending = {"vfx": None, "carrier": None, "source": None, "sound": None, "until": 0.0,
                "art": False, "heard": False, "side": None}
@@ -394,67 +392,48 @@ def apply(ctx):
     narrowed = []
 
     # ------------------------------------------------------------ 1. 審判の選択肢
-    def install_send(target):
-        @ctx.wrap(target, required=False, safe=True)
-        def battle_send(orig, *args, **kwargs):
-            if "structure" in kwargs:
-                structure, where = kwargs["structure"], "kw"
-            elif len(args) >= 3:
-                structure, where = args[2], "pos"
-            else:
-                return orig(*args, **kwargs)
-            if not isinstance(structure, type):
-                return orig(*args, **kwargs)
-            try:
-                held = extended.get(structure)
-            except TypeError:
-                held = None
-            widened = held() if held is not None else None
-            if widened is None:
-                pydantic_module = sys.modules.get("pydantic")
-                if pydantic_module is None:
-                    return orig(*args, **kwargs)
-                widened = extend_structure(structure, pydantic_module)
-                if widened is None:
-                    return orig(*args, **kwargs)
-                try:
-                    extended[structure] = weakref.ref(widened)
-                except TypeError:
-                    pass
-                manager_name = args[0] if args else kwargs.get("manager_name")
-                if manager_name not in widened_for:
-                    widened_for.add(manager_name)
-                    write("widened vfx for {}: {}".format(
-                        manager_name, ", ".join(literal_choices(widened.model_fields["vfx"].annotation))))
-            if where == "kw":
-                kwargs = dict(kwargs)
-                kwargs["structure"] = widened
-            else:
-                args = args[:2] + (widened,) + tuple(args[3:])
-            manager_name = args[0] if args else kwargs.get("manager_name")
-            # 手引きはプロンプトにも置く（OpenAI 互換サーバーの経路では型の説明がモデルに届かない）。
-            guided = None
-            if "message" in kwargs:
-                guided = with_vfx_guide(kwargs["message"])
-                if guided is not None:
-                    kwargs = dict(kwargs, message=guided)
-            elif len(args) >= 2:
-                guided = with_vfx_guide(args[1])
-                if guided is not None:
-                    args = args[:1] + (guided,) + tuple(args[2:])
-            if guided is not None and manager_name not in guided_for:
-                guided_for.add(manager_name)
-                write("vfx guide added to the prompt for {}".format(manager_name))
-            answer = orig(*args, **kwargs)
-            if manager_name in NARROWED_MANAGERS:
-                for carrier, value in narrow_answer(answer):
-                    narrowed.append({"carrier": carrier, "vfx": value,
-                                     "until": time.monotonic() + NARROWED_SECONDS})
-                    write("{}: {} goes back to the game's choices as {} (the answer is rebuilt "
-                          "with the original type)".format(manager_name, value, carrier))
-            return answer
+    # 送り口を包むのはローダの窓口 `llm.on_request`（後から生える別名と「開始する」のたびの置き直しも窓口が受け持つ）。
+    # こちらは返却型を広げ、広げた頼みにだけ手引きを置き、答えの足した値を運び手に置き換える（TECH.md §3.3.21）。
+    owner = ctx.mod_name or "342_attack_animations"
 
-    llm.watch_aliases(ctx, list(BATTLE_SEND_TARGETS), install_send, label="attack animations")
+    def widen_request(req):
+        """送る前。`vfx` の Literal を広げた子クラスに替え、広げた頼みにだけ手引きを足した messages を返す。"""
+        structure = req.structure
+        if not isinstance(structure, type):
+            return None
+        pydantic_module = sys.modules.get("pydantic")
+        if pydantic_module is None:
+            return None
+        widened = extend_structure(structure, pydantic_module)
+        if widened is None:
+            return None
+        req.structure = widened
+        req.memo[owner] = True
+        manager_name = req.manager_name
+        if manager_name not in widened_for:
+            widened_for.add(manager_name)
+            write("widened vfx for {}: {}".format(
+                manager_name, ", ".join(literal_choices(widened.model_fields["vfx"].annotation))))
+        # 手引きはプロンプトにも置く（OpenAI 互換サーバーの経路では型の説明がモデルに届かない）。
+        guided = with_vfx_guide(req.message)
+        if guided is not None and manager_name not in guided_for:
+            guided_for.add(manager_name)
+            write("vfx guide added to the prompt for {}".format(manager_name))
+        return guided
+
+    def narrow_after(req):
+        """答えが返った後。元の型で作り直す審判（`NARROWED_MANAGERS`）の答えの足した値を、その場で運び手に置き換える。"""
+        if not req.memo.get(owner) or req.manager_name not in NARROWED_MANAGERS:
+            return
+        for carrier, value in narrow_answer(req.result):
+            narrowed.append({"carrier": carrier, "vfx": value,
+                             "until": time.monotonic() + NARROWED_SECONDS})
+            write("{}: {} goes back to the game's choices as {} (the answer is rebuilt "
+                  "with the original type)".format(req.manager_name, value, carrier))
+
+    # 返却型を取らない `send_request_with_no_structure` は見ない。
+    llm.on_request(owner, ctx, widen_request, targets=llm.send_targets("llm_manager_battle", ns=False),
+                   after=narrow_after, write=write)
 
     # ------------------------------------------------------------ 2. 絵と音の差し替え
     def live():
@@ -475,7 +454,7 @@ def apply(ctx):
         action = battle_action_of(args, kwargs)
         vfx = action.get("vfx") if isinstance(action, dict) else None
         now = time.monotonic()
-        side = kwargs.get("character_side", args[1] if len(args) >= 2 else None)
+        side = frames.arg(args, kwargs, "character_side", RESOLVE_ARGS)
         narrowed[:] = [row for row in narrowed if row["until"] > now]
         back = None
         if narrowed and side != ENEMY_SIDE and isinstance(vfx, str) and narrowed[0]["carrier"] == vfx:
@@ -509,8 +488,9 @@ def apply(ctx):
 
         @ctx.wrap(target, required=False, safe=True)
         def effect(orig, self, *args, **kwargs):
+            # 絵のフォルダは1つ目の引数。名前は `effect_src`（effect）と `folder_path`（window_effect）の2通り
             key = "effect_src" if "effect_src" in kwargs else "folder_path"
-            src = kwargs.get(key) if key in kwargs else (args[0] if args else None)
+            src = frames.arg(args, kwargs, key, 0)
             seen = effect_seen.get(name, 0)
             if seen < EFFECT_SAMPLES:
                 effect_seen[name] = seen + 1
@@ -518,11 +498,7 @@ def apply(ctx):
             if (src is not None and live() and pending["source"]
                     and same_folder(src, CARRIER_SOURCES[pending["carrier"]])):
                 pending["art"] = True
-                if key in kwargs:
-                    kwargs = dict(kwargs)
-                    kwargs[key] = pending["source"]
-                else:
-                    args = (pending["source"],) + tuple(args[1:])
+                args, kwargs, _ = frames.replace_arg(args, kwargs, key, 0, pending["source"])
                 write("{}: {} -> {} ({})".format(pending["vfx"], src, pending["source"], name))
             return orig(self, *args, **kwargs)
 
@@ -532,17 +508,12 @@ def apply(ctx):
     # `play_sound(self, app, sound_src)`。音の名前は2つ目（recon の targets.txt）。
     @ctx.wrap(SOUND_TARGET, required=False, safe=True)
     def play_sound(orig, self, *args, **kwargs):
-        named = "sound_src" in kwargs
-        name = kwargs["sound_src"] if named else (args[1] if len(args) >= 2 else None)
+        name = frames.arg(args, kwargs, "sound_src", SOUND_ARGS)
         if live() and pending["sound"] and name in ELEMENT_SOUNDS:
             if name != pending["sound"]:
                 if not pending["heard"]:
                     write("{}: sound {} -> {}".format(pending["vfx"], name, pending["sound"]))
-                if named:
-                    kwargs = dict(kwargs)
-                    kwargs["sound_src"] = pending["sound"]
-                else:
-                    args = (args[0], pending["sound"]) + tuple(args[2:])
+                args, kwargs, _ = frames.replace_arg(args, kwargs, "sound_src", SOUND_ARGS, pending["sound"])
             pending["heard"] = True
         return orig(self, *args, **kwargs)
 

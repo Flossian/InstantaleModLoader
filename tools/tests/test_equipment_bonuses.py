@@ -83,6 +83,7 @@ class Person(object):
 
 class FakeCtx:
     _mod = "411_equipment_bonuses"
+    mod_name = _mod      # 本物の ctx.mod_name と同じく MOD のフォルダ名（窓口に名乗る持ち主名）
 
     def __init__(self, out_dir, mod_dir):
         self.out_dir = out_dir
@@ -163,6 +164,11 @@ ctx = FakeCtx(OUT_DIR, folder)
 mod.apply(ctx)
 battle_effects.install(ctx)     # 戦闘の効果はローダの窓口が効かせる（boot が MOD の後に当てる）
 check("窓口に答えを置いた", abilities.owners() == [package])
+# 品が作られた瞬間と店に入る処理は自分で包まず、ローダの窓口 `items.on_made` / `shopping` に登録する
+from instantale_modloader import items as items_window, shopping  # noqa: E402
+check("窓口 items.on_made に登録する", package in items_window.made_owners(), items_window.made_owners())
+check("窓口 shopping の ENTER に登録する", package in shopping.owners(shopping.ENTER),
+      shopping.owners(shopping.ENTER))
 check("戦闘の効果の窓口にも答えを置いた", battle_effects.owners() == [package], battle_effects.owners())
 check("主人公（自由枠は数えない）", abilities.bonus(app, player) == {"strength": 3, "wisdom": 1})
 check("仲間", abilities.bonus(app, ally) == {"strength": 4, "dexterity": 2})

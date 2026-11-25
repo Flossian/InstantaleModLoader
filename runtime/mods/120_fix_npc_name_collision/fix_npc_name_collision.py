@@ -112,7 +112,7 @@ LLM が書いた名前は捨てて名簿から引く。
 **濁点は鍵に残す。** 落とすのは比べるときだけで、
 しかも落として完全一致した場合に限る（`_near`）。
 鍵の段階で落とすと編集距離と二重に効いて、
-`バルガス` と `アルカス` が同じ人になる（実際に起きた。§ 下の表）。
+`バルガス` と `アルカス` が同じ人になる（VERIFICATION.md §3.30）。
 
 比べ方は4つ。
 どれか1つでも当たれば重複とみなす。
@@ -161,7 +161,6 @@ LLM が書いた名前は捨てて名簿から引く。
 
 ### 二つ名は `EPITHET_CHANCE`（既定 10%）
 
-既定を 30% から 10% に下げた（v5）。
 `ALWAYS_RENAME` で全員を名簿から命名する遊び方だと、
 30% では10人に3人が異名持ちになり「特別な人の印」が薄まる。
 10% なら NPC 20人の世界に1人くらいは居て、居れば目立つ。
@@ -175,11 +174,10 @@ LLM が書いた名前は捨てて名簿から引く。
 
 ### 選び方は乱数（世界ごとに顔ぶれが変わる）
 
-初版は `crc32(id)` で位置を決めていた。
-同じ世界を読み直しても同じ名前になる利点はあったが、**世界をまたぐと同じ
+id から位置を決める（`crc32(id)` など）と、**世界をまたぐと同じ
 id が毎回同じ名前になる**。
 遊ぶたび同じ顔ぶれの名前が並ぶ。
-名前を選ぶのに再現性は要らないので、乱数に替えた。
+名前を選ぶのに再現性は要らないので、乱数で選ぶ（VERIFICATION.md §3.30）。
 
 乱数は **MOD 専用の `random.Random`**（`RNG`）から引く。
 グローバルの `random` を使うとゲーム自身の乱数列がずれる（GAME.md §2.11）。
@@ -196,7 +194,7 @@ id が毎回同じ名前になる**。
 `110_` と同じ立場で記録だけして元の名前のまま通す。
 名前を発明する経路は持たない。
 
-## 一括生成で書かれる住人（版8）
+## 一括生成で書かれる住人
 
 街の住人は、その街に初めて入ったときに `write_area_data_to_world_dict` が素データに書き、
 遊んでいる途中で `World.generate_character` が組み立てる（GAME.md §2.23）。ここで改名していた。
@@ -211,15 +209,13 @@ id が毎回同じ名前になる**。
 主人公は一括生成の世界の素データに居ないので、突き合わせの相手に入らない。
 """
 
-import io
-import json
 import os
 import random
 import re
 import threading
 import unicodedata
 
-from instantale_modloader import frames, loads, ui
+from instantale_modloader import frames, loads, read_json, ui
 
 LOG_BASENAME = "npc_name.log"
 
@@ -357,7 +353,7 @@ def _strip_epithet(text):
     まず**配ったことのある二つ名**をそのまま当てる（`remember_epithets`）。
     当たらなければ助詞の `の` で見るが、**`の` の手前が仮名だけなら切らない**。
     `たけのうち` `みのり` は名前そのもので、切ると鍵が `ウチ` `リ` に化ける
-    （実測で `たけのうち` の鍵が `ウチ` になっていた）。
+    （VERIFICATION.md §3.30）。
     二つ名は `隻眼の` `重鉄の` `元傭兵の` のように漢字を含むので、
     そこで見分ける（仮名だけの二つ名は取りこぼすが、
     名前を壊すよりは取りこぼすほうがよい）。
@@ -483,8 +479,7 @@ def _near(a, b):
     **濁点の違いは編集距離と足し合わせない。**
     鍵を作る段階で濁点を落としてから編集距離を許すと、
     「濁点で1文字寄せて、さらに1文字違ってもよい」＝実質2文字違いが
-    同一人物になる。実際に `バルガス` と `アルカス` が重なり、
-    別人の NPC が改名されていた（`out/npc_name.log` に3件）。
+    同一人物になり、別人の NPC を改名してしまう（VERIFICATION.md §3.30）。
 
     そこで2段に分ける:
 
@@ -544,20 +539,17 @@ def usable(value):
         ch in BAD_NAME_CHARS or ord(ch) < 0x20 for ch in got)
 
 
-def read_roster(path):
+def read_roster(path, report=None):
     """名簿を読む。`(名前の表, 二つ名)` を返す。読めなければ `({}, [])`。
 
     知らない鍵は黙って無視する。
     別の道具で作った名簿をそのまま置けるようにするため。
     読む鍵が1つも無ければ空で返り、呼んだ側が警告を出す。
+    読みはローダの `read_json`（手で直して BOM が付いた名簿も読み、在るのに読めなければ `report` に残す）。
     """
     if not path:
         return {}, []
-    try:
-        with io.open(path, encoding="utf-8") as handle:
-            data = json.load(handle)
-    except Exception:
-        return {}, []
+    data = read_json(path, None, report=report)
     if not isinstance(data, dict):
         return {}, []
     names = {}
@@ -629,7 +621,7 @@ def apply(ctx):
     # **`ctx.mod_dir` は `apply()` の中で控える**（外では None になる。
     # GAME.md §2.12 で実際に踏んでいる）。
     roster_path = pick_path(ctx.mod_dir)
-    names, epithets = read_roster(roster_path)
+    names, epithets = read_roster(roster_path, report=ctx.log_exc)
     # id -> (鍵, 表示上の名前)。
     # 世界を読み直すたびに作り直す。
     known = {}
@@ -688,7 +680,7 @@ def apply(ctx):
         """名簿（既定は今の世界の控え `known`）の中で `key` と同じ人に見える相手。無ければ None。
 
         舐めるのは写し。起動の当て直しの種まき（ワーカーのスレッド）が舐めている間に、ゲームのスレッドの
-        人物の登録が `remember` で書き足し、`dictionary changed size during iteration` で種まきが落ちた（実機）。
+        人物の登録が `remember` で書き足し、`dictionary changed size during iteration` で種まきが落ちた（VERIFICATION.md §3.109）。
         """
         for other_id, (other_key, other_name) in list((known if roster is None else roster).items()):
             if str(other_id) == str(cid):
@@ -820,15 +812,17 @@ def apply(ctx):
                     continue
                 raw = entry.get("name")
                 if isinstance(raw, str):
-                    # 突き合わせにも通す（控えるだけだと、片方が未組み立ての既存の重複を記録も改名もしなかった。
+                    # 突き合わせにも通す（控えるだけだと、片方が未組み立ての既存の重複を記録も改名もしない。
                     # 組み立てた後は `resolve` の番人が素通しにする）。
                     resolve(cid, raw, where, app, entry)
         return fixed
 
     # -------------------------------------------------- 本命: 素データを直す
     @ctx.wrap("__main__:World.generate_character")
-    def generate_character(orig, self, character_id, *args, **kwargs):
-        value = args[0] if args else kwargs.get("character_value")
+    def generate_character(orig, self, *args, **kwargs):
+        # 引数は来た形のまま orig へ渡し、値は名前でも位置でも読む
+        character_id = frames.arg(args, kwargs, "character_id", 0)
+        value = frames.arg(args, kwargs, "character_value", 1)
         try:
             if isinstance(value, dict):
                 name = value.get("name")
@@ -845,7 +839,7 @@ def apply(ctx):
         except Exception:
             # 名前のために NPC の生成を落とさない。
             ctx.log_exc("npc name: could not check {!r}".format(character_id))
-        return orig(self, character_id, *args, **kwargs)
+        return orig(self, *args, **kwargs)
 
     # ------------------------------------------------------------ 受け皿
     @ctx.wrap("scripts.characters:Character.__init__")
@@ -881,7 +875,7 @@ def apply(ctx):
         loading["depth"] += 1
 
     def after_load(call):
-        # `always=True`。ロードが投げても深さは戻す（前は try/finally で包んでいた）。
+        # `always=True`。ロードが投げても深さは戻す。
         try:
             if call.error is None:
                 try:
@@ -897,10 +891,10 @@ def apply(ctx):
         finally:
             loading["depth"] -= 1
 
-    loads.on(os.path.basename(getattr(ctx, "mod_dir", "") or "") or "120_fix_npc_name_collision", ctx, (loads.LOAD, loads.NEW_GAME),
+    loads.on(ctx.mod_name or "120_fix_npc_name_collision", ctx, (loads.LOAD, loads.NEW_GAME),
              before=before_load, after=after_load, always=True, write=write)
 
-    # ------------------------------------- 一括生成で書かれる住人（版8。docstring の節）
+    # ------------------------------------- 一括生成で書かれる住人（docstring の節）
     bulk = {"depth": 0}
     bulk_lock = threading.Lock()
 

@@ -23,9 +23,11 @@
 - 立ち絵（`character_image_right`）はこのレイアウトの外。
   触らない
 
-手配度は `player.area_history[エリアid]['lawfulness']`（`309_office_pardon` が実セーブで確認済み。負ほど重く、0 未満で犯罪者、
+手配度は `player.area_history[エリアid]['lawfulness']`（GAME.md §2.20。負ほど重く、0 未満で犯罪者、
 平常値は 10）。
 """
+
+from instantale_modloader import frames
 
 # ---------------------------------------------------------------- 箱の置き場所
 # 値は**広げた後のレイアウトに対する割合**。
@@ -54,8 +56,8 @@ BOXES = {
     "character_sheet_empty":            ((0.19, 0.18), {"x": 0.79, "y": 0.03}),
     # この MOD が足す箱。
     # 二つ名は箱を持たない。レベル行（basic_info）の text に続けて書く
-    # （別の箱に置いた2つの版は、名前と並べると浮き、レベル行と並べると
-    # 折り返しが手配度の枠に食い込んだ ― 実機2・3周目。続けて書けば
+    # （別の箱に置くと、名前と並べれば浮き、レベル行と並べれば
+    # 折り返しが手配度の枠に食い込む。VERIFICATION_LOG.md §2.46。続けて書けば
     # 位置合わせそのものが要らない）。行が伸びるぶん、上の basic_info の
     # 箱を手配度の手前（0.78）まで広げてある。
     "wanted":                           ((0.30, 0.81), {"x": 0.47, "y": 0.03}),
@@ -214,8 +216,8 @@ HEALTH_IDLE = "health_idle"
 
 
 def _whole(value):
-    """整数として読めた値。読めなければ None（`bool` は数にしない）。"""
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    """整数として読めた値。読めなければ None（`bool` は数にしない。ローダの `frames.is_number`）。"""
+    if not frames.is_number(value):
         return None
     return int(value) if float(value) == int(value) else value
 
@@ -251,7 +253,7 @@ def stage_name(part, stage):
     return STAGE_NAMES.get(PART_GROUPS.get(part), {}).get(stage, stage)
 
 
-#: 健康状態の欄に、見出しの下で入る行数。3行目は欄の下で落ちた（実機。脚の行が出なかった）。
+#: 健康状態の欄に、見出しの下で入る行数。3行目は欄の下で落ちる（VERIFICATION.md §3.131）。
 HEALTH_LINES = 2
 #: 1行に複数の部位を並べるときの区切り。
 HEALTH_GAP = "　"
@@ -337,11 +339,11 @@ def health_details(body_parts, original, current):
 
 
 # ---------------------------------------------------------------- マウスオーバーの説明
-# 特性とスキルの箱は狭く、名前が1行ぶんしか見えない（2件目は箱の下で落ちる。実機）。
+# 特性とスキルの箱は狭く、名前が1行ぶんしか見えない（2件目は箱の下で落ちる）。
 # 箱にマウスを乗せたら、全件の名前・効果・説明を並べた窓を出す。
 
 #: 説明の窓の幅（窓の幅に対する割合）と、マウスからの離れ（px。`ui.upx` で拡縮）。
-#: 最初の 0.26 は 1920px で1行が全角約18字になり、長い特質の説明が18行まで伸びた（実機）。
+#: 狭いと長い特質の説明が縦に伸びる（0.26 では 1920px で18行。VERIFICATION_LOG.md §2.46）。
 DETAIL_WIDTH = 0.36
 DETAIL_GAP = 16.0
 
@@ -487,18 +489,17 @@ REROLL_SUFFIX = ".reroll.json"
 #: 引き直しボタンの置き場所の右端。レベル行の箱（x 0.03〜0.78）のすぐ右。
 #: ふだんは二つ名の文字の直後に置き（`reroll_pos`）、文字の幅を測れないときと、
 #: 文字が箱の右端まで届くときだけここに置く。
-#: 版3まではいつもここで、短い二つ名だと文字から大きく離れて見えた。
+#: いつもここに置くと、短い二つ名では文字から大きく離れて見える。
 #: 大きさはボタン側の固定値（`ui.make_icon_button` の正方形）を使うので、位置だけ持つ。
-#: 最初の版は箱の割合（幅0.05×高0.06）で置いていて、窓に合わせて横長に潰れていた（実機）。
+#: 箱の割合で置くと、窓に合わせて横長に潰れる（VERIFICATION_LOG.md §2.46）。
 REROLL_POS = {"x": 0.79, "center_y": 0.875}
 
 #: 二つ名の文字の終わりから引き直しボタンまでの間（upx）。
 REROLL_GAP = 8.0
 
 #: 引き直しボタンの絵柄の名前（角を落としたサイコロの面と3つの目）。形はローダの `ui.icon_strokes` が持つ。
-#: 版3までは円弧＋矢尻で、408 の立ち絵の描き直しボタンと並ぶと
-#: どちらが何を更新するのか見分けが付かなかった。
-#: 版6で `317_` の評判の画面の再生成のボタンも同じ形を使うことになり、自分のフォルダからローダへ移した
+#: 円弧＋矢尻の形は、408 の立ち絵の描き直しボタンと並ぶとどちらが何を更新するのか見分けが付かない。
+#: `317_` の評判の画面の再生成のボタンも同じ形を使うので、形はローダに置く
 #: （2つ以上の MOD が同じ意味で使う絵柄はローダに置く。TECH.md の HUD の節）。
 REROLL_ICON = "さいころ"
 
@@ -543,10 +544,6 @@ WANTED_HEADING = "手配度: (0未満で犯罪者)"
 SKILLS_HEADING = "スキル:"
 TRAITS_HEADING = "特性:"
 
-#: 手配度の行が箱に入り切らなくなる目安。
-#: これを超えたぶんは出さない。
-MAX_WANTED_LINES = 24
-
 #: エリアの規模。
 #: この値のエリアは手配度に出さない。
 #: セーブでは `dungeon`（単数）、BGM のフォルダは `dungeons`（複数）と揺れる。
@@ -569,7 +566,7 @@ def is_dungeon(size):
 def size_from_bgm(bgm):
     """BGM のパスから規模を読む。読めなければ `None`。
 
-    `104_balance_area_bgm` と同じ読み方。
+    パスの形は GAME.md §2.11 のエリアBGM。
     実行中の `Area` は `size` を持っていないので（実測）、
     生の辞書が引けないときの控えとして使う。
     """
@@ -583,86 +580,39 @@ def size_from_bgm(bgm):
     return parts[-3]
 
 
-def raw_areas(holders):
-    """セーブの生のエリア表 `{id: {"size": ..., ...}}` を探す。
+def area_sizes(areas, saved):
+    """`({エリアid(str): 規模}, セーブの表から読めた数)`。セーブの表を先に、無ければ BGM から読む。
 
-    実行中の `Area` オブジェクトは `size` を持っていない（実測）。
-    セーブを読み込んだ辞書のほうには在るので、
-    `app.world_dict` などから中身で見分ける。
-    属性名は決めつけない（`world_dict` /
-    `save_data_dict` のどちらが生きているかはビルド次第）。
+    `saved(area_id)` はセーブ側の土地の表の規模（入口がローダの `ui.area_size` を渡す。
+    実行中の `Area` は `size` を持っていないので、セーブの辞書から引く。GAME.md §2.7）。
     """
-    for holder in holders:
-        try:
-            own = dict(vars(holder))
-        except Exception:
-            continue
-        for value in own.values():
-            if not isinstance(value, dict):
-                continue
-            found = _areas_in(value)
-            if found is not None:
-                return found
-    return None
-
-
-def _areas_in(value, depth=0):
-    """辞書の中から「エリアの表らしいもの」を1つ選ぶ。
-
-    `{id: {...}}` の形で、中身が `size` と
-    `name` の両方を持っているものだけをエリア表とみなす。
-    1段だけ潜るのは、セーブが `{"areas": {...}}` の形だから。
-    """
-    if not value:
-        return None
-    sample = next(iter(value.values()))
-    if isinstance(sample, dict) and "size" in sample and "name" in sample:
-        return value
-    if depth >= 1:
-        return None
-    for nested in value.values():
-        if isinstance(nested, dict):
-            found = _areas_in(nested, depth + 1)
-            if found is not None:
-                return found
-    return None
-
-
-def area_sizes(areas, raw):
-    """`{エリアid: 規模}`。生の表が在ればそちらを、無ければ BGM から読む。
-
-    id は保存されるときに文字列になるので、両方を文字列に均して突き合わせる。
-    """
-    sizes = {}
+    sizes, found = {}, 0
     for area_id, area in (areas or {}).items():
-        key = str(area_id)
-        size = None
-        if isinstance(raw, dict):
-            entry = raw.get(key, raw.get(area_id))
-            if isinstance(entry, dict):
-                size = entry.get("size")
-        if not isinstance(size, str) or not size:
+        size = saved(area_id)
+        if isinstance(size, str) and size:
+            found += 1
+        else:
             size = size_from_bgm(getattr(area, "bgm", None))
-        sizes[key] = size
-    return sizes
+        sizes[str(area_id)] = size
+    return sizes, found
 
 
-def wanted_entries(areas, sizes, history, max_lines=MAX_WANTED_LINES):
+def wanted_entries(areas, sizes, lawfulness, max_lines=None):
     """手配度に出す `[(エリア名, 手配度)]`。
 
+    `lawfulness` は `{エリアid(str): 手配度}`（入口が `ui.lawfulness_by_area` で引いて渡す）。
     出す条件は3つ。
     規模がダンジョンでないこと、記録が在ること（＝一度も関わっていないエリアは出さない）、
-    手配度が数として読めること。
+    手配度が数として読めること（読めない記録は `lawfulness` に入っていない）。
     並びはエリア id 順で、id が数として読めるならその順に均す。
-    `max_lines=None` で全件（説明の窓に出す分）。
+    `max_lines=None`（既定）で全件。
     """
     rows = []
     for area_id, area in (areas or {}).items():
         key = str(area_id)
         if is_dungeon((sizes or {}).get(key)):
             continue
-        entry = _history_entry(history, key)
-        value = _lawfulness(entry)
+        value = (lawfulness or {}).get(key)
         if value is None:
             continue
         name = getattr(area, "name", None)
@@ -678,28 +628,6 @@ def _sort_key(area_id):
         return (0, int(area_id), "")
     except (TypeError, ValueError):
         return (1, 0, str(area_id))
-
-
-def _history_entry(history, area_id):
-    if not isinstance(history, dict):
-        return None
-    if area_id in history:
-        return history[area_id]
-    for key, value in history.items():
-        if str(key) == area_id:
-            return value
-    return None
-
-
-def _lawfulness(entry):
-    """記録の手配度。`bool` を弾くのは `isinstance(True, int)` が真だから。"""
-    if isinstance(entry, dict):
-        value = entry.get("lawfulness")
-    else:
-        value = getattr(entry, "lawfulness", None)
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return int(value)
 
 
 def names_of(value, limit=12):

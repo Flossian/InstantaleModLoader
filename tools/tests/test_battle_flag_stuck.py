@@ -29,7 +29,7 @@ if RUNTIME_DIR not in sys.path:
     sys.path.insert(0, RUNTIME_DIR)
 
 import instantale_modloader as ml                      # noqa: E402
-from instantale_modloader import gates, loads          # noqa: E402
+from instantale_modloader import battles, gates, loads, twin_windows   # noqa: E402
 
 failures = []
 
@@ -68,6 +68,7 @@ class FakeUI(object):
 
 class FakeCtx(object):
     _mod = "107_fix_battle_flag_stuck"
+    mod_name = _mod
 
     def __init__(self, out_dir):
         self.out_dir = out_dir
@@ -141,6 +142,12 @@ for target in ("__main__:BattleEndManager.end_phase",
                "__main__:BattleEndInFreeAction.end_phase",
                "__main__:BattleEndInColosseum.end_phase"):
     check("包む: " + target, target in ctx.hooks, sorted(ctx.hooks))
+# 終わり方3つと売買の窓を閉じた後は自分で包まず、ローダの窓口 `battles` / `twin_windows` に登録する
+check("窓口 battles の END に登録する",
+      "107_fix_battle_flag_stuck" in battles.owners(battles.END), battles.owners(battles.END))
+check("窓口 twin_windows の CLOSE に登録する",
+      "107_fix_battle_flag_stuck" in twin_windows.owners(twin_windows.CLOSE),
+      twin_windows.owners(twin_windows.CLOSE))
 # ロードと新規開始の後は自分で包まず、ローダの窓口 `loads` に登録する
 for kind in (loads.LOAD, loads.NEW_GAME):
     check("窓口 loads に登録する: " + kind,

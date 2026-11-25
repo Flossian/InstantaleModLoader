@@ -29,8 +29,8 @@ MOD なしの労働は、役場が「16ヵ月」「32ヵ月」の2択、裏の�
 import random
 import sys
 
-from instantale_modloader import (abilities, choices, modfacility, npcs, prices, state as loader_state,
-                                  town_events, ui)
+from instantale_modloader import (abilities, choices, durations, frames, modfacility, modnpc, npcs, prices,
+                                  state as loader_state, town_events, ui)
 
 from . import rules
 
@@ -164,9 +164,6 @@ STATE_DIRNAME = "labor_overhaul"
 STORE_ATTR = "_instantale_labor_overhaul"
 MARK = "mod_labor_overhaul"
 
-#: MOD が建てた施設の id の頭（ローダの `modfacility`）。雇い主にしない。
-MOD_FACILITY_PREFIX = "mod:"
-
 OFFICE_TYPE = "administrative_office"
 UNDERWORLD_TYPE = "underworld_office"
 #: ゲームの労働のボタンの spec のクラス名（GAME.md §2.20 の役場の選択肢）。
@@ -185,18 +182,13 @@ WORK_SCREEN = "work"
 AFFINITY_MIN = -100
 AFFINITY_MAX = 100
 
-BUSY_FLAGS = ui.BUSY_FLAGS
 money = ui.money
 coins = ui.rewrite_coins
 
 
 def _store():
-    """世代をまたぐ入れ物。プロセスに1つ（TECH.md §3.5）。"""
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {"worlds": None, "rng": random.Random()}
-        setattr(sys, STORE_ATTR, store)
-    return store
+    """世代をまたぐ入れ物。プロセスに1つ（TECH.md §3.5。ローダの state.process_store が足りない鍵を埋める）。"""
+    return loader_state.process_store(STORE_ATTR, {"worlds": None, "rng": random.Random()})
 
 
 def rule_values():
@@ -229,8 +221,8 @@ def apply(ctx):
         return str(area_id) if area_id not in (None, "") else None
 
     def area_name_here(app):
-        name = getattr(ui.current_area(app), "name", None)
-        return name if isinstance(name, str) and name else AREA_FALLBACK
+        # 名前は切らない（ローダの ui.area_name。空白だけの名前は無いとみなす）
+        return ui.area_name(app, ui.current_area(app), fallback=AREA_FALLBACK, limit=None)
 
     def facility_type_here(app):
         return ui.facility_type_of(ui.current_facility(app))
@@ -240,7 +232,7 @@ def apply(ctx):
         return str(value if value not in (None, "") else fallback)
 
     def busy(app):
-        return [flag for flag in BUSY_FLAGS if getattr(app, flag, False)]
+        return ui.busy_flags(app)       # 立っている忙しさの旗（ui.BUSY_FLAGS の順）
 
     def growth_here(app, bucket):
         """いま居る街の労働の実績（賃金の基準の難易度に足す数）。"""
@@ -258,7 +250,7 @@ def apply(ctx):
         if not callable(reward):
             return None
         difficulty = getattr(app, DIFFICULTY_ATTR, None)
-        if isinstance(difficulty, bool) or not isinstance(difficulty, (int, float)):
+        if not frames.is_number(difficulty):
             difficulty = 0
         difficulty = min(DIFFICULTY_TOP, difficulty + max(0, int(growth)))
         try:
@@ -266,19 +258,12 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("labor: {} failed".format(REWARD_FUNCTION))
             return None
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        if not frames.is_number(value) or value <= 0:
             return None
         return value
 
-    def age_of(app):
-        """主人公の年齢。読めなければ None（そのときは年齢の決まりを当てない）。"""
-        value = getattr(getattr(app, "player", None), "age", None)
-        if isinstance(value, bool):
-            return None
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return None
+    # 主人公の年齢。読めなければ None（そのときは年齢の決まりを当てない。ローダの durations.age_of）
+    age_of = durations.age_of
 
     def term_for_age(app, days):
         """設定の長さ（29歳までの長さ）を、主人公の年齢の長さにする。"""
@@ -336,11 +321,11 @@ def apply(ctx):
         for node in nodes_here(app):
             for key, facility in ui.facilities_of(node).items():
                 kind = ui.facility_type_of(facility)
-                owner_id = getattr(facility, "owner", None)
+                owner_id, _owner = ui.facility_owner(app, facility)     # 主が居なければ None
                 facility_id = facility_id_of(facility, key)
-                if kind not in rules.OFFICE_JOB_BY_TYPE or owner_id in (None, "") or facility_id in seen:
+                if kind not in rules.OFFICE_JOB_BY_TYPE or owner_id is None or facility_id in seen:
                     continue
-                if facility_id.startswith(MOD_FACILITY_PREFIX) or str(owner_id).startswith(MOD_FACILITY_PREFIX):
+                if modfacility.is_mod_facility(facility_id) or modnpc.is_mod_npc(owner_id):
                     continue
                 place = ui.facility_name(app, facility) or PLACE_FALLBACK
                 # 同じ種類・同じ名前の施設は1つだけ並べる（区画が何組もある街では、同じ施設が区画ごとに在る）
@@ -424,9 +409,9 @@ def apply(ctx):
         area_id = area_id_here(app)
         facility = ui.current_facility(app)
         key = rules.employer_key(area_id, facility_id_of(facility))
-        owner_id = getattr(facility, "owner", None)
+        owner_id, _owner = ui.facility_owner(app, facility)     # 主が居なければ None
         if SENIORITY:
-            rules.employer_row(bucket, key, owner_id if owner_id not in (None, "") else None)
+            rules.employer_row(bucket, key, owner_id)
         tenure = rules.tenure_days(bucket, key) if SENIORITY else 0
         rank = rules.rank_index(tenure)
         mine = scores(app)
@@ -568,7 +553,7 @@ def apply(ctx):
         return LIST_ROW.format(name=row["name"], details=LIST_SEP.join(details))
 
     def format_percent(value):
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
+        if not frames.is_number(value):
             return "?"
         return "{:g}".format(round(value, 1))
 
@@ -792,7 +777,7 @@ def apply(ctx):
             return
         try:
             current = npcs.affinity_of(app, owner_id)
-            if isinstance(current, bool) or not isinstance(current, (int, float)):
+            if not frames.is_number(current):
                 return
             target = max(AFFINITY_MIN, min(AFFINITY_MAX, int(current) + int(delta)))
             if target != current:
@@ -1017,7 +1002,7 @@ def apply(ctx):
             if isinstance(started, bool) or not isinstance(started, int):
                 started = day
             text = template.format(
-                player=getattr(player, "name", None) or "主人公", area=area_name_here(app),
+                player=ui.player_name(app, fallback="主人公"), area=area_name_here(app),
                 name=contract["name"], period=rules.days_in_words(max(0, day - started)))
             logs.append({"day_start": started, "day_end": day, "summarized_count": 0,
                          "content": RECORD_MARK + text + "\n"})
@@ -1063,7 +1048,7 @@ def apply(ctx):
         """勤続の段のある店で、買値を下げる（ローダの値段の共通フックの一時の段）。触らないなら None。"""
         if not (SENIORITY and SHOP_DISCOUNT) or key != prices.BUY:
             return None
-        if isinstance(price, bool) or not isinstance(price, (int, float)) or price <= 0:
+        if not frames.is_number(price) or price <= 0:
             return None
         app = ui.find_app()
         if app is None:
@@ -1086,26 +1071,14 @@ def apply(ctx):
     ACTIONS = {"list": open_list, "back": back, "pick": pick, "start": start, "work": work,
                "option": option, "skip_event": skip_event, "quit": quit_work, "cancel": cancel}
 
-    class LaborPhase(object):
-        """自前のフェーズ。`PhaseSpec` には載せない（セーブに残さない）。"""
-
-        def __init__(self, app, action, payload):
-            self.app = app
-            self.action = action
-            self.payload = payload
-
-        def execute(self, choice_text):
-            try:
-                ACTIONS[self.action](self.app, self.payload)
-            except Exception:
-                ctx.log_exc("labor: phase failed ({})".format(self.action))
-
     def _press(action, text, payload):
-        """自前のボタンの押下。ゲームと同じ経路（`process_choice`）で動かす。"""
+        """自前のボタンの押下。ゲームと同じ経路（`process_choice`）で動かす。
+
+        使い捨てのフェーズはローダの `Screen.run_phase` が作る（`PhaseSpec` には載せない。セーブに残さない）。
+        """
         def on_press(app):
             write("pressed {!r} ({})".format(text, action))
-            screen.start_phase(app, LaborPhase(app, action, payload), text,
-                               fallback=lambda: ACTIONS[action](app, payload))
+            screen.run_phase(app, text, ACTIONS[action], payload, label=action)
             return None
         return on_press
 

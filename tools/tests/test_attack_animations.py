@@ -69,6 +69,8 @@ class Ctx(object):
         self.out_dir = out_dir
         self.state_dir = os.path.join(out_dir, "state")
         self.mod_dir = mod_dir
+        # 窓口に名乗る持ち主（本物は apply() の間だけ MOD のフォルダ名）
+        self.mod_name = os.path.basename(mod_dir)
         self.game_dir = game_dir
         self.hooks = {}
         self.errors = []
@@ -308,8 +310,10 @@ if pydantic is not None:
     check("vfx の行のある system を選ぶ",
           MOD.with_vfx_guide(two)[0] is two[0] and MOD.VFX_GUIDE in MOD.with_vfx_guide(two)[1]["content"])
 
-    # 1手ごとに作られる型は、使い終えたら控えごと回収される
+    # 1手ごとに作られる型は、控え（ローダの `llm.extend_structure` の直近 EXTENDED_LIMIT 組）から
+    # 押し出されたら回収される（1手ごとに型が溜まらない）
     import gc
+    from instantale_modloader import llm as loader_llm
 
     def one_turn():
         class Turn(pydantic.BaseModel):
@@ -319,8 +323,10 @@ if pydantic is not None:
         return weakref.ref(Turn), weakref.ref(turn_seen["args"][2])
 
     turn_ref, wide_ref = one_turn()
+    for _turn in range(loader_llm.EXTENDED_LIMIT):
+        one_turn()
     gc.collect()
-    check("使い終えた型は回収される", turn_ref() is None and wide_ref() is None,
+    check("使い終えた型は控えから押し出されたら回収される", turn_ref() is None and wide_ref() is None,
           (turn_ref(), wide_ref()))
 
 

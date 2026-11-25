@@ -7,6 +7,8 @@
 備えはこのボタンと同じ引数でゲームの服役を1年進め、見つかったときは残り年数と刑期を延ばして渡す。
 """
 
+from instantale_modloader import frames
+
 from . import rules
 
 #: 年ごとの画面の目印（ゲームの「服役する」のボタンが呼ぶクラス）。
@@ -61,8 +63,8 @@ IMPROVISED_TEXT = "押収された装備は看守の詰所にある。手にあ�
 RECOVERED_TEXT = "逃げる途中で詰所に押し入り、押収されていた装備を取り戻した。"
 
 
-def is_number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+#: int か float で bool ではない（ローダの `frames.is_number`）。
+is_number = frames.is_number
 
 
 def serve_args(args):

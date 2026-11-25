@@ -23,7 +23,7 @@ HP は**最大 HP に対する割合**で品に書く（`回復: 25%`）。
 
 import random
 
-from instantale_modloader import frames
+from instantale_modloader import frames, items, prices
 
 ITEM_TYPES = ("healing_item", "consumable")
 
@@ -59,17 +59,12 @@ OWN_KEY_NAMES = ("stamina", "hp_delta", "stamina_delta", "ailment")
 
 
 def num(value):
-    """数として読めれば float、読めなければ None（文字列で入ることがある）。"""
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value.strip())
-        except ValueError:
-            return None
-    return None
+    """数として読めれば float、読めなければ None（文字列で入ることがある）。
+
+    読み方はローダの `frames.to_number`（真偽値は弾く）。こちらはいつも float で返す。
+    """
+    number = frames.to_number(value)
+    return None if number is None else float(number)
 
 
 def parse_amount(value):
@@ -98,24 +93,12 @@ def format_signed_percent(pct):
 
 
 def read_item(item):
-    """`Item` インスタンスからもセーブの辞書からも、同じ形で読む（`129_` と同じ）。"""
-    inner = frames.attr(item, "item_instance", None)
-    if inner is not None:
-        item = inner
-    if isinstance(item, dict):
-        attributes = item.get("attributes")
+    """`Item` インスタンスからもセーブの辞書からも、同じ形で読む（`129_` と同じローダの `prices.read_item`）。
 
-        def field(name):
-            return item.get(name)
-    else:
-        attributes = getattr(item, "attributes", None)
-
-        def field(name):
-            return getattr(item, name, None)
-
-    if not isinstance(attributes, dict):
-        attributes = None
-    return field, attributes
+    画面の部品（`InventoryItem`）が来たら中の品を読む（`items.unwrap`）。
+    `attributes` が辞書でなければ空の辞書を返す。
+    """
+    return prices.read_item(items.unwrap(item))
 
 
 def find_key(attributes, candidates):
@@ -136,7 +119,7 @@ def own_key(attributes, name):
 def kind_of(item):
     """この分類が扱う細分なら種類を、扱わないなら None。"""
     field, attributes = read_item(item)
-    if attributes is None or field("item_type") not in ITEM_TYPES:
+    if not attributes or field("item_type") not in ITEM_TYPES:
         return None
     return KIND_BY_DETAIL.get(attributes.get("item_detail"))
 
@@ -266,7 +249,7 @@ def effect_of(item, owner=None):
     `owner` が無い（読めない）ときは割合の項を 0 と見なす。
     """
     _field, attributes = read_item(item)
-    if attributes is None:
+    if not attributes:
         return 0, 0, False
     base = max_hp_of(owner) if owner is not None else None
     hp = stamina = 0
@@ -296,7 +279,10 @@ def effect_of(item, owner=None):
 
 
 def inventory_size(character):
-    inventory = frames.attr(character, "inventory", None)
+    # Character の持ち物は入れ物（ItemContainer）の `.inventory` にある。`items.inventory_of` が2段目まで降りる
+    inventory = items.inventory_of(character)
+    if inventory is None:
+        inventory = frames.attr(character, "inventory", None)
     if isinstance(inventory, (dict, list, tuple)):
         return len(inventory)
     return None
@@ -340,7 +326,7 @@ def commit(owner, planned):
         if not delta:
             continue
         current = frames.attr(owner, attr_name, None)
-        if isinstance(current, bool) or not isinstance(current, (int, float)):
+        if not frames.is_number(current):
             continue
         new = current + delta
         setattr(owner, attr_name, new if isinstance(current, float) else int(new))
@@ -399,7 +385,7 @@ class Hidden(object):
     def __init__(self, attributes):
         self.attributes = attributes
         self.saved = None
-        if attributes is not None and is_reworked(attributes):
+        if attributes and is_reworked(attributes):
             key = find_key(attributes, BURDEN_KEYS)
             if key is not None:
                 self.saved = list(attributes.items())

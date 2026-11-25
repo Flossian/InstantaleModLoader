@@ -52,11 +52,14 @@ import threading
 MOD_DIR = os.path.dirname(os.path.abspath(__file__))
 if MOD_DIR not in sys.path:
     sys.path.insert(0, MOD_DIR)
-for _tools in [os.environ.get("INSTANTALE_MODLOADER_TOOLS", ""),
-               os.path.normpath(os.path.join(MOD_DIR, os.pardir, os.pardir,
-                                             os.pardir, "tools"))]:
-    if os.path.isfile(os.path.join(_tools, "modtool.py")) and _tools not in sys.path:
-        sys.path.insert(0, _tools)
+# 共有の土台（`tools/modtool.py`）。ほかの設定画面と同じく `IML_ROOT` を先に見る
+# （検証用の仮フォルダや local\ に置いた MOD でも、起動側の木の modtool を使う）。無ければ3つ上。
+_IML_ROOT = os.environ.get("IML_ROOT") or ""
+for _tools in ([os.path.join(_IML_ROOT, "tools")] if _IML_ROOT else []) + [
+        os.path.normpath(os.path.join(MOD_DIR, os.pardir, os.pardir, os.pardir, "tools"))]:
+    if os.path.isfile(os.path.join(_tools, "modtool.py")):
+        if _tools not in sys.path:
+            sys.path.insert(0, _tools)
         break
 
 import assets     # noqa: E402  自分の隣（モデルの置き場とダウンロード）

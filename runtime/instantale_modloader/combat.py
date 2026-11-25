@@ -32,9 +32,7 @@ MOD どうしは import しない（TECH.md §3.2.3）ので、両者はここ�
 置き場は `sys` の属性で、注入し直しをまたいで残る。
 そのため切った MOD のぶんは、ローダの `boot()` と `unload` が `durations.forget` の片付けとして外す。
 """
-import sys
-
-from . import durations, equipment
+from . import _kinds, durations, equipment, state
 from . import log_exc
 
 #: 装備の攻撃力。答えは float。
@@ -52,14 +50,9 @@ ENEMY_KINDS = (ENEMY_HP, ENEMY_DAMAGE)
 _ATTR = "_instantale_combat"
 _ENEMY_ATTR = "_instantale_combat_enemy"
 
-
-def _registry():
-    """`{種類: (持ち主, 関数)}`。`sys` に置いて注入し直しをまたぐ。"""
-    found = getattr(sys, _ATTR, None)
-    if not isinstance(found, dict):
-        found = {}
-        setattr(sys, _ATTR, found)
-    return found
+#: `{種類: (持ち主, 関数)}` の登録簿（`_kinds`。`durations` / `equipment` と同じ形）。
+_by_kind = _kinds.KindRegistry(_ATTR, "combat")
+_registry = _by_kind.table
 
 
 def declare(kind, fn, owner="", write=None):
@@ -67,24 +60,12 @@ def declare(kind, fn, owner="", write=None):
 
     `fn(app, holder)` は float か、**装備が無ければ None** を返す。
     """
-    if not callable(fn):
-        raise TypeError("declare() needs a callable, got {!r}".format(type(fn)))
-    registry = _registry()
-    previous = registry.get(str(kind))
-    registry[str(kind)] = (str(owner or ""), fn)
-    before = previous[0] if previous else None
-    if write and before and before != str(owner or ""):
-        write("combat: {!r} is now decided by {!r} (was {!r})".format(kind, owner, before))
-    return before
+    return _by_kind.declare(kind, fn, owner, write)
 
 
 def _enemy_registry():
     """`{持ち主: {種類: 関数}}`（置いた順）。`sys` に置いて注入し直しをまたぐ。"""
-    found = getattr(sys, _ENEMY_ATTR, None)
-    if not isinstance(found, dict):
-        found = {}
-        setattr(sys, _ENEMY_ATTR, found)
-    return found
+    return state.process_store(_ENEMY_ATTR, {})
 
 
 def declare_enemy(kind, fn, owner="", write=None):
@@ -129,10 +110,7 @@ def enemy_scaler():
 
 def forget(owner, write=None):
     """その持ち主が置いたものを全部外す（MOD を外したとき）。外した種類を返す。"""
-    registry = _registry()
-    gone = [kind for kind, (who, _fn) in registry.items() if who == str(owner)]
-    for kind in gone:
-        registry.pop(kind, None)
+    gone = _by_kind.drop(owner)
     enemy = _enemy_registry().pop(str(owner), None)
     if enemy:
         gone += sorted(enemy)
@@ -151,13 +129,11 @@ def owners():
     ローダの `boot()` が、今回適用されなかった MOD のぶんを外すのに使う
     （登録簿は注入をまたいで残るので、切った MOD の旧い関数に聞き続けないように）。
     """
-    return sorted({who for who, _fn in _registry().values()} | set(_enemy_registry()))
+    return sorted(_by_kind.owners() | set(_enemy_registry()))
 
 
-def source_of(kind):
-    """その種類を決めている MOD の名前。誰も置いていなければ `""`。"""
-    entry = _registry().get(str(kind))
-    return entry[0] if entry else ""
+#: その種類を決めている MOD の名前。誰も置いていなければ `""`。
+source_of = _by_kind.source_of
 
 
 def _ask(kind, app, holder):

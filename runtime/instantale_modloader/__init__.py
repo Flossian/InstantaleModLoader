@@ -349,6 +349,19 @@ _state: dict = {
     "replaced_own": 0,
 }
 
+# `ctx.logger(span="injection")` の覚え（(MOD, ファイル名, span_key) -> 打ち切りの数・書いた本文）。
+# `_state` と同じくモジュール変数にしてある。遅れて当て直す boot は同じモジュールの `boot()` を
+# 呼ぶので残り（`_deferred_loop`）、手で注入し直すとブートストラップがローダを sys.modules から
+# 落として読み直すので空に戻る（tools/injector.py の BOOTSTRAP_TEMPLATE）。
+# `_state` に入れないのは、`status()` の写しに MOD の本文の集合が混ざらないようにするため。
+_LOGGER_SPANS: dict = {}
+_LOGGER_SPANS_LOCK = threading.Lock()
+
+
+def _logger_span() -> dict:
+    """`ctx.logger` の1つの span の覚え。used は cap に数えた行、seen は unrepeated、last は dedup。"""
+    return {"lock": threading.Lock(), "used": 0, "noticed": False, "seen": set(), "last": None}
+
 # on_ready の「もう実行した」印を置く場所。
 # sys に生やしているのは、**注入し直すとこのモジュール自体が読み込み直される**ため。
 # ここをモジュール変数にすると印ごと消えて、
@@ -359,11 +372,8 @@ _ONCE_ATTR = "__instantale_ready_once__"
 
 
 def _once_store() -> set:
-    store = getattr(sys, _ONCE_ATTR, None)
-    if not isinstance(store, set):
-        store = set()
-        setattr(sys, _ONCE_ATTR, store)
-    return store
+    from . import state as _state_mod
+    return _state_mod._process_value(_ONCE_ATTR, set)
 
 
 # 積んだがまだ走っていない on_ready（キー → 積んだ世代）。印と同じ理由で sys に置く。
@@ -374,11 +384,8 @@ _PENDING_ATTR = "__instantale_ready_pending__"
 
 
 def _pending_store() -> dict:
-    store = getattr(sys, _PENDING_ATTR, None)
-    if not isinstance(store, dict):
-        store = {}
-        setattr(sys, _PENDING_ATTR, store)
-    return store
+    from . import state as _state_mod
+    return _state_mod.process_store(_PENDING_ATTR, {})
 
 
 def reset_once(prefix: str | None = None) -> int:
@@ -420,6 +427,18 @@ def log(msg: str, *, level: str = "INFO") -> None:
             pass
     try:
         sys.stderr.write("[modloader] " + line + "\n")
+    except Exception:
+        pass
+
+
+def _log_line(text) -> None:
+    """窓口の既定の書き先（ローダの内部用）。`modloader.log` へ、頭が `WARN` なら WARN の段で書く。投げない。
+
+    窓口の記録は、どの MOD が先に包んだかで行き先を変えないため `modloader.log` に書く。
+    `defeat` / `equipment` / `guards` に同じ本体が写されていた。
+    """
+    try:
+        log(text, level="WARN" if text.startswith("WARN") else "INFO")
     except Exception:
         pass
 
@@ -808,7 +827,9 @@ class ModContext:
         return path
 
     def logger(self, name: str, *, tag: str = None, stamp: bool = True,
-               label: str = None, cap: int = None, dedup: bool = False):
+               label: str = None, cap: int = None, dedup: bool = False,
+               span: str = "apply", unrepeated: bool = False, cap_notice: str = None,
+               span_key=None):
         """この MOD 専用のログ関数を作る。`out/<name>` に1行ずつ追記する。
 
             write = ctx.logger("quest_offer.log")
@@ -826,6 +847,31 @@ class ModContext:
         | `label` | 書けなかったときに `modloader.log` へ出す名前。既定は MOD のフォルダ名 |
         | `cap` | この関数からの書き込みをこの行数で打ち切る。毎フレーム呼ばれる場所からの記録用（`note = ctx.logger(名前, cap=N)` の形で、無制限の `write` と併用する）。既定は無制限 |
         | `dedup` | **直前と同じ本文なら書かない。** 結末が変わったときだけ1行出る。会話の LLM は1ターンに何度も回るので、注入の結末をそのまま書くとログが会話で埋まる。`cap` が「N 行で打ち切る」なのに対し、こちらは「変わるまで黙る」 |
+        | `span` | 下の3つ（`cap` の数・`unrepeated` の覚え・`dedup` の直前の本文）を持つ期間。既定 `"apply"` はこの関数ごと（apply のたびに作り直す）。`"injection"` は注入の間ずっと |
+        | `unrepeated` | **この span の中で既に書いた本文と同じ行は書かない。** `dedup` と違い、直前だけでなく前に書いたどの行とも比べる。設定の要約のような定型の行用 |
+        | `cap_notice` | `cap` を超えた最初の1行の代わりに1回だけ書く行（`tag` と時刻は付く）。既定は何も書かない |
+        | `span_key` | `span="injection"` で、同じ MOD・同じ `name` の記録を別々に数えたいときの呼び分けの鍵。既定 None |
+
+        `span="injection"` は、遅れて当て直す boot（1回の注入で何度か走る）をまたいで覚えを残す。
+        apply のたびに作り直す既定の span だと、当て直しのたびに `cap` が満タンに戻り、
+        設定の要約が同じ文面で並び直す。覚えはローダのモジュール変数 `_LOGGER_SPANS` に
+        (MOD, `name`, `span_key`) の鍵で置く。手で注入し直すとローダごと読み直されるので空に戻る。
+        注入はふつうログの世代送りの境目なので（tools/injector.py の `rotate_logs`）、
+        新しいログの頭にもう一度書かれる。世代送りを切っているときと、`--unload` と、
+        watcher が起動時に既に動いていたゲームへ注入し直すときはログが続くので、
+        同じ行が同じファイルにもう一度出る（`log_unrepeated` と同じ寿命）。
+
+        そろえた写しは2通り。`cap` と `cap_notice` は 129・134・409・410・411 の note
+        （LOG_LIMIT 行の後に「以降は件数だけ数える」を1回）。写しは数を sys に置いていたので、
+        手で注入し直した後の新しいログには1行も出なかった。こちらは注入ごとに数え直す。
+        `unrepeated` は 104・111・129・142・405 の「前に書いた設定の行と同じなら書かない」。
+        写しは sys に置いてログの身元（st_dev, st_ino）で入れ替わりを見ていた（142 は見ない）。
+        こちらは身元を見ずに注入で区切る。ローダは注入ごとに読み直され、boot ごとには読み直されない。
+
+        判定の順は `dedup` → `unrepeated` → `cap`。書かなかった行は枠を食わない。
+        `unrepeated` と `dedup` が比べるのは時刻と印を付ける前の本文。
+        `unrepeated` の覚えは件数で打ち切らないので、毎回違う本文が来る記録には使わない
+        （鍵ごとに1回だけ書くなら `ctx.once`。覚えの件数に上限を置ける）。
 
         `tag` を逐語にしてあるのは、**既にあるログの見た目を変えないため**。
         角括弧の形（`[BGMFIX]`）と区切りの形（`quest-end:`）が両方使われていて、
@@ -849,39 +895,119 @@ class ModContext:
         """
         path = self.out_path(name)
         whose = label or (self._mod or "mod")
-        lock = threading.Lock()
-        left = [cap]                     # None なら無制限
-        last = [None]                    # dedup 用。直前に書いた本文
+        if span not in ("apply", "injection"):
+            log("{}: unknown logger span {!r}; using 'apply'".format(whose, span), level="WARN")
+            span = "apply"
+        if span == "injection":
+            with _LOGGER_SPANS_LOCK:
+                memo = _LOGGER_SPANS.setdefault(
+                    (self._mod or label or "<loader>", name, span_key), _logger_span())
+        else:
+            memo = _logger_span()
+        lock = memo["lock"]
 
         def write(text):
             try:
                 line = str(text).rstrip("\n")
-                # dedup は cap より**先**に見る。
-                # 逆にすると、書かなかった行が枠を食って
-                # `cap=10, dedup=True` が「1行書いて終わり」になる。
-                if dedup:
-                    # 時刻と印を付ける**前**の本文で見る。
-                    # 付けた後だと時刻が毎回違うので、同じ結末でも別物になる。
-                    if line == last[0]:
-                        return
-                    last[0] = line
-                if left[0] is not None:
-                    if left[0] <= 0:
-                        return
-                    left[0] -= 1
-                if tag:
-                    line = "{} {}".format(tag, line)
-                if stamp:
-                    line = "[{}] {}".format(
-                        datetime.datetime.now().isoformat(timespec="milliseconds"),
-                        line)
                 with lock:
+                    # dedup と unrepeated は cap より**先**に見る。
+                    # 逆にすると、書かなかった行が枠を食って
+                    # `cap=10, dedup=True` が「1行書いて終わり」になる。
+                    if dedup:
+                        # 時刻と印を付ける**前**の本文で見る。
+                        # 付けた後だと時刻が毎回違うので、同じ結末でも別物になる。
+                        if line == memo["last"]:
+                            return
+                        memo["last"] = line
+                    if unrepeated and line in memo["seen"]:
+                        return
+                    if cap is not None and memo["used"] >= cap:
+                        # 打ち切りの知らせは本文の代わりに1回だけ。覚え（seen）には足さない。
+                        if cap_notice is None or memo["noticed"]:
+                            return
+                        memo["noticed"] = True
+                        line = str(cap_notice).rstrip("\n")
+                    else:
+                        if cap is not None:
+                            memo["used"] += 1
+                        if unrepeated:
+                            memo["seen"].add(line)
+                    if tag:
+                        line = "{} {}".format(tag, line)
+                    if stamp:
+                        line = "[{}] {}".format(
+                            datetime.datetime.now().isoformat(timespec="milliseconds"),
+                            line)
                     with open(path, "a", encoding="utf-8") as fh:
                         fh.write(line + "\n")
             except Exception:
                 self.log_exc("{}: write failed".format(whose))
 
         return write
+
+    def once(self, write, prefix: str = "", limit: int = None, *, store=None):
+        """同じ鍵の行を1回だけ書く関数を作る。`fn(key, text=None) -> bool`（書いたか）。
+
+            warn_once = ctx.once(write, prefix="WARN ")
+            warn_once(("area", key, area_id), "cannot place the house in {}".format(area_id))
+            note_once = ctx.once(write, limit=200)
+            note_once(line)                     # 鍵を省くと本文そのものが鍵
+
+        毎フレーム・1手ごとに来る所からの「見つからない」「当てられない」の記録用。
+        `ctx.warner` と違い、行き先は渡した `write`（ふつうは `ctx.logger` の戻り値）で、
+        `ctx.logger(dedup=True)` と違い、直前だけでなく前に書いたどの鍵とも比べる
+        （2種類の行が交互に来ても溢れない）。
+
+        | 引数 | |
+        |---|---|
+        | `write` | 書く関数。1引数で呼ぶ |
+        | `prefix` | 本文の前に**そのまま**付ける文字列（区切りの空白も込みで渡す。`"WARN "` など） |
+        | `limit` | 覚える鍵の数の上限。超えたら覚えを全部捨ててから覚え直す。既定は無制限 |
+        | `store` | 覚えを置く集合。既定は新しい集合（この関数が生きている間だけ覚える）。注入をまたいで覚えたいときは、MOD が sys に置いた集合を渡す |
+
+        戻り値の関数の `forget(*keys)` は鍵の覚えを落とす（直ったら次にまた出す）。
+        鍵を渡さなければ全部落とす（ロードで周回が替わったときなど）。`seen` は覚えの集合。
+
+        鍵は本文と別に渡せる（理由ごとに1回。本文に毎回変わる数を含めても溢れない）。
+        覚えは書く前に付ける。`write` が投げたら記録して False を返し、覚えは残す
+        （書けない行を毎回書きに行かない）。
+
+        7本の MOD に写されていた note_once / warn_once を寄せた先（TECH.md §3.2.3）。
+        写しの違いはこうそろえた。鍵は 130・317・321・330・331・921 の「本文と別」を既定にし、
+        346 の「本文そのもの」は `text` を省く形で受ける。`prefix` は 921 の `"WARN "`、`limit` は 346 の
+        上限（超えたら全部捨てる）、`forget` は 330・331 の鍵の discard と 330 のロード時の作り直し、
+        戻り値は 330・331。覚えの置き場は既定で関数ごと（130・921 の apply ごと）、
+        317・321・330・346 の sys の器は `store` で渡す。
+        """
+        seen = store if store is not None else set()
+        lock = threading.Lock()
+
+        def note(key, text=None):
+            if text is None:
+                text = key
+            with lock:
+                if key in seen:
+                    return False
+                if limit is not None and len(seen) >= limit:
+                    seen.clear()
+                seen.add(key)
+            try:
+                write("{}{}".format(prefix or "", text))
+            except Exception:
+                self.log_exc("{}: once write failed".format(getattr(self, "_mod", None) or "mod"))
+                return False
+            return True
+
+        def forget(*keys):
+            with lock:
+                if not keys:
+                    seen.clear()
+                for key in keys:
+                    seen.discard(key)
+
+        note.forget = forget
+        note.seen = seen
+        return note
 
     def jsonl(self, name: str, *, label: str = None):
         """1行1件の JSON（JSONL）を書き足す関数を作る。`out/<name>` へ追記する。
@@ -1051,6 +1177,16 @@ class ModContext:
         # `runtime/mods` を決め打つと、`local/` の mod だけ同梱データが見つからない。
         root = self._mod_root or os.path.join(self.runtime_dir, "mods")
         return os.path.join(root, self._mod)
+
+    @property
+    def mod_name(self) -> str | None:
+        """いま apply() が走っている mod のフォルダ名（`307_area_move_dungeon` の形）。
+
+        窓口（`loads.on` / `durations.declare` / `choices.provide` など）に名乗る持ち主の名前に使う。
+        以前は `os.path.basename(getattr(ctx, "mod_dir", "") or "") or "<名前>"` が30本余りに写されていた。
+        `mod_dir` と同じく apply() の外では None なので、フックから使うなら apply() の中で控える。
+        """
+        return self._mod
 
     # -- 実行環境の情報 -----------------------------------------------------
     @property
@@ -2365,7 +2501,8 @@ def _rebind_cloud_resources() -> None:
 
 
 def _install_outer_windows(ctx) -> list[str]:
-    """外側に立てる窓口（`quest_generation` / `quest_ends` / `text_filters` / `saving`）の包みを立てる。立てた窓口を返す。
+    """外側に立てる窓口（`quest_generation` / `quest_ends`（終わりと放棄） / `text_filters` / `saving` / `shopping` /
+    `items` / `arrivals` の第一声 / `llm.on_request` / `choices` の一覧の種類）の包みを立てる。立てた窓口を返す。
 
     `boot()` が全 MOD の適用と保存の関所の立て直しの後に呼ぶ。MOD の適用の間は包まない（`gates.defer_outermost`）。
     最初に登録した MOD の位置に立てると、その後に適用した MOD の直の包み（`306_` の本文・`125_` の依頼の終わり・probe）と、
@@ -2373,19 +2510,32 @@ def _install_outer_windows(ctx) -> list[str]:
     保存の間だけ素の値へ戻す処理が `modnpc` の写しの後に走る。外側に立てれば、注入の何回目でも並びが同じになる。
     登録する MOD が無くても立てる（素通しする）。
     """
+    from . import arrivals as _arrivals
+    from . import choices as _choices
     from . import gates as _gates_mod
+    from . import items as _items
+    from . import llm as _llm
     from . import patch_registry as _registry
     from . import quest_ends as _quest_ends
     from . import quest_generation as _quest_generation
     from . import saving as _saving
+    from . import shopping as _shopping
     from . import text_filters as _text_filters
     _gates_mod.defer_outermost(False)
     done = []
-    for name, window in (("quest_generation", _quest_generation), ("quest_ends", _quest_ends),
-                         ("text_filters", _text_filters), ("saving", _saving)):
+    # 送り口の窓口（`llm.on_request`）は全 MOD の層より外側。`watch_aliases` の包み直しは登録の順なので、
+    # ここで立てれば作り直しの後も外側に残る。一覧の種類の印（`choices.install_listing`）は前後の処理が無いので
+    # 層の位置は答えに効かないが、boot の1か所にまとめるためここで立てる。
+    for name, install in (("quest_generation", _quest_generation.install), ("quest_ends", _quest_ends.install),
+                          ("quest_ends.retire", _quest_ends.install_retire),
+                          ("text_filters", _text_filters.install), ("saving", _saving.install),
+                          ("shopping", _shopping.install), ("items", _items.install),
+                          ("arrivals.opening", _arrivals.install_opening),
+                          ("llm.on_request", _llm.install_requests),
+                          ("choices.listing", _choices.install_listing)):
         _registry.begin_mod("(loader)")
         try:
-            window.install(ctx, log)
+            install(ctx, log)
             done.append(name)
         except BaseException:
             log_exc("cannot install the {} window".format(name))
@@ -2556,7 +2706,7 @@ def _boot(out_dir: str) -> dict:
                 _registry.end_mod()
         except BaseException:
             log_exc("cannot install the new game gate")
-        # 外側に立てる窓口（quest_generation / quest_ends / text_filters / saving）は、適用の間は包まない。
+        # 外側に立てる窓口（並びは _install_outer_windows）は、適用の間は包まない。
         # 全 MOD の適用の後に、下の `_install_outer_windows` がローダの ctx で外側に立てる（gates.defer_outermost）。
         _gates.defer_outermost(True)
         for fname in names:

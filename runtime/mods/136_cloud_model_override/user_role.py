@@ -4,7 +4,7 @@
 素のゲームはこの4件を system role だけで組んで送る。
 Gemini は返答が無く裏で落ち、Claude は system を別の欄へ移すので messages が空になり 400 で断られる（DOC.md「user role の補い」）。
 
-他のファイルと違い、SDK の送信ではなく `llm_manager:send_request` を包む。
+他のファイルと違い、SDK の送信ではなく `llm_manager` の `send_request` で書き換える（ローダの窓口 `llm.on_request`）。
 足す本文をリクエストの種類（manager 名）で選ぶためで、SDK の送信からは manager 名が見えない。
 差し替えの設定とは関わりなく、Gemini・Claude で送るときは補う。
 
@@ -14,7 +14,6 @@ Gemini は返答が無く裏で落ち、Claude は system を別の欄へ移す�
 from instantale_modloader import llm
 
 
-MANAGER_TARGET = "scripts.llm.llm_manager:send_request"
 USER_TEXTS = {
     "shop_item_generator_ordinary": "＜売買する＞",
     "epilogue_pre_evaluator": "＜エピローグを評価する＞",
@@ -23,7 +22,6 @@ USER_TEXTS = {
 }
 # user role が無いと返答できない送信モジュール（名前の一部）。GPT 系は system だけでも返答できるので入れない。
 NEEDS_USER = ("gemini", "claude")
-LABEL = "136_cloud_model_override: user role"
 
 
 def needs_user_runtime():
@@ -32,16 +30,6 @@ def needs_user_runtime():
         return any(part in name.lower() for name in llm.request_modules() for part in NEEDS_USER)
     except Exception:
         return False
-
-
-def message_from(args, kwargs):
-    """send_request の message を位置・キーワードの両方から読む。"""
-    if len(args) >= 2 and isinstance(args[1], list):
-        return args[1], "args"
-    message = kwargs.get("message")
-    if isinstance(message, list):
-        return message, "kwargs"
-    return None, None
 
 
 def add_user_role(message, user_text):
@@ -56,44 +44,33 @@ def add_user_role(message, user_text):
     return rewritten
 
 
-def replace_message(args, kwargs, new_message, where):
-    """呼び出し引数を壊さず、message だけを差し替える。"""
-    if where == "args":
-        return args[:1] + (new_message,) + args[2:], kwargs
-    if where == "kwargs":
-        new_kwargs = dict(kwargs)
-        new_kwargs["message"] = new_message
-        return args, new_kwargs
-    return args, kwargs
-
-
-def rewrite(args, kwargs):
-    """補うなら `(args, kwargs, manager 名)`、触らないなら None。"""
-    manager_name = args[0] if args else kwargs.get("manager_name")
+def rewrite(manager_name, message):
+    """補うなら user を足した新しい messages、触らないなら None。"""
     user_text = USER_TEXTS.get(manager_name) if isinstance(manager_name, str) else None
     if user_text is None:
         return None
-    message, where = message_from(args, kwargs)
-    if not message:
+    if not isinstance(message, list) or not message:
         return None
     if any(isinstance(item, dict) and item.get("role") == "user" for item in message):
         return None
-    new_args, new_kwargs = replace_message(args, kwargs, add_user_role(message, user_text), where)
-    return new_args, new_kwargs, manager_name
+    return add_user_role(message, user_text)
 
 
 def install(ctx):
-    """send_request はプロバイダの初期化の後に生えるため、共有部品の watcher に任せる。"""
-    def wrap(target):
-        @ctx.wrap(target, required=False, safe=True)
-        def manager_send(orig, *args, **kwargs):
-            if llm.is_local_runtime() or not needs_user_runtime():
-                return orig(*args, **kwargs)
-            found = rewrite(args, kwargs)
-            if found is None:
-                return orig(*args, **kwargs)
-            new_args, new_kwargs, manager_name = found
-            ctx.log("cloud model override: inserted user role for {}".format(manager_name))
-            return orig(*new_args, **new_kwargs)
+    """送り口はローダの窓口 `llm.on_request` が包む（後から生える送り口の見張りも窓口が持つ）。
 
-    llm.watch_aliases(ctx, [MANAGER_TARGET], wrap, label=LABEL)
+    届く範囲は前に自分で包んでいた `llm_manager:send_request` だけ（`targets`）。
+    窓口はローカル実行でも呼ぶので、クラウドかどうかはここで見る。
+    この MOD は自分のログファイルを持たないので、窓口の WARN も `ctx.log` へ書く。
+    """
+    def add_user(req):
+        if llm.is_local_runtime() or not needs_user_runtime():
+            return None
+        rewritten = rewrite(req.manager_name, req.message)
+        if rewritten is not None:
+            ctx.log("cloud model override: inserted user role for {}".format(req.manager_name))
+        return rewritten
+
+    llm.on_request(ctx.mod_name or "136_cloud_model_override", ctx, add_user,
+                   managers=tuple(USER_TEXTS), targets=llm.send_targets("llm_manager", ns=False),
+                   write=ctx.log)

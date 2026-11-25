@@ -6,24 +6,19 @@
 GAME.md §2.18、`217_` の `out\\area_move.log` で `days=[] texts=1`）。
 
 分岐が読むのは `relationship["player"]["relationship"]` の配列（`228_` の実機記録。
-雇用 NPC は `['同行中']`）。友好度（版1）も `Character.state`（版2）も読んでいない。
+雇用 NPC は `['同行中']`）。友好度も `Character.state` も読んでいない（VERIFICATION.md §3.56）。
 「家族になろう」の会話で `二人は家族になった。` と書く経路がこの配列に `家族` を入れると読む。
 
 やること: `execute` に入った時点で同行者全員のこの配列を `['家族']` に置き換え、
 判定を通り抜けた印である `elapse_days` の直前で元の配列に戻す。
 拒否・所持金不足のときは `execute` を抜けるときに戻す（どちらも `elapse_days` を通らない）。
-`save_game` の直前にも戻す（版1で、拒否の途中の保存に一時値が乗った。VERIFICATION.md §3.56）。
+`save_game` の直前にも戻す（拒否の途中の保存に一時値が乗る。VERIFICATION.md §3.56）。
 戻すときは `save_data_dict["npcs"][id]` に同じ値が写っていればそちらも戻す。
 
 外れの検知: 置いた後も `area_move_rejector` が呼ばれたら `WARN rejected:` を書く。
-
-版7: `area_move_rejector` のフックは、引数を受け取った形のまま元の関数へ渡す
-（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 """
 
-import os
-
-from instantale_modloader import arrivals, durations, frames, saving, ui
+from instantale_modloader import arrivals, durations, frames, npcs, saving, ui
 
 LOG_BASENAME = "area_move_party.log"
 
@@ -38,16 +33,12 @@ def apply(ctx):
     MISSING = object()
 
     def save_entry(app, npc_id):
-        npcs = (getattr(app, "save_data_dict", None) or {}).get("npcs")
-        entry = npcs.get(str(npc_id)) if isinstance(npcs, dict) else None
+        saved_npcs = (getattr(app, "save_data_dict", None) or {}).get("npcs")
+        entry = saved_npcs.get(str(npc_id)) if isinstance(saved_npcs, dict) else None
         return entry if isinstance(entry, dict) else None
 
-    def slot_of(holder):
-        """`relationship["player"]` の欄。Character でもセーブの辞書でも同じ形。"""
-        relationship = (holder.get("relationship") if isinstance(holder, dict)
-                        else getattr(holder, "relationship", None))
-        slot = relationship.get("player") if isinstance(relationship, dict) else None
-        return slot if isinstance(slot, dict) else None
+    # `relationship["player"]` の欄は Character でもセーブの辞書でも同じ形で、読み方はローダが持つ。
+    slot_of = npcs.player_row
 
     def restore(app, reason):
         lifted = state["lifted"]
@@ -98,7 +89,7 @@ def apply(ctx):
                 npc_id, ui.character_name(app, npc_id), before, FAMILY))
 
     # 街の移動の前後・日数が進む前はローダの窓口（`arrivals` / `durations.on_days`。TECH.md §3.3.21）。
-    owner = os.path.basename(getattr(ctx, "mod_dir", "") or "") or "329_area_move_with_party"
+    owner = ctx.mod_name or "329_area_move_with_party"
 
     def move_begin(call):
         state["rejected"] = False
@@ -108,7 +99,7 @@ def apply(ctx):
             ctx.log_exc("area move party: cannot lift relationship")
 
     def move_end(call):
-        # `always=True`。移動が投げても戻す（前は try/finally）。
+        # `always=True`。移動が投げても戻す。
         restore(call.app, "execute done")
         if state["rejected"]:
             write("WARN rejected: the game refused the move although every companion "

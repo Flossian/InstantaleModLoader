@@ -205,6 +205,8 @@ class FakeCtx:
     # ログは本物の `ctx.logger` をそのまま借りる。
     # ここを自前で書くと、検査だけが別のログ処理を通ることになる。
     _mod = None
+    # 窓口に名乗る持ち主の名前（本物は apply() の間だけフォルダ名）。
+    mod_name = os.path.basename(MOD_DIR)
 
     def logger(self, name, **kw):
         return ml.ModContext.logger(self, name, **kw)

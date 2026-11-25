@@ -73,26 +73,23 @@ JDSherbert のアンビエント）を指しているエリア。
 どれが発火しても結果は同じにしてある。
 実際にどれだったかは out/bgm.log を見れば分かる。
 
-版の記録
---------
-版3: 曲の内訳（`[BALANCE] pool under ...` と size ごとの4行）が apply のたびに出ていた。
-遅れて当て直す boot を含めて約40日で1,120回ずつ・約700KB。
-前に書いた中身と同じなら書かないようにした（控えは `sys` に置いて1プロセスで持つ）。
-注入のときにログが世代送りされたら（ファイルが入れ替わったら）、新しいログに書き直す。
-選び直した行（`area ...: ... -> ...`）と初めて見たワールドの行は今までどおり書く。
-あわせて、ワールドごとに「最初に見たときに在ったエリア」の控え（`_seen`）を `sys` へ移した。
-版2まではモジュール変数で、boot のたびに（遅れて当て直す boot と注入し直しで）空に戻り、
-そのたびに今あるエリアを全部「前からある」として覚え直していた（`first sight` が約40日で447行）。
-作られた瞬間の包みを通らずに増えたエリアが、次の保存より前に覚え直しに当たると、
-新しいエリアなのに二度と選び直されなかった。
+ログと控え
+----------
+曲の内訳（`[BALANCE] pool under ...` と size ごとの4行）は、同じ注入の中で前に書いた内訳と同じなら書かない。
+覚えはローダの `ctx.logger(span="injection", unrepeated=True)` に持たせる（遅れて当て直す boot をまたぎ、
+注入し直すと空に戻る。注入はログの世代送りの境目なので、新しいログの頭にもう一度書かれる）。
+選び直した行（`area ...: ... -> ...`）と初めて見たワールドの行は毎回書く。
+ワールドごとの「最初に見たときに在ったエリア」の控え（`_seen`）は `sys` に置いて boot をまたぐ（`state.process_store`）。
+boot のたびに空に戻すと、作られた瞬間の包みを通らずに増えたエリアを「前からある」と覚え直してしまう（VERIFICATION_LOG.md §2.4）。
+
+パスの解析と選び方の確かめは固定の入力なので、tools/tests/test_balance_area_bgm.py に置く（TECH.md §6.1）。
 """
 
 import os
 import random
-import sys
 
-from instantale_modloader import frames, sounds
-from instantale_modloader.state import world_key_of_dict
+from instantale_modloader import frames, sounds, ui
+from instantale_modloader.state import process_store, world_key_of_dict
 
 MUSIC_MARKER = "assets/sounds/musics"
 AUDIO_EXT = (".mp3", ".wav", ".ogg", ".flac", ".opus", ".m4a")
@@ -114,14 +111,10 @@ FILL_MISSING = True
 
 _rng = random.Random()          # ゲーム側の乱数列に影響しないよう専用に持つ
 _pool_cache = {}                # musics のパス -> {size: [(mood, 曲名), ...]}
-# ワールド -> 最初に見たときに存在したエリア id。1プロセスで持つ（版3。`seen_store`）。
+# ワールド -> 最初に見たときに存在したエリア id。1プロセスで持つ（`seen_store`）。
 SEEN_ATTR = "_instantale_balance_area_bgm_seen"
 
 LOG_BASENAME = "bgm.log"
-
-# 最後に書いた曲の内訳と、ログのファイルの身元（版3）。1プロセスに1組。
-# MOD のモジュールは boot のたびに読み直されるので、モジュール変数では boot ごとに消える。
-POOL_LOG_ATTR = "_instantale_balance_area_bgm_pool_logged"
 
 
 def seen_store():
@@ -129,31 +122,7 @@ def seen_store():
 
     MOD のモジュールは boot のたびに読み直されるので、モジュール変数では boot ごとに空に戻る。
     """
-    store = getattr(sys, SEEN_ATTR, None)
-    if not isinstance(store, dict):
-        store = {}
-        setattr(sys, SEEN_ATTR, store)
-    return store
-
-
-def file_id(path):
-    """ログのファイルの身元。無ければ None（世代送りで名前を変えられた直後など）。"""
-    try:
-        info = os.stat(path)
-    except OSError:
-        return None
-    return (info.st_dev, info.st_ino)
-
-
-def log_replaced(store, path):
-    """前の apply の後で `path` が入れ替わった（世代送り・削除）なら True。控えは今の身元へ進める。
-
-    世代送りは注入のとき（apply より前）にしか起きないので、apply の頭で見れば足りる。
-    """
-    now = file_id(path)
-    before = store.get("file")
-    store["file"] = now
-    return before is not None and before != now
+    return process_store(SEEN_ATTR, {})
 
 
 # --------------------------------------------------------------------------
@@ -314,14 +283,9 @@ def area_order(areas):
 
     辞書順のままだと "10" が "2" より前に来てしまい、
     同じデータでも処理の順番が直感と合わなくなる。
-    数値にできない id は後ろにまとめる。
+    数値にできない id は後ろにまとめる（並べ方はローダの `ui.id_sort_key`）。
     """
-    def key(aid):
-        try:
-            return (0, int(aid), "")
-        except (TypeError, ValueError):
-            return (1, 0, str(aid))
-    return sorted(areas, key=key)
+    return sorted(areas, key=ui.id_sort_key)
 
 
 def count_usage(areas, pool, skip_id=None):
@@ -457,11 +421,7 @@ def apply(ctx):
         """ワールドを見分けるためのキー。名前が取れなければオブジェクト id で代用する。
 
         鍵の見方はローダの語彙（`state.world_key_of_dict`）。
-        ここに写した版は `world_data["name"]` の1鍵しか見ておらず、
-        `world_name` / `title` で名前を持つ世界では毎回 id に落ちていた。
-        そうなると辞書が作り直されるたびに「初見」に戻り、
-        既存エリアの除外がやり直しになる（集計が分断されるだけで書き換えはしないので、
-        壊れる方向ではない）。
+        id に落ちると、辞書が作り直されるたびに「初見」に戻り、既存エリアの除外がやり直しになる。
         """
         return world_key_of_dict(container, "id:{}".format(id(container)))
 
@@ -645,14 +605,14 @@ def apply(ctx):
             ctx.log("bgm: target missing: {}".format(target), level="WARN")
 
     ctx.log("bgm: hooks live on {}".format(", ".join(installed) or "nothing"))
-    _report_pool(ctx, write, root, pool)
-    _self_test(ctx, pool)
+    _report_pool(ctx, root, pool)
 
 
-def _report_pool(ctx, write, root, pool):
+def _report_pool(ctx, root, pool):
     """見つかった曲の内訳をログに出す。size ごとの mood 数と曲数。
 
-    前に書いた内訳と同じなら書かない（版3）。
+    同じ注入の中で前に書いた内訳と同じなら書かない（遅れて当て直す boot で並び直さない）。
+    覚えの鍵（span_key）を内訳そのものにしてあるので、中身が変わったときは見出しから全部の行が出る。
     """
     lines = ["[BALANCE] pool under {}".format(root)]
     for size in sorted(pool):
@@ -662,101 +622,8 @@ def _report_pool(ctx, write, root, pool):
         lines.append("    {:<10} {} track(s) over {} mood(s): {}".format(
             size, len(pool[size]), len(moods),
             ", ".join("{}={}".format(m, moods[m]) for m in sorted(moods))))
-    logged = getattr(sys, POOL_LOG_ATTR, None)
-    if not isinstance(logged, dict):
-        logged = {"lines": None, "file": None}
-        setattr(sys, POOL_LOG_ATTR, logged)
-    if log_replaced(logged, ctx.out_path(LOG_BASENAME)):
-        logged["lines"] = None              # 世代送りされた新しいログにも書く
-    if logged.get("lines") != lines:
-        logged["lines"] = lines
-        for line in lines:
-            write(line)
+    write = ctx.logger(LOG_BASENAME, span="injection", unrepeated=True, span_key=tuple(lines))
+    for line in lines:
+        write(line)
     ctx.log("bgm: pool = {}".format(
         ", ".join("{} {}".format(s, len(pool[s])) for s in sorted(pool))))
-
-
-def _self_test(ctx, pool):
-    """注入した時点で動作を確認する。
-
-    実際の処理はエリアが生成されたときにしか動かないので、
-    ここで作ったデータを使って一通り検証しておく。
-    """
-    checks = []
-
-    # --- パスの解析 ---
-    real = "Assets/sounds/musics/town/solemn/Ambient 7 Loop.mp3"
-    checks.append(("parse", parse_bgm(real) ==
-                   ("Assets/sounds/musics", "town", "solemn", "Ambient 7 Loop.mp3", "/")))
-    checks.append(("parse backslash",
-                   parse_bgm(r"Assets\sounds\musics\dungeons\eerie\Hunted.mp3") ==
-                   (r"Assets\sounds\musics", "dungeons", "eerie", "Hunted.mp3", "\\")))
-    checks.append(("top-level musics ignored",
-                   parse_bgm("Assets/sounds/musics/other.mp3") is None))
-    checks.append(("empty ignored", parse_bgm("") is None))
-    checks.append(("None ignored", parse_bgm(None) is None))
-    checks.append(("round trip", build_bgm(*parse_bgm(real)[:4], sep="/") == real))
-
-    # --- 選び方のルール --- 3曲に対して6エリアなら、2/2/2 に分かれるはず。
-    fake = {"town": [("a", "1.mp3"), ("a", "2.mp3"), ("b", "3.mp3")]}
-    areas = dict((str(i), {"bgm": "Assets/sounds/musics/town/a/1.mp3"}) for i in range(6))
-    balance_world(areas, fake)
-    spread = {}
-    for area in areas.values():
-        spread[area["bgm"]] = spread.get(area["bgm"], 0) + 1
-    checks.append(("even spread", sorted(spread.values()) == [2, 2, 2]))
-
-    # 同じデータへの2回目は何も変えないこと。
-    again = balance_world(areas, fake)
-    checks.append(("idempotent", again == []))
-
-    # フォルダを決めるのは size であってパスではないこと。
-    # エリアが持つ値 dungeon が、フォルダ名 dungeons に対応する必要がある。
-    if "dungeons" in pool and "town" in pool:
-        misfiled = {"0": {"size": "dungeon",
-                          "bgm": "Assets/sounds/musics/town/calm/Ambient 1.mp3"}}
-        balance_world(misfiled, pool)
-        moved = parse_bgm(misfiled["0"]["bgm"])
-        checks.append(("size=dungeon -> dungeons folder",
-                       moved is not None and moved[1] == "dungeons"))
-
-        for value, want in (("town", "town"), ("village", "village"),
-                            ("city", "city"), ("dungeon", "dungeons")):
-            if want in pool:
-                checks.append(("size=%s -> %s" % (value, want),
-                               size_folder({"size": value}, pool) == want))
-
-    # bgm が空でも、size が分かっていれば曲が入ること。
-    # 曲の一覧にそのフォルダ（曲が入ったもの）が無い版では埋めようが無いので確かめない（上の検査と同じ守り）。
-    if pool.get("city") and pool.get("town"):
-        silent = {"0": {"size": "city", "bgm": ""}, "1": {"size": "town"}}
-        balance_world(silent, pool)
-        checks.append(("empty bgm filled from size",
-                       (parse_bgm(silent["0"].get("bgm")) or [None, None])[1] == "city"))
-        checks.append(("absent bgm filled from size",
-                       (parse_bgm(silent["1"].get("bgm")) or [None, None])[1] == "town"))
-
-    # size もパスも無い場合は判断材料が無いので、何もしないこと。
-    nothing = {"0": {"bgm": ""}, "1": {}}
-    balance_world(nothing, pool)
-    checks.append(("no size and no path -> untouched",
-                   nothing["0"]["bgm"] == "" and "bgm" not in nothing["1"]))
-
-    # mood フォルダの外を指す曲には触らないこと。
-    special = {"0": {"size": "town", "bgm": "Assets/sounds/musics/それ以外.mp3"}}
-    balance_world(special, pool)
-    checks.append(("top-level one-off untouched",
-                   special["0"]["bgm"] == "Assets/sounds/musics/それ以外.mp3"))
-
-    # only を指定したとき、それ以外のエリアが書き換わらないこと。
-    mixed = dict((str(i), {"bgm": "Assets/sounds/musics/town/a/1.mp3"}) for i in range(4))
-    before = mixed["0"]["bgm"]
-    balance_world(mixed, fake, only={"3"})
-    checks.append(("only= confines writes",
-                   mixed["0"]["bgm"] == before and mixed["1"]["bgm"] == before))
-
-    failed = [name for name, ok in checks if not ok]
-    if failed:
-        ctx.log("bgm: VERIFY FAILED: {}".format(", ".join(failed)), level="ERROR")
-    else:
-        ctx.log("bgm: verified {} check(s)".format(len(checks)))

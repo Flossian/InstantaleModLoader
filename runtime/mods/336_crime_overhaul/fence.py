@@ -21,7 +21,7 @@
   2つに絞ったまま残った（実機）
 - 司法取引で裏の事務所を売った締め出しの間は出さない（`office`）
 """
-from instantale_modloader import choices, ui
+from instantale_modloader import choices, twin_windows, ui
 
 from . import common, office
 
@@ -31,7 +31,6 @@ WINDOW_LABEL = "買取"
 WINDOW_SITUATION = "shop"
 OPEN_TEXT = "{broker}が帳場の奥から顔を上げた。\n「盗品なら引き取ってやる。相場の{rate}だ」"
 NO_BUY_TEXT = "{broker}は品を引き寄せた。\n「買い取った品は売り物じゃねえ」"
-TWIN_WINDOW_DATA = "visible_twin_inventory_data"
 #: 窓を開いている間に残す選択肢（施設の「出る」「会話する」）。閉じたら `set_buttons_to_normal` で戻す。
 KEEP_WHILE_OPEN = (common.FACILITY_MARK, "DisplayTalkChoice")
 #: 入力欄の行き先（`PhaseSpec`）と、店の窓の間にゲームが入れる値切りのマネージャ（GAME.md §2.13.1.4）。
@@ -50,11 +49,9 @@ def install(env):
     ctx, write, screen, worlds, cfg = env.ctx, env.write, env.screen, env.worlds, env.cfg
 
     def window_open(app):
-        """売買の窓が開いているか。閉じるとゲームの後始末（`on_close_window`）が `is_popup_window_opened` を下ろす。"""
-        if getattr(app, "is_popup_window_opened", False):
-            return True
-        data = getattr(ui.find_hud(app), TWIN_WINDOW_DATA, None)
-        return isinstance(data, dict) and bool(data.get("TorF"))
+        """売買の窓が開いているか。閉じるとゲームの後始末（`on_close_window`）が `is_popup_window_opened` を下ろす
+        （その印も見る。ローダの `twin_windows.is_open`）。"""
+        return twin_windows.is_open(app, popup=True)
 
     def in_office(app):
         """いま裏の事務所に居るか。ボタンを出すのはこれだけで決める（主は押したときに引く）。
@@ -69,11 +66,10 @@ def install(env):
         facility = env.current_facility(app)
         if ui.facility_type_of(facility) != office.OFFICE_FACILITY_TYPE:
             return None
-        owner_id = getattr(facility, "owner", None)
-        broker = ui.character_of(app, str(owner_id)) if owner_id is not None else None
+        owner_id, broker = ui.facility_owner(app, facility)
         if broker is None or not isinstance(getattr(broker, "inventory", None), dict):
             return None
-        return str(owner_id), broker
+        return owner_id, broker
 
     def holds_stolen(app):
         inventory = getattr(getattr(app, "player", None), "inventory", None)
@@ -245,19 +241,19 @@ def install(env):
         after_close(self)
         return result
 
-    @ctx.wrap("scripts.hud.new_hud:InstanTaleHUD.turnoff_window_visibility", required=False, safe=True)
-    def turnoff_window_visibility(orig, self, *args, **kwargs):
-        """窓を消した（外側を押した）。ゲームの後始末の後のフレームで、上と同じ片付けをする。
+    def turnoff_window_visibility(call):
+        """窓を消した（外側を押した）。ゲームの後始末の後のフレームで、上と同じ片付けをする（ローダの窓口 `twin_windows.BACKDROP`）。
 
         HUD は作られたときの `on_close_window` を `on_backdrop_callback` に握るので、注入より前に作られた HUD では
         上の包みを通らなかった（閉じても選択肢が絞ったまま・入力欄が値切りのまま。2026-11-03 の実機）。
         """
-        result = orig(self, *args, **kwargs)
         if env.fence.get("broker") and not env.fence.get("opening"):
-            app = ui.find_app()
+            app = call.app
             if app is not None:
                 screen.schedule(lambda: after_close(app))
-        return result
+
+    twin_windows.on(env.owner + ":fence", ctx, (twin_windows.BACKDROP,), after=turnoff_window_visibility,
+                    write=write)
 
     def after_close(app):
         """盗品買取商の窓が閉じていれば、主の持ち物を片付けて事務所の選択肢へ戻す（入力欄も `clear_bought` が戻す）。"""

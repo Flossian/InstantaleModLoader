@@ -16,10 +16,8 @@ r"""闘技場の相手の強さと懸賞金を設定で決める。
 `current_phase` は施設の `config` に焼かれるので、この伸びはセーブをまたいで続く。
 
 懸賞金に乱数は乗っていない（同じ格で2回やると同額）。
-格30→173G / 43→282 / 44→288 / 58→359 / 71→426 / 85→452 / 97→454 で、
-**格70を超えると頭打ち**（85 と 97 の差は 2G）。式そのものは当てていない。
-格だけでも決まらず（`D` 32 の土地では格30で 177）、施設に焼いた格も読まない
-（上限で下げても素の格の額が出る）。
+伸びは高い格で鈍り、格70を超えると頭打ちになる。式そのものは当てていない。
+格だけでも決まらず、施設に焼いた格も読まない（上限で下げても素の格の額が出る。実測の値は GAME.md §2.11）。
 
 ## この MOD の当て所
 
@@ -44,10 +42,9 @@ r"""闘技場の相手の強さと懸賞金を設定で決める。
 審判は `in_colosseum_battle` が立っている間だけ、要約はその呼び出しの間だけ足す。
 要約の頼みは `guard_battle_summarizer` の名前で送られる（ゲーム側の取り違え。GAME.md §2.11）ので、
 名前だけでは衛兵戦の要約と見分けられず、呼び出しの間の印で見分ける。
-送り口は `401_battle_character_context` と同じ所で、後から生える別名はローダの `llm.watch_aliases` に任せる。
+送り口は `401_battle_character_context` と同じ所で、包むのはローダの窓口 `llm.on_request`（後から生える別名も窓口が見張る）。
 
-**頼み文の難易度だけを変えても相手は弱くならない**（版1の実機。上限70を当てたのに
-敵のレベルは 72 と 86 のままで、`data.rank` も 71 / 85 で焼かれた）。
+頼み文の難易度だけを変えても相手は弱くならない（GAME.md §2.11）。
 ゲームは格を自分で計算し、**頼み文・保存・敵の数値の3か所で別々に使う**。
 だから3か所とも同じ値に揃える。
 
@@ -72,16 +69,17 @@ r"""闘技場の相手の強さと懸賞金を設定で決める。
 既出の闘士を頼み文に足す一文は 331 と同じ文面で、
 どちらも既に入っていれば足さない（読む順ではこちらが外側の包みで、先に足す）。
 
-版9: 難易度の関数・`generate_enemy_data`・試合の始め・`remove_party_member`・`add_text` のフックは、
+難易度の関数・`generate_enemy_data`・試合の始め・`remove_party_member`・`add_text` のフックは、
 引数を受け取った形のまま元の関数へ渡す（名前付きで受けて位置引数に直さない。TECH.md の規則の表）。
 難易度と懸賞金の文は来た側に合わせて差し替える。
-相手の名前が主人公や仲間と重ならないようにした（生成に伝え、それでも重なれば `generate_enemy_data` の戻りで改名する）。
+相手の名前は主人公や仲間と重ならないようにする（生成に伝え、それでも重なれば `generate_enemy_data` の戻りで改名する）。
 """
 
 import sys
 import time
 
-from instantale_modloader import choices, defeat, frames, llm, loads, text_filters, ui
+from instantale_modloader import battles, choices, defeat, frames, llm, loads, text_filters, ui
+from instantale_modloader.state import process_store
 
 LOG_BASENAME = "colosseum_custom.log"
 MARK = "_mod_colosseum_custom"
@@ -175,13 +173,8 @@ NONLETHAL_SUMMARY_NOTE = ("\n\n" + NONLETHAL_MARK + "\n"
                           "絶命・惨殺・致命傷・遺体の描写はしない。")
 
 #: 審判と要約の送り口（`401_battle_character_context` と同じ所）。
-#: 審判は `llm_manager_battle`、要約は `llm_manager` を通る。
-NARRATION_SEND_TARGETS = (
-    "scripts.llm.llm_manager_battle:send_request",
-    "scripts.llm.llm_manager_battle:send_request_with_no_structure",
-    "scripts.llm.llm_manager:send_request",
-    "scripts.llm.llm_manager:send_request_with_no_structure",
-)
+#: 審判は `llm_manager_battle`、要約は `llm_manager` を通る。選び方はローダの `llm.send_targets`。
+NARRATION_SEND_TARGETS = llm.send_targets("llm_manager_battle", "llm_manager")
 #: 審判の manager_name の頭。
 REFEREE_PREFIX = "referee_"
 #: 試合の要約の manager_name（ゲームは衛兵戦の名前で送る。GAME.md §2.11）。
@@ -259,33 +252,6 @@ def replace_amount(text, base, want):
     return None
 
 
-def append_note(message, note):
-    """最後の user message の末尾に `note` を足した写しを返す。足さなければ `message` そのもの。
-
-    呼び出し元の list も dict も書き換えない（ゲームが同じ list を持ち続けているため）。
-    既に印が入っていれば足さない（別名の包みが二重に掛かったときや再送の保険）。
-    """
-    if not isinstance(message, list):
-        return message
-    for item in message:
-        content = item.get("content") if isinstance(item, dict) else None
-        if isinstance(content, str) and NONLETHAL_MARK in content:
-            return message
-    for index in range(len(message) - 1, -1, -1):
-        item = message[index]
-        if not isinstance(item, dict) or item.get("role") != "user":
-            continue
-        content = item.get("content")
-        if not isinstance(content, str):
-            continue
-        rewritten = list(message)
-        replacement = dict(item)
-        replacement["content"] = content + note
-        rewritten[index] = replacement
-        return rewritten
-    return message
-
-
 class _LocationView(object):
     """`location` の身代わり。`description` だけ差し替え、ほかは本物へ素通しする。
 
@@ -339,14 +305,11 @@ def apply(ctx):
     #: 置き場は `sys`（`332_` と同じ理由）。当て直しは最初の LLM の呼び出しのときに背景スレッドの
     #: `boot()` から来るので、相手を仕込んでいる最中に挟まることがある。ここで作り直した空の器を
     #: 新しいラッパが握ると、窓が見えないまま素の格で相手が作られ、そのまま保存される。
-    #: 版が上がって足した項目は `setdefault` で埋める（前の世代の器にはまだ無い）。
-    state = getattr(sys, STATE_STORE_ATTR, None)
-    if not isinstance(state, dict):
-        state = {}
-        setattr(sys, STATE_STORE_ATTR, state)
-    for _name, _value in (("survived", False), ("reward", None), ("window", None),
-                          ("summarizing", 0), ("fallen", {}), ("lawful_guard", None)):
-        state.setdefault(_name, _value)
+    #: 版が上がって足した項目は埋める（前の世代の器にはまだ無い。ローダの state.process_store）。
+    state = process_store(STATE_STORE_ATTR, {
+        "survived": False, "reward": None, "window": None,
+        "summarizing": 0, "fallen": {}, "lawful_guard": None,
+    })
 
     # ------------------------------------------------------------------ 設定
     def rank_untouched():
@@ -366,7 +329,7 @@ def apply(ctx):
     # -------------------------------------------------------------- 写し取り
     def level_of(app):
         value = frames.attr(frames.attr(app, "player", None), "experience_level", None)
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
+        if not frames.is_number(value):
             return 1
         return max(1, int(value))
 
@@ -384,7 +347,7 @@ def apply(ctx):
     def match_index(app):
         """この闘技場で何試合目か（`current_phase` / 2）。読めなければ 0。"""
         phase = config_of(arena_of(app)).get("current_phase")
-        if isinstance(phase, bool) or not isinstance(phase, (int, float)):
+        if not frames.is_number(phase):
             return 0
         return max(0, int(phase) // 2)
 
@@ -426,14 +389,13 @@ def apply(ctx):
             return None
         try:
             values = [v for v in (fn(ui.current_area(app), getattr(app, "world", None)) or ())
-                      if isinstance(v, (int, float)) and not isinstance(v, bool)]
+                      if frames.is_number(v)]
         except Exception:
             return None
         if not values:
             return None
-        # ゲームは一覧の**平均を四捨五入してから**式に入れる（実測。GAME.md §2.11）。
-        # 小数のまま計算すると告げる格が1ずれ（平均 69.33 の土地で 35 と出たが実際は 34）、
-        # 切り捨てでも1ずれる（平均 31.67 の土地で 29 と出たが実際は 30）。
+        # ゲームは一覧の**平均を四捨五入してから**式に入れる。
+        # 小数のままでも切り捨てでも、告げる格が1ずれる（GAME.md §2.11）。
         return int(round(sum(values) / float(len(values))))
 
     # ------------------------------------------------------ 相手の強さを決める
@@ -441,7 +403,7 @@ def apply(ctx):
         """ゲームが決めた難易度を設定で組み直す。素のままなら `raw` をそのまま返す。"""
         if rank_untouched():
             return raw
-        if isinstance(raw, bool) or not isinstance(raw, (int, float)) or raw <= 0:
+        if not frames.is_number(raw) or raw <= 0:
             return raw
         difficulty = difficulty_from(raw, index)
         start = difficulty * RANK_BASE / float(RANK_DIV)
@@ -466,13 +428,13 @@ def apply(ctx):
             # 鍵はセーブから読んだ分が文字列、読み込みの後に戦った分が数（GAME.md §2.11）。
             # 試合の直後の賞金は数の鍵の側を引くので、両方を見る。
             entry = None
-            if isinstance(phase, (int, float)) and not isinstance(phase, bool):
+            if frames.is_number(phase):
                 entry = enemies.get(int(phase))
                 if entry is None:
                     entry = enemies.get(str(int(phase)))
             data = entry.get("data") if isinstance(entry, dict) else None
             rank = data.get("rank") if isinstance(data, dict) else None
-            if isinstance(rank, (int, float)) and not isinstance(rank, bool):
+            if frames.is_number(rank):
                 return int(rank)          # 既に作られている相手（調整後の値）
         difficulty = area_difficulty(app)
         if difficulty is None:
@@ -517,8 +479,7 @@ def apply(ctx):
 
         ゲームは敵の数値を施設に焼いた格から作る（実機。焼いた格が 16 なら 16 が渡る）。
         焼く格は `generate_enemy_data` で既に揃えてあるので、渡ってきたのがその値なら触らない。
-        組み直した値をもう一度組み直すと、上限以外の設定では二重に掛かる
-        （伸び0で格16に揃えた試合で、16 をさらに 6 へ下げ、敵がレベル7になった）。
+        組み直した値をもう一度組み直すと、上限以外の設定では二重に掛かる（VERIFICATION.md §3.69 #3）。
         ここで組み直すのは、揃える前の素の値が渡ってきたときと、頼み文を見ていないときだけ。
         """
         opened = window()
@@ -537,7 +498,7 @@ def apply(ctx):
             """相手の**実際の強さ**。レベルも能力値もこの難易度1つから決まる。
 
             引数は (enemy_tier, quest_difficulty)。受け取った形のまま渡し、`quest_difficulty` だけを
-            来た側に合わせて差し替える（版6 は引数名を本体に揃えた。版9 から名前で受けない）。
+            来た側に合わせて差し替える。
             """
             try:
                 quest_difficulty = frames.arg(args, kwargs, "quest_difficulty", 1)
@@ -551,13 +512,8 @@ def apply(ctx):
     for _name in ENEMY_NUMBER_FNS:
         install_enemy_number(_name)
 
-    @ctx.wrap("__main__:BattleStartManager.start_battle", required=False, safe=True)
-    def start_battle(orig, self, *args, **kwargs):
-        """相手が出来上がったら窓を閉じる。"""
-        try:
-            return orig(self, *args, **kwargs)
-        finally:
-            close_window()
+    # 相手が出来上がったら窓を閉じる（戦闘の始まりの後。ローダの窓口 battles。投げた回も閉じる）。
+    battles.on(OWNER, ctx, (battles.START,), after=lambda call: close_window(), always=True, write=write)
 
     @ctx.wrap("__main__:ColosseumMatchStart.generate_enemy_data", required=False,
               safe=True)
@@ -596,29 +552,29 @@ def apply(ctx):
 
         難易度は第4位置引数で渡る（実測）が、`kwargs` で来ても拾えるようにしてある。
         ここは**描写にしか効かない**（実際の強さは `get_enemy_*` の側）。
+        引数は (location, area, world, npc_difficulty_level)。来た側に合わせて差し替える（`frames.arg` / `replace_arg`）。
         """
         try:
             app = ui.find_app()
-            if "npc_difficulty_level" in kwargs:
-                kwargs["npc_difficulty_level"] = adjust_difficulty(
-                    app, kwargs["npc_difficulty_level"], "prompt rank")
-            elif len(args) >= 4:
-                args = (args[:3] + (adjust_difficulty(app, args[3], "prompt rank"),)
-                        + args[4:])
+            level = frames.arg(args, kwargs, "npc_difficulty_level", 3, frames.MISSING)
+            if level is not frames.MISSING:
+                args, kwargs, _ = frames.replace_arg(
+                    args, kwargs, "npc_difficulty_level", 3,
+                    adjust_difficulty(app, level, "prompt rank"))
             if VARY_OPPONENT:
                 names = fighters_so_far(app)
                 if names:
-                    if args:
-                        args = (vary_location(args[0], names),) + args[1:]
-                    elif "location" in kwargs:
-                        kwargs["location"] = vary_location(kwargs["location"], names)
+                    location = frames.arg(args, kwargs, "location", 0, frames.MISSING)
+                    if location is not frames.MISSING:
+                        args, kwargs, _ = frames.replace_arg(
+                            args, kwargs, "location", 0, vary_location(location, names))
                     write("variety: {} earlier fighter(s) told to the generator".format(
                         len(names)))
             note = own_names_note(party_names(app))
-            if args:
-                args = (with_note(args[0], note, OWN_NAMES_HEAD),) + args[1:]
-            elif "location" in kwargs:
-                kwargs["location"] = with_note(kwargs["location"], note, OWN_NAMES_HEAD)
+            location = frames.arg(args, kwargs, "location", 0, frames.MISSING)
+            if location is not frames.MISSING:
+                args, kwargs, _ = frames.replace_arg(
+                    args, kwargs, "location", 0, with_note(location, note, OWN_NAMES_HEAD))
         except Exception:
             ctx.log_exc("colosseum: cannot adjust the opponent")
         return orig(*args, **kwargs)
@@ -806,7 +762,7 @@ def apply(ctx):
                 continue
             value = kept["value"]
             hp = getattr(value, "current_hp", None)
-            if isinstance(hp, (int, float)) and not isinstance(hp, bool) and hp <= 0:
+            if frames.is_number(hp) and hp <= 0:
                 value.current_hp = SURVIVE_HP
             escaped[member_id] = value
             write("fallen: handed {} ({}) to escaped_member_in_battle, hp {} -> {}".format(
@@ -837,26 +793,39 @@ def apply(ctx):
                         ctx.log_exc("colosseum: cannot put {}.{} back".format(member_id, name))
         fallen.clear()
 
-    @ctx.wrap("__main__:BattleEndManager.end_phase", required=False)
-    def escaped_end_phase(orig, self, *args, **kwargs):
-        """闘技場から逃げた（負けて切り上げた）試合の終わり。倒れた仲間を連れて戻る。"""
-        app = getattr(self, "app", None) or ui.find_app()
+    # 試合の終わり方の前後はローダの窓口 battles（TECH.md §3.3.21）。後の処理は orig が投げても来る（always=True）。
+    def escaped_before(call):
+        """闘技場から逃げた（負けて切り上げた）試合の終わりの前。倒れた仲間を預ける。
+
+        闘技場の旗は終わり方の後で下りるので、闘技場の試合かは orig の前に読んで後の処理へ渡す（`call.memo`）。
+        """
+        app = call.app
         arena = bool(getattr(app, "in_colosseum_battle", False))
         if arena:
             try:
                 hand_over_fallen(app)
             except Exception:
                 ctx.log_exc("colosseum: cannot hand over the fallen members")
-            arm_lawfulness("escaped")
+            # 前の処理が投げると窓口が握って memo が None になり、預けた仲間を後の処理で戻さなくなる。
+            try:
+                arm_lawfulness("escaped")
+            except Exception:
+                ctx.log_exc("colosseum: cannot arm the lawfulness watch")
+        return arena
+
+    def escaped_after(call):
+        """逃げた試合の終わりの後。倒れた仲間を連れて戻り、下がった手配度を拾う。"""
+        if not call.memo:
+            return
+        app = call.app
         try:
-            return orig(self, *args, **kwargs)
-        finally:
-            if arena:
-                try:
-                    restore_fallen(app, "escaped")
-                except Exception:
-                    ctx.log_exc("colosseum: cannot bring the fallen members back")
-                restore_lawfulness(app, "escaped")
+            restore_fallen(app, "escaped")
+        except Exception:
+            ctx.log_exc("colosseum: cannot bring the fallen members back")
+        restore_lawfulness(app, "escaped")
+
+    battles.on(OWNER, ctx, (battles.END_NORMAL,), before=escaped_before, after=escaped_after,
+               always=True, write=write)
 
     # -------------------------------------------------------------- 懸賞金
     def prize_text(context, app):
@@ -903,25 +872,18 @@ def apply(ctx):
         write("reward: the game paid {}, we promised {}; corrected {:+d}".format(
             moved, want, diff))
 
-    @ctx.wrap("__main__:BattleEndInColosseum.end_phase", required=False)
-    def end_phase(orig, self, *args, **kwargs):
-        """勝った試合の終わり。倒れた仲間を連れて戻り、懸賞金に倍率を乗せる。"""
-        app = getattr(self, "app", None) or ui.find_app()
+    def won_before(call):
+        """勝った試合の終わりの前。倒れた仲間を預け、懸賞金に倍率を乗せる印を立てる。
+
+        所持金は終わり方の中で動き（実機）、文の額は orig の中で `prize_text` が `state["reward"]` を見て書き換える。
+        倍率を乗せる回は、控えた所持金を後の処理へ渡す（`call.memo`）。
+        """
+        app = call.app
         try:
             hand_over_fallen(app)
         except Exception:
             ctx.log_exc("colosseum: cannot hand over the fallen members")
         state["lawful_guard"] = None            # 勝った試合の手配度には触らない
-        try:
-            return won_end_phase(orig, self, app, *args, **kwargs)
-        finally:
-            try:
-                restore_fallen(app, "won")
-            except Exception:
-                ctx.log_exc("colosseum: cannot bring the fallen members back")
-
-    def won_end_phase(orig, self, app, *args, **kwargs):
-        """勝ったときの懸賞金に倍率を乗せる。所持金はこの中で動く（実機）。"""
         rank = None
         try:
             rank = expected_rank(app)
@@ -933,17 +895,27 @@ def apply(ctx):
         except Exception:
             ctx.log_exc("colosseum: cannot work out the prize")
         if multiplier == 1.0:
-            return orig(self, *args, **kwargs)
+            return None
         before = ui.gold_of(app)
         state["reward"] = {"mult": multiplier, "base": None, "want": None}
-        try:
-            return orig(self, *args, **kwargs)
-        finally:
+        return {"before": before}
+
+    def won_after(call):
+        """勝った試合の終わりの後。懸賞金の差を埋めてから、倒れた仲間を連れて戻る。"""
+        app = call.app
+        if call.memo is not None:
             try:
-                settle(app, before)
+                settle(app, call.memo.get("before"))
             except Exception:
                 ctx.log_exc("colosseum: cannot settle the prize")
             state["reward"] = None
+        try:
+            restore_fallen(app, "won")
+        except Exception:
+            ctx.log_exc("colosseum: cannot bring the fallen members back")
+
+    battles.on(OWNER, ctx, (battles.END_COLOSSEUM,), before=won_before, after=won_after,
+               always=True, write=write)
 
     # -------------------------------------------------------- 死なずに退く描写
     def narration_kind(manager_name):
@@ -975,31 +947,23 @@ def apply(ctx):
         finally:
             state["summarizing"] -= 1
 
-    def install_send(target):
-        """送り口1つに包みを掛ける。`llm.watch_aliases` が対象ごとに呼ぶ。"""
-        @ctx.wrap(target, required=False, safe=True)
-        def narration_send(orig, *args, **kwargs):
-            manager_name = args[0] if args else kwargs.get("manager_name")
-            try:
-                kind = narration_kind(manager_name)
-                if kind is not None:
-                    note = NONLETHAL_SUMMARY_NOTE if kind == "summary" else NONLETHAL_NOTE
-                    if len(args) >= 2 and isinstance(args[1], list):
-                        replaced = append_note(args[1], note)
-                        if replaced is not args[1]:
-                            args = args[:1] + (replaced,) + args[2:]
-                            write("nonlethal: {} ({})".format(manager_name, kind))
-                    elif isinstance(kwargs.get("message"), list):
-                        replaced = append_note(kwargs["message"], note)
-                        if replaced is not kwargs["message"]:
-                            kwargs = dict(kwargs, message=replaced)
-                            write("nonlethal: {} ({})".format(manager_name, kind))
-            except Exception:
-                ctx.log_exc("colosseum: cannot add the nonlethal note")
-            return orig(*args, **kwargs)
+    def nonlethal_note(req):
+        """審判と試合の要約の頼みの、最後の user の末尾に一文を足す（ローダの窓口 `llm.on_request`）。
 
-    # 送り口はプロバイダの初期化後に生える。後生えと別名はローダの見張りに任せる。
-    llm.watch_aliases(ctx, list(NARRATION_SEND_TARGETS), install_send,
-                      label="colosseum custom")
+        ゲームの list と dict は書き換えず写しを返す（`llm.edit_turn`）。既に印が入っていれば足さない
+        （再送や別名の送り口が重なったときの保険）。
+        """
+        kind = narration_kind(req.manager_name)
+        if kind is None:
+            return None
+        note = NONLETHAL_SUMMARY_NOTE if kind == "summary" else NONLETHAL_NOTE
+        replaced = llm.edit_turn(req.message, lambda text: text + note, role="user", last=True,
+                                 unless=NONLETHAL_MARK)
+        if replaced is not None:
+            write("nonlethal: {} ({})".format(req.manager_name, kind))
+        return replaced
+
+    # 送り口はプロバイダの初期化後に生え、ゲームが作り直す。包むのはローダの1か所。
+    llm.on_request(OWNER, ctx, nonlethal_note, targets=NARRATION_SEND_TARGETS, write=write)
 
     ctx.log("colosseum custom: ready")

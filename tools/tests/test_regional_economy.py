@@ -371,6 +371,8 @@ def main():
         generation = 1
         _mod = "405_regional_economy"
         mod_dir = MOD_DIR
+        # 本物の ctx.mod_name と同じく MOD のフォルダ名（窓口に名乗る持ち主名）
+        mod_name = os.path.basename(MOD_DIR)
 
         def __init__(self):
             self.hooks = {}
@@ -437,6 +439,36 @@ def main():
         got = ctx.hooks[laid](lambda self, *a, **k: "laid", object(), None, 1)
         check("並べる処理の戻り値はそのまま（店が引けなくても）", got == "laid", got)
         check("引けない場面でも例外を出さない", not ctx.errors, ctx.errors)
+
+    # 売買を押したとき（窓口 shopping の ENTER）。元の処理の間だけ在庫生成の印を立て、投げても戻す。
+    enter = "__main__:ShoppingStartManagerRemake.execute"
+    check("売買を押したときの入口を包む", enter in ctx.hooks, sorted(ctx.hooks))
+    if enter in ctx.hooks:
+        seen_batch = []
+        manager = object()
+        mod._store()["stock_batch"] = None
+
+        def failing_enter(self, *a, **k):
+            seen_batch.append(mod._store().get("stock_batch"))
+            raise RuntimeError("enter failed")
+
+        try:
+            ctx.hooks[enter](failing_enter, manager, "売買する")
+        except RuntimeError:
+            pass
+        check("元の処理の間は印が立ち、投げても前の印へ戻る",
+              len(seen_batch) == 1 and isinstance(seen_batch[0], dict)
+              and seen_batch[0].get("manager") == id(manager)
+              and mod._store().get("stock_batch") is None, (seen_batch, mod._store().get("stock_batch")))
+    check("売買画面を閉じる入口（窓口 twin_windows の CLOSE）を包む",
+          "__main__:InstantaleApp.close_shopping_window_process" in ctx.hooks, sorted(ctx.hooks))
+    check("説明欄の入口（窓口 items の DETAIL）を包む",
+          "scripts.hud.new_hud:ItemDetailBox.update_content" in ctx.hooks, sorted(ctx.hooks))
+    detail = ctx.hooks.get("scripts.hud.new_hud:ItemDetailBox.update_content")
+    if detail is not None:
+        got = detail(lambda self, *a, **k: "drawn", object(), object())
+        check("説明欄の戻り値はそのまま（地点が引けなくても）", got == "drawn", got)
+    check("窓口に載せても例外を出さない", not ctx.errors, ctx.errors)
 
     check("得と損で別の色", mod.GAIN_MARK_COLOR != mod.LOSS_MARK_COLOR)
     check("色は6桁のHTML色",
@@ -598,8 +630,9 @@ def main():
             delattr(sys, mod.STATE_STORE_ATTR)
 
     print("[繰り返し]")
-    # 版4: apply のたびに同じ中身で出ていた `installed:` と関所の `adjusts item prices` は、
-    # 前に書いた中身と同じなら書かない。中身が変わったときと、ログが世代送りされた後は書く。
+    # apply のたびに同じ中身で出る `installed:` と関所の `adjusts item prices` は、
+    # 注入の間に1回だけ書く（`ctx.logger(span="injection", unrepeated=True)`）。中身が変わったときと、
+    # 注入し直した後（ログが世代送りされた後）は書く。
     log_path = os.path.join(OUT_DIR, "regional_economy.log")
     start = [os.path.getsize(log_path) if os.path.isfile(log_path) else 0]
 
@@ -615,7 +648,15 @@ def main():
     # ローダの `prices.adjust` も、同じ持ち主・同じ種類の行は注入1回に1度しか書かない。
     # 本物では注入し直すとローダごと読み直されて空に戻るので、ここでは手で空にする。
     from instantale_modloader import prices as loader_prices
-    loader_prices._adjust_written.clear()
+    import instantale_modloader as loader
+
+    def reinjected():
+        """注入し直しでローダが読み直された形（関所の書いた控えと、注入の間のログの覚えが空に戻る）。"""
+        loader_prices._adjust_written.clear()
+        for key in [k for k in loader._LOGGER_SPANS if k[0] == Ctx._mod]:
+            del loader._LOGGER_SPANS[key]
+
+    reinjected()
     try:
         if hasattr(sys, mod.STATE_STORE_ATTR):
             delattr(sys, mod.STATE_STORE_ATTR)
@@ -632,7 +673,7 @@ def main():
         # 注入のときにログが世代送りされた形。新しいログに書き直す。
         os.replace(log_path, log_path + ".1")
         start[0] = 0
-        loader_prices._adjust_written.clear()    # 注入し直しでローダが読み直された形
+        reinjected()
         for _ in range(2):
             ctxs.append(GenCtx())
             mod.apply(ctxs[-1])

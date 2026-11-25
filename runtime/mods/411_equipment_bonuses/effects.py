@@ -235,9 +235,3 @@ def combine(items, mode):
         if kind in total:
             total[kind] = min(total[kind], cap)
     return total
-
-
-def _num(value):
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return value

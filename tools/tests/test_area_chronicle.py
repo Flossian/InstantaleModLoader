@@ -142,6 +142,8 @@ class FakeLLM(object):
 
 class FakeCtx(object):
     _mod = MOD_FOLDER
+    # mod_dir を持たない偽物なので、持ち主名は MOD の予備の名前になる（本物の ctx.mod_name は apply の外で None）
+    mod_name = None
 
     def __init__(self):
         self.out_dir = OUT_DIR
@@ -169,6 +171,9 @@ class FakeCtx(object):
 
     def logger(self, name, **kw):
         return ml.ModContext.logger(self, name, **kw)
+
+    def once(self, write, *args, **kw):
+        return ml.ModContext.once(self, write, *args, **kw)
 
     def log(self, msg, level="INFO"):
         self.logs.append((level, msg))

@@ -31,7 +31,7 @@
 import sys
 import threading
 
-from instantale_modloader import value_limits
+from instantale_modloader import frames, value_limits
 
 LOG_BASENAME = "beyond_76.log"
 
@@ -78,8 +78,8 @@ INVERSE = (
 )
 
 
-def is_number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+# int か float で bool ではない（ローダの frames.is_number。TECH.md §3.2.3）
+is_number = frames.is_number
 
 
 def like(sample, value):

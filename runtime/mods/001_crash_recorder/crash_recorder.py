@@ -2,10 +2,8 @@
 """クラッシュしたときの情報を、省略なしで out/live_crashes.log に残す。
 
 いま動いている版で何が落ちるかは、この MOD の記録だけが答える。
-ゲームに同梱されていた crash_log.txt は全て `game_version` 013 のもので、
-現行版（main_023 ＝ `014`）への更新で消えている。
-直っているかもしれないし、まだ残っているかもしれない（GAME.md §1.4 / §1.5）。
-件数を根拠にする議論は 013／014 の境目を跨がせないこと。
+ゲームの crash_log.txt は更新で消えることがあり、前の版の記録は今の版の不具合の一覧にならない（GAME.md §1.5）。
+版は記録の見出しに付けるだけで、判定には使わない。
 
 そのうえ、クラッシュ地点はモジュールのグローバルから引けるとは限らない（`send_request_on_id` はトレースバックに 62 回出るのに
 `vars(module)` には無い ＝ ネスト関数）。
@@ -45,12 +43,7 @@ MOD を入れて遊んでいる間の記録には、ローダと MOD の枠が�
 本体がその判断を通る経路でしか効かない。
 出したくないのは送信という行為の方なので、そちらを直接止める。
 
-> 以前は**注入している間はこの後段が丸ごと走っていなかった**。
-> 注入で流し込むコードがモジュール階層で `import datetime` していて、
-> 本体が `from datetime import datetime` で持っていた束縛を上書きしていたため、
-> `make_crash_log` が `AttributeError` で落ちていた
-> （`tools/injector.py` の `BOOTSTRAP_TEMPLATE` の注記）。
-> あちらを直したので `crash_log.txt` は戻る。送信はここで意図して止める。
+注入の間も `crash_log.txt` が書かれる理由は `tools/injector.py` の `BOOTSTRAP_TEMPLATE` の注記と VERIFICATION.md §3.33。
 """
 
 import datetime
@@ -114,12 +107,8 @@ def apply(ctx):
             version = main.get_game_version()
         except Exception:
             version = "?"
-        # バージョンはログに書くだけ。
-        # 判定には使わない（'013' 前提で書いていた頃の文面は main_023 で嘘になった）。
-        # 同梱の crash_log.txt は '013' のもので、その版はもう走っていない。
-        ctx.log("running build reports game_version={!r} "
-                "(the bundled crash_log.txt was '013'; do not read it as this "
-                "build's bug list)".format(version))
+        # バージョンはログに書くだけ。判定には使わない。
+        ctx.log("running build reports game_version={!r}".format(version))
 
         def record(exc_type, exc_value, exc_traceback, title):
             # 記録処理そのものが例外を出すと、
@@ -161,7 +150,7 @@ def apply(ctx):
 
         @ctx.wrap("__main__:send_crash_log_to_server", required=False)
         def send_crash_log_to_server(orig, *args, **kwargs):
-            # **元の関数は呼ばない。**
+            # 元の関数は呼ばない。
             # ここを通るトレースバックにはローダと MOD の枠が混ざっているので、
             # 素のゲームの不具合報告としては送らない（上の「送信だけは止める」）。
             size = len(args[0]) if args and isinstance(args[0], str) else -1
@@ -178,14 +167,12 @@ def apply(ctx):
             getattr(threading.excepthook, "__name__", threading.excepthook)))
 
 
-    # **在るとは限らない。**
+    # 在るとは限らない。
     # インタプリタ初期化の時点で注入すると `__main__.report_crash` はまだ無く、
-    # ここで降りると設置されないまま1セッションが終わる
-    # （実測: 89セッション中77で初回ブートが記録係なしで走り、
-    #  ブートが1回きりだった2つの pid では最後まで載らなかった）。
-    # `__main__` は常に `sys.modules` に在るのでローダの保留にも載せられない。
-    # 保留は「モジュールがまだ無い」ためのもので、
-    # 「モジュールは在るが属性がまだ無い」はここで待つしかない。
+    # ここで降りると設置されないまま1セッションが終わることがある（GAME.md §1.7）。
+    # 現れるまでここで待つ。ローダの `patch.await_module` にも載せられるが、
+    # あちらは5秒ごとで、付けるのは全 MOD を当て直す boot（上限8回を他の保留と分け合う）になる。
+    # クラッシュの記録は付くのが早いほど取りこぼしが減るので、2秒ごとに自分で見て、この MOD だけを付ける。
     main = sys.modules.get("__main__")
     if main is not None and getattr(main, "report_crash", None) is not None:
         install(main)

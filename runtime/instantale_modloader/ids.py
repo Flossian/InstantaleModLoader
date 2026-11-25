@@ -31,6 +31,11 @@ PREFIX = {"item": "item_"}
 
 
 def _int(value):
+    """採番の鍵の番号（`int(str(value))`）。読めなければ None。
+
+    `frames.to_number` に寄せないのは答えが違うため。ここは `"12"` を 12 にし、
+    `True`（`"True"`）と `"1.0"` は None にする（鍵の文字列を読むので、小数や真偽値は番号ではない）。
+    """
     try:
         return int(str(value))
     except (TypeError, ValueError):

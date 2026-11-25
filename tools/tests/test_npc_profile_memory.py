@@ -38,6 +38,7 @@ sys.path.insert(0, os.path.join(_ROOT, "runtime"))
 
 import instantale_modloader as ml                      # noqa: E402
 from instantale_modloader import modnpc                # noqa: E402
+from instantale_modloader import talks                 # noqa: E402
 
 MODS_DIR = os.path.join(_ROOT, "runtime", "mods")
 
@@ -343,6 +344,8 @@ class Ctx(object):
         self.state_dir = os.path.join(out_dir, "state")
         self.hooks = {}
         self.errors = []
+        # 窓口に名乗る持ち主の名前（本物は apply() の間だけフォルダ名）。
+        self.mod_name = os.path.basename(os.path.dirname(MOD_PATH))
 
     def out_path(self, *parts):
         return self._under(self.out_dir, parts)
@@ -473,6 +476,9 @@ def reset_mod_store():
         if hasattr(sys, attr):
             delattr(sys, attr)
     modnpc.registry().clear()
+    # 会話の1手の後はローダの窓口 `talks` が包む。偽の ctx は世代を持たないので、
+    # 包みの印と登録を忘れさせないと、次の筋書きの ctx に包みが渡らない。
+    talks.reset()
 
 
 class Run(object):
@@ -1207,7 +1213,7 @@ def test_reapply_shares_one_worker_and_one_lock():
 
     second = getattr(sys, MOD.STATE_STORE_ATTR)
     check(second is first, "当て直しで控え一式が作り直された")
-    for key in ("state", "worlds", "worker", "log_lock"):
+    for key in ("state", "worlds", "worker"):
         check(second[key] is first[key], "{} が別物になった".format(key))
     # 中身も見る（`rebind` は ctx を差し替えるだけで、錠と待ち行列は据え置き）。
     check(second["worlds"].lock is first["worlds"].lock, "控えの錠が別物になった")
@@ -1297,8 +1303,8 @@ def test_structured_call_follows_the_house_rules():
     check(all(isinstance(item, dict) and "role" in item and "content" in item
               for item in call["message"]),
           "message の形が違う: {}".format(call["message"]))
-    check(call["timeout"] == MOD.EXTRACT_TIMEOUT,
-          "timeout を渡していない: {!r}".format(call["timeout"]))
+    check(call["timeout"] is None,
+          "timeout は送り口へ渡さない（llm.ask の目安。VERIFICATION.md §3.101）: {!r}".format(call["timeout"]))
     check(call["manager"].startswith("mod_"),
           "manager_name が mod_ で始まらない: {!r}".format(call["manager"]))
     # 空の `Literal[]` は pydantic が拒否してゲームごと落ちる（`203_` の実測）。

@@ -61,12 +61,13 @@
 import collections
 import copy
 import random
-import sys
 import time
 import typing
 import weakref
 
-from instantale_modloader import choices, frames, llm, modfacility, save_lookup, shop_lineup, ui, value_limits
+from instantale_modloader import (choices, frames, items, llm, modfacility, modnpc, save_lookup, shop_lineup,
+                                  shopping, ui, value_limits)
+from instantale_modloader.state import process_store
 
 # ---------------------------------------------------------------- 設定（mod.json）
 #: 店の種類に合わない武器・防具も並べる（ゲームの「武器と防具を1つずつ」の名残）。
@@ -86,7 +87,6 @@ SHOP_CLS = "ShoppingStartManagerRemake"
 SHOP_SITE = "shopping"
 #: 施設の `出る`（ゲームの移動）。施設の画面かの目印。
 MOVE_CLS = "MovePhaseManager"
-MOD_PREFIX = "mod:"
 
 #: `売買する` を足す施設の種類と、その施設の画面に並ぶゲーム自身の入口（施設の画面かの目印）。
 ENTRY_TYPES = {
@@ -110,10 +110,9 @@ SELLS = {
 }
 
 FACILITY_INIT = "__main__:Facility.__init__"
-SHOP_TARGET = "__main__:ShoppingStartManagerRemake.execute"
+#: 売買を押したとき（`execute`）と、雛形からその段の品を並べるとき（`set_item_from_world_data`。初めて開いた店。
+#: GAME.md §2.13.1）は、ローダの窓口 `shopping` の ENTER / LAY が包む（TECH.md §3.3.21）。
 ITEM_TARGET = "__main__:ShoppingStartManagerRemake.generate_item_in_shopping"
-#: 品揃えの雛形（`config['goods']`）からその段の品を並べる入口（初めて開いた店。GAME.md §2.13.1）。
-TEMPLATE_TARGET = "__main__:ShoppingStartManagerRemake.set_item_from_world_data"
 #: 世界の一括生成の仕事1件（`scripts.world_bulk_*` は「開始／再開」の後に読み込まれ、ローダが当て直す。GAME.md §2.27）。
 BULK_TARGET = "scripts.world_bulk_backend:GameGenerationBackend.generate"
 BULK_SHOP_KIND = "shop"
@@ -189,23 +188,18 @@ FILL_TYPES = {
                  "plant", "mushroom", "relic", "scrap", "magical_material",
                  "other_material"),
 }
-RARITIES = ("common", "rare", "magical", "epic", "legendary", "mythic")
-#: 頼みに書く価値の目盛りの上限。ゲームの難易度の上限（`QUEST_DIFFICULTY_VALUE_MAX`）と同じ 76。
-#: ゲームの頼みは「最高が70」と書くが、雛形の価値は終盤の街で 76 まで出る。
-#: 返ってきた価値を切る上限は窓口 `value_limits` から引く（素は 76。76 を超えた価値はゲームが値段と強さを
-#: 76 の値で止める。VERIFICATION.md §3.112。`923_beyond_76` が入っていれば 100。TECH.md §3.3.26）。
-VALUE_MAX = 76
+#: 希少度の6段（ゲームのスキーマ。ローダの `items.RARITIES`）。
+RARITIES = items.RARITIES
+# 頼みに書く価値の目盛りの上限は、ゲームの難易度の上限（`QUEST_DIFFICULTY_VALUE_MAX`。ローダの `value_limits.game_max`。素は 76）。
+# ゲームの頼みは「最高が70」と書くが、雛形の価値は終盤の街で 76 まで出る。
+# 返ってきた価値を切る上限は窓口 `value_limits` から引く（素は 76。76 を超えた価値はゲームが値段と強さを
+# 76 の値で止める。VERIFICATION.md §3.112。`923_beyond_76` が入っていれば 100。TECH.md §3.3.26）。
 
 #: 品揃えの間の目印がこれより古ければ、差し替えない（`execute` が戻らなかった回の取り残し）。
 BATCH_STALE_SECONDS = 600
 
-
-def _get(obj, key, default=None):
-    """辞書でも属性でも読む。"""
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    value = frames.attr(obj, key, default)
-    return default if value is frames.MISSING else value
+#: 辞書でも属性でも読む（ローダの `frames.field`。読めない番人は default に戻す）。
+_get = frames.field
 
 
 def category_of(item_data):
@@ -279,16 +273,14 @@ def add_selling(response_list, instruction, facility_type):
 
 
 def apply(ctx):
-    store = getattr(sys, STORE_ATTR, None)
-    if not isinstance(store, dict):
-        store = {
-            "entry": None,          # 店の `choices["売買する"]` の写し
-            "pending": None,        # 入口がまだ写せていない間に生まれた施設
-            "swept": None,          # 見回った世界（弱い参照。id は解放後の番地の使い回しで別の世界と一致する）
-            "batch": None,          # 店で品揃えを作っている間の目印
-        }
-        setattr(sys, STORE_ATTR, store)
-    store.setdefault("withheld", set())   # 入口を外した (世界, 施設) の控え（ログを1度だけ出す）
+    # 置き方はローダの `state.process_store`（注入し直しをまたいで1組。足りない鍵だけ埋める）。
+    store = process_store(STORE_ATTR, {
+        "entry": None,          # 店の `choices["売買する"]` の写し
+        "pending": None,        # 入口がまだ写せていない間に生まれた施設
+        "swept": None,          # 見回った世界（弱い参照。id は解放後の番地の使い回しで別の世界と一致する）
+        "batch": None,          # 店で品揃えを作っている間の目印
+        "withheld": set(),      # 入口を外した (世界, 施設) の控え（ログを1度だけ出す）
+    })
     if store.get("pending") is None:
         try:
             store["pending"] = weakref.WeakSet()
@@ -296,6 +288,7 @@ def apply(ctx):
             store["pending"] = set()
 
     write = ctx.logger(LOG_BASENAME, cap=2000)
+    owner_name = ctx.mod_name or OWNER
 
     # ------------------------------------------------------------ 施設を見分ける
     def facility_id(facility):
@@ -306,7 +299,7 @@ def apply(ctx):
         if modfacility.is_mod_facility(facility_id(facility)):
             return False
         owner = _get(facility, "owner")
-        return owner is not None and not str(owner).startswith(MOD_PREFIX)
+        return owner is not None and not modnpc.is_mod_npc(str(owner))
 
     def takes_entry(facility):
         """`売買する` を足す施設か（ゲームの宿屋と鍛冶屋）。"""
@@ -579,31 +572,35 @@ def apply(ctx):
             return None
         return batch
 
-    @ctx.wrap(SHOP_TARGET, required=False, safe=True)
-    def shopping_start(orig, self, *args, **kwargs):
-        app = _get(self, "app") or ui.find_app()
-        facility = None
-        try:
-            facility = ui.current_facility(app)
-        except Exception:
-            ctx.log_exc("shop lineup: cannot read the current facility")
+    def shopping_start(call):
+        """売買を押したとき（orig の前）。ゲームの店なら品揃えの間の目印を立て、after に渡す。"""
+        facility = call.facility
         if facility is None or not has_lineup(facility):
-            return orig(self, *args, **kwargs)
+            return None
         batch = {"since": time.time(), "facility": facility_id(facility), "obj": facility,
                  "type": ui.facility_type_of(facility), "owner": str(_get(facility, "owner")),
-                 "name": ui.facility_name(app, facility), "rewrites": 0, "dropped": []}
+                 "name": ui.facility_name(call.app, facility), "rewrites": 0, "dropped": []}
         store["batch"] = batch
         write("shopping at {} {!r} owner={}".format(where(facility), batch["name"], batch["owner"]))
-        try:
-            return orig(self, *args, **kwargs)
-        finally:
-            if store.get("batch") is batch:
-                store["batch"] = None
-            goods = _get(_get(facility, "config"), "goods")
-            kinds = collections.Counter(category_of(entry) for entry in goods) \
-                if isinstance(goods, list) else collections.Counter()
-            write("done at {}: rewrites={} dropped={} goods={} {}".format(
-                where(facility), batch["rewrites"], len(batch["dropped"]), sum(kinds.values()), dict(kinds)))
+        return batch
+
+    def shopping_done(call):
+        """売買の処理が戻った後（orig が投げた回も）。目印を下ろし、棚の内訳を残す。"""
+        batch = call.memo
+        if batch is None:
+            return
+        if store.get("batch") is batch:
+            store["batch"] = None
+        facility = batch["obj"]
+        goods = _get(_get(facility, "config"), "goods")
+        kinds = collections.Counter(category_of(entry) for entry in goods) \
+            if isinstance(goods, list) else collections.Counter()
+        write("done at {}: rewrites={} dropped={} goods={} {}".format(
+            where(facility), batch["rewrites"], len(batch["dropped"]), sum(kinds.values()), dict(kinds)))
+
+    # 売買の前後はローダの窓口 `shopping` の ENTER（TECH.md §3.3.21）。前は orig が投げても片付けていたので always=True。
+    shopping.on(owner_name, ctx, (shopping.ENTER,), before=shopping_start, after=shopping_done, always=True,
+                write=write)
 
     def rewrite(texts, site):
         batch = live_batch()
@@ -647,13 +644,8 @@ def apply(ctx):
                 return None
         return orig(self, *args, **kwargs)
 
-    def stock_of(owner):
-        """主の持ち物の辞書（`inventory.inventory`）。読めなければ None。"""
-        holder = _get(owner, "inventory")
-        inner = _get(holder, "inventory")
-        if isinstance(inner, dict):
-            return inner
-        return holder if isinstance(holder, dict) else None
+    # 主の持ち物の辞書（`inventory.inventory`）。読めなければ None（ローダの `items.inventory_of`）。
+    stock_of = items.inventory_of
 
     def fill_structure():
         """足す品の返却型。`Literal` は使わない（空だと pydantic が落ちる。llm.py）。"""
@@ -693,7 +685,7 @@ def apply(ctx):
             shop=frames.short(frames.attr(facility, "name", ""), 60), kind=facility_type,
             shop_desc=frames.short(frames.attr(facility, "description", "") or "", None),
             types=types, values=values, rarities="/".join(RARITIES),
-            max=VALUE_MAX,
+            max=value_limits.game_max(),
             present="、".join(sorted(present)) or "無し")
         return [{"role": "system", "content": text}, {"role": "user", "content": "＜品を足す＞"}]
 
@@ -777,27 +769,25 @@ def apply(ctx):
             len(made), count, batch["type"], batch["facility"], "、".join(made)))
         return len(made)
 
-    @ctx.wrap(TEMPLATE_TARGET, required=False, safe=True)
-    def keep_gear_out_of_template(orig, self, *args, **kwargs):
-        """雛形から段の品を並べる間も、`MIXED_GEAR` を切った宿屋と診療所では武器・防具を残さない。
+    def template_before(call):
+        """雛形から段の品を並べる前。`MIXED_GEAR` を切った宿屋と診療所なら、並べる前の棚の鍵を after に渡す。
 
         初めて開いた店では、ゲームが雛形（前の頼みで武器と防具を1つずつ作った品揃え）から
         その段の品を直に作る（`generate_item_in_shopping` も `generate_item_from_dict` も通らない。
         `227_` の品の誕生の記録）。作り終えた直後、売買の画面を開く前の同じスレッドで、新しく入った武器・防具を外す
         （画面を開いた後に持ち物の辞書を触ると、値付けの見回りと競合して落ちる。GAME.md §2.13.1）。
         棚が空から並べる回（初めて開いた店）で武器・防具を外すことになるときは、並べる**前**に傾向の品を足す
-        （`fill_stock`）。後に足すと、品を並べ終えた直後に検品する `405_regional_economy` が足した品を見ないことがあり
-        （包みの重なり順で前後する）、売買画面を開く手前でもう一度待つ（2026-10-24 の実機）。
+        （`fill_stock`）。窓口 `shopping` の LAY では、before で足した品を全部の after（`405_regional_economy` の検品）が見る。
         """
         batch = live_batch()
-        owner = frames.arg(args, kwargs, "shop_owner_instance", 0)
+        owner = call.owner
         stock = stock_of(owner) if batch is not None and gear_dropped(batch["type"]) else None
         before = set(stock) if isinstance(stock, dict) else None
         if before is not None and not before and not batch.get("filled"):
             try:
-                app = _get(self, "app") or ui.find_app()
-                facility = ui.current_facility(app)
-                tier = frames.arg(args, kwargs, "next_tier", 1)
+                app = call.app
+                facility = call.facility
+                tier = call.tier
                 if batch["dropped"] or template_gear(facility, tier):
                     batch["filled"] = True
                     fill_stock(app, batch, facility, owner, tier)
@@ -805,11 +795,15 @@ def apply(ctx):
                     before = set(stock) if isinstance(stock, dict) else before
             except Exception:
                 ctx.log_exc("shop lineup: cannot fill the stock")
-        result = orig(self, *args, **kwargs)
-        if before is None:
-            return result
+        return None if before is None else (batch, before)
+
+    def template_after(call):
+        """雛形から並べた後。新しく入った武器・防具を棚から外す（orig が返った回だけ）。"""
+        if call.memo is None:
+            return
+        batch, before = call.memo
         try:
-            stock = stock_of(owner)
+            stock = stock_of(call.owner)
             for key in [key for key in list(stock or {}) if key not in before]:
                 item = stock[key]
                 kind = category_of(item)
@@ -821,7 +815,9 @@ def apply(ctx):
                         name, kind, batch["type"], batch["facility"]))
         except Exception:
             ctx.log_exc("shop lineup: cannot keep the gear out of the template stock")
-        return result
+
+    # 雛形から並べる前後はローダの窓口 `shopping` の LAY（TECH.md §3.3.21）。
+    shopping.on(owner_name, ctx, (shopping.LAY,), before=template_before, after=template_after, write=write)
 
     # ------------------------------------------------------------ 世界の一括生成の店の品
     def bulk_facility(task, world):
@@ -852,7 +848,7 @@ def apply(ctx):
             ctx.log_exc("shop lineup: cannot read the bulk task")
         kind = _get(found, "facility_type") if found is not None else None
         owner = _get(found, "owner") if found is not None else None
-        if kind not in LINEUPS or owner is None or str(owner).startswith(MOD_PREFIX) \
+        if kind not in LINEUPS or owner is None or modnpc.is_mod_npc(str(owner)) \
                 or modfacility.is_mod_facility(str(fid)):
             return orig(self, *args, **kwargs)
         batch = {"since": time.time(), "facility": str(fid), "obj": found, "type": kind, "owner": str(owner),
@@ -881,7 +877,7 @@ def apply(ctx):
             return None
         return GEAR_TYPES
 
-    shop_lineup.provide(OWNER, ctx, tendency, exclude=excluded)
+    shop_lineup.provide(owner_name, ctx, tendency, exclude=excluded)
 
     ctx.log("shop lineup: {!r} added at {}; goods lean by shop type ({}); off-type gear {}; log goes to out/{}".format(
         SHOP_CHOICE, "/".join(ENTRY_TYPES), "/".join(LINEUPS),
