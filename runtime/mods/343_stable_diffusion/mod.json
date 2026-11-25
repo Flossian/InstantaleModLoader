@@ -121,8 +121,8 @@
         "en": "First stage sampling method"
       },
       "note": {
-        "ja": "立ち絵と敵の1段目（下描き）。ゲームのままは euler_a。立ち絵と敵は同じ関数を通るので、この段の設定は両方に効く",
-        "en": "The first (draft) stage for portraits and enemies. The game uses euler_a. Portraits and enemies go through the same function, so this applies to both"
+        "ja": "立ち絵と敵の1段目（画質 highres では仕上げ、highres_upscale では下描き）。ゲームのままは euler_a。立ち絵と敵は同じ関数を通るので、この段の設定は両方に効く",
+        "en": "The first stage for portraits and enemies (the final pass with the highres quality, the draft with highres_upscale). The game uses euler_a. Portraits and enemies go through the same function, so this applies to both"
       }
     },
     "STAGE1_STEPS": {

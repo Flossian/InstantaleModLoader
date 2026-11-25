@@ -37,10 +37,10 @@ QUALITY_KEYS = {"portrait": "character_generation_quality",
                 "background": "background_generation_quality"}
 
 #: sdcpp 系で、画質ごとに通る段（実測できた組だけ。GAME.md §2.33）。
-#: 立ち絵の `highres_upscale` は1段目で下描きして2段目で描き直す。
+#: 立ち絵の `highres_upscale` は1段目で下描きして2段目で描き直す。`highres` は1段目の1回で描き終える。
 STAGES_BY_QUALITY = {
     "portrait": {"highres_upscale": ("stage1", "stage2"), "highres_faster": ("lcm",), "highres": ("stage1",)},
-    "enemy": {"highres_faster": ("lcm",)},
+    "enemy": {"highres_faster": ("lcm",), "highres": ("stage1",)},
     "background": {"highres_faster": ("lcm",)},
 }
 
@@ -48,6 +48,10 @@ STAGES_BY_QUALITY = {
 BASE_SIZES = {("portrait", "stage1"): (256, 512), ("portrait", "stage2"): (512, 1024),
               ("portrait", "lcm"): (512, 1024), ("enemy", "lcm"): (512, 512),
               ("background", "lcm"): (1024, 512)}
+
+#: 画質で寸法の変わる段（実測。GAME.md §2.33）。`highres` の1段目は下描きでなく、仕上げの寸法で描く。
+BASE_SIZES_BY_QUALITY = {("portrait", "highres", "stage1"): (512, 1024),
+                         ("enemy", "highres", "stage1"): (512, 512)}
 
 STAGE_LABELS = {"stage1": "1段目", "stage2": "2段目", "lcm": "LCM の段"}
 STAGE_ORDER = ("stage1", "stage2", "lcm")
@@ -180,9 +184,9 @@ def sampler_of(stage, values):
             str(values.get(head + "_SCHEDULER") or game[3]))
 
 
-def size_of(kind, stage, values, family):
-    """この段で出口に渡る寸法（本体の `wanted` と同じ計算）。"""
-    base = BASE_SIZES.get((kind, stage))
+def size_of(kind, stage, values, family, quality=None):
+    """この段で出口に渡る寸法（本体の `wanted` と同じ計算）。`quality` はゲームの画質（段の寸法が変わる画質がある）。"""
+    base = BASE_SIZES_BY_QUALITY.get((kind, quality, stage)) or BASE_SIZES.get((kind, stage))
     if base is None:
         return None
     if family == "diffusers" and not values.get("DIFFUSERS_RESIZE"):
@@ -233,7 +237,7 @@ def plan_kind(kind, values, custom, family, quality, game, last, game_dir=""):
                 and str(used.get("MODEL_SAFETY") or "auto") == "auto"):
             got = sizes.SDXL_SAMPLER
         samplers.append((stage, got))
-    size = size_of(kind, stages[-1], used, family) if stages else None
+    size = size_of(kind, stages[-1], used, family, quality) if stages else None
     return {"model": model, "source": source, "family": model_family, "stages": stages, "how": how,
             "size": size, "samplers": samplers, "values": used, "missing": missing}
 

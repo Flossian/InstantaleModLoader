@@ -2161,6 +2161,13 @@ got = OL.build(dict(ol_values, PORTRAIT_SHORT=704, PORTRAIT_MAX_LONG=1408, STAGE
 check("立ち絵が2段なら、2段目の寸法と両方のサンプラー",
       got["rows"][0][2] == "704x1408" and "1段目 euler_a 30 / cfg 8" in got["rows"][0][3]
       and "2段目 dpmpp2m 15 / cfg 7 karras" in got["rows"][0][3], got["rows"][0])
+got = OL.build(dict(ol_values, PORTRAIT_SHORT=1024, PORTRAIT_MAX_LONG=2048, ENEMY_SHORT=1024, ENEMY_MAX_LONG=2048),
+               [], dict(ol_faster, character_generation_quality="highres", monster_generation_quality="highres"),
+               "game_model", ol_read)
+check("画質 highres は立ち絵も敵も1段目の1回で、仕上げの寸法（立ち絵 512x1024・敵 512x512）から拡大する",
+      got["rows"][0][2:4] == ("1024x2048", "euler_a 20 / cfg 8")
+      and got["rows"][1][2:4] == ("1024x1024", "euler_a 20 / cfg 8") and "前回" not in got["rows"][0][3],
+      got["rows"])
 got = OL.build(dict(ol_values, STAGE1_STEPS=30), [], ol_faster, "game_model", ol_read)
 check("どの絵も通らない段のサンプラーを変えていたら、効いていない設定に出す",
       got["notes"] == ["1段目のサンプラー（ゲームの画質では、この段を通る絵が無い）"], got["notes"])

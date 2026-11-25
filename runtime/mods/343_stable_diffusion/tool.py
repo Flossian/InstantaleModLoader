@@ -97,8 +97,8 @@ SIZE_GROUPS = (("立ち絵 (キャラクタ)", ("PORTRAIT_SHORT", "PORTRAIT_MAX_
 
 #: サンプラーのタブの GroupBox（元 GUI の portrait / landscape / square に当たる段）。
 SAMPLER_GROUPS = (
-    ("1段目 (立ち絵と敵の下描き)", ("STAGE1_METHOD", "STAGE1_STEPS",
-                                    "STAGE1_CFG", "STAGE1_SCHEDULER")),
+    ("1段目 (立ち絵と敵)", ("STAGE1_METHOD", "STAGE1_STEPS",
+                            "STAGE1_CFG", "STAGE1_SCHEDULER")),
     ("2段目 (立ち絵と敵の描き直し)", ("STAGE2_METHOD", "STAGE2_STEPS",
                                       "STAGE2_CFG", "STAGE2_SCHEDULER")),
     ("LCM の段 (背景・敵。画質を下げると立ち絵も)", ("LCM_METHOD", "LCM_STEPS",

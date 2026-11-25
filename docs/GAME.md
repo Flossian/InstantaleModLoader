@@ -4433,6 +4433,8 @@ MOD なしの値（`sdcpp_cuda`、実測）:
 `highres` は1段目の関数（`generate_image_anime`）の1回で、512x1024 を `euler_a` / 20 / 8 / `default` で描く（2026-11-25 実測。2段目は通らない）。
 どの画質でも、立ち絵の工程は `pixel_art_process(絵, pixelation_width=165, pixelation_height=330)` と `reduce_image_colors(絵, 64)` だった（同日、`343_` の呼び方の控え）。
 `highres_upscale` の2段目の引数は `dpmpp2m` / 15 / 7 / `karras`・seed -1。
+敵・モンスターの画質（`monster_generation_quality`）が `highres` なら、敵も1段目の関数の1回で、512x512 を `euler_a` / 20 / 8 / `default` で描く（同日、`generate_enemy_image` を2体。2段目は通らない）。
+`343_` のサンプラーは段で引くので、このとき敵は「LCM の段」でなく「1段目」の値で描かれる。
 LCM の処理を通る回はプロンプトに `<lora:LCM_LoRA_Weights_SD15:1>` が入る。
 
 敵・モンスターは立ち絵とは別の経路で、
