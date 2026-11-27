@@ -605,7 +605,7 @@ def apply(ctx):
             room = return_spot(app, record) is not None
             button = {"text": "取り外す", "enabled": enough and room, "action": "remove",
                       "payload": [part, record["slot"]],
-                      "lines": [coins("{}G・{}".format(money(fee), rules.days_words(days)))]}
+                      "lines": [coins("{}G／{}".format(money(fee), rules.days_words(days)))]}
             if not room:
                 notes.insert(0, (NO_ROOM_TEXT, rules.MINUS))
             if not enough:
@@ -644,8 +644,8 @@ def apply(ctx):
         current = injuries(app).get(part, (0, ""))[0]
 
         def button_lines(p):
-            """施術のボタンの小さい行（`成功率70%・2,700G・4日`、`失敗時 怪我 +60`）。"""
-            return [coins("成功率{}・{}G・{}".format(rules.percent_words(rules.success_percent(p["fail"])),
+            """施術のボタンの小さい行（`成功率70%／2,700G／4日`、`失敗時 怪我 +60`）。"""
+            return [coins("成功率{}／{}G／{}".format(rules.percent_words(rules.success_percent(p["fail"])),
                                                    money(p["fee"]), rules.days_words(p["days"]))),
                     "失敗時 " + rules.fail_injury_words(rules.fail_injury(p["illegal"]), current)]
 

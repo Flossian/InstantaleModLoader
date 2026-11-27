@@ -80,7 +80,7 @@ check("契約の稼ぎは割増こみ（4回 12.5%・8回 25%）",
 check("素の労働は割増なし", plain["plain_long"] == 178 * 8)
 check("依頼1件との比べ", abs(plain["share"] - 100.0 * plain["long_total"] / 4234) < 1e-9)
 strong = tool.simulate(rules, found, defaults, sample, 30, 2880)
-check("能力値 30・右腕で 4 倍", strong["pay"] == rules.term_pay(BASE, 90, (200, 200)) and strong["rank"] == "右腕" and strong["discount"] == 15, strong)
+check("能力値 30・重鎮で 4 倍", strong["pay"] == rules.term_pay(BASE, 90, (200, 200)) and strong["rank"] == "重鎮" and strong["discount"] == 15, strong)
 check("危険度ごとの賃金は 2・3・4 倍（90日ぶん）",
       [row["pay"] for row in plain["illegal"]] == [rules.term_pay(BASE, 90, (p,)) for p in (200, 300, 400)])
 check("危険の確率は表の値（能力値 11）", [row["chance"] for row in plain["illegal"]] == [10.0, 18.0, 28.0],

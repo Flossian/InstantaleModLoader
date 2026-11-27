@@ -58,6 +58,19 @@ CARD_PAD, CARD_GAP, SLOT_PAD = 6, 10, 2
 SLOT_SIDE, SLOT_GAP = 2, 6
 #: 持ち物の候補の札の、絵の左右に取る余白の合計（px。列の数は欄の幅を「絵＋余白」で割って決める）。
 CANDIDATE_MARGIN = 8
+#: 部位の札の見出しの帯と、詳しい欄の項目名の枠の塗り。
+BAND_FILL = (0.12, 0.12, 0.14, 1)
+CHIP_FILL = (0.16, 0.16, 0.18, 1)
+#: 項目名の枠の字の両脇の余白の合計・枠と中身の間・代償の行の字下げ・部位の見出しの帯の左の余白（upx）。
+CHIP_PAD, CHIP_GAP, SUB_INDENT, BAND_PAD = 16, 10, 18, 6
+#: 人体の図の下の凡例の段の高さ（字の大きさに対する倍率）。字の下端を左右の札の下端に揃える高さ。
+LEGEND_ROW = 1.2
+#: 見出しの項目の区切り。
+HEAD_SEP = "　｜　"
+#: 詳しい欄の方法ごとの塊の間の線と、スクロールする欄とボタンの段の間の線の色。
+BLOCK_LINE = (0.24, 0.24, 0.26, 1)
+#: 括弧の中の説明の字の大きさ（行の字に対する倍率）。「再生（毎ターン…）」の括弧の中を小さくして1行に収める。
+PAREN_SCALE = 0.8
 
 #: 人体の図の形（幅 320・高さ 500 の箱。y は下向き。x は中心からのずれ。左右対称のものは右半分だけ）。
 FIG_W, FIG_H, FIG_TOP = 320.0, 500.0, 18.0
@@ -149,6 +162,62 @@ def _pieces_markup(pieces):
                      for text, kind in pieces)
 
 
+def _split_paren(text):
+    """「名前（説明）」を `(名前, 説明)` に分ける。括弧で終わらない文は `(文, "")`。"""
+    head, mark, rest = text.partition("（")
+    if mark and head and rest.endswith("）"):
+        return head, rest[:-1]
+    return text, ""
+
+
+def _paren_markup(text, size):
+    """文の末尾の括弧（「…（…）」）を字の大きさ `size` にした markup（色は付けない）。"""
+    from kivy.utils import escape_markup
+    head, mark, rest = text.rpartition("（")
+    if mark and rest.endswith("）"):
+        return "{}[size={}]（{}[/size]".format(escape_markup(head), int(size), escape_markup(rest))
+    return escape_markup(text)
+
+
+def _rows_markup(pieces, size):
+    """詳しい欄の行の効果の並び。括弧の中の説明は小さい字（`size`）にする。効果の中の空白は折り返さない空白にする。"""
+    color = {rules.PLUS: PLUS, rules.MINUS: MINUS, rules.PLAIN: panels.TEXT}
+    return "  ".join("[color={}]{}[/color]".format(_hex(color.get(kind, panels.TEXT)),
+                                                  _paren_markup(text.replace(" ", " "), size))
+                     for text, kind in pieces)
+
+
+def _rule(kit, color=panels.FAINT):
+    """細い横の線（欄の区切り）。"""
+    from kivy.graphics import Color, Rectangle
+    from kivy.uix.widget import Widget
+    line = Widget(size_hint_y=None, height=max(1, int(round(kit.px(1)))))
+    with line.canvas:
+        Color(*color)
+        rect = Rectangle(pos=line.pos, size=line.size)
+    line.bind(pos=lambda w, v: setattr(rect, "pos", v), size=lambda w, v: setattr(rect, "size", v))
+    return line
+
+
+def _filled(widget, color):
+    """`widget` の下に塗りだけを敷く（`kit.framed` は枠の線を字の上に描くので、字の端が塗りの色の線に隠れた）。"""
+    from kivy.graphics import Color, Rectangle
+    with widget.canvas.before:
+        Color(*color)
+        rect = Rectangle(pos=widget.pos, size=widget.size)
+    widget.bind(pos=lambda w, v: setattr(rect, "pos", v), size=lambda w, v: setattr(rect, "size", v))
+    return widget
+
+
+def _chip(kit, text, width, height, color):
+    """項目名の枠（薄い地に字を真ん中）。"""
+    from kivy.uix.label import Label
+    label = kit._font(Label(text=text, color=color, font_size=kit.base * panels.META, halign="center",
+                            valign="middle", size_hint=(None, None), size=(width, height)))
+    label.bind(size=lambda w, value: setattr(w, "text_size", value))
+    return _filled(label, CHIP_FILL)
+
+
 class AugmentWindow(object):
     """画面1つ。`render(model)` で中身を描き直す（見立てや判定が済んだとき）。"""
 
@@ -235,8 +304,12 @@ class AugmentWindow(object):
         place = [(model["gold"], panels.TEXT)] if model.get("gold") else []
         place.append((model["note"], self.palette["accent"] if model.get("mode") else panels.DIM))
         for row in (pieces, place):
-            text = panels.markup([(t + "　", c) for t, c in row[:-1]] + row[-1:])
-            label = kit.label(text, panels.META, use_markup=True, wrap=False)
+            parts = []
+            for index, (text, color) in enumerate(row):
+                if index:
+                    parts.append((HEAD_SEP, panels.FAINT))
+                parts.append((text, color))
+            label = kit.label(panels.markup(parts), panels.META, use_markup=True, wrap=False)
             label.pos_hint = {"right": 1}
             info.add_widget(label)
         head.add_widget(info)
@@ -245,6 +318,16 @@ class AugmentWindow(object):
         close.bind(on_release=lambda *_a: self.view.dismiss())
         close.pos_hint = {"center_y": 0.5}
         head.add_widget(close)
+        # 見出しの下に細い線（高さは足さない。見出しと下の段の間に引く）
+        from kivy.graphics import Color, Rectangle
+        with head.canvas.after:
+            Color(*panels.FAINT)
+            rule = Rectangle()
+
+        def place_rule(w, _value):
+            rule.pos = (w.x, w.y - kit.px(4))
+            rule.size = (w.width, max(1, int(round(kit.px(1)))))
+        head.bind(pos=place_rule, size=place_rule)
         return head
 
     def legend(self, model):
@@ -253,7 +336,7 @@ class AugmentWindow(object):
         from kivy.uix.widget import Widget
         kit = self.kit
         words = model["words"]
-        row = BoxLayout(orientation="horizontal", size_hint_y=None, height=kit.base * panels.TICK * 1.6,
+        row = BoxLayout(orientation="horizontal", size_hint_y=None, height=kit.base * panels.TICK * LEGEND_ROW,
                         spacing=kit.px(6))
         row.add_widget(Widget())
         for color, text in ((self.palette["accent"], words["augment"]), (self.palette["illegal"], words["illegal"]),
@@ -314,8 +397,12 @@ class AugmentWindow(object):
         box = kit.framed(BoxLayout(orientation="vertical", padding=(kit.px(10), kit.px(CARD_PAD)), spacing=kit.px(2),
                                    size_hint_y=None, height=self.card_height()),
                          color=color)
-        head = BoxLayout(orientation="horizontal", size_hint_y=None, height=kit.base * panels.NAME * 1.15)
-        head.add_widget(kit.label(data["name"], panels.NAME, wrap=False))
+        head = BoxLayout(orientation="horizontal", size_hint_y=None, height=kit.base * panels.NAME * 1.15,
+                         padding=(kit.px(BAND_PAD), 0, kit.px(BAND_PAD), 0))
+        _filled(head, BAND_FILL)
+        name = kit.label(data["name"], panels.NAME, wrap=False)
+        name.pos_hint = {"center_y": 0.5}
+        head.add_widget(name)
         # 侵食・自己修復の次の刻みまでの日数（部位名と状態の間。収まらない分は「…」）
         marks = data.get("wear") or []
         if marks:
@@ -333,7 +420,9 @@ class AugmentWindow(object):
         # 状態は怪我のある部位だけ出す（「正常」は出さず、空いた幅を日数の表示に回す）
         text, key = data["state"]
         if key == "hurt":
-            head.add_widget(kit.label(text, panels.META, self.palette["hurt"], wrap=False))
+            hurt = kit.label(text, panels.META, self.palette["hurt"], wrap=False)
+            hurt.pos_hint = {"center_y": 0.5}
+            head.add_widget(hurt)
         box.add_widget(head)
         row = BoxLayout(orientation="horizontal", spacing=kit.px(SLOT_GAP), size_hint_y=None, height=self.slot_height())
         slots = data["slots"]
@@ -404,7 +493,7 @@ class AugmentWindow(object):
         cell.add_widget(icon)
         # 札の枠の高さは決まっているので、名前は1行、効果は2行までにして続きは「…」で切る（全部は説明の窓に出す）。
         # 字の塊は絵の高さの中央に揃える
-        words = BoxLayout(orientation="vertical", spacing=kit.px(2), size_hint_y=None, pos_hint={"center_y": 0.5})
+        words = BoxLayout(orientation="vertical", spacing=kit.px(4), size_hint_y=None, pos_hint={"center_y": 0.5})
         words.bind(minimum_height=words.setter("height"))
         name = kit.label(record["name"], panels.META, self.name_color(record))
         name.shorten = True
@@ -521,6 +610,7 @@ class AugmentWindow(object):
             box.add_widget(kit.label(model.get("candidate_empty") or "", panels.META, panels.DIM))
         box.add_widget(kit.scroller(grid))
         if model.get("candidate_note"):
+            box.add_widget(_rule(kit))
             box.add_widget(kit.label(model["candidate_note"], panels.TICK, panels.FAINT))
         return box
 
@@ -567,7 +657,7 @@ class AugmentWindow(object):
                               self.palette["illegal"] if data.get("forbidden") else None)
         icon.pos_hint = {"top": 1}
         top.add_widget(icon)
-        words = BoxLayout(orientation="vertical", spacing=kit.px(2), size_hint_y=None, pos_hint={"top": 1})
+        words = BoxLayout(orientation="vertical", spacing=kit.px(6), size_hint_y=None, pos_hint={"top": 1})
         words.bind(minimum_height=words.setter("height"))
         words.bind(height=lambda w, value: setattr(top, "height", max(icon_size, value)))
         name = data["name"]
@@ -587,17 +677,64 @@ class AugmentWindow(object):
         box.add_widget(top)
         body = kit.column(spacing=4)
         danger_rows = set(data.get("danger_rows") or ())
+        # 行は `(字下げ, 項目名, 効果の並び, 項目名の色)`。代償のうち括弧の説明つきのもの（反動・侵食など）は、
+        # 親の行の下に字下げした行で「名前｜説明」と出す（1行に詰めると折り返して読みにくかった）
+        # 方法ごとの行（通常施術・限界施術）は塊にし、塊の間に線を引く。塊の中は1行目が伸びる効果、2行目が代償
+        # （折り返しに任せると、幅によって代償の落ちる位置が変わった）。`None` の項目名は枠を置かず字下げだけ
+        methods = set(rules.METHOD_NAMES.values())
+        lines = []
         for label, row in data.get("rows") or []:
             if not row:
                 continue
-            # 違法の改造になる方法の行（限界施術）は、見出しを違法の色にする
-            head = self.palette["illegal"] if label in danger_rows else panels.DIM
-            body.add_widget(kit.label("[color={}]{}[/color]　{}".format(
-                _hex(head), label, _pieces_markup(row)), panels.BODY, use_markup=True))
-        for text, kind in data.get("notes") or []:
-            body.add_widget(kit.label(text, panels.META, MINUS if kind == rules.MINUS else (
-                PLUS if kind == rules.PLUS else panels.DIM)))
+            subs = [piece for piece in row if piece[1] == rules.MINUS and _split_paren(piece[0])[1]]
+            main = [piece for piece in row if piece not in subs]
+            # 違法の改造になる方法の行（限界施術）は、項目名を違法の色にする
+            color = self.palette["illegal"] if label in danger_rows else panels.DIM
+            if label in methods:
+                if lines:
+                    lines.append(None)
+                gains = [piece for piece in main if piece[1] != rules.MINUS]
+                costs = [piece for piece in main if piece[1] == rules.MINUS]
+                if gains:
+                    lines.append((0, label, gains, color))
+                if costs:
+                    lines.append((0, None if gains else label, costs, color))
+            elif main:
+                lines.append((0, label, main, color))
+            for text, kind in subs:
+                name, words_text = _split_paren(text)
+                lines.append((1 if main else 0, name, [(words_text, kind)], panels.DIM))
+        chip = max([self.text_width(line[1], panels.META) for line in lines if line and line[1]] or [0]) \
+            + kit.px(CHIP_PAD)
+        small = kit.base * panels.BODY * PAREN_SCALE
+
+        def note_label(text, kind):
+            color = MINUS if kind == rules.MINUS else (PLUS if kind == rules.PLUS else panels.DIM)
+            return kit.label("[color={}]{}[/color]".format(
+                _hex(color), _paren_markup(text, kit.base * panels.META * PAREN_SCALE)), panels.META, use_markup=True)
+        # 警告（押せない理由など）は効果の行より上に出す（下に置くとスクロールの奥に隠れて、ボタンが押せない理由が見えなかった）
+        notes = data.get("notes") or []
+        for text, kind in notes:
+            if kind == rules.MINUS:
+                body.add_widget(note_label(text, kind))
+        for line in lines:
+            if line is None:
+                body.add_widget(Widget(size_hint_y=None, height=kit.px(2)))
+                body.add_widget(_rule(kit, BLOCK_LINE))
+                body.add_widget(Widget(size_hint_y=None, height=kit.px(2)))
+                continue
+            indent, label, pieces, color = line
+            body.add_widget(self.detail_row(label, _rows_markup(pieces, small), chip, color, indent))
+        # 良い知らせ、失敗したときの説明は効果の行の後
+        for kind_first in (rules.PLUS, None):
+            for text, kind in notes:
+                if kind != rules.MINUS and (kind == rules.PLUS) == (kind_first == rules.PLUS):
+                    body.add_widget(note_label(text, kind))
         box.add_widget(kit.scroller(body))
+        # スクロールする欄とボタンの段の間に、すき間と線を入れる（切れた行がボタンにかかって見えた）
+        buttons_here = data.get("buttons") or data.get("button")
+        if buttons_here:
+            box.add_widget(_rule(kit, BLOCK_LINE))
         # ボタンは1つか2つ（裏の事務所の正規のアイテムは通常施術と限界施術）。どちらも欄の半分の幅。
         # 料金と期間・失敗したときの怪我（`lines`。古い形は `side` の1行）は、名前の下に小さい字で重ねる
         buttons = data.get("buttons") or ([data["button"]] if data.get("button") else [])
@@ -625,6 +762,36 @@ class AugmentWindow(object):
             box.add_widget(row)
         return box
 
+    def text_width(self, text, scale):
+        """字の大きさ `scale` で1行に書いたときの幅（Kivy の字の測り方で測る）。"""
+        from kivy.core.text import Label as CoreLabel
+        options = {"font_size": self.kit.base * scale}
+        if self.kit.font_name:
+            options["font_name"] = self.kit.font_name
+        return float(CoreLabel(**options).get_extents(text or "")[0])
+
+    def detail_row(self, label, markup, chip, color, indent):
+        """詳しい欄の1行。左に項目名の枠、右に効果（折り返すと行が高くなる。枠は上に揃える）。"""
+        from kivy.uix.boxlayout import BoxLayout
+        from kivy.uix.widget import Widget
+        kit = self.kit
+        height = self.line_height(panels.BODY)
+        row = BoxLayout(orientation="horizontal", size_hint_y=None, height=height, spacing=kit.px(CHIP_GAP))
+        if indent:
+            row.add_widget(Widget(size_hint_x=None, width=kit.px(SUB_INDENT)))
+        if label is None:
+            # 前の行の続き（代償の行）。枠は置かず、枠の幅だけ空けて字の書き出しを揃える
+            row.add_widget(Widget(size_hint_x=None, width=chip))
+        else:
+            box = _chip(kit, label, chip, height, color)
+            box.pos_hint = {"top": 1}
+            row.add_widget(box)
+        text = kit.label(markup, panels.BODY, use_markup=True)
+        text.pos_hint = {"top": 1}
+        text.bind(height=lambda w, value: setattr(row, "height", max(height, value)))
+        row.add_widget(text)
+        return row
+
     def button_face(self, press, text, lines, ink):
         """ボタンの中身。上に大きい行（名前と成功率）、下に小さい字の行を中央揃えで積む
         （ボタンの位置と大きさに付いて動く）。"""
@@ -647,6 +814,7 @@ class AugmentWindow(object):
     def totals(self, model):
         from kivy.uix.boxlayout import BoxLayout
         from kivy.uix.gridlayout import GridLayout
+        from kivy.uix.widget import Widget
         kit = self.kit
         box = kit.framed(BoxLayout(orientation="vertical", padding=kit.px(12), spacing=kit.px(6)))
         box.size_hint_x = 0.26
@@ -663,6 +831,10 @@ class AugmentWindow(object):
                 name, _hex(PLUS if kind == rules.PLUS else MINUS), value), TOTAL_STAT, use_markup=True))
         content.add_widget(grid)
         if battle:
+            if stats:
+                content.add_widget(Widget(size_hint_y=None, height=kit.px(4)))
+                content.add_widget(_rule(kit))
+                content.add_widget(Widget(size_hint_y=None, height=kit.px(2)))
             content.add_widget(kit.label("戦闘", panels.BODY, panels.DIM))
             lines = GridLayout(cols=2, size_hint_y=None, spacing=kit.px(4))
             lines.bind(minimum_height=lines.setter("height"))

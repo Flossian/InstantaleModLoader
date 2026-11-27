@@ -1423,7 +1423,7 @@ check("設定を既定に戻すと、段の表も既定に戻る", [row[1:4] for
 print("\n[画面] 募集の札と契約の帯の中身（view.py）")
 tv = view.tenure_view(720)
 check("勤続の帯は段と次の段までの割合", tv["stage"] == 1 and tv["name"] == "一人前"
-      and abs(tv["ratio"] - 0.25) < 1e-9 and tv["next"] == "古株まで あと 720日", tv)
+      and abs(tv["ratio"] - 0.25) < 1e-9 and tv["next"] == "昇格まで あと 720日", tv)
 check("最上の段は割合 1", view.tenure_view(9999)["ratio"] == 1.0 and view.tenure_view(9999)["next"] == "最高位")
 check("段の効き目（値引きを切ると賃金だけ）", view.tenure_view(1440)["effect"] == "賃金 ×1.5・買値 10%引き"
       and view.tenure_view(1440, discount=False)["effect"] == "賃金 ×1.5")
@@ -1434,30 +1434,34 @@ smith = {"kind": "office", "job": "blacksmith", "name": "鉄の工房の下働�
          "affinity": 34, "again": False, "terms": [[4, False], [8, True]], "face": None}
 card = view.office_card(smith, total, yen)
 check("施設の札: 題・種類・1回の額", card["title"] == "鉄の工房の下働き" and card["kind"] == "鍛冶屋"
-      and card["per"] == "3ヵ月 142G", card)
+      and card["per"] == "1回 142G", card)
 check("施設の札: 題を詰めるときは「の〈役名〉」を残す", view.office_card(dict(smith, place="鉄の工房"), total, yen)["keep"]
       == "の下働き" and card["keep"] == "")
 check("施設名で始まらない名前（人足・臨時・裏の仕事）は残す所が無い",
       view.title_keep("日雇いの人足", "持ち場") == "" and view.title_keep("荷運び", "持ち場") == ""
       and view.title_keep("場の", "場") == "")
-check("施設の札: 雇い主と好感度、能力値と倍率", card["rows"] == [("雇い主", "ガルド　好感度 34"),
+check("施設の札: 雇い主と好感度、能力値と倍率", card["rows"] == [("雇い主", "ガルド（好感度 34）"),
                                                          ("能力", "筋力(21)・耐久(17)　賃金 ×1.42")], card["rows"])
 check("募集に仕事の説明があれば1行出る", view.office_card(dict(smith, work="力仕事をする。"), total, yen)["rows"][1]
       == ("仕事", "力仕事をする。"))
 check("施設ごとに仕事の説明が1行ある", all(row[2].endswith("。") for row in rules.OFFICE_JOBS), rules.OFFICE_JOBS)
 check("施設の札: 契約のボタンは短い・長いの2つ", [b[:2] for b in card["buttons"]] == [
-    ("短い契約（12ヵ月）", "568G"), ("長い契約（24ヵ月）", "1,136G")] and card["buttons"][1][2] == [8, True], card["buttons"])
-check("右腕なら金の印", card["badge"] == ("右腕", view.GOLD), card["badge"])
+    ("短い契約（12ヵ月）", "満了で 568G"), ("長い契約（24ヵ月）", "満了で 1,136G")] and card["buttons"][1][2] == [8, True], card["buttons"])
+check("重鎮なら金の印", card["badge"] == ("重鎮", view.GOLD), card["badge"])
 check("前回の仕事の印が先", view.office_card(dict(smith, again=True), total, yen)["badge"] == ("前回の仕事", view.ACCENT))
 porter = view.office_card({"kind": "office", "job": "porter", "name": "日雇いの人足", "term_days": 90, "pay": 100,
                            "terms": [[4, False], [8, True]]}, total, yen)
-check("人足の札は顔の代わりに「誰でも」", porter["placeholder"] == ("誰でも", "勤続なし") and porter["tenure"] is None)
+check("人足の札は顔の代わりに「誰でも」", porter["placeholder"] == ("誰でも", "") and porter["tenure"] is None)
+check("人足の札は雇い主と勤続の行で、勤続のある札と行の並びをそろえる",
+      porter["rows"] == [("雇い主", "その日ごと"), ("能力", "問わない"), ("勤続", "付かない")], porter["rows"])
 relief = view.office_card({"kind": "office", "job": "relief", "name": "臨時の募集・盗賊の横行の対応",
                            "term_days": 30, "pay": 50, "terms": [[3, False]], "event_name": "盗賊の横行",
                            "event_stage": 2, "abilities": ["constitution", "wisdom"], "scores": {},
                            "ability_percent": 100}, total, yen)
 check("臨時の募集の札は出来事の段とボタン1つ", relief["rows"][0] == ("街の様子", "盗賊の横行（段階 2）")
-      and [b[0] for b in relief["buttons"]] == ["引き受ける（3ヵ月）"] and relief["badge"][0] == "臨時", relief)
+      and [b[0] for b in relief["buttons"]] == ["引き受ける（3ヵ月）"]
+      and relief["buttons"][0][1].startswith("満了で ") and relief["badge"][0] == "臨時"
+      and relief["rows"][-1] == ("勤続", "付かない"), relief)
 gone = view.barred_card({"name": "渡り鳥の宿の客室係", "job": "inn", "owner_name": "ミーナ", "abilities": ["charisma"],
                          "tenure": 100, "days_left": 92})
 check("雇ってもらえない札は押せず、残りの日数が出る", gone["grey"] and not gone["buttons"]
@@ -1467,7 +1471,7 @@ dark = view.illegal_card({"kind": "illegal", "job": "breakin", "name": "侵入�
                           "scores": {"dexterity": 14}, "terms": [[3, False]]}, total, yen)
 check("裏の仕事の札: 危険の確率と起きやすい危険", dark["rows"][1:] == [("能力", "器用(14)・賢さ"), ("危険", "取り締まり・仕返し")]
       and dark["placeholder"] == ("21%", "1回ごとの危険")
-      and dark["buttons"][0][:2] == ("引き受ける（9ヵ月）", "1,200G") and dark["danger"], dark)
+      and dark["buttons"][0][:2] == ("引き受ける（9ヵ月）", "計 1,200G") and dark["danger"], dark)
 
 contract = {"kind": "office", "job": "blacksmith", "name": "鉄の工房の下働き", "owner": "5", "owner_name": "ガルド",
             "term_days": 90, "terms": 8, "done": 4, "pay": 100, "earned": 400, "long": True,
@@ -1480,7 +1484,7 @@ check("帯: 済んだ期・次の期・まだの期", [c["state"] for c in cells
 check("帯: 済んだ期は入った額と出来事の印", cells[1]["pay"] == "130G" and cells[1]["tag"] == "出来事 +30G"
       and cells[1]["tone"] == view.GOOD and cells[3]["tag"] == "出来事 −30G" and cells[3]["tone"] == view.BAD, cells[:4])
 check("帯: 最後の期に満了の割増", cells[-1]["tag"] == "満了 +200G" and cells[-1]["tone"] == view.GOLD, cells[-1])
-check("帯: 見出しに主人と勤続、稼ぎと残り", model["line"] == "雇い主 ガルド　勤続 一人前（古株まで あと 720日）"
+check("帯: 見出しに主人と勤続、稼ぎと残り", model["line"] == "雇い主 ガルド　勤続 一人前（昇格まで あと 720日）"
       and model["right"] == "稼ぎ 400G" and model["right2"] == "あと4回　満了で 1,000G（割増込み）", model)
 done = view.strip_model(dict(contract, done=8, earned=800), yen, tenure=1500, finished=True, bonus=200,
                         rank_up=(1, 2))

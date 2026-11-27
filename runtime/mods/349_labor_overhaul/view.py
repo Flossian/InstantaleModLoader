@@ -22,25 +22,31 @@ STRIP_CELLS_MAX = 12
 #: 帯で、いまの期より前に残すマスの数（上限を超えたとき）。
 STRIP_CELLS_BEFORE = 5
 
-PER_TEXT = "{period} {pay}"
-OWNER_ROW = ("雇い主", "{owner}　好感度 {affinity}")
+PER_TEXT = "1回 {pay}"
+OWNER_ROW = ("雇い主", "{owner}（好感度 {affinity}）")
 OWNER_ROW_PLAIN = ("雇い主", "{owner}")
 WORK_ROW = "仕事"
 ABILITY_ROW = ("能力", "{scores}　賃金 ×{rate}")
 ABILITY_ROW_PLAIN = ("能力", "{words}")
 PORTER_ABILITY_ROW = ("能力", "問わない")
+#: 雇い主と勤続のない札（人足・臨時）の行。勤続のある札と行の高さをそろえる。
+PORTER_OWNER_ROW = ("雇い主", "その日ごと")
+NO_TENURE_ROW = ("勤続", "付かない")
 RELIEF_EVENT_ROW = ("街の様子", "{event}（段階 {stage}）")
 ILLEGAL_ROWS = (("仕事", "{detail}"), ("能力", "{scores}"), ("危険", "{risks}"))
 #: 契約のボタン。長さは契約の全体（1回の長さ × 回数）で出す。
 SHORT_BUTTON = "短い契約（{period}）"
 LONG_BUTTON = "長い契約（{period}）"
 ONE_BUTTON = "引き受ける（{period}）"
+#: ボタンの2段目の額。満了の割増が付く仕事は満了までの合計、裏の仕事（割増なし）は全部の回の合計。
+BUTTON_FULL = "満了で {total}"
+BUTTON_TOTAL = "計 {total}"
 BARRED_NOTE = "途中でやめたため、あと {days}日は雇われない"
-NEXT_RANK = "{name}まで あと {days}日"
+NEXT_RANK = "昇格まで あと {days}日"
 TOP_RANK = "最高位"
 RANK_EFFECT = "賃金 ×{pay}"
 RANK_EFFECT_DISCOUNT = "賃金 ×{pay}・買値 {discount}%引き"
-PLACEHOLDER_ANYONE = ("誰でも", "勤続なし")
+PLACEHOLDER_ANYONE = ("誰でも", "")
 PLACEHOLDER_RELIEF = ("臨時", "街の出来事")
 PLACEHOLDER_RISK = "{risk}%"
 PLACEHOLDER_RISK_NOTE = "1回ごとの危険"
@@ -104,7 +110,7 @@ def tenure_view(days, discount=True):
     else:
         start, end = row[1], rules.RANKS[stage + 1][1]
         ratio = max(0.0, min(1.0, (days - start) / float(max(1, end - start))))
-        nxt = NEXT_RANK.format(name=rules.RANKS[stage + 1][0], days=left)
+        nxt = NEXT_RANK.format(days=left)
     if discount and row[3] > 0:
         effect = RANK_EFFECT_DISCOUNT.format(pay=rate_text(row[2]), discount=row[3])
     else:
@@ -134,7 +140,9 @@ def contract_buttons(offer, total_of, money):
             label = ONE_BUTTON.format(period=period)
         else:
             label = (LONG_BUTTON if long_contract else SHORT_BUTTON).format(period=period)
-        out.append((label, money(total_of(offer, terms, bool(long_contract))), [terms, bool(long_contract)]))
+        amount = (BUTTON_TOTAL if offer.get("kind") == rules.ILLEGAL else BUTTON_FULL).format(
+            total=money(total_of(offer, terms, bool(long_contract))))
+        out.append((label, amount, [terms, bool(long_contract)]))
     return out
 
 
@@ -163,7 +171,7 @@ def office_card(offer, total_of, money, discount=True):
     if job == rules.PORTER:
         card["kind"] = FACILITY_KIND_NAMES["administrative_office"]
         card["placeholder"] = PLACEHOLDER_ANYONE
-        card["rows"] = work_rows(offer) + [PORTER_ABILITY_ROW]
+        card["rows"] = [PORTER_OWNER_ROW] + work_rows(offer) + [PORTER_ABILITY_ROW, NO_TENURE_ROW]
         return card
     scores = score_words(offer.get("abilities"), offer.get("scores"))
     rate = rate_text(offer.get("ability_percent") or 100)
@@ -174,7 +182,8 @@ def office_card(offer, total_of, money, discount=True):
         card["badge"] = (BADGE_RELIEF, ACCENT)
         card["rows"] = [(RELIEF_EVENT_ROW[0], RELIEF_EVENT_ROW[1].format(
             event=offer.get("event_name") or "困り事", stage=offer.get("event_stage") or 1))]
-        card["rows"] += work_rows(offer) + [(ABILITY_ROW[0], ABILITY_ROW[1].format(scores=scores, rate=rate))]
+        card["rows"] += work_rows(offer) + [(ABILITY_ROW[0], ABILITY_ROW[1].format(scores=scores, rate=rate)),
+                                            NO_TENURE_ROW]
         return card
     affinity = offer.get("affinity")
     if rules._number(affinity, None) is not None:

@@ -39,6 +39,27 @@ STRIP_GAP = 6
 #: 帯のマスの間と、マスの枠の内側の左右の余白（upx）。
 STRIP_CELL_GAP = 6
 STRIP_CELL_PAD = 8
+#: 契約のボタンの塗り（普段・マウスを乗せたとき・押している間）。
+BUTTON_IDLE = (0, 0, 0, 0)
+BUTTON_HOVER = (1, 1, 1, 0.15)
+BUTTON_DOWN = (1, 1, 1, 0.22)
+#: マウスの見張りの置き場（`Window` の属性）。注入し直しても見張りが1つだけ残るように、前の世代を外して結び直す。
+HOVER_ATTR = "_instantale_labor_overhaul_hover"
+TENURE_LABEL = "勤続"
+#: 札の題の帯と、項目名の枠の塗り。項目名の枠の幅はウィンドウの中で一番長い項目名に合わせ、値の書き出しを全札でそろえる。
+BAND_FILL = (0.12, 0.12, 0.14, 1)
+CHIP_FILL = (0.16, 0.16, 0.18, 1)
+#: 項目名の枠の、字の両脇の余白の合計・枠と値の間・題の帯の左右の余白・種類の札の余白（upx）。
+CHIP_PAD = 20
+CHIP_GAP = 12
+BAND_PAD = 10
+TAG_PAD = 16
+#: 勤続のゲージの帯の太さと、帯と段の名前の間（upx）。
+GAUGE_BAR = 10
+GAUGE_GAP = 4
+GAUGE_TRACK = (0.20, 0.20, 0.22, 1)
+#: 見出しの項目の区切り。
+SUBTITLE_SEP = "　｜　"
 
 
 def color_of(key, default=panels.TEXT):
@@ -90,6 +111,144 @@ def _fit_keep(kit, text, keep, scale, room):
     return head[:low] + "…" + keep if low else text
 
 
+def _label_names(cards):
+    """札に出る項目名（行の名前と、勤続の欄があれば「勤続」）。"""
+    names = []
+    for card in cards:
+        names += [label for label, _value in card.get("rows") or []]
+        if card.get("tenure") is not None:
+            names.append(TENURE_LABEL)
+    return names
+
+
+def _filled(widget, color):
+    """`widget` の下に塗りだけを敷く（`kit.framed` は枠の線を字の上に描くので、字の端が塗りの色の線に隠れた）。"""
+    from kivy.graphics import Color, Rectangle
+    with widget.canvas.before:
+        Color(*color)
+        rect = Rectangle(pos=widget.pos, size=widget.size)
+    widget.bind(pos=lambda w, v: setattr(rect, "pos", v), size=lambda w, v: setattr(rect, "size", v))
+    return widget
+
+
+def _chip(kit, text, width, height, color):
+    """項目名の枠（薄い地に字を真ん中）。"""
+    from kivy.uix.label import Label
+    label = kit._font(Label(text=text, color=color, font_size=kit.base * panels.META, halign="center",
+                            valign="middle", size_hint=(None, None), size=(width, height)))
+    label.bind(size=lambda w, value: setattr(w, "text_size", value))
+    return _filled(label, CHIP_FILL)
+
+
+def _tag(kit, text, color, height):
+    """題の帯の右端に置く小さな札（字の幅＋余白）。"""
+    from kivy.uix.label import Label
+    mark = kit._font(Label(text=text, color=color, font_size=kit.base * panels.TICK, size_hint=(None, None),
+                           height=height))
+    mark.bind(texture_size=lambda w, value: setattr(w, "width", value[0] + kit.px(TAG_PAD)))
+    mark.pos_hint = {"center_y": 0.5}
+    return kit.framed(mark, color=panels.FAINT, fill=panels.BG)
+
+
+def _gauge_height(kit):
+    return kit.px(GAUGE_BAR) + kit.px(GAUGE_GAP) + kit.base * panels.META * 1.5
+
+
+def _gauge(kit, names, current, color):
+    """勤続のゲージ。1本の帯を段の数に区切り、今の段までを塗る（前の段は薄く）。下に段の名前。"""
+    from kivy.graphics import Color, Line, Rectangle
+    from kivy.uix.boxlayout import BoxLayout
+    from kivy.uix.widget import Widget
+    box = BoxLayout(orientation="vertical", size_hint_y=None, height=_gauge_height(kit), spacing=kit.px(GAUGE_GAP))
+    bar = Widget(size_hint_y=None, height=kit.px(GAUGE_BAR))
+    count = max(1, len(names))
+    dim = (color[0] * 0.45, color[1] * 0.45, color[2] * 0.45, 1)
+    with bar.canvas:
+        Color(*GAUGE_TRACK)
+        track = Rectangle()
+        fills = []
+        for index in range(count):
+            fills.append((Color(*(color if index == current else dim if index < current else GAUGE_TRACK)),
+                          Rectangle()))
+        Color(*panels.BG)
+        cuts = [Rectangle() for _ in range(count - 1)]
+        Color(*panels.FAINT)
+        edge = Line(width=1)
+
+    def follow(w, _value):
+        x, y, width, height = w.x, w.y, w.width, w.height
+        track.pos, track.size = (x, y), (width, height)
+        step = width / float(count)
+        for index, (_color, rect) in enumerate(fills):
+            rect.pos, rect.size = (x + step * index, y), (step, height)
+        cut = max(1, int(round(kit.px(2))))
+        for index, rect in enumerate(cuts):
+            rect.pos, rect.size = (x + step * (index + 1) - cut / 2.0, y), (cut, height)
+        edge.rectangle = (x, y, width, height)
+
+    bar.bind(pos=follow, size=follow)
+    box.add_widget(bar)
+    row = BoxLayout(orientation="horizontal")
+    for index, name in enumerate(names):
+        row.add_widget(_line(kit, name, panels.META, color if index == current else panels.FAINT, halign="center"))
+    box.add_widget(row)
+    return box
+
+
+def _hover_state():
+    from kivy.core.window import Window
+    state = getattr(Window, HOVER_ATTR, None)
+    if not isinstance(state, dict):
+        state = {"buttons": [], "watch": None}
+        setattr(Window, HOVER_ATTR, state)
+    if state.get("watch") is not _on_mouse:
+        if state.get("watch") is not None:
+            try:
+                Window.unbind(mouse_pos=state["watch"])
+            except Exception:
+                pass
+        Window.bind(mouse_pos=_on_mouse)
+        state["watch"] = _on_mouse
+    return state
+
+
+def _paint(button, mouse=None):
+    """契約のボタンの塗りを、押している間・マウスが乗っている・普段の順に決める。"""
+    try:
+        if button.state == "down":
+            color = BUTTON_DOWN
+        else:
+            hovered = False
+            if mouse is not None and button.get_root_window() is not None:
+                hovered = button.collide_point(*button.to_widget(*mouse))
+            color = BUTTON_HOVER if hovered else BUTTON_IDLE
+        if tuple(button.background_color) != color:
+            button.background_color = color
+    except Exception:
+        pass
+
+
+def _on_mouse(_window, mouse):
+    state = _hover_state()
+    alive = []
+    for ref in state["buttons"]:
+        button = ref()
+        if button is not None:
+            alive.append(ref)
+            _paint(button, mouse)
+    state["buttons"] = alive
+
+
+def _watch_hover(button):
+    """契約のボタンに、マウスを乗せたときと押している間の塗りを付ける。ボタンが無くなれば登録も消える。"""
+    import weakref
+    from kivy.core.window import Window
+    state = _hover_state()
+    state["buttons"] = [ref for ref in state["buttons"] if ref() is not None]
+    state["buttons"].append(weakref.ref(button))
+    button.bind(state=lambda w, _v: _paint(w, Window.mouse_pos))
+
+
 def _line(kit, text, scale, color=panels.TEXT, *, use_markup=False, halign="left"):
     """1行の字。欄の幅に収まらなければ後ろを「…」で詰める。"""
     from kivy.uix.label import Label
@@ -139,8 +298,10 @@ class LaborWindow(object):
         root.add_widget(head)
         if model.get("subtitle"):
             pieces = []
-            for label, value in model["subtitle"]:
-                pieces += [(label + "　", panels.DIM), (value + "　　", panels.TEXT)]
+            for number, (label, value) in enumerate(model["subtitle"]):
+                if number:
+                    pieces.append((SUBTITLE_SEP, panels.FAINT))
+                pieces += [(label + "　", panels.DIM), (value, panels.TEXT)]
             root.add_widget(kit.label(panels.markup(pieces), panels.META, use_markup=True))
         for text, key in model.get("notes") or []:
             root.add_widget(kit.label(text, panels.META, color_of(key, panels.DIM)))
@@ -149,6 +310,8 @@ class LaborWindow(object):
         grid = GridLayout(cols=columns, size_hint_y=None, spacing=kit.px(14))
         grid.bind(minimum_height=grid.setter("height"))
         cards = model.get("cards") or []
+        names = _label_names(cards)
+        self.chip_width = max([_text_width(kit, name, panels.META) for name in names] or [0]) + kit.px(CHIP_PAD)
         # 札の高さは全部そろえる（短い札が行の中で上下の真ん中に浮かないように）
         height = max([self.card_height(card) for card in cards] or [0])
         for index, card in enumerate(cards):
@@ -182,19 +345,30 @@ class LaborWindow(object):
         kit = self.kit
         return kit.base * (panels.META + panels.BODY) * 1.3 + kit.px(12)
 
+    def head_height(self):
+        return self.kit.base * panels.NAME * 1.5 + self.kit.px(8)
+
+    def row_height(self):
+        return self.kit.base * panels.META * 1.5
+
+    def per_height(self):
+        return self.kit.base * panels.META * 1.9
+
     def card_height(self, card):
         kit = self.kit
-        line = kit.base * panels.META * 1.5
-        right = kit.base * panels.NAME * 1.5 + line * len(card["rows"])
+        heights = [self.head_height()] + [self.row_height()] * len(card["rows"])
         if card.get("tenure") is not None:
-            right += line + kit.px(30)
+            heights += [self.row_height(), _gauge_height(kit)]
         if card.get("buttons"):
-            right += self.button_height()
+            heights.append(self.button_height())
         elif card.get("note"):
-            right += line
-        right += kit.px(6) * (len(card["rows"]) + (2 if card.get("compact") else 3))
+            heights.append(self.row_height())
+        # 間は子の数−1。子は上の段と下の空き（Widget）。間を1つ数え落とすと中身が札から上へ押し出された
+        right = sum(heights) + kit.px(6) * len(heights)
         # 詰めた札（闇労働）は1回の額をボタンの段へ移すので、左の欄は絵だけ
-        left = kit.px(FACE) if card.get("compact") else kit.px(FACE) + kit.px(8) + kit.base * panels.TICK * 1.5
+        left = kit.px(FACE)
+        if not card.get("compact") and card.get("per"):
+            left += kit.px(8) + self.per_height()
         return max(right, left) + kit.px(16) * 2
 
     def cornered(self, source, corner):
@@ -247,42 +421,50 @@ class LaborWindow(object):
             color = color_of(card["placeholder_tone"]) if card.get("placeholder_tone") else panels.DIM
             holder.add_widget(Widget())
             holder.add_widget(_line(kit, top, panels.NAME, color, halign="center"))
-            holder.add_widget(_line(kit, bottom, panels.TICK, panels.FAINT, halign="center"))
+            if bottom:
+                holder.add_widget(_line(kit, bottom, panels.TICK, panels.FAINT, halign="center"))
             holder.add_widget(Widget())
             left.add_widget(holder)
-        if not card.get("compact"):
-            left.add_widget(_line(kit, card.get("per") or "", panels.TICK, panels.FAINT if grey else panels.DIM,
-                                  halign="center"))
+        if not card.get("compact") and card.get("per"):
+            # 1回の額は絵のすぐ下に、絵と同じ幅の枠で
+            per = BoxLayout(orientation="vertical", size_hint=(None, None), size=(kit.px(FACE), self.per_height()))
+            per.add_widget(Widget())
+            per.add_widget(_line(kit, card["per"], panels.META, main, halign="center"))
+            per.add_widget(Widget())
+            left.add_widget(kit.framed(per, color=panels.FAINT if grey else panels.DIM))
         left.add_widget(Widget())
         box.add_widget(left)
 
         right = BoxLayout(orientation="vertical", spacing=kit.px(6))
-        head = BoxLayout(orientation="horizontal", size_hint_y=None, height=kit.base * panels.NAME * 1.5,
-                         spacing=kit.px(12))
+        head = BoxLayout(orientation="horizontal", size_hint_y=None, height=self.head_height(),
+                         spacing=kit.px(6), padding=(kit.px(BAND_PAD), 0, kit.px(BAND_PAD) / 2.0, 0))
+        _filled(head, BAND_FILL)
         # 題は字の幅どおり。収まらなければ題を「…」で詰め、種類と印は札の中に残す（長い施設名で印が隣の札へはみ出した）
         title = _line(kit, card["title"], panels.NAME, main)
         title.size_hint_x = None
+        title.pos_hint = {"center_y": 0.5}
         natural = _text_width(kit, card["title"], panels.NAME)
         head.add_widget(title)
+        head.add_widget(Widget())
         fixed = []
+        tag_height = kit.base * panels.NAME * 1.1
         if card.get("kind"):
-            kind = kit.label(card["kind"], panels.TICK, panels.FAINT if grey else panels.DIM, wrap=False)
-            kind.pos_hint = {"center_y": 0.45}
+            kind = _tag(kit, card["kind"], panels.FAINT if grey else panels.DIM, tag_height)
             head.add_widget(kind)
             fixed.append(kind)
-        head.add_widget(Widget())
         if card.get("badge"):
             text, key = card["badge"]
             color = color_of(key)
             mark = kit._font(Label(text=text, color=color, font_size=kit.base * panels.META, size_hint=(None, None),
-                                   height=kit.base * panels.NAME * 1.3))
+                                   height=tag_height))
             mark.bind(texture_size=lambda w, value: setattr(w, "width", value[0] + kit.px(28)))
             mark.pos_hint = {"center_y": 0.5}
-            head.add_widget(kit.framed(mark, color=color))
+            head.add_widget(kit.framed(mark, color=color, fill=panels.BG))
             fixed.append(mark)
 
         def fit_title(*_a):
-            others = sum(widget.width for widget in fixed) + head.spacing * (len(head.children) - 1)
+            others = sum(widget.width for widget in fixed) + head.spacing * (len(head.children) - 1) \
+                + head.padding[0] + head.padding[2]
             title.width = max(0, min(natural + 2, head.width - others))
             title.text = _fit_keep(kit, card["title"], card.get("keep"), panels.NAME, title.width - 2)
         head.bind(width=fit_title)
@@ -290,22 +472,26 @@ class LaborWindow(object):
             widget.bind(width=fit_title)
         fit_title()
         right.add_widget(head)
+        label_color = panels.FAINT if grey else panels.DIM
+
+        def labeled(label, value, color):
+            row = BoxLayout(orientation="horizontal", size_hint_y=None, height=self.row_height(),
+                            spacing=kit.px(CHIP_GAP))
+            row.add_widget(_chip(kit, label, self.chip_width, self.row_height(), label_color))
+            row.add_widget(_line(kit, value, panels.META, color))
+            return row
         for label, value in card["rows"]:
-            right.add_widget(_line(kit, panels.markup([(label + "　", panels.FAINT if grey else panels.DIM),
-                                                       (value, main)]), panels.META, use_markup=True))
+            right.add_widget(labeled(label, value, main))
         tenure = card.get("tenure")
         if tenure is not None:
             top = len(words.rules.RANKS) - 1
             color = panels.FAINT if grey else color_of(words.GOLD if tenure["stage"] == top else words.GOOD)
-            row = BoxLayout(orientation="horizontal", size_hint_y=None, height=kit.base * panels.META * 1.5,
-                            spacing=kit.px(12))
-            row.add_widget(_line(kit, panels.markup([("勤続　", panels.FAINT if grey else panels.DIM),
-                                                     (tenure["name"], color)]), panels.META, use_markup=True))
+            row = labeled(TENURE_LABEL, tenure["name"], color)
             if not grey:
-                row.add_widget(_line(kit, tenure["next"], panels.TICK, panels.DIM, halign="right"))
+                row.add_widget(_line(kit, tenure["next"], panels.META, panels.DIM, halign="right"))
             right.add_widget(row)
             names = [rank[0] for rank in words.rules.RANKS]
-            right.add_widget(kit.gauge(names, tenure["stage"], color, lit=lambda i, s=tenure["stage"]: i < s))
+            right.add_widget(_gauge(kit, names, tenure["stage"], color))
         right.add_widget(Widget())
         if card.get("buttons"):
             row = BoxLayout(orientation="horizontal", size_hint_y=None, height=self.button_height(),
@@ -334,6 +520,7 @@ class LaborWindow(object):
                     button.bind(texture_size=fit)
                     row.bind(width=fit)
                     per.bind(width=fit)
+                _watch_hover(button)
                 button.bind(on_release=lambda *_a, i=index, p=payload: self.pick(i, p))
                 row.add_widget(kit.framed(button))
             right.add_widget(row)

@@ -81,7 +81,7 @@ CARDS = (
         ("line", ["1つの街での上限は", "GROWTH_MAX"]),
     )),
     ("seniority", "勤続", "SENIORITY", "同じ雇い主で働いた日数で段階が上がる", (
-        ("table", ["見習い", "一人前", "古株", "右腕"], [
+        ("table", ["見習い", "一人前", "古株", "重鎮"], [
             ("届く日数", [FIXED + "0", "RANK2_DAYS", "RANK3_DAYS", "RANK4_DAYS"]),
             ("賃金（%）", [FIXED + "100", "RANK2_PAY_PERCENT", "RANK3_PAY_PERCENT", "RANK4_PAY_PERCENT"]),
             ("その店の値引き（%）", [FIXED + "0", "RANK2_DISCOUNT_PERCENT", "RANK3_DISCOUNT_PERCENT",
