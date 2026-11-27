@@ -2023,7 +2023,7 @@ InventoryGrid   cols=4  rows=6  len(slots)=24  size=[259, 389]  spacing=[1, 1]
 `find_placement_position` → `place_new_item` に流すのが安全。
 アイテムの絵の地はレア度の色で塗る（`InventoryItem.define_image_color(self, rarity)`）。
 詳細の箱の名前の色も同じくレア度で決まる（`ItemDetailBox.define_text_color(self, rarity)`）。
-どちらも `self` を使わず、`None` を渡して呼べる（2026-11-23 にテストワールドで読んだ。知らないレア度は `KeyError`）。
+どちらも `self` を使わず、`None` を渡して呼べる（2026-11-23 に世界Fで読んだ。知らないレア度は `KeyError`）。
 
 | レア度 | 絵の地 | 名前の色 |
 | --- | --- | --- |
@@ -2964,7 +2964,7 @@ player.body_parts = {"head": {"injury": 0, "stage": "intact", "state": "", "desc
 - `injury` の初めの値は主人公によって 0 と 9 がある（理由は分かっていない）。
   9 始まりの主人公は、3 増える怪我1回で `hurt` になる
 - 治療は医療施設の `MedicalTreatmentManager`（3ヵ月の入院）。
-  `248_probe_medical` で3回測った（2026-11-21、テストワールド。料金の表示は「治療を受ける(200円)」）。
+  `248_probe_medical` で3回測った（2026-11-21、世界F。料金の表示は「治療を受ける(200円)」）。
   - 暦は3回とも90日進む（`elapse_days(90)` が1回）。保存は1回、人生の記録は1件増える
   - `injury` が 100 未満の部位は全部 0 に戻る（3・9・15・30・35・69・99 で確かめた）。
     100 以上（`lost`）の部位は戻らない（100 と 129 で確かめた）。治した後に `check_body_damage` が1回走る
@@ -3060,7 +3060,7 @@ app.buttons      = ['労働の募集をみる', '市民権の発行', '出る', 
 
 ##### 役場の労働（実測）
 
-`247_probe_labor` の記録（2026-11-21、テストワールド。16ヵ月を満了、32ヵ月を1回で放棄）。
+`247_probe_labor` の記録（2026-11-21、世界F。16ヵ月を満了、32ヵ月を1回で放棄）。
 
 ```text
 労働の募集をみる  DisplayLongTermLaborChoice     get_labor_reward(app.highest_cleared_quest_difficulty) を1回呼ぶ
@@ -3072,7 +3072,7 @@ app.buttons      = ['労働の募集をみる', '市民権の発行', '出る', 
 
 | 項目 | 実測 |
 | --- | --- |
-| 賃金の基準 | `get_labor_reward` に渡るのは `app.highest_cleared_quest_difficulty`（89 で 514。76 超えは `923_` が延ばした値） |
+| 賃金の基準 | `get_labor_reward` に渡るのは `app.highest_cleared_quest_difficulty`（89 で 514。76 超えは手元で難易度を延ばして測った値） |
 | 「働く」1回 | `elapse_days(120)`、所持金に1回の賃金、`save_game` 1回。文は「4ヵ月を労働に費やす...」。LLM は呼ばない |
 | 選択肢の額 | 16ヵ月は 1回の賃金 × 4 × 1.125、32ヵ月は × 8 × 1.25（514 で 2313 と 5140） |
 | 実際に入る額 | 1回の賃金 × 回数だけ。満了の文も「務め終えた。2056円を稼いだ。この地に少し馴染んだ...」で、選択肢の額との差（割増）は入らない |
