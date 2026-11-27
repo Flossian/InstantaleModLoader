@@ -510,6 +510,8 @@ def apply(ctx):
                               # マウスを乗せたときの説明の窓（効果と、改造と元のアイテムの説明）
                               "tip": {"tag": (rules.FORBIDDEN_WORD if record.get("forbidden") else
                                               words["illegal"] if record.get("illegal") else ""),
+                                      "sub": [rules.PART_NAMES[part],
+                                              rules.FINISH_NAMES.get(record.get("finish"), "")],
                                       "item": "元のアイテム {}（{}）".format(info.get("name") or "",
                                                                          info.get("rarity") or ""),
                                       "effects": rules.effect_pieces(record, costs=False),
@@ -576,9 +578,8 @@ def apply(ctx):
         else:
             rows = [("効果", plans[0]["effects"]), ("代償", plans[0]["costs"])]
         return {"tag": rules.FORBIDDEN_WORD if appraisal.get("restricted") else "",
-                "item": "元のアイテム {}（{}）　{}・{}".format(
-                    info.get("name") or "", info.get("rarity") or "", rules.PART_NAMES[appraisal["part"]],
-                    rules.FINISH_NAMES.get(appraisal.get("finish"), "")),
+                "sub": [rules.PART_NAMES[appraisal["part"]], rules.FINISH_NAMES.get(appraisal.get("finish"), "")],
+                "item": "元のアイテム {}（{}）".format(info.get("name") or "", info.get("rarity") or ""),
                 "rows": rows, "description": appraisal.get("description") or "",
                 "item_description": info.get("description") or ""}
 

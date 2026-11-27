@@ -469,7 +469,8 @@ class AugmentWindow(object):
         return self.palette["illegal"] if data.get("illegal") or data.get("forbidden") else panels.TEXT
 
     def tip_markup(self, record):
-        """札にマウスを乗せたときの説明の窓の文。名前・元のアイテム・効果・代償・改造の説明・元のアイテムの説明。"""
+        """札にマウスを乗せたときの説明の窓の文。下の詳しい欄と同じ順（名前と部位・仕上げ・改造の説明・効果・代償）に並べ、
+        元のアイテムの名前と説明は最後に置く。"""
         from kivy.utils import escape_markup
         tip = record["tip"]
         color = self.name_color(record)
@@ -477,14 +478,19 @@ class AugmentWindow(object):
             int(self.kit.base * panels.NAME), _hex(color), escape_markup(record["name"]))
         if tip.get("tag"):
             head += "　[color={}][{}][/color]".format(_hex(color), escape_markup(tip["tag"]))
-        lines = [head, "[color={}]{}[/color]".format(_hex(panels.DIM), escape_markup(tip["item"]))]
+        # 部位と仕上げは、詳しい欄と同じく名前の後ろに小さく並べる
+        sub = "　".join(s for s in tip.get("sub") or [] if s)
+        if sub:
+            head += "　[color={}]{}[/color]".format(_hex(panels.DIM), escape_markup(sub))
+        lines = [head]
+        if tip.get("description"):
+            lines.append(escape_markup(tip["description"]))
         # 持ち物の候補は `rows`（方法が2つなら方法ごとの行）、部位の札は効果と代償
         rows = tip.get("rows") or (("効果", tip.get("effects")), ("代償", tip.get("costs")))
         for label, pieces in rows:
             if pieces:
                 lines.append("[color={}]{}[/color]　{}".format(_hex(panels.DIM), label, _pieces_markup(pieces)))
-        if tip.get("description"):
-            lines.append(escape_markup(tip["description"]))
+        lines.append("[color={}]{}[/color]".format(_hex(panels.DIM), escape_markup(tip["item"])))
         if tip.get("item_description"):
             lines.append("[color={}]{}[/color]".format(_hex(panels.DIM), escape_markup(tip["item_description"])))
         return "\n".join(lines)

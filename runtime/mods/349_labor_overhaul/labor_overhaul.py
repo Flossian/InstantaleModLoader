@@ -124,18 +124,20 @@ OTHER_CONTRACT_TEXT = "{name}の契約がまだ残っている。終えるまで
 GROWTH_TEXT = "この街での労働の実績は +{growth}（務め終えた契約 {done} 回）"
 GROWTH_UP_TEXT = "{area}での働きぶりが知られ、この街の賃金の水準が上がった（実績 +{growth}）。"
 JOB_LABEL = "{name}({pay}G)"
-EMPLOYER_NAME = "{place}の手伝い"
+EMPLOYER_NAME = "{place}の{role}"
 PORTER_NAME = "日雇いの人足"
 PORTER_WORK = "雇い主を決めずに、その日の力仕事をする。"
 RELIEF_NAME = "臨時の募集・{event}の対応"
 LIST_LAST = "前回の仕事"
-RELIEF_WORK = "街の困り事を片付ける。務め終えると事態が1段階収まる。"
+RELIEF_WORK = "街の困り事を片付ける。務め終えると事態が1段収まる。"
 INCIDENT_TEXT = "{event}の影響で、賃金は普段の{percent}%になっている。"
 CANCEL_LABEL = "やめる"
 CANCEL_TEXT = "募集の一覧を閉じた。"
 TERM_TEXT = "{name}。{period}ごとに{pay}G。どれだけ働く？"
 TERM_LABEL = "{period}({total}G)"
 START_TEXT = "{name}で働き始めた。"
+#: 施設の仕事（名前が「〈施設名〉の〈役名〉」）を始めたとき。
+START_ROLE_TEXT = "{name}として働き始めた。"
 WORK_LABEL = "働く(あと{left}回)"
 QUIT_LABEL = "途中でやめる"
 WORKED_TEXT = "{period}を働いて過ごし、{pay}Gを得た。"
@@ -150,7 +152,7 @@ RESULT_PAY = "今回の賃金は{pay}Gになった。"
 FIRED_TEXT = "{name}の仕事は、ここで打ち切りになった。"
 FINISH_TEXT = "{name}の契約を務め終えた。稼ぎは合わせて{total}G。"
 FINISH_BONUS = "満了の割増として{bonus}Gが上乗せされた。"
-RANK_UP_TEXT = "{name}での勤続が「{rank}」になった。"
+RANK_UP_TEXT = "{where}で「{rank}」と認められた。"
 QUIT_TEXT = "{name}の仕事を途中でやめた。ここまでの稼ぎは{total}G。"
 QUIT_BARRED = "{owner}は当分、仕事を回してくれないだろう。"
 OWNER_FALLBACK = "雇い主"
@@ -195,7 +197,7 @@ ITEM_TIMEOUT = 60
 # 募集のウィンドウ（見出しと添え書き）
 WINDOW_TITLE = "労働の募集"
 WINDOW_TITLE_ILLEGAL = "闇労働の募集"
-WINDOW_GROWTH = ("この街での労働の実績", "+{growth}（務め終えた契約 {done}回）")
+WINDOW_GROWTH = ("この街での実績", "+{growth}（満了 {done}回）")
 WINDOW_ROTATE = ("募集の入れ替えまで", "あと {days}日")
 WINDOW_TERM = ("1回の長さ", "{period}")
 WINDOW_TERM_AGE = ("1回の長さ", "{period}（{age}歳）")
@@ -483,6 +485,11 @@ def apply(ctx):
         return found
 
     # ------------------------------------------------------------ 募集を組む
+    def office_role(app, key, kind, tenure):
+        """その雇い主の、いまの役 `(役名, 仕事の中身)`。勤続の段で絞り、入れ替えの回ごとに選び直す。"""
+        seed = "{}|{}|{}".format(loader_state.playthrough_key(app), key, rules.rotation_of(ui.game_day(app)))
+        return rules.office_role(kind, rules.rank_index(tenure) if SENIORITY else None, seed)
+
     def office_offers(app, bucket):
         """役場の募集 `[offer]`。offer は JSON にできる辞書（画面の控えに書く）。"""
         base = base_reward(app, growth_here(app, bucket))
@@ -509,13 +516,14 @@ def apply(ctx):
         for key, kind, place, owner_id in open_rows:
             if key not in listed and key != again:
                 continue
-            _kind, job_abilities, work = rules.OFFICE_JOB_BY_TYPE[kind]
+            _kind, job_abilities, _work = rules.OFFICE_JOB_BY_TYPE[kind]
             tenure = rules.tenure_days(bucket, key) if SENIORITY else 0
+            role, work = office_role(app, key, kind, tenure)
             ability = rules.ability_percent(rules.ability_average(mine, job_abilities), ABILITY_MAX_PERCENT)
             percents = (ability, rules.rank_pay_percent(tenure), incident)
             offers.append({
                 "kind": rules.OFFICE, "job": kind, "employer": key,
-                "name": EMPLOYER_NAME.format(place=place), "place": place, "work": work,
+                "name": EMPLOYER_NAME.format(place=place, role=role), "place": place, "work": work,
                 "owner": owner_id, "owner_name": owner_name_of(app, owner_id),
                 "abilities": list(job_abilities), "term_days": term_for_age(app, TERM_DAYS),
                 "pay": rules.term_pay(base, TERM_DAYS, percents),
@@ -566,7 +574,8 @@ def apply(ctx):
             if not rules.barred(bucket, key, day):      # 主が替わって控えが消えた
                 continue
             _kind, job_abilities, _work = rules.OFFICE_JOB_BY_TYPE[kind]
-            rows.append({"name": EMPLOYER_NAME.format(place=place), "job": kind, "owner_name": owner_name_of(
+            role, _work = office_role(app, key, kind, rules.tenure_days(bucket, key))
+            rows.append({"name": EMPLOYER_NAME.format(place=place, role=role), "place": place, "job": kind, "owner_name": owner_name_of(
                 app, owner_id), "face": image_of(app, owner_id, "face"), "abilities": list(job_abilities),
                 "tenure": rules.tenure_days(bucket, key), "days_left": int(row["barred_until"]) - int(day)})
         return rows
@@ -857,7 +866,7 @@ def apply(ctx):
             return None
         out = []
         for index, row in enumerate(rows):
-            label = coins(JOB_LABEL.format(name=row["name"], pay=money(row["pay"])))
+            label = wrapped(coins(JOB_LABEL.format(name=row["name"], pay=money(row["pay"]))), drop=True)
             out.append(choices.Choice(label, on_press=_press("pick", label, [data.get("kind"), index])))
         out.append(choices.Choice(CANCEL_LABEL, on_press=_press("cancel", CANCEL_LABEL, None)))
         return out
@@ -944,8 +953,11 @@ def apply(ctx):
             return
         write("start: {} [{}] {} x {} day(s), {} per term".format(
             contract["name"], contract["kind"], contract["terms"], contract["term_days"], contract["pay"]))
-        screen.say(app, (ILLEGAL_START_TEXT if contract["kind"] == rules.ILLEGAL
-                         else START_TEXT).format(name=contract["name"]))
+        if contract["kind"] == rules.ILLEGAL:
+            started = ILLEGAL_START_TEXT
+        else:
+            started = START_ROLE_TEXT if view.title_keep(contract["name"], contract.get("place")) else START_TEXT
+        screen.say(app, started.format(name=contract["name"]))
         choices.open_screen(app, state["owner"], WORK_SCREEN)
         save_soon(app, "labor start")
 
@@ -1042,15 +1054,22 @@ def apply(ctx):
             out.append(choices.Choice(label, on_press=_press("option", label, index)))
         return out
 
-    def wrapped(label):
-        """長い選択肢は、確率の括弧の前で改行する（語の途中で折り返させない）。"""
+    def wrapped(label, drop=False):
+        """長い選択肢は、確率の括弧の前で改行する（語の途中で折り返させない）。
+
+        `drop` なら、括弧の前だけで1行を超えるとき括弧を外す（一覧の額。次の画面に出る。3行になってボタンから
+        はみ出した）。
+        """
         cut = label.rfind("(")
         if cut <= 0:
             return label
         width, height = ui.window_size()
         narrow = height > 0 and width / height < WRAP_NARROW_RATIO
-        if len(label) <= (WRAP_CHARS_NARROW if narrow else WRAP_CHARS_WIDE):
+        limit = WRAP_CHARS_NARROW if narrow else WRAP_CHARS_WIDE
+        if len(label) <= limit:
             return label
+        if drop and cut > limit:
+            return label[:cut]
         return label[:cut] + "\n" + label[cut:]
 
     def bribe_cost(contract):
@@ -1445,7 +1464,8 @@ def apply(ctx):
             screen.say(app, line)
         refresh_status(app)
         if rank_after is not None and rank_after > rank_before:
-            screen.say(app, RANK_UP_TEXT.format(name=contract["name"], rank=rules.RANKS[rank_after][0]))
+            where = contract.get("place") if contract.get("kind") == rules.OFFICE else None
+            screen.say(app, RANK_UP_TEXT.format(where=where or contract["name"], rank=rules.RANKS[rank_after][0]))
             prices.refresh("labor rank")
         if fired:
             end_contract(app, contract, "fired")

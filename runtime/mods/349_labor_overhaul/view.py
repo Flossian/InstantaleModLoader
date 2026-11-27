@@ -28,16 +28,16 @@ OWNER_ROW_PLAIN = ("雇い主", "{owner}")
 WORK_ROW = "仕事"
 ABILITY_ROW = ("能力", "{scores}　賃金 ×{rate}")
 ABILITY_ROW_PLAIN = ("能力", "{words}")
-PORTER_ABILITY_ROW = ("能力", "関わらない")
+PORTER_ABILITY_ROW = ("能力", "問わない")
 RELIEF_EVENT_ROW = ("街の様子", "{event}（段階 {stage}）")
 ILLEGAL_ROWS = (("仕事", "{detail}"), ("能力", "{scores}"), ("危険", "{risks}"))
 #: 契約のボタン。長さは契約の全体（1回の長さ × 回数）で出す。
 SHORT_BUTTON = "短い契約（{period}）"
 LONG_BUTTON = "長い契約（{period}）"
 ONE_BUTTON = "引き受ける（{period}）"
-BARRED_NOTE = "途中でやめたので、あと {days}日 雇ってもらえない"
+BARRED_NOTE = "途中でやめたため、あと {days}日は雇われない"
 NEXT_RANK = "{name}まで あと {days}日"
-TOP_RANK = "最上の段階"
+TOP_RANK = "最高位"
 RANK_EFFECT = "賃金 ×{pay}"
 RANK_EFFECT_DISCOUNT = "賃金 ×{pay}・買値 {discount}%引き"
 PLACEHOLDER_ANYONE = ("誰でも", "勤続なし")
@@ -138,6 +138,14 @@ def contract_buttons(offer, total_of, money):
     return out
 
 
+def title_keep(name, place):
+    """施設の仕事の名前「〈施設名〉の〈役名〉」の「の〈役名〉」。題を詰めるときに残す。施設の仕事でなければ空。"""
+    name, place = name or "", place or ""
+    if place and name.startswith(place + "の") and len(name) > len(place) + 1:
+        return name[len(place):]
+    return ""
+
+
 def work_rows(offer):
     """仕事の中身の1行（募集に説明があれば）。"""
     return [(WORK_ROW, offer["work"])] if offer.get("work") else []
@@ -150,7 +158,7 @@ def office_card(offer, total_of, money, discount=True):
             "face": offer.get("face"), "placeholder": None, "per": PER_TEXT.format(period=period,
                                                                                   pay=money(offer["pay"])),
             "rows": [], "tenure": None, "buttons": contract_buttons(offer, total_of, money), "grey": False,
-            "note": None}
+            "note": None, "keep": title_keep(offer["name"], offer.get("place"))}
     job = offer.get("job")
     if job == rules.PORTER:
         card["kind"] = FACILITY_KIND_NAMES["administrative_office"]
@@ -192,7 +200,8 @@ def barred_card(row, discount=True):
                      (ABILITY_ROW_PLAIN[0], ABILITY_ROW_PLAIN[1].format(
                          words=rules.ability_words(row.get("abilities"))))],
             "tenure": tenure_view(row.get("tenure") or 0, discount), "buttons": [], "grey": True,
-            "note": BARRED_NOTE.format(days=max(1, int(row.get("days_left") or 1)))}
+            "note": BARRED_NOTE.format(days=max(1, int(row.get("days_left") or 1))),
+            "keep": title_keep(row["name"], row.get("place"))}
 
 
 def illegal_card(offer, total_of, money):
@@ -338,6 +347,7 @@ def strip_model(contract, money, *, face=None, tenure=None, risk=None, discount=
         banner = STRIP_BANNER.format(before=rules.RANKS[rank_up[0]][0], after=rules.RANKS[rank_up[1]][0],
                                      effect=tenure_view(tenure, discount)["effect"])
     return {"face": face, "title": contract.get("name") or "", "sub": sub, "line": line,
+            "keep": title_keep(contract.get("name"), contract.get("place")) if not illegal else "",
             "right": STRIP_EARNED.format(earned=money(earned + (bonus if finished else 0))),
             "right2": right2, "cells": cells, "banner": banner, "illegal": illegal, "finished": bool(finished)}
 

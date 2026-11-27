@@ -481,6 +481,40 @@ print("\n[規則] 賃金の倍率")
 rules = load_mod().rules
 view = load_mod().view
 yen = lambda value: "{:,}G".format(int(value))  # noqa: E731
+#: 施設の仕事の役名の全部（長い順。施設名を切り出すのに使う）。
+ROLE_NAMES = sorted({role for tiers in rules.OFFICE_ROLES.values() for roles in tiers for role, _work in roles}
+                    | {rules.ROLE_FALLBACK}, key=len, reverse=True)
+
+
+def role_names(kind, tier):
+    return [role for role, _work in rules.OFFICE_ROLES[kind][tier]]
+
+
+def place_of(label):
+    """施設の仕事のボタンの文字列から施設名。施設の仕事でなければ None。"""
+    name = (label or "").split("(")[0].strip()
+    for role in ROLE_NAMES:
+        if name.endswith("の" + role):
+            return name[:-len(role) - 1]
+    return None
+
+
+def job_name(app, place):
+    """その施設の仕事の名前「〈施設名〉の〈役名〉」（役名は月と勤続で変わるので施設名で探す）。"""
+    label = app.find(place + "の")
+    return (label or "").split("(")[0].strip() if place_of(label) == place else None
+
+
+def role_of(app, place):
+    """その施設の仕事の役名。"""
+    name = job_name(app, place)
+    return name[len(place) + 1:] if name else None
+
+
+def paid(app, place, pay):
+    """その施設の仕事が、1回 `pay`G で並んでいるか。"""
+    label = app.find(place + "の")
+    return place_of(label) == place and label.replace("\n", "").endswith("({}G)".format(pay))
 check("能力値 11 で 100%", rules.ability_percent(11, 200) == 100.0)
 check("能力値 30 で上限", rules.ability_percent(30, 200) == 200.0)
 check("能力値 30 を超えても上限のまま", rules.ability_percent(45, 200) == 200.0)
@@ -590,17 +624,18 @@ check("役場の労働のボタンは同じ文言・同じ位置", app.labels()[
 check("二重に並ばない", app.labels().count(LABOR_TEXT) == 1, app.labels())
 app.press(LABOR_TEXT)
 check("ゲームの労働の画面へは進まない", "DisplayLongTermLaborChoice" not in app.game_phases, app.game_phases)
-check("街の施設ごとの仕事が並ぶ", app.find("鉄の工房の手伝い") and app.find("渡り鳥の宿の手伝い")
-      and app.find("検査の役場の手伝い"), app.labels())
+check("街の施設ごとの仕事が並ぶ", place_of(app.find("鉄の工房の")) == "鉄の工房"
+      and place_of(app.find("渡り鳥の宿の")) == "渡り鳥の宿" and place_of(app.find("検査の役場の")) == "検査の役場",
+      app.labels())
 check("主の居ない施設は並ばない", not app.find("通り"), app.labels())
 check("同じ名前の施設は1つだけ並ぶ", sum(1 for label in app.labels() if label.startswith("鉄の工房")) == 1, app.labels())
 check("MOD が建てた施設は並ばない", not app.find("出資の訓練所"), app.labels())
 check("繋がっていない区画の施設は並ばない", not app.find("別の区画の工房"), app.labels())
 check("裏の事務所は役場の一覧に並ばない", not app.find("裏の口"), app.labels())
 check("日雇いの人足が並ぶ", app.find("日雇いの人足(100G)") is not None, app.labels())
-check("能力値 11・勤続なしなら素の賃金", app.find("鉄の工房の手伝い(100G)") is not None, app.labels())
+check("能力値 11・勤続なしなら素の賃金", paid(app, "鉄の工房", "100"), app.labels())
 check("一覧の本文は1件1行で、効く能力値・賃金・勤続が出る",
-      "・鉄の工房の手伝い（筋力・耐久／3ヵ月 100G／勤続 見習い）" in app.texts
+      "・{}（筋力・耐久／3ヵ月 100G／勤続 見習い）".format(job_name(app, "鉄の工房")) in app.texts
       and "・日雇いの人足（3ヵ月 100G）" in app.texts, app.texts)
 check("一覧の行に句点を挟まない", not any("。" in text for text in app.texts if text.startswith("・")), app.texts)
 app.press("やめる")
@@ -608,17 +643,20 @@ check("やめると役場の選択肢に戻る", app.labels()[0] == LABOR_TEXT, 
 
 _m, _c, strong = setup(no_events, score=30)
 strong.press(LABOR_TEXT)
-check("能力値 30 なら 2 倍", strong.find("鉄の工房の手伝い(200G)") is not None, strong.labels())
+check("能力値 30 なら 2 倍", paid(strong, "鉄の工房", "200"), strong.labels())
 check("人足は能力値で変わらない", strong.find("日雇いの人足(100G)") is not None, strong.labels())
 
 # ================================================================== 役場
 print("\n[役場] 契約して務め終える")
 module, ctx, app = setup(no_events)
 app.press(LABOR_TEXT)
-app.press("鉄の工房の手伝い")
+smith_name = job_name(app, "鉄の工房")
+check("見習いの間は見習いの役", role_of(app, "鉄の工房") in role_names("blacksmith", 0), smith_name)
+app.press("鉄の工房の")
 check("契約の長さは2つ（割増こみの合計）", app.find("12ヵ月(450G)") and app.find("24ヵ月(1,000G)"), app.labels())
 app.press("12ヵ月")
 check("働く画面になる", app.find("働く(あと4回)") and app.find("途中でやめる"), app.labels())
+check("施設の仕事は「〜として働き始めた」", smith_name + "として働き始めた。" in app.texts, app.texts[-3:])
 day, gold = app.world.days_elapsed, app.player.gold
 app.press("働く")
 check("1回で 90 日進む", app.world.days_elapsed == day + 90, app.world.days_elapsed - day)
@@ -638,20 +676,22 @@ check("雇い主の好感度が上がる（短い契約 +3）",
 check("保存を頼んでいる", app.saves > 0, app.saves)
 check("人生の記録に1行書く（ゲームの労働と同じ形）", app.player.life_log == [
     {"day_start": day, "day_end": day + 360, "summarized_count": 0,
-     "content": "〈労働の記録〉検査の主人公は検査の街の鉄の工房の手伝いを12ヵ月務め上げ、給与を得た。\n"}], app.player.life_log)
+     "content": "〈労働の記録〉検査の主人公は検査の街の{}を12ヵ月務め上げ、給与を得た。\n".format(smith_name)}], app.player.life_log)
 app.press(LABOR_TEXT)
-app.press("鉄の工房の手伝い")
+app.press("鉄の工房の")
 app.press("12ヵ月")
 app.press("働く")
 app.press("働く")
-check("勤続が 480 日に届くと段が上がったと知らせる", any("一人前" in text for text in app.texts), app.texts[-6:])
+check("勤続が 480 日に届くと段が上がったと知らせる（役名でなく施設名で）",
+      "鉄の工房で「一人前」と認められた。" in app.texts, app.texts[-6:])
 app.press("途中でやめる")
 bucket_of(module, app)["employers"]["0/2"]["barred_until"] = None
 rules.add_tenure(bucket_of(module, app), "0/2", 240)     # やめた分を戻す
 app.press(LABOR_TEXT)
 # 務め終えた1契約ぶん、街の実績で基準が 100 → 102 に上がっている（途中でやめた契約は数えない）
-check("勤続の段で賃金が上がる（102 の 125%）", app.find("鉄の工房の手伝い(128G)") is not None, app.labels())
-check("勤続はほかの雇い主には付かない", app.find("渡り鳥の宿の手伝い(102G)") is not None, app.labels())
+check("勤続の段で賃金が上がる（102 の 125%）", paid(app, "鉄の工房", "128"), app.labels())
+check("勤続はほかの雇い主には付かない", paid(app, "渡り鳥の宿", "102"), app.labels())
+check("一人前になると一人前の役が出る", role_of(app, "鉄の工房") in role_names("blacksmith", 1), app.labels())
 
 print("\n[役場] 1回の長さと回数を変える")
 def monthly(module):
@@ -663,8 +703,8 @@ def monthly(module):
 
 module, ctx, app = setup(monthly)
 app.press(LABOR_TEXT)
-check("賃金は長さに比例する", app.find("鉄の工房の手伝い(33G)") is not None, app.labels())
-app.press("鉄の工房の手伝い")
+check("賃金は長さに比例する", paid(app, "鉄の工房", "33"), app.labels())
+app.press("鉄の工房の")
 check("契約は 3ヵ月と 6ヵ月", app.find("3ヵ月(") and app.find("6ヵ月("), app.labels())
 app.press("3ヵ月")
 day = app.world.days_elapsed
@@ -685,8 +725,8 @@ check("入れ替えは 30 日ごと", [rules.rotation_of(d) for d in (0, 29, 30,
 
 
 def shown(app):
-    """いまの一覧の、施設の仕事の名前。"""
-    return [label.split("の手伝い")[0] for label in app.labels() if "の手伝い" in label]
+    """いまの一覧の、施設の仕事の施設名（役名は月と勤続で変わる）。"""
+    return [place for place in (place_of(label) for label in app.labels()) if place]
 
 
 module, ctx, app = setup(no_events, big=True)
@@ -710,11 +750,43 @@ for _ in range(12):
     app.press("やめる")
 check("月が替わると顔ぶれが入れ替わる", len(seen) > 1, seen)
 
+print("\n[一覧] 施設の仕事の役名は勤続の段で絞り、月ごとに選び直す")
+check("どの施設の種類にも、勤続の4段ぶん2つずつ役がある", set(rules.OFFICE_ROLES) == set(rules.OFFICE_JOB_BY_TYPE)
+      and all(len(tiers) == len(rules.RANKS) and all(len(roles) == 2 for roles in tiers)
+              for tiers in rules.OFFICE_ROLES.values()))
+check("役ごとに仕事の中身が1文ある", all(role and work.endswith("。") for tiers in rules.OFFICE_ROLES.values()
+                                        for roles in tiers for role, work in roles))
+check("同じ施設の中で役名が重ならない", all(
+    len({role for roles in tiers for role, _work in roles}) == 2 * len(tiers) for tiers in rules.OFFICE_ROLES.values()))
+check("同じ種なら同じ役", rules.office_role("inn", 1, "a|0/3|4") == rules.office_role("inn", 1, "a|0/3|4"))
+check("段の役から選ぶ", {rules.office_role("inn", 2, "s{}".format(n)) for n in range(40)}
+      == set(rules.OFFICE_ROLES["inn"][2]))
+check("勤続を数えないなら全部の段から", {rules.office_role("inn", None, "s{}".format(n)) for n in range(200)}
+      == {role for roles in rules.OFFICE_ROLES["inn"] for role in roles})
+check("段の番号が表より大きければ最後の段", rules.office_role("inn", 9, "x") in rules.OFFICE_ROLES["inn"][-1])
+check("表に無い種類は「手伝い」と施設の種類の中身", rules.office_role("nothing", 0, "x") == ("手伝い", "")
+      and rules.office_role("inn", 0, "x")[0] != "手伝い")
+module, ctx, app = setup(no_events)
+roles = set()
+for _ in range(12):
+    app.press(LABOR_TEXT)
+    role = role_of(app, "渡り鳥の宿")
+    roles.add(role)
+    app.press("やめる")
+    app.press(LABOR_TEXT)
+    same = role_of(app, "渡り鳥の宿") == role
+    app.press("やめる")
+    if not same:
+        break
+    app.world.days_elapsed += 30
+check("開き直しても同じ役", same)
+check("月が替わると見習いの2つの役が入れ替わる", roles == set(role_names("inn", 0)), roles)
+
 print("\n[一覧] 前回務め終えた仕事は追加の枠で並ぶ")
 module, ctx, app = setup(no_events, big=True)
 app.press(LABOR_TEXT)
 done = shown(app)[0]
-app.press(done + "の手伝い")
+app.press(done + "の")
 app.press("12ヵ月")
 for _ in range(4):
     app.press("働く")
@@ -731,7 +803,7 @@ check("務め終えた仕事は、月が替わっても並び続ける", kept)
 check("選ばれた3件に入っていない月は、4件めとして並ぶ", extra)
 check("本文に「前回の仕事」と出る", any(t.startswith("・" + done) and "前回の仕事" in t for t in app.texts), app.texts[-8:])
 app.press(LABOR_TEXT)
-app.press(done + "の手伝い")
+app.press(done + "の")
 app.press("12ヵ月")
 app.press("働く")
 app.press("途中でやめる")
@@ -754,7 +826,7 @@ def always(module):
 # 乱数: 出来事が起きる(0.0) → 表の先頭(0.0) → 判定に成功(0.0)
 module, ctx, app = setup(always, rng=Scripted(0.0))
 app.press(LABOR_TEXT)
-app.press("鉄の工房の手伝い")
+app.press("鉄の工房の")
 app.press("12ヵ月")
 gold = app.player.gold
 app.press("働く")
@@ -770,7 +842,7 @@ check("働く画面に戻る", app.find("働く(あと3回)") is not None, app.l
 # 判定に失敗（0.99）
 module, ctx, app = setup(always, rng=Scripted(0.0, 0.0, 0.99))
 app.press(LABOR_TEXT)
-app.press("鉄の工房の手伝い")
+app.press("鉄の工房の")
 app.press("12ヵ月")
 gold = app.player.gold
 app.press("働く")
@@ -782,7 +854,7 @@ theft_index = [e["key"] for e in rules.events_for("blacksmith")].index("theft")
 pool = len(rules.events_for("blacksmith"))
 module, ctx, app = setup(always, rng=Scripted(0.0, (theft_index + 0.5) / pool, 0.99))
 app.press(LABOR_TEXT)
-app.press("鉄の工房の手伝い")
+app.press("鉄の工房の")
 app.press("12ヵ月")
 app.press("働く")
 check("盗みの誘いが出る", app.find("乗る(器用") is not None, app.labels())
@@ -791,7 +863,7 @@ check("しくじると契約が打ち切られる", bucket_of(module, app)["cont
 check("手配度が下がる", app.player.area_history["0"]["lawfulness"] == 7, app.player.area_history)
 check("雇い主の好感度が下がる", app.world.characters["5"].relationship["player"]["affinity"] == 0)
 app.press(LABOR_TEXT)
-check("暇を出された雇い主は一覧に出ない", not app.find("鉄の工房の手伝い"), app.labels())
+check("暇を出された雇い主は一覧に出ない", not app.find("鉄の工房の"), app.labels())
 
 module, ctx, app = setup(always, rng=Scripted(0.0))
 app.press(LABOR_TEXT)
@@ -804,7 +876,7 @@ check("人足には出来事が起きない", app.find("働く(あと3回)") is 
 print("\n[途中] やめると勤続が減り、一覧から消える")
 module, ctx, app = setup(no_events)
 app.press(LABOR_TEXT)
-app.press("渡り鳥の宿の手伝い")
+app.press("渡り鳥の宿の")
 app.press("24ヵ月")
 for _ in range(3):
     app.press("働く")
@@ -816,12 +888,12 @@ check("やめたことを人生の記録に書く", len(app.player.life_log) == 
 check("勤続が 240 日減る（270 → 30）", rules.tenure_days(bucket_of(module, app), "0/3") == 30)
 check("役場の選択肢に戻る", app.labels()[0] == LABOR_TEXT, app.labels())
 app.press(LABOR_TEXT)
-check("やめた雇い主は一覧に出ない", not app.find("渡り鳥の宿の手伝い"), app.labels())
-check("ほかの雇い主は出る", app.find("鉄の工房の手伝い") is not None, app.labels())
+check("やめた雇い主は一覧に出ない", not app.find("渡り鳥の宿の"), app.labels())
+check("ほかの雇い主は出る", app.find("鉄の工房の") is not None, app.labels())
 app.press("やめる")
 app.world.days_elapsed += 181
 app.press(LABOR_TEXT)
-check("180 日たつと一覧に戻る", app.find("渡り鳥の宿の手伝い") is not None, app.labels())
+check("180 日たつと一覧に戻る", app.find("渡り鳥の宿の") is not None, app.labels())
 
 # ================================================================== 裏の事務所
 print("\n[裏] 危険度で賃金が上がり、危険が起きる")
@@ -986,7 +1058,7 @@ check("勤続があれば危険度3 が並ぶ（4 倍）", app.find("侵入の�
 print("\n[闇労働] 役場の契約の途中")
 module, ctx, app = setup(no_events)
 app.press(LABOR_TEXT)
-app.press("鉄の工房の手伝い")
+app.press("鉄の工房の")
 app.press("24ヵ月")
 app.press("働く")
 going = dict(bucket_of(module, app)["contract"])
@@ -1004,16 +1076,16 @@ print("\n[連動] 街の出来事")
 good = {"name": "収穫の祭り", "kind": "festival", "good": True, "stage": 2, "last_stage": 3, "tone": "good"}
 module, ctx, app = setup(no_events, event=good)
 app.press(LABOR_TEXT)
-check("良い出来事で賃金が上がる（2段めは 120%）", app.find("鉄の工房の手伝い(120G)") is not None, app.labels())
+check("良い出来事で賃金が上がる（2段めは 120%）", paid(app, "鉄の工房", "120"), app.labels())
 check("理由を本文に出す", any("収穫の祭り" in t and "120%" in t for t in app.texts), app.texts)
 check("良い出来事に人手の仕事は出ない", not app.find("臨時の募集・収穫の祭りの対応"), app.labels())
 
 bad = {"name": "盗賊の横行", "kind": "outlaws", "good": False, "stage": 2, "last_stage": 3, "tone": "bad"}
 module, ctx, app = setup(no_events, event=bad)
 app.press(LABOR_TEXT)
-check("困り事では賃金は変わらない", app.find("鉄の工房の手伝い(100G)") is not None, app.labels())
+check("困り事では賃金は変わらない", paid(app, "鉄の工房", "100"), app.labels())
 # 30 日ぶん 25 の 1.5 倍
-check("人手の仕事が出る", app.find("臨時の募集・盗賊の横行の対応(50G)") is not None, app.labels())
+check("人手の仕事が出る", app.find("臨時の募集・盗賊の横行の対応\n(50G)") is not None, app.labels())
 app.press("臨時の募集・盗賊の横行の対応")
 check("人手の仕事は 30 日 × 3 回", app.labels()[0].startswith("3ヵ月("), app.labels())
 app.press("3ヵ月")
@@ -1026,7 +1098,7 @@ check("段の動きは知らせない（出来事を持つ MOD が出す）", no
 
 module, ctx, app = setup(no_events, event=bad)
 app.press(LABOR_TEXT)
-app.press("鉄の工房の手伝い")
+app.press("鉄の工房の")
 app.press("12ヵ月")
 for _ in range(4):
     app.press("働く")
@@ -1048,13 +1120,13 @@ def unlinked(module):
 
 module, ctx, app = setup(unlinked, event=good)
 app.press(LABOR_TEXT)
-check("連動を切ると賃金は変わらない", app.find("鉄の工房の手伝い(100G)") is not None, app.labels())
+check("連動を切ると賃金は変わらない", paid(app, "鉄の工房", "100"), app.labels())
 
 # ================================================================== 続き
 print("\n[続き] 契約の途中で注入し直す")
 module, ctx, app = setup(no_events)
 app.press(LABOR_TEXT)
-app.press("鉄の工房の手伝い")
+app.press("鉄の工房の")
 app.press("24ヵ月")
 app.press("働く")
 module2, ctx2, app2 = setup(no_events, keep_state=True)
@@ -1081,7 +1153,7 @@ layer = layer[0][1]
 app.player.location = app.world.areas["0"].nodes["0"].facilities["2"]
 check("勤続が無ければ触らない", layer(object(), prices.BUY, 1000) is None)
 rules.add_tenure(bucket_of(module, app), "0/2", 1440)
-check("任される段で 10% 引き", layer(object(), prices.BUY, 1000) == 900)
+check("古株段で 10% 引き", layer(object(), prices.BUY, 1000) == 900)
 check("売値には触らない", layer(object(), prices.SELL, 1000) is None)
 app.player.location = app.world.areas["0"].nodes["0"].facilities["3"]
 check("ほかの店では触らない", layer(object(), prices.BUY, 1000) is None)
@@ -1100,7 +1172,7 @@ check("書く前の並びに入る", rules.order_bucket(bucket)["towns"] == {"0"
 # 偽の賃金の式は 90 + 難易度。難易度 10 の主人公は 100 から始まる
 module, ctx, app = setup(no_events)
 app.press(LABOR_TEXT)
-app.press("鉄の工房の手伝い")
+app.press("鉄の工房の")
 app.press("12ヵ月")
 for _ in range(4):
     app.press("働く")
@@ -1116,7 +1188,7 @@ for _ in range(8):
     app.press("働く")
 check("長い契約は +5。人足も数える", bucket_of(module, app)["towns"]["0"] == {"growth": 7, "done": 2})
 app.press(LABOR_TEXT)
-app.press("渡り鳥の宿の手伝い")
+app.press("渡り鳥の宿の")
 app.press("12ヵ月")
 app.press("働く")
 app.press("途中でやめる")
@@ -1200,9 +1272,9 @@ def setup_aged(age, **kwargs):
 
 module, ctx, app = setup_aged(50)
 app.press(LABOR_TEXT)
-check("50歳の役場は1回 8ヵ月、賃金は変わらない", app.find("鉄の工房の手伝い(100G)") is not None
-      and "・鉄の工房の手伝い（筋力・耐久／8ヵ月 100G／勤続 見習い）" in app.texts, app.texts[-6:])
-app.press("鉄の工房の手伝い")
+check("50歳の役場は1回 8ヵ月、賃金は変わらない", paid(app, "鉄の工房", "100")
+      and "・{}（筋力・耐久／8ヵ月 100G／勤続 見習い）".format(job_name(app, "鉄の工房")) in app.texts, app.texts[-6:])
+app.press("鉄の工房の")
 check("契約は 32ヵ月と 64ヵ月", app.find("32ヵ月(450G)") and app.find("64ヵ月(1,000G)"), app.labels())
 app.press("32ヵ月")
 day = app.world.days_elapsed
@@ -1223,7 +1295,7 @@ check("50歳の闇労働はゲームのボタンのまま（ゲームが断る�
 
 module, ctx, app = setup_aged(54)
 app.press(LABOR_TEXT)
-app.press("鉄の工房の手伝い")
+app.press("鉄の工房の")
 app.press("32ヵ月")
 app.press("働く")
 app.player.age = "55"
@@ -1243,7 +1315,7 @@ app.player.age = "70"
 app.facility_screen()
 CLOCK.settle()
 app.press(LABOR_TEXT)
-check("年齢の決まりを切ると、70歳でも 3ヵ月で働ける", app.find("鉄の工房の手伝い(100G)") is not None
+check("年齢の決まりを切ると、70歳でも 3ヵ月で働ける", paid(app, "鉄の工房", "100")
       and any("3ヵ月 100G" in t for t in app.texts), app.labels())
 
 # ================================================================== 数の設定
@@ -1269,7 +1341,7 @@ app.press(LABOR_TEXT)
 check("一覧の件数を変えられる", len(shown(app)) == 2, app.labels())
 check("入れ替えの間隔を変えられる", [tuned_rules.rotation_of(d) for d in (0, 9, 10, 25)] == [0, 0, 1, 2])
 name = shown(app)[0]
-app.press(name + "の手伝い")
+app.press(name + "の")
 check("満了の割増を変えられる（400 の 50%）", app.find("12ヵ月(600G)") is not None, app.labels())
 app.press("12ヵ月")
 gold = app.player.gold
@@ -1283,7 +1355,7 @@ check("段の賃金と値引きを変えられる", tuned_rules.rank_pay_percent
       and tuned_rules.rank_discount_percent(100) == 40)
 check("後の段の日数は前の段より小さくならない", [row[1] for row in tuned_rules.RANKS] == [0, 100, 1440, 2880])
 app.press(LABOR_TEXT)
-app.press(name + "の手伝い")
+app.press(name + "の")
 app.press("12ヵ月")
 app.press("働く")
 before = tuned_rules.tenure_days(bucket_of(module, app), employer)
@@ -1308,7 +1380,7 @@ def strong_relief(module):
 module, ctx, app = setup(strong_relief, event=bad)
 app.press(LABOR_TEXT)
 # 10 日ぶんは 100 * 10 / 90 = 11.1、4 倍で 44
-check("臨時の募集の賃金と長さを変えられる", app.find("臨時の募集・盗賊の横行の対応(44G)") is not None, app.labels())
+check("臨時の募集の賃金と長さを変えられる", app.find("臨時の募集・盗賊の横行の対応\n(44G)") is not None, app.labels())
 app.press("臨時の募集")
 check("臨時の募集の回数を変えられる", app.labels()[0].startswith("20日("), app.labels())
 app.press("20日")
@@ -1351,18 +1423,23 @@ check("設定を既定に戻すと、段の表も既定に戻る", [row[1:4] for
 print("\n[画面] 募集の札と契約の帯の中身（view.py）")
 tv = view.tenure_view(720)
 check("勤続の帯は段と次の段までの割合", tv["stage"] == 1 and tv["name"] == "一人前"
-      and abs(tv["ratio"] - 0.25) < 1e-9 and tv["next"] == "任されるまで あと 720日", tv)
-check("最上の段は割合 1", view.tenure_view(9999)["ratio"] == 1.0 and view.tenure_view(9999)["next"] == "最上の段階")
+      and abs(tv["ratio"] - 0.25) < 1e-9 and tv["next"] == "古株まで あと 720日", tv)
+check("最上の段は割合 1", view.tenure_view(9999)["ratio"] == 1.0 and view.tenure_view(9999)["next"] == "最高位")
 check("段の効き目（値引きを切ると賃金だけ）", view.tenure_view(1440)["effect"] == "賃金 ×1.5・買値 10%引き"
       and view.tenure_view(1440, discount=False)["effect"] == "賃金 ×1.5")
 total = lambda row, terms, long_contract: row["pay"] * terms  # noqa: E731
-smith = {"kind": "office", "job": "blacksmith", "name": "鉄の工房の手伝い", "term_days": 90, "pay": 142,
+smith = {"kind": "office", "job": "blacksmith", "name": "鉄の工房の下働き", "term_days": 90, "pay": 142,
          "owner": "5", "owner_name": "ガルド", "abilities": ["strength", "constitution"],
          "scores": {"strength": 21, "constitution": 17}, "ability_percent": 142.1, "tenure": 3000,
          "affinity": 34, "again": False, "terms": [[4, False], [8, True]], "face": None}
 card = view.office_card(smith, total, yen)
-check("施設の札: 題・種類・1回の額", card["title"] == "鉄の工房の手伝い" and card["kind"] == "鍛冶屋"
+check("施設の札: 題・種類・1回の額", card["title"] == "鉄の工房の下働き" and card["kind"] == "鍛冶屋"
       and card["per"] == "3ヵ月 142G", card)
+check("施設の札: 題を詰めるときは「の〈役名〉」を残す", view.office_card(dict(smith, place="鉄の工房"), total, yen)["keep"]
+      == "の下働き" and card["keep"] == "")
+check("施設名で始まらない名前（人足・臨時・裏の仕事）は残す所が無い",
+      view.title_keep("日雇いの人足", "持ち場") == "" and view.title_keep("荷運び", "持ち場") == ""
+      and view.title_keep("場の", "場") == "")
 check("施設の札: 雇い主と好感度、能力値と倍率", card["rows"] == [("雇い主", "ガルド　好感度 34"),
                                                          ("能力", "筋力(21)・耐久(17)　賃金 ×1.42")], card["rows"])
 check("募集に仕事の説明があれば1行出る", view.office_card(dict(smith, work="力仕事をする。"), total, yen)["rows"][1]
@@ -1381,10 +1458,10 @@ relief = view.office_card({"kind": "office", "job": "relief", "name": "臨時の
                            "ability_percent": 100}, total, yen)
 check("臨時の募集の札は出来事の段とボタン1つ", relief["rows"][0] == ("街の様子", "盗賊の横行（段階 2）")
       and [b[0] for b in relief["buttons"]] == ["引き受ける（3ヵ月）"] and relief["badge"][0] == "臨時", relief)
-gone = view.barred_card({"name": "渡り鳥の宿の手伝い", "job": "inn", "owner_name": "ミーナ", "abilities": ["charisma"],
+gone = view.barred_card({"name": "渡り鳥の宿の客室係", "job": "inn", "owner_name": "ミーナ", "abilities": ["charisma"],
                          "tenure": 100, "days_left": 92})
 check("雇ってもらえない札は押せず、残りの日数が出る", gone["grey"] and not gone["buttons"]
-      and gone["note"] == "途中でやめたので、あと 92日 雇ってもらえない", gone)
+      and gone["note"] == "途中でやめたため、あと 92日は雇われない", gone)
 dark = view.illegal_card({"kind": "illegal", "job": "breakin", "name": "侵入の手引き", "term_days": 90,
                           "pay": 400, "danger": 3, "risk": 21.04, "abilities": ["dexterity", "wisdom"],
                           "scores": {"dexterity": 14}, "terms": [[3, False]]}, total, yen)
@@ -1392,7 +1469,7 @@ check("裏の仕事の札: 危険の確率と起きやすい危険", dark["rows"
       and dark["placeholder"] == ("21%", "1回ごとの危険")
       and dark["buttons"][0][:2] == ("引き受ける（9ヵ月）", "1,200G") and dark["danger"], dark)
 
-contract = {"kind": "office", "job": "blacksmith", "name": "鉄の工房の手伝い", "owner": "5", "owner_name": "ガルド",
+contract = {"kind": "office", "job": "blacksmith", "name": "鉄の工房の下働き", "owner": "5", "owner_name": "ガルド",
             "term_days": 90, "terms": 8, "done": 4, "pay": 100, "earned": 400, "long": True,
             "log": [{"pay": 100}, {"pay": 130, "kind": "event", "delta": 30, "tone": "good"},
                     {"pay": 100}, {"pay": 70, "kind": "event", "delta": -30, "tone": "bad"}]}
@@ -1403,12 +1480,12 @@ check("帯: 済んだ期・次の期・まだの期", [c["state"] for c in cells
 check("帯: 済んだ期は入った額と出来事の印", cells[1]["pay"] == "130G" and cells[1]["tag"] == "出来事 +30G"
       and cells[1]["tone"] == view.GOOD and cells[3]["tag"] == "出来事 −30G" and cells[3]["tone"] == view.BAD, cells[:4])
 check("帯: 最後の期に満了の割増", cells[-1]["tag"] == "満了 +200G" and cells[-1]["tone"] == view.GOLD, cells[-1])
-check("帯: 見出しに主人と勤続、稼ぎと残り", model["line"] == "雇い主 ガルド　勤続 一人前（任されるまで あと 720日）"
+check("帯: 見出しに主人と勤続、稼ぎと残り", model["line"] == "雇い主 ガルド　勤続 一人前（古株まで あと 720日）"
       and model["right"] == "稼ぎ 400G" and model["right2"] == "あと4回　満了で 1,000G（割増込み）", model)
 done = view.strip_model(dict(contract, done=8, earned=800), yen, tenure=1500, finished=True, bonus=200,
                         rank_up=(1, 2))
 check("務め終えた帯は全部済み・割増こみの稼ぎ・勤続が上がった", all(c["state"] == "done" for c in done["cells"])
-      and done["right"] == "稼ぎ 1,000G" and done["banner"].startswith("勤続が上がった　一人前 → 任される"), done)
+      and done["right"] == "稼ぎ 1,000G" and done["banner"].startswith("勤続が上がった　一人前 → 古株"), done)
 dark_contract = {"kind": "illegal", "job": "breakin", "name": "侵入の手引き", "owner": "9", "owner_name": "口利き",
                  "term_days": 90, "terms": 3, "done": 2, "pay": 400, "earned": 400, "danger": 3,
                  "log": [{"pay": 400, "kind": "safe"}, {"pay": 0, "kind": "crackdown", "law": 6}]}
@@ -1446,7 +1523,7 @@ check("一言の頼みに渡す出来事は新しい3件", view.event_summary(
 print("\n[記録] 期ごとの結果を契約の控えに残す")
 module, ctx, app = setup(lambda m: setattr(m, "EVENT_PERCENT", 100), rng=Scripted(0.0))
 app.press(LABOR_TEXT)
-app.press("鉄の工房の手伝い")
+app.press("鉄の工房の")
 app.press("12ヵ月")
 check("始めた時の勤続の段を控える", bucket_of(module, app)["contract"]["rank_start"] == 0,
       bucket_of(module, app)["contract"])
@@ -1458,7 +1535,7 @@ check("出来事の期は種類・賃金の差・あらましを残す", len(log
       and isinstance(log[0]["delta"], int) and log[0]["summary"] and log[0]["tone"] in ("good", "bad", "plain"), log)
 module, ctx, app = setup(no_events)
 app.press(LABOR_TEXT)
-app.press("鉄の工房の手伝い")
+app.press("鉄の工房の")
 app.press("12ヵ月")
 app.press("働く")
 check("出来事の無い期は額だけ", bucket_of(module, app)["contract"]["log"] == [{"pay": 100}],
@@ -1498,7 +1575,7 @@ shown_images, removed = [], []
 app.update_character_image = lambda character_id: shown_images.append(character_id)
 app.remove_character_image = lambda: removed.append(True)
 app.press(LABOR_TEXT)
-app.press("鉄の工房の手伝い")
+app.press("鉄の工房の")
 app.press("12ヵ月")
 for _ in range(4):
     app.press("働く")
@@ -1522,7 +1599,7 @@ check("雇い主の居ない仕事は場面を挟まない", app.labels()[0] == 
 module, ctx, app = setup(scene)
 app.update_character_image = lambda character_id: shown_images.append(("no image", character_id))
 app.press(LABOR_TEXT)
-app.press("鉄の工房の手伝い")
+app.press("鉄の工房の")
 app.press("12ヵ月")
 for _ in range(4):
     app.press("働く")
@@ -1565,7 +1642,7 @@ def generate_item_from_dict(data, key, owner):
 
 app.generate_item_from_dict = generate_item_from_dict
 app.press(LABOR_TEXT)
-app.press("鉄の工房の手伝い")
+app.press("鉄の工房の")
 app.press("12ヵ月")
 gold = app.player.gold
 app.press("働く")
@@ -1613,7 +1690,7 @@ module.llm.ask = fake_ask
 module.llm.create_structure = lambda *args, **kwargs: object()     # 検査の環境には pydantic が無い
 try:
     app.press(LABOR_TEXT)
-    app.press("渡り鳥の宿の手伝い")
+    app.press("渡り鳥の宿の")
     app.press("12ヵ月")
     gold = app.player.gold
     app.press("働く")
@@ -1631,7 +1708,7 @@ check("作った品が持ち物に入り、本文に出る", "item_77" in app.pl
 module, ctx, app = setup(gift, rng=Scripted(0.0, 0.99, 0.0))
 give_inventory(app)
 app.press(LABOR_TEXT)
-app.press("渡り鳥の宿の手伝い")
+app.press("渡り鳥の宿の")
 app.press("12ヵ月")
 gold = app.player.gold
 app.press("働く")
@@ -1646,12 +1723,12 @@ check("LLM の返事の整え方", rules.tidy_item({"item_name": "  札  ", "ite
 print("\n[場面] 雇ってもらえない雇い主")
 module, ctx, app = setup(no_events)
 app.press(LABOR_TEXT)
-app.press("鉄の工房の手伝い")
+app.press("鉄の工房の")
 app.press("12ヵ月")
 app.press("働く")
 app.press("途中でやめる")
 app.press(LABOR_TEXT)
-check("やめた雇い主は選択肢の一覧に出ない（押せない札はウィンドウだけ）", not app.find("鉄の工房の手伝い"), app.labels())
+check("やめた雇い主は選択肢の一覧に出ない（押せない札はウィンドウだけ）", not app.find("鉄の工房の"), app.labels())
 app.press("やめる")
 
 # ================================================================== 設定
